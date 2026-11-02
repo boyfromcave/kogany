@@ -664,6 +664,9 @@ where
             // kogany (W4-d): the set state the scripts read.
             let vault_state = Self::vault_script_state(&req, &network, state.clone()).await?;
 
+            #[cfg(feature = "ycash")]
+            let mempool_vault_state = vault_state.clone();
+
             // kogany (W6-c): the primitive's rules and the template input's script for the next
             // block over the tip's set state (ycash6 `AcceptToMemoryPool`, after the fee checks).
             #[cfg(feature = "ycash")]
@@ -746,7 +749,30 @@ where
 
             tracing::trace!(?tx_id, "awaiting async checks...");
 
-            async_checks.check(block_batch_flush_key).await?;
+            let checked = async_checks.check(block_batch_flush_key).await;
+            // kogany (W6-c, W6-a finding F-4): a mempool script failure that ycashd's retry
+            // without the standard-not-mandatory flags (CLTV included) passes is policy there.
+            #[cfg(feature = "ycash")]
+            if let (Err(error), true) = (&checked, req.is_mempool()) {
+                let script_failure = error
+                    .downcast_ref::<zakura_script::Error>()
+                    .or_else(|| match error.downcast_ref::<TransactionError>() {
+                        Some(TransactionError::Script(e)) => Some(e),
+                        _ => None,
+                    })
+                    .is_some_and(zakura_script::Error::is_script_failure);
+                if script_failure {
+                    if let Some(error) = vault_mempool::non_mandatory_script_failure(
+                        &network,
+                        &cached_ffi_transaction,
+                        req.height(),
+                        mempool_vault_state.clone(),
+                    ) {
+                        return Err(error);
+                    }
+                }
+            }
+            checked?;
 
             tracing::trace!(?tx_id, "finished async checks");
 

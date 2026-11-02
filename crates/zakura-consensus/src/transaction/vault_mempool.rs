@@ -183,7 +183,7 @@ fn previous_epoch(network: &Network, height: Height) -> Option<NetworkUpgrade> {
 /// - It verifies: `Ok`.
 /// - It fails on the set state (`VaultTemplateFailsOnSetState`, retried under the previous
 ///   epoch's branch ID): [`TransactionError::VaultTemplateSetState`] (DoS 0).
-/// - It fails otherwise but passes the consensus flags: [`TransactionError::VaultTemplateNonStandard`]
+/// - It fails otherwise but passes the consensus flags: [`TransactionError::NonMandatoryScriptFlag`]
 ///   (ycashd `non-mandatory-script-verify-flag`, DoS 0).
 /// - It fails the consensus flags too: `Ok`, and the verifier's own script check refuses the
 ///   transaction as ycashd's `ContextualCheckInputs` does.
@@ -254,12 +254,41 @@ pub fn check_template_input(
     }
     let consensus = ScriptContext::new(network.clone(), height, Some(state.clone()));
     if cached.is_valid_in(input_index, &consensus).is_ok() {
-        return Err(TransactionError::VaultTemplateNonStandard {
+        return Err(TransactionError::NonMandatoryScriptFlag {
             input_index,
             script_error: script_error_text(&error),
         });
     }
     Ok(())
+}
+
+/// ycashd's classification of a mempool script failure (`ContextualCheckInputs`,
+/// `main.cpp:3076-3088`, W6-a finding F-4): the first input that fails the consensus flags at
+/// `height` is retried with the mempool-mandatory flags
+/// ([`ScriptContext::with_mempool_mandatory_flags`]: no `CHECKLOCKTIMEVERIFY`); if it passes
+/// there, the failure is [`TransactionError::NonMandatoryScriptFlag`] (policy, DoS 0). `None`:
+/// the failure stays the verifier's consensus script error.
+pub fn non_mandatory_script_failure(
+    network: &Network,
+    cached: &CachedFfiTransaction,
+    height: Height,
+    state: Option<VaultStateSnapshot>,
+) -> Option<TransactionError> {
+    let consensus = ScriptContext::new(network.clone(), height, state);
+    let mandatory = consensus.clone().with_mempool_mandatory_flags();
+    let (input_index, error) = (0..cached.inputs().len()).find_map(|input_index| {
+        cached
+            .is_valid_in(input_index, &consensus)
+            .err()
+            .map(|error| (input_index, error))
+    })?;
+    cached
+        .is_valid_in(input_index, &mandatory)
+        .is_ok()
+        .then(|| TransactionError::NonMandatoryScriptFlag {
+            input_index,
+            script_error: script_error_text(&error),
+        })
 }
 
 /// `MempoolCheckReason` for the block at `height` (tip + 1): the YED module's verdict over the
@@ -351,7 +380,7 @@ mod tests {
                 input_index: 0,
                 script_error: "OP_CHECKSETSIG or OP_CHECKSETDORMANT failed".into(),
             },
-            TransactionError::VaultTemplateNonStandard {
+            TransactionError::NonMandatoryScriptFlag {
                 input_index: 0,
                 script_error: "cleanstack".into(),
             },

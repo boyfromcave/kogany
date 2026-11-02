@@ -337,15 +337,16 @@ pub enum TransactionError {
         script_error: String,
     },
 
-    /// kogany (W6-c): a vault template (V/I) input's script passes the consensus flags but not
-    /// the standard ones (ycash6 `ContextualCheckInputs` with `STANDARD_SCRIPT_VERIFY_FLAGS`,
-    /// `non-mandatory-script-verify-flag`, `REJECT_NONSTANDARD`, DoS 0).
+    /// kogany (W6-c): an input's script fails the mempool's flags but passes ycashd's mempool
+    /// retry with `flags & ~STANDARD_NOT_MANDATORY_VERIFY_FLAGS` (the policy flags and
+    /// `CHECKLOCKTIMEVERIFY`; W6-a finding F-4), or a vault template input fails the standard
+    /// flags only: ycash6 `non-mandatory-script-verify-flag`, `REJECT_NONSTANDARD`, DoS 0.
     #[cfg(feature = "ycash")]
     #[error(
-        "vault template input {input_index} did not pass standard validation \
+        "transaction input {input_index} did not pass standard validation \
          (non-mandatory-script-verify-flag ({script_error}))"
     )]
-    VaultTemplateNonStandard {
+    NonMandatoryScriptFlag {
         input_index: usize,
         script_error: String,
     },
@@ -567,7 +568,7 @@ impl TransactionError {
             #[cfg(feature = "ycash")]
             Self::VaultRejected { .. }
             | Self::VaultTemplateSetState { .. }
-            | Self::VaultTemplateNonStandard { .. }
+            | Self::NonMandatoryScriptFlag { .. }
             | Self::YellowbackRejected { .. } => {
                 BodyVerificationClass::Retryable(TransientBodyFailureKind::VerifierUnavailable)
             }
@@ -655,7 +656,7 @@ impl TransactionError {
             #[cfg(feature = "ycash")]
             VaultRejected { .. }
             | VaultTemplateSetState { .. }
-            | VaultTemplateNonStandard { .. }
+            | NonMandatoryScriptFlag { .. }
             | YellowbackRejected { .. } => 0,
 
             // TODO: Consider add peer penalty 1 if these are very old
