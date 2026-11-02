@@ -702,11 +702,11 @@ impl YcashMining for WithState {
 }
 
 /// `prepare`: no vault filter before activation (ycashd builds no `TemplateRun` there), the
-/// fail-closed filter without a state, the running one with the state and the network's rules.
+/// fail-closed filter without a state, the running one with the state and the network's rules
+/// (ycash6 regtest's set maturity, 2).
 #[tokio::test]
 async fn prepare_follows_the_vault_activation() {
     use zakura_chain::parameters::testnet::{ConfiguredActivationHeights, RegtestParameters};
-    use zakura_state::vault::{register_vault_params_for_test, VaultNetworkParams};
 
     let network = Network::new_regtest(RegtestParameters::from(ConfiguredActivationHeights {
         vault: Some(101),
@@ -723,17 +723,8 @@ async fn prepare_follows_the_vault_activation() {
     assert!(!no_state.keep(&a), "fail closed without a set state");
     assert!(no_state.keep(&payment(0x43)));
 
-    // The network's Vault parameters (W4-d makes them live; a test registers them).
+    // With the state, under the network's Vault parameters (`vault_network_params`).
     let hooks = WithState(Arc::new(state));
-    let mut unregistered = TemplateFilter::prepare(&network, Height(101), parent, &hooks).await;
-    assert!(!unregistered.keep(&a), "no Vault parameters: fail closed");
-    register_vault_params_for_test(
-        &network,
-        VaultNetworkParams {
-            activation_height: Height(101),
-            min_set_maturity: 0,
-        },
-    );
     let mut running = TemplateFilter::prepare(&network, Height(101), parent, &hooks).await;
     assert!(running.keep(&a));
     assert!(!running.keep(&join(set_id, 1, 0x42)));
