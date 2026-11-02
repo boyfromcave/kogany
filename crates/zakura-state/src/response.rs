@@ -63,6 +63,9 @@ pub enum AuthDataCommitment {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 /// A response to a [`StateService`](crate::service::StateService) [`Request`].
+// kogany: `VaultSnapshot` is the largest variant; boxing it would change the response type the
+// RPC and node crates match on, so the size is accepted (CI clippy runs with `-D warnings`).
+#[allow(clippy::large_enum_variant)]
 pub enum Response {
     /// Response to [`Request::ApplyHeaderChainInsert`].
     HeaderChainInsertApplied(zakura_header_chain::ApplyResult),

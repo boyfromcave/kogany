@@ -66,6 +66,7 @@ pub fn evaluate_sequence_locks(block_height: Height, min_height: i64) -> bool {
 /// Vault upgrade and for a coinbase transaction. `coin_height` gives the height of each spent
 /// output (a mempool parent at `spend_height`); a spent output it does not know is the caller's
 /// spend check's to reject, so this check skips it.
+#[allow(clippy::unwrap_in_result)]
 pub fn transparent_sequence_locks(
     network: &Network,
     transaction: &Transaction,
