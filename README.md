@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/images/kogany-logo-tag.jpeg" alt="Kogany: the Ycash full node with vaults" width="480">
+  <img src="docs/images/kogany-logo-tag.jpeg" alt="Kogany. A Rust full node for Ycash. Built for post-quantum vaults." width="560">
 </p>
 
 # Kogany: the Ycash node in Rust (`koganyd`)
