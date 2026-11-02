@@ -1,18 +1,25 @@
-# Upstream sync `sync-zakura-20261102`: blocked on the common fork
+# Upstream sync `sync-zakura-20261102`
 
 Plan §4.2 rule 7 (`docs/plans/kogany/kogany-yellowback-plan.md` in the Yellowback workspace).
-Base: `vaults/kogany-compat` at `18650e75c`. Pin: `kogany-legacy` = `ref/zakura` = `2b062412c5`.
-Upstream: `zakura-core/zakura` `main` at `b44ec121d` (fetched with the narrowed refspec of the
-branch inventory §6: `+refs/heads/main:refs/remotes/upstream/main`, no tags), 20 commits past the
-pin.
+Base: `vaults/kogany-compat` at `18650e75c`, then `0bb40c0ca` (the fork-sync-rc4 record). Pin:
+`kogany-legacy` = `ref/zakura` = `2b062412c5`. Upstream: `zakura-core/zakura` `main` at
+`b44ec121d` (fetched with the narrowed refspec of the branch inventory §6:
+`+refs/heads/main:refs/remotes/upstream/main`, no tags), 20 commits past the pin.
 
-**Result: the merge was not made.** The upstream range bumps every Common crate (the crates the
-common fork `zakura-common-ycash` carries) from `5.0.0-rc.2` to `5.0.0-rc.4`. Rule 7 says such a
-bump forces a sync of the common fork first; kogany's `[patch.crates-io]` pins those crates to
-the fork at `1e6d6aa4` (`5.0.0-rc.2+ycash.1`), which cannot satisfy upstream's `=5.0.0-rc.4`
-requirements. The sync stops here and is re-run after the fork is synced. The dry-run
-rebase-ability measure and a trial merge (aborted, nothing committed) were recorded so the re-run
-starts from a known conflict set.
+**Result: merged.** The first attempt stopped before the merge because the range moves every
+Common crate from `5.0.0-rc.2` to `5.0.0-rc.4`; the coordinator first synced the common fork
+(`doc/fork-sync-rc4.md`: fork rev `04989544`, `5.0.0-rc.4+ycash.1`). The re-run on
+`kc/sync-zakura-20261102`:
+
+| Commit | What |
+| --- | --- |
+| `e21ae01c1` | merge of `origin/vaults/kogany-compat` (`0bb40c0ca`) |
+| `6cc2f22a2` | **the upstream merge** `2b062412c5..b44ec121d`, 7 conflicts resolved (below) |
+| `fd3d6bece` | the common-fork bump, its own commit (rule 8): rev `049895445b6f` on all 25 lines of the root `[patch.crates-io]` and of `qa/fuzz/vault`'s copy, both locks re-resolved |
+| `1179cbc6e` | kogany's hooks carried to two call sites the merge added (they merged cleanly but did not compile) |
+
+`6cc2f22a2` alone does not resolve (`Cargo.lock` is upstream's, which the rc.2 fork cannot
+patch); the tree builds from `fd3d6bece` on.
 
 ## The upstream range `2b062412c5..b44ec121d`
 
@@ -42,26 +49,22 @@ starts from a known conflict set.
 The upstream range touches 113 files and no file under `.github/`: no workflow was added, edited,
 renamed or deleted, so `.github/workflows-off/` and `.github/kogany-workflows.txt` need nothing.
 
-## Why it is blocked: the Common crate bump
+## The common-fork prerequisite
 
-- `379c531fc` (#1907) moved upstream onto `zakura-core/common` after common#638 (Sapling `cv`
-  kept as bytes) and changed `zakura-chain`/`zakura-consensus` code to that API
-  (`CommitmentSum::try_sum` replaces the removed `Sum` impl).
-- `2398c0924` (#1939) bumped every Common dependency to `=5.0.0-rc.4` from crates.io (root
-  `Cargo.toml`, 12 crate manifests, `Cargo.lock`, `qa/supply-chain/config.toml`).
-- The common fork is at `5.0.0-rc.2+ycash.1` (`1e6d6aa4`, on `zakura-common-ycash-legacy` =
-  `bdbca121`, "prepare Common 5.0.0-rc.2"). Its local `upstream/main` is `0d85733b`
-  (`5.0.0-rc.3`); `zakura-core/common` `main` is now `3596abb3` (seen with `git ls-remote`, not
-  fetched), which carries rc.4.
-
-What has to happen first (the coordinator's, not this chunk's): sync the common fork onto the
-upstream Common commit that `5.0.0-rc.4` was published from, re-port the fork lines, version it
-`5.0.0-rc.4+ycash.1`, and bump kogany's `[patch.crates-io]` rev in its own commit (rule 8). Then
-re-run this sync on top of it.
-
-Upstream's in-repo crate versions also move with `b138edf56` (v1.8.0-rc1: for example
-`zakura-state` `11.1.0-rc0` → `12.0.0-rc0`). Those are path crates in this repository and need no
-fork; they only show up as manifest conflicts below.
+- `379c531fc` (#1907) moved upstream onto common#638 (Sapling `cv` kept as bytes,
+  `CommitmentSum::try_sum` replaces the removed `Sum` impl); `2398c0924` (#1939) bumped every
+  Common dependency to `=5.0.0-rc.4`. The fork at `1e6d6aa4` was `5.0.0-rc.2+ycash.1`, which
+  cannot satisfy those requirements.
+- Fork rev now pinned: `049895445b6fe7a9db20b484736008952a6d6d94` (fork commits `08d6ccb2`,
+  `e5515523`, `04989544`; upstream Common `bdbca121..16437a9d`). `cargo update -p` of the 25
+  patched crates, in the root and in `qa/fuzz/vault`: each crate appears once, as
+  `5.0.0-rc.4+ycash.1` (`zakura-zcash-script` `0.0.1+ycash.1`, `zakura-sensei*` `0.1.0`) from the
+  fork rev; `zakura-udon` and `zakura-bento` stay single from crates.io.
+- `qa/supply-chain/config.toml`: upstream's rc.4 version, taken by the merge; nothing added.
+- common#638 call sites in kogany code: none. No kogany line names `CommitmentSum`, the removed
+  `Sum` impl or a Sapling `cv` decode; every crate checks with the feature on and off
+  (`cargo check --locked --all-targets` of zakura-chain, -consensus, -state, -rpc, -script,
+  -network, -header-chain, both ways, and `-p zakura`, `-p kogany-rpc --features ycash`).
 
 ## The rebase-ability measure (dry run, report-only)
 
@@ -213,32 +216,74 @@ conflicting stop the conflicted files were recorded and the commit was skipped
 
 </details>
 
-## The trial merge (aborted)
+## The merge: conflicts and how each was resolved
 
-`git merge --no-commit --no-ff upstream/main` on `kc/sync-zakura-20261102`: 7 conflicted files,
-everything else merged cleanly. Then `git merge --abort`. How each would be resolved on the
-re-run:
+`git merge upstream/main`: 7 conflicted files, the rest merged cleanly. Upstream touched nothing
+under `.github/`, so no workflow had to move to `.github/workflows-off/` or be classified.
 
 | File | Conflict | Resolution |
 | --- | --- | --- |
-| `Cargo.lock` | Common crates rc.2 (fork git source) vs rc.4 (crates.io), and the in-repo version bumps | Regenerate after the fork bump (`cargo update -p` of the changed packages, `--locked` thereafter); never hand-merged |
-| `crates/zakura-rpc/Cargo.toml` | upstream `zakura-state` `12.0.0-rc0` against kogany's `kogany-vault`/`kogany-yellowback` optional deps beside the `11.1.0-rc0` line | Take upstream's version line, keep kogany's two optional deps (hook) |
-| `crates/zakurad/Cargo.toml` | the same `zakura-state` version line against kogany's `kogany-rpc` dep | Take upstream's version, keep `kogany-rpc` (hook) |
-| `crates/zakura-chain/src/parameters/network_upgrade.rs` (consensus path) | `eccae45e4` adds `MAINNET_ACTIVATION_MAP` (a `LazyLock` map) where kogany inserted the `#[cfg(feature = "ycash")]` `CONSENSUS_BRANCH_IDS` table | Keep both, kogany's table first, then upstream's static. The cached map reads `MAINNET_ACTIVATION_HEIGHTS`, which kogany already splits by `cfg(feature = "ycash")` (re-exporting `super::ycash::MAINNET_ACTIVATION_HEIGHTS`), so the `ycash` heights flow through upstream's new `activation_map()` with no further hook |
-| `crates/zakura-chain/src/transparent.rs` | `6d3883415` rewrites `address()` to match P2PKH/P2SH script bytes directly; kogany's hook (W7-b, the `TX_PQPKH` `pq_key_id()` branch) sits before the old `TxOut::try_from` match | Take upstream's new body, re-insert kogany's `#[cfg(feature = "ycash")]` `pq_key_id()` block before it unchanged |
-| `crates/zakura-consensus/src/block.rs` (consensus path) | upstream's verifier restructuring (`7c4c54842`, `c96f5e3b9`, `8a164df24`, `281fbf94b`) against kogany's hooks in the block verifier body | Take upstream's body, re-apply each kogany hook from the chunk commit bodies (hook table); the consensus-diff report must then show only kogany hunks |
-| `crates/zakura-rpc/src/methods.rs` | `0a1aa320c` (reuse a retained template on exact submission) re-nests `submitblock`'s decode-failure return; kogany's W7-e hook returns ycashd's -22 there | Take upstream's nesting, keep kogany's `#[cfg(feature = "ycash")]` -22 return at the new indentation |
+| `Cargo.lock` | Common crates rc.2 (fork git source) vs rc.4 (crates.io), and the in-repo version bumps | Upstream's in the merge commit; re-resolved by `cargo update -p` in the bump commit, never hand-merged |
+| `crates/zakura-rpc/Cargo.toml` | upstream's `zakura-state` `12.0.0-rc0` against kogany's `kogany-vault`/`kogany-yellowback` optional deps | Upstream's version line; kogany's two deps kept |
+| `crates/zakurad/Cargo.toml` | the same version line against kogany's `kogany-rpc` dep | Upstream's version; `kogany-rpc` kept. `crates/kogany-rpc/Cargo.toml`'s own `zakura-state` requirement moved `11.1.0-rc0` → `12.0.0-rc0` with it |
+| `crates/zakura-chain/src/parameters/network_upgrade.rs` (consensus path) | `eccae45e4` adds `MAINNET_ACTIVATION_MAP` where kogany's `#[cfg(feature = "ycash")]` `CONSENSUS_BRANCH_IDS` table sits | Both kept, kogany's table first. The cached map reads `MAINNET_ACTIVATION_HEIGHTS`, which kogany already selects by `cfg(feature = "ycash")`, so the Ycash heights reach upstream's new `activation_map()` with no further hook |
+| `crates/zakura-chain/src/transparent.rs` | `6d3883415` rewrites `address()` on the script bytes; kogany's W7-b `TX_PQPKH` branch sat before the old `TxOut::try_from` match | Upstream's body; kogany's `#[cfg(feature = "ycash")]` `pq_key_id()` block kept in front of it, unchanged |
+| `crates/zakura-consensus/src/block.rs` (consensus path) | upstream's restructured verifier (`7c4c54842`, `c96f5e3b9`, `8a164df24`, `281fbf94b`) nests the body one level deeper | Upstream's file; kogany's four hooks re-applied unchanged at the new nesting: the `ycash_tests` module, `equihash_solution_is_valid`'s `height` argument, the W4-d vault snapshot fetch, the `tx::Request::Block` `vault_snapshot` field |
+| `crates/zakura-rpc/src/methods.rs` | `0a1aa320c` re-nests `submitblock`'s decode-failure return; kogany's W7-e hook returns ycashd's -22 there | Upstream's nesting; kogany's `#[cfg(feature = "ycash")]` -22 return kept |
+
+Two call sites the merge added cleanly, adapted in `1179cbc6e`:
+
+- `crates/zakura-consensus/src/block/check.rs` `proof_of_work_is_valid` (upstream `0be1f4589`)
+  called `equihash_solution_is_valid` without kogany's height argument; it now passes the
+  `height` it already takes (Ycash's Equihash parameters are height-bound).
+- `crates/zakura-consensus/src/transaction/tests.rs`, upstream `379c531fc`'s invalid Sapling `cv`
+  test: `vault_snapshot: None` added to its `tx::Request::Block`, as in kogany's other test
+  initialisers.
+
+The consensus-diff against the new upstream tip shows only kogany hunks: per file, the
+`git diff --numstat` of the consensus path set for `upstream/main..HEAD` equals that of
+`2b062412c5..0bb40c0ca` (108 files) except `block/check.rs` and `transaction/tests.rs`, one line
+each, the two adaptations above.
 
 ## Gates
 
-Not run: the merge was not made, so there is no merged tree to test (feature-off upstream suite,
-the `kogany-ycash`/`kogany-regtest` nextest profiles, `kogany-rpc --features ycash`, the pure
-crates in debug and release, `xtask check-rpc-artifacts`, `qa/kogany_audit.py all`, the mixed
-smoke against ycash6). All run on the re-run.
+On `1179cbc6e`, macOS, `CARGO_INCREMENTAL=0`, target dir `wt/.targets/sync-zakura`, the local
+fork through `url.insteadOf`.
 
-## Re-pin
+| Gate | Command | Result |
+| --- | --- | --- |
+| feature-off upstream suite | `cargo test --locked -p zakura-chain -p zakura-consensus -p zakura-state -p zakura-rpc -p zakura-script -p zakura-network --lib --no-fail-fast` | chain 546, consensus 324, state 847, rpc 261 pass; network 2071 pass, 3 fail (the known macOS `listener_*zcashd_compat*` tests); script 42 pass, 5 fail (pre-existing, below) |
+| mempool | `cargo test --locked -p zakura --lib components::mempool` | pass |
+| ycash legs | `cargo nextest run --locked --profile kogany-ycash -p <crate> --features <crate>/ycash` for zakura-chain, zakura-header-chain, zakura-consensus, zakura-network, zakura-rpc, kogany-rpc, zakura | all pass except zakura-rpc 29/30 (pre-existing, below) |
+| vault fuzz verdicts | `cargo test --locked -p zakura-consensus --features ycash --test vault_fuzz_verdicts` | pass |
+| kogany-regtest | `cargo nextest run --locked --profile kogany-regtest -p zakura --features ycash` | pass |
+| kogany-rpc | `cargo test --locked -p kogany-rpc --features ycash` | pass |
+| pure crates | `cargo test --locked [--release] -p kogany-pq -p kogany-vault -p kogany-yellowback` | pass, debug and release |
+| RPC artifacts | `cargo run --locked -p xtask -- check-rpc-artifacts` | **fails, pre-existing** (below) |
+| audit | `qa/kogany_audit.py --base upstream/main --upstream upstream/main all` | pass (consensus-diff: only kogany hunks plus the six forked-crate lock entries `5.0.0-rc.4` → `+ycash.1`; frozen: `halo2.rs`, `nu7_diff_dump.rs` as before). Against the default `kogany-legacy` it fails until the re-pin, as expected: greps reads upstream's own commit trailers in the range (`379c531fc`, `ba009ef84`) and dormancy counts 5 tests upstream itself deleted |
+| mixed smoke | `KOGANY_LIVE=W1-Y1,W2-b,W5-f,W5-c,W3-c KOGANY_BIN=<koganyd> ZCASHD=wt/.bin/ycash6-65cb4ae0f/ycashd kogany_mixed_smoke.py --srcdir=wt/.bin/ycash6-65cb4ae0f` (from `wt/kc-ycash6-int`) | pass: 5 sync points, 5 vault and 5 YED state hashes, 2 verdicts |
 
-None now. After the re-run merges, the coordinator re-pins by the rule-1 procedure: `ref/zakura`
-and `kogany-legacy` → `b44ec121d` (or the later tip the re-run merges), with `repos.yaml`,
-AGENTS.md (the layout line and the kogany paragraph), and the mapping §24 citations in the same
-change.
+Failures present on the base too (`0bb40c0ca`, checked in a scratch worktree), not caused by
+the sync:
+
+- `zakura-script` `ycash_tests` (5 tests) fail in a feature-off build: the module is compiled
+  under `cfg(test)` alone, and zakura-script has no `ycash` feature to turn on the zakura-chain
+  and zcash_script `ycash` behaviour they assert (`YcashUpgradeNeedsYcashBuild`, opcode 0xc2
+  unknown).
+- `zakura-rpc` `methods::tests::vault::templates_across_the_vault_activation_commit_to_the_chain_history_root`
+  panics "HistoryTree does not exist for pre-Heartwood upgrades": `fake_history_tree` builds
+  from Zcash Mainnet block 1,046,400, which is before Ycash Mainnet Heartwood (1,100,003).
+- `check-rpc-artifacts`: `doc/kogany-rpc-openrpc.json` records the SHA-256 of the two contract
+  copies from before `080dc1426` / `66cb769eb` regenerated them; `cargo xtask
+  generate-rpc-artifacts` would update the two hashes. Left for the contract chunk's owner.
+- The mixed smoke without `KOGANY_LIVE` stops at height 103 (block 104 `ScriptInvalid`): the
+  follower is configured without the Ycash and Vault upgrades (`pending:W1-Y1`, `pending:W2-b`
+  in its toml). The pre-sync `wt/.bin/koganyd/koganyd` (`5582c1f87`) fails identically.
+
+## Re-pin (the coordinator's)
+
+By the rule-1 procedure, after this branch merges: `ref/zakura` and `kogany-legacy` →
+`b44ec121d6cf55f6596c29f1a31775553d218d18`, with `repos.yaml`, AGENTS.md (the layout line and the
+kogany paragraph: "main @ 2b062412c5 (past v1.7.0)" becomes `b44ec121d`, v1.8.0-rc1), and the
+mapping §24 citations re-taken at the new commit in the same change. After the re-pin the
+audit's default base reads clean.
