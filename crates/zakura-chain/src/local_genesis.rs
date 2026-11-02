@@ -418,6 +418,9 @@ fn configured_activation_heights(
         before_overwinter: Some(1),
         overwinter: (latest_network_upgrade >= Overwinter).then_some(activation_height),
         sapling: (latest_network_upgrade >= Sapling).then_some(activation_height),
+        // The Ycash rules gate on `current >= Ycash` in a `ycash` build, so a later upgrade at
+        // the same height already applies them; a Zcash build never schedules Ycash.
+        ycash: None,
         blossom: (latest_network_upgrade >= Blossom).then_some(activation_height),
         heartwood: (latest_network_upgrade >= Heartwood).then_some(activation_height),
         canopy: (latest_network_upgrade >= Canopy).then_some(activation_height),

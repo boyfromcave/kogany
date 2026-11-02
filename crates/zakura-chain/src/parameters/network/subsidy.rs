@@ -26,6 +26,8 @@ use crate::{
     transparent,
 };
 
+// The `ycash` profile derives the first halving, so it does not read `testnet::FIRST_HALVING`.
+#[cfg_attr(feature = "ycash", allow(unused_imports))]
 use constants::{
     mainnet, testnet, BLOSSOM_POW_TARGET_SPACING_RATIO, FUNDING_STREAM_RECEIVER_DENOMINATOR,
     FUNDING_STREAM_SPECIFICATION, LOCKBOX_SPECIFICATION, MAX_BLOCK_SUBSIDY,
@@ -267,6 +269,9 @@ pub trait ParameterSubsidy {
 /// Network methods related to Block Subsidy and Funding Streams
 impl ParameterSubsidy for Network {
     fn height_for_first_halving(&self) -> Height {
+        // On Ycash the first halving is pre-Blossom and unrelated to Canopy (850,000 on mainnet,
+        // lane B §1 row 5), so every Ycash network derives it.
+        //
         // First halving on Mainnet is at Canopy
         // while in Testnet is at block constant height of `1_116_000`
         // <https://zips.z.cash/protocol/protocol.pdf#zip214fundingstreams>
@@ -274,9 +279,13 @@ impl ParameterSubsidy for Network {
         // Regtest and configured testnets derive it, because their target
         // spacings, including the 25 second spacing after NU7, set the height.
         match self {
+            #[cfg(feature = "ycash")]
+            _ => height_for_halving(1, self).expect("first halving height should be available"),
+            #[cfg(not(feature = "ycash"))]
             Network::Mainnet => NetworkUpgrade::Canopy
                 .activation_height(self)
                 .expect("canopy activation height should be available"),
+            #[cfg(not(feature = "ycash"))]
             Network::Testnet(params) => {
                 if params.is_default_testnet() {
                     testnet::FIRST_HALVING

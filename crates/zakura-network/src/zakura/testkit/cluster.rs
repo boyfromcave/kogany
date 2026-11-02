@@ -1141,6 +1141,7 @@ mod tests {
             .with_genesis_hash(mainnet_genesis_hash())
             .expect("mainnet genesis vector hash parses")
             .with_activation_heights(ConfiguredActivationHeights {
+                ycash: None,
                 before_overwinter: None,
                 overwinter: Some(1),
                 sapling: Some(1),

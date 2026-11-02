@@ -430,6 +430,7 @@ impl Version for zakura_mmr_tree::V1 {
             | NetworkUpgrade::BeforeOverwinter
             | NetworkUpgrade::Overwinter
             | NetworkUpgrade::Sapling
+            | NetworkUpgrade::Ycash
             | NetworkUpgrade::Blossom => {
                 panic!("HistoryTree does not exist for pre-Heartwood upgrades")
             }

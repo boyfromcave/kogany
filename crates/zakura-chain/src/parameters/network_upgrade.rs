@@ -40,6 +40,11 @@ pub enum NetworkUpgrade {
     Overwinter,
     /// The Zcash protocol after the Sapling upgrade.
     Sapling,
+    /// The Ycash protocol after the Ycash fork from Zcash (branch ID `0x374d694f`).
+    ///
+    /// Present in every build so the exhaustive matches compile identically; only the `ycash`
+    /// profile schedules it. Ycash-era rules gate on `current >= Ycash` inside that profile only.
+    Ycash,
     /// The Zcash protocol after the Blossom upgrade.
     Blossom,
     /// The Zcash protocol after the Heartwood upgrade.
@@ -75,6 +80,7 @@ const NETWORK_UPGRADES: &[NetworkUpgrade] = &[
     BeforeOverwinter,
     Overwinter,
     Sapling,
+    Ycash,
     Blossom,
     Heartwood,
     Canopy,
@@ -128,6 +134,7 @@ impl fmt::Display for NetworkUpgrade {
 /// Don't use this directly; use NetworkUpgrade::activation_list() so that
 /// we can switch to fake activation heights for some tests.
 #[allow(unused)]
+#[cfg(not(feature = "ycash"))]
 pub(super) const MAINNET_ACTIVATION_HEIGHTS: &[(block::Height, NetworkUpgrade)] = {
     use super::constants::activation_heights::mainnet::*;
     &[
@@ -146,6 +153,10 @@ pub(super) const MAINNET_ACTIVATION_HEIGHTS: &[(block::Height, NetworkUpgrade)] 
         (NU7, Nu7),
     ]
 };
+/// Ycash mainnet network upgrade activation heights (the `ycash` profile).
+#[cfg(feature = "ycash")]
+pub(super) const MAINNET_ACTIVATION_HEIGHTS: &[(block::Height, NetworkUpgrade)] =
+    super::ycash::MAINNET_ACTIVATION_HEIGHTS;
 /// Testnet network upgrade activation heights.
 ///
 /// This is actually a bijective map, but it is const, so we use a vector, and
@@ -156,6 +167,7 @@ pub(super) const MAINNET_ACTIVATION_HEIGHTS: &[(block::Height, NetworkUpgrade)] 
 /// Don't use this directly; use NetworkUpgrade::activation_list() so that
 /// we can switch to fake activation heights for some tests.
 #[allow(unused)]
+#[cfg(not(feature = "ycash"))]
 pub(super) const TESTNET_ACTIVATION_HEIGHTS: &[(block::Height, NetworkUpgrade)] = {
     use super::constants::activation_heights::testnet::*;
     &[
@@ -174,6 +186,10 @@ pub(super) const TESTNET_ACTIVATION_HEIGHTS: &[(block::Height, NetworkUpgrade)] 
         (NU7, Nu7),
     ]
 };
+/// Ycash testnet network upgrade activation heights (the `ycash` profile, both testnet profiles).
+#[cfg(feature = "ycash")]
+pub(super) const TESTNET_ACTIVATION_HEIGHTS: &[(block::Height, NetworkUpgrade)] =
+    super::ycash::TESTNET_ACTIVATION_HEIGHTS;
 
 /// The Consensus Branch Id, used to bind transactions and blocks to a
 /// particular network upgrade.
@@ -256,9 +272,12 @@ impl TryFrom<ConsensusBranchId> for zcash_protocol::consensus::BranchId {
 ///
 /// This is actually a bijective map, but it is const, so we use a vector, and
 /// do the uniqueness check in the unit tests.
+#[cfg(not(feature = "ycash"))]
 pub(crate) const CONSENSUS_BRANCH_IDS: &[(NetworkUpgrade, ConsensusBranchId)] = &[
     (Overwinter, ConsensusBranchId(0x5ba81b19)),
     (Sapling, ConsensusBranchId(0x76b809bb)),
+    // Inert in this build: no Zcash network schedules the Ycash upgrade.
+    (Ycash, ConsensusBranchId(0x374d694f)),
     (Blossom, ConsensusBranchId(0x2bb40e60)),
     (Heartwood, ConsensusBranchId(0xf5b9230b)),
     (Canopy, ConsensusBranchId(0xe9ff75a6)),
@@ -272,6 +291,12 @@ pub(crate) const CONSENSUS_BRANCH_IDS: &[(NetworkUpgrade, ConsensusBranchId)] = 
     #[cfg(zcash_unstable = "zfuture")]
     (ZFuture, ConsensusBranchId(0xfffffffd)),
 ];
+
+/// Ycash network upgrade consensus branch IDs (the `ycash` profile), the same on every Ycash
+/// network.
+#[cfg(feature = "ycash")]
+pub(crate) const CONSENSUS_BRANCH_IDS: &[(NetworkUpgrade, ConsensusBranchId)] =
+    super::ycash::CONSENSUS_BRANCH_IDS;
 
 /// The target block spacing before Blossom.
 const PRE_BLOSSOM_POW_TARGET_SPACING: i64 = 150;
@@ -372,7 +397,13 @@ const TESTNET_MINIMUM_DIFFICULTY_START_HEIGHT: block::Height = block::Height(299
 ///
 /// Part of the block header consensus rules in the Zcash specification at
 /// <https://zips.z.cash/protocol/protocol.pdf#blockheader>
+#[cfg(not(feature = "ycash"))]
 pub const TESTNET_MAX_TIME_START_HEIGHT: block::Height = block::Height(653_606);
+
+/// The activation height for the block maximum time rule on the Ycash testnet (the `ycash`
+/// profile).
+#[cfg(feature = "ycash")]
+pub const TESTNET_MAX_TIME_START_HEIGHT: block::Height = super::ycash::testnet::MAX_TIME_START_HEIGHT;
 
 impl Network {
     /// Returns a map between activation heights and network upgrades for `network`,
@@ -502,7 +533,9 @@ impl NetworkUpgrade {
     /// [`POST_BLOSSOM_POW_TARGET_SPACING`] from the Zcash specification.
     pub fn target_spacing(&self) -> Duration {
         let spacing_seconds = match self {
-            Genesis | BeforeOverwinter | Overwinter | Sapling => PRE_BLOSSOM_POW_TARGET_SPACING,
+            Genesis | BeforeOverwinter | Overwinter | Sapling | Ycash => {
+                PRE_BLOSSOM_POW_TARGET_SPACING
+            }
             Blossom | Heartwood | Canopy | Nu5 | Nu6 | Nu6_1 | Nu6_2 | Nu6_3 => {
                 POST_BLOSSOM_POW_TARGET_SPACING.into()
             }
@@ -608,8 +641,8 @@ impl NetworkUpgrade {
     /// `PoWAveragingWindow` in ZIP 218, which widens the window at NU7.
     pub fn averaging_window(&self) -> usize {
         match self {
-            Genesis | BeforeOverwinter | Overwinter | Sapling | Blossom | Heartwood | Canopy
-            | Nu5 | Nu6 | Nu6_1 | Nu6_2 | Nu6_3 => PRE_NU7_POW_AVERAGING_WINDOW,
+            Genesis | BeforeOverwinter | Overwinter | Sapling | Ycash | Blossom | Heartwood
+            | Canopy | Nu5 | Nu6 | Nu6_1 | Nu6_2 | Nu6_3 => PRE_NU7_POW_AVERAGING_WINDOW,
             Nu7 => POST_NU7_POW_AVERAGING_WINDOW,
 
             #[cfg(zcash_unstable = "zfuture")]

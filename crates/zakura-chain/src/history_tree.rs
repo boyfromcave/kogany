@@ -129,6 +129,7 @@ impl NonEmptyHistoryTree {
             | NetworkUpgrade::BeforeOverwinter
             | NetworkUpgrade::Overwinter
             | NetworkUpgrade::Sapling
+            | NetworkUpgrade::Ycash
             | NetworkUpgrade::Blossom => {
                 return Err(HistoryTreeError::InvalidCachedTree {
                     reason: "history trees do not exist before Heartwood",
@@ -228,6 +229,7 @@ impl NonEmptyHistoryTree {
             | NetworkUpgrade::BeforeOverwinter
             | NetworkUpgrade::Overwinter
             | NetworkUpgrade::Sapling
+            | NetworkUpgrade::Ycash
             | NetworkUpgrade::Blossom => {
                 panic!("HistoryTree does not exist for pre-Heartwood upgrades")
             }

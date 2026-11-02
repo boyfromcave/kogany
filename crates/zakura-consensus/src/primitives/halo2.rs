@@ -391,8 +391,8 @@ fn lazy_verifier_for(network_upgrade: NetworkUpgrade) -> &'static LazyLock<Verif
         // verifier because that is the only key under which any Orchard
         // history before NU6.2 verifies; routing them anywhere else cannot be
         // correct.
-        Genesis | BeforeOverwinter | Overwinter | Sapling | Blossom | Heartwood | Canopy | Nu5
-        | Nu6 | Nu6_1 => &VERIFIER_PRE_NU6_2,
+        Genesis | BeforeOverwinter | Overwinter | Sapling | Ycash | Blossom | Heartwood | Canopy
+        | Nu5 | Nu6 | Nu6_1 => &VERIFIER_PRE_NU6_2,
 
         // NU6.2 ships the fixed circuit and is the only upgrade that uses it:
         // it is active from the NU6.2 activation height until NU6.3.

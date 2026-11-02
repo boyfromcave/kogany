@@ -96,6 +96,10 @@ impl Version {
             (Testnet(params), Sapling) if params.is_regtest() => 170_006,
             (Testnet(_), Sapling) => 170_007,
             (Mainnet, Sapling) => 170_007,
+            // ycashd's `UPGRADE_YCASH.nProtocolVersion` on every network
+            // (`ycash6 src/chainparams.cpp:129,436`). Only a `ycash` build schedules it; W1-Y5
+            // replaces this table there.
+            (_, Ycash) => 270_007,
             (Testnet(_), Blossom) => 170_008,
             (Mainnet, Blossom) => 170_009,
             (Testnet(_), Heartwood) => 170_010,

@@ -17,6 +17,11 @@ categories = ["asynchronous", "cryptography::cryptocurrencies", "encoding"]
 [features]
 default = []
 
+# The Ycash network profile (kogany): Ycash mainnet, testnet profiles and regtest replace the Zcash
+# networks, and the forked librustzcash crates switch to their Ycash values. Off, this crate is
+# upstream Zakura with the Ycash upgrade present as an inert variant.
+ycash = []
+
 # Production features that activate extra functionality
 
 # Consensus-critical conversion from JSON to Zcash types

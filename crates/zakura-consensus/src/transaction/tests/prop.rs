@@ -365,7 +365,7 @@ fn sanitize_transaction_version(
             Genesis | BeforeOverwinter | Overwinter => {
                 unreachable!("mock transparent transaction tests only use Sapling-onward heights")
             }
-            Sapling | Blossom | Heartwood | Canopy => (4, 4),
+            Sapling | Ycash | Blossom | Heartwood | Canopy => (4, 4),
             Nu5 | Nu6 | Nu6_1 | Nu6_2 => (4, 5),
             Nu6_3 => (4, 6),
             Nu7 => (5, 5),
