@@ -41,7 +41,7 @@ use crate::{
 pub use crate::service::finalized_state::vault::register_vault_params_for_test;
 pub use crate::service::{
     finalized_state::vault::{
-        vault_network_params, vault_tx, FinalizedVaultState, VaultNetworkParams,
+        vault_network_params, vault_outpoint, vault_tx, FinalizedVaultState, VaultNetworkParams,
     },
     non_finalized_state::{ChainVaultOverlay, ChainVaultView, VaultDelta},
 };

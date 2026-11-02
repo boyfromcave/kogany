@@ -2260,6 +2260,7 @@ impl Service<Request> for StateService {
             | Request::BlockInfo(_)
             | Request::VaultSnapshot { .. }
             | Request::BestChainVaultSnapshot
+            | Request::BestChainYedMempoolCheck(_)
             | Request::AnyChainBlock(_)
             | Request::BlockHeader(_)
             | Request::FindBlockHashes { .. }
@@ -3035,6 +3036,20 @@ impl Service<ReadRequest> for ReadStateService {
                     &state.db,
                     hash,
                 )))
+            }
+
+            // kogany (W6-c): the YED module's mempool check at the best chain tip (admission
+            // and the tip re-check's sweep).
+            ReadRequest::BestChainYedMempoolCheck(txs) => {
+                let snapshot = yed::tip_yed_snapshot(state.latest_best_chain().as_ref(), &state.db);
+                let reasons = txs
+                    .iter()
+                    .map(|(tx, expiry_height)| snapshot.mempool_check(tx, *expiry_height))
+                    .collect();
+                Ok(ReadResponse::YedMempoolCheck {
+                    tip: snapshot.tip,
+                    reasons,
+                })
             }
 
             // Used by the StateService.

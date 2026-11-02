@@ -1094,7 +1094,15 @@ impl Storage {
 
         for (&tx_id, tx) in self.transactions() {
             if let Some(expiry_height) = tx.transaction.transaction().expiry_height() {
-                if tip_height >= expiry_height {
+                // Ycash: ycashd's `removeExpired(tip)` drops a transaction only once the tip is
+                // past its expiry height (`IsExpiredTx`: `height > nExpiryHeight`), so one whose
+                // expiry is the tip stays for one more block; no template includes it (kogany
+                // W6-c, mapping W1-Y9 open row).
+                #[cfg(feature = "ycash")]
+                let expired = tip_height > expiry_height;
+                #[cfg(not(feature = "ycash"))]
+                let expired = tip_height >= expiry_height;
+                if expired {
                     tx_ids.insert(tx_id);
                 }
             }
@@ -1116,6 +1124,38 @@ impl Storage {
         }
 
         removed_tx_ids
+    }
+
+    /// Ycash (kogany W6-c): evicts the transactions the tip re-check refused at the new tip,
+    /// with their descendants (ycashd `pool.remove(tx, removed, true)`), and rejects each
+    /// refused one until the next tip block. Returns every removed id.
+    #[cfg(feature = "ycash")]
+    pub(super) fn evict_after_tip_recheck(
+        &mut self,
+        evictions: Vec<super::tip_recheck::Eviction>,
+    ) -> HashSet<UnminedTxId> {
+        let mut removed = HashSet::new();
+        for eviction in evictions {
+            let Some(tx_id) = self
+                .verified
+                .transactions()
+                .get(&eviction.mined_id)
+                .map(|tx| tx.transaction.id())
+            else {
+                continue;
+            };
+            tracing::debug!(?tx_id, error = %eviction.error, "evicting a mempool transaction at the new tip");
+            removed.extend(
+                self.verified
+                    .remove_all_that(|tx| tx.transaction.id().mined_id() == eviction.mined_id),
+            );
+            self.reject(
+                tx_id,
+                ExactTipRejectionError::FailedVerification(eviction.error).into(),
+            );
+        }
+        self.pending_outputs.prune();
+        removed
     }
 
     /// Check if transaction should be downloaded and/or verified.

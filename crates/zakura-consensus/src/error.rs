@@ -219,6 +219,10 @@ pub enum TransactionError {
         reason: String,
         /// The next block's height, which the check ran at.
         height: zakura_chain::block::Height,
+        /// kogany (W6-c): ycashd's `IsByteLevelActFailure` (`src/vault/node.cpp:517`): a
+        /// malformed act no honest relay produces, scored 10; every other reason depends on the
+        /// set state at this node's tip and scores 0.
+        byte_level: bool,
     },
 
     #[error("could not validate mempool transaction lock time on best chain: {0}")]
@@ -322,6 +326,51 @@ pub enum TransactionError {
 
     #[error("unexpected error")]
     Other(String),
+
+    /// kogany (W6-c): a vault template (V/I) input's script fails on the set state at this node's
+    /// tip (`OP_CHECKSETSIG`, `OP_CHECKSETDORMANT`), which the relaying peer's tip need not share
+    /// (ycash6 `AcceptToMemoryPool`'s template-input check, `src/main.cpp:2215-2234`, DoS 0,
+    /// `mandatory-script-verify-flag-failed (...)`; audit 07/F-1).
+    #[cfg(feature = "ycash")]
+    #[error(
+        "vault template input {input_index} fails on the set state at this node's tip \
+         (mandatory-script-verify-flag-failed ({script_error}))"
+    )]
+    VaultTemplateSetState {
+        input_index: usize,
+        script_error: String,
+    },
+
+    /// kogany (W6-c): an input's script fails the mempool's flags but passes ycashd's mempool
+    /// retry with `flags & ~STANDARD_NOT_MANDATORY_VERIFY_FLAGS` (the policy flags and
+    /// `CHECKLOCKTIMEVERIFY`; W6-a finding F-4), or a vault template input fails the standard
+    /// flags only: ycash6 `non-mandatory-script-verify-flag`, `REJECT_NONSTANDARD`, DoS 0.
+    #[cfg(feature = "ycash")]
+    #[error(
+        "transaction input {input_index} did not pass standard validation \
+         (non-mandatory-script-verify-flag ({script_error}))"
+    )]
+    NonMandatoryScriptFlag {
+        input_index: usize,
+        script_error: String,
+    },
+
+    /// kogany (W6-c): a transaction the Vault rules refuse is non-standard as well, which ycashd
+    /// reports first (`IsStandardTx`, outputs included, runs before `vault::CheckTx`;
+    /// `REJECT_NONSTANDARD`, DoS 0). `reason` is ycashd's (`scriptpubkey`, `dust`, ...).
+    #[cfg(feature = "ycash")]
+    #[error("mempool transaction is non-standard: {reason}")]
+    NonStandardTransaction { reason: String },
+
+    /// kogany (W6-c): the Yellowback (YED) rule module refuses the transaction for the next
+    /// block (ycash6 `MempoolCheckReason` in `AcceptToMemoryPool`, `src/main.cpp:2255-2261`):
+    /// the module's state moves with the tip, so DoS 0. `reason` is the module's verdict
+    /// (ycashd's reject reason is `bad-yellowback-<reason>`).
+    #[cfg(feature = "ycash")]
+    #[error(
+        "yellowback module refuses the transaction for the next block: bad-yellowback-{reason}"
+    )]
+    YellowbackRejected { reason: String },
 }
 
 impl From<ValidateContextError> for TransactionError {
@@ -530,6 +579,15 @@ impl TransactionError {
             Self::Io(_) | Self::TryFromSlice(_) | Self::Other(_) => {
                 BodyVerificationClass::Retryable(TransientBodyFailureKind::VerifierUnavailable)
             }
+            // kogany (W6-c): mempool-only verdicts at this node's tip; a block's vault and YED
+            // rules fail in contextual validation instead.
+            #[cfg(feature = "ycash")]
+            Self::VaultTemplateSetState { .. }
+            | Self::NonMandatoryScriptFlag { .. }
+            | Self::NonStandardTransaction { .. }
+            | Self::YellowbackRejected { .. } => {
+                BodyVerificationClass::Retryable(TransientBodyFailureKind::VerifierUnavailable)
+            }
             Self::Amount(_) => consensus("transaction.amount"),
             Self::Balance(_) => consensus("transaction.balance"),
             Self::OrchardProofSize => consensus("transaction.orchard_proof_size"),
@@ -604,6 +662,17 @@ impl TransactionError {
             // NU6.2 mempool transactions are invalid under NU6.3 rules, but
             // honest peers can relay them briefly while their chain tips converge.
             WrongConsensusBranchIdNu6_3GracePeriod => 0,
+
+            // kogany (W6-c): ycashd scores a byte-level act failure 10 and every other vault
+            // or YED mempool refusal 0 (`src/main.cpp:2202,2229,2260`).
+            VaultRejected {
+                byte_level: true, ..
+            } => 10,
+            #[cfg(feature = "ycash")]
+            VaultTemplateSetState { .. }
+            | NonMandatoryScriptFlag { .. }
+            | NonStandardTransaction { .. }
+            | YellowbackRejected { .. } => 0,
 
             // TODO: Consider add peer penalty 1 if these are very old
             DuplicateTransparentSpend(_)

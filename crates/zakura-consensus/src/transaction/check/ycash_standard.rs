@@ -834,6 +834,10 @@ pub fn mempool_standard_checks(
 /// `non-mandatory-script-verify-flag` (REJECT_NONSTANDARD, DoS 0).
 ///
 /// Returns the first failing input and its error.
+///
+/// The input spending a vault template (V/I) is skipped: its scripts read the set state at the
+/// tip, which this check does not have, and the transaction verifier has already run it with the
+/// standard flags and that state (kogany W6-c, `vault_mempool::check_template_input`).
 pub fn standard_script_check(
     tx: Arc<Transaction>,
     spent_outputs: Arc<Vec<transparent::Output>>,
@@ -845,11 +849,19 @@ pub fn standard_script_check(
     }
     let nu = NetworkUpgrade::current(network, height);
     let inputs = tx.inputs().len();
+    let template_input = find_vault_template_input(
+        spent_outputs
+            .iter()
+            .map(|o| Some(o.lock_script.as_raw_bytes())),
+    );
     let cached = zakura_script::CachedFfiTransaction::new(tx, spent_outputs, nu)
         .map_err(|error| (0, error))?;
     let context =
         zakura_script::ScriptContext::new(network.clone(), height, None).with_standard_policy();
     for input_index in 0..inputs {
+        if template_input == Some(input_index) {
+            continue;
+        }
         cached
             .is_valid_in(input_index, &context)
             .map_err(|error| (input_index, error))?;

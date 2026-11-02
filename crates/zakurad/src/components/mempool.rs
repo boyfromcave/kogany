@@ -61,6 +61,9 @@ mod peer_cooldown;
 mod pending_outputs;
 mod queue_checker;
 mod storage;
+// kogany (W6-c): the Ycash re-check after the tip grows.
+#[cfg(feature = "ycash")]
+mod tip_recheck;
 
 /// Supplies named, timed storage operations to a benchmark harness.
 #[cfg(feature = "mempool-bench")]
@@ -427,6 +430,16 @@ fn peer_action(error: &TransactionError) -> PeerAction {
         | CoinbaseConstruction(_)
         | Subsidy(_) => Ignore,
 
+        // kogany (W6-c): the vault and YED verdicts depend on the set state and the module state
+        // at this node's tip (ycashd DoS 0), and a standard-flag failure is policy; a byte-level
+        // act failure gets ycashd's score of 10 (`tip_recheck::extra_misbehavior_score`), not a
+        // ban.
+        #[cfg(feature = "ycash")]
+        VaultTemplateSetState { .. }
+        | NonMandatoryScriptFlag { .. }
+        | NonStandardTransaction { .. }
+        | YellowbackRejected { .. } => Ignore,
+
         // The verifier failed, or the error does not name the rule that failed.
         Script(_)
         | InternalDowncastError(_)
@@ -629,6 +642,10 @@ pub struct Mempool {
     /// Signalled after each transaction download and verify task finishes.
     /// Shared with every downloader, and kept across mempool resets.
     verification_finished: Arc<Notify>,
+
+    /// Ycash: the running re-check of the stored transactions at the new tip (kogany W6-c).
+    #[cfg(feature = "ycash")]
+    tip_recheck: tip_recheck::TipRecheck,
 }
 
 impl Mempool {
@@ -670,6 +687,8 @@ impl Mempool {
                 .map(|ip| ip.to_canonical())
                 .collect(),
             verification_finished: Arc::new(Notify::new()),
+            #[cfg(feature = "ycash")]
+            tip_recheck: Default::default(),
         };
 
         // Make sure `is_enabled` is accurate.
@@ -884,6 +903,10 @@ impl Service<Request> for Mempool {
 
             let previous_state = self.active_state.take();
             let tx_retries = previous_state.transaction_retry_requests();
+            // Ycash: the retries below re-verify every transaction at the new tip, BIP68 and the
+            // vault and YED checks included (kogany W6-c).
+            #[cfg(feature = "ycash")]
+            self.tip_recheck.clear();
 
             // Use the same code for dropping and resetting the mempool,
             // to avoid subtle bugs.
@@ -1007,6 +1030,20 @@ impl Service<Request> for Mempool {
                                 .misbehavior_sender
                                 .try_send((peer, zn::constants::MAX_PEER_MISBEHAVIOR_SCORE));
                         }
+                        // Ycash: ycashd's DoS 10 for a byte-level act failure (kogany W6-c).
+                        #[cfg(feature = "ycash")]
+                        if let TransactionDownloadVerifyError::Invalid {
+                            error,
+                            advertiser_addr: Some(peer),
+                            ..
+                        } = &error
+                        {
+                            if let Some(score) = tip_recheck::extra_misbehavior_score(error)
+                                .filter(|_| !is_zcashd_compat_peer(zcashd_compat_peer_ips, *peer))
+                            {
+                                let _ = self.misbehavior_sender.try_send((*peer, score));
+                            }
+                        }
 
                         // Only start cooldowns while this node's validation context is
                         // current. A stale node verifies transactions against old rules.
@@ -1098,6 +1135,17 @@ impl Service<Request> for Mempool {
 
                 mined_mempool_ids.extend(mined);
                 invalidated_ids.extend(invalidated);
+
+                // Ycash: re-check what is left at the new tip (kogany W6-c, below).
+                #[cfg(feature = "ycash")]
+                self.tip_recheck.schedule(
+                    network.clone(),
+                    (block.height, block.hash),
+                    storage.transactions().values().cloned().collect(),
+                    self.tx_verifier.clone(),
+                    self.read_state.clone(),
+                    self.verification_finished.clone(),
+                );
             }
 
             // Remove expired transactions from the mempool.
@@ -1116,6 +1164,25 @@ impl Service<Request> for Mempool {
                     );
 
                     invalidated_ids.extend(expired_transactions);
+                }
+            }
+
+            // Ycash: re-check the stored transactions at the new tip, and evict what the last
+            // re-check refused (ycashd `ConnectTip`'s `RemoveInvalidVaultSpends` and
+            // `RecheckMempool`, kogany W6-c).
+            #[cfg(feature = "ycash")]
+            {
+                if let Some(evictions) = self.tip_recheck.poll_evictions(cx, *last_seen_tip_hash) {
+                    let evicted = storage.evict_after_tip_recheck(evictions);
+                    if !evicted.is_empty() {
+                        info!(
+                            transactions = evicted.len(),
+                            ?evicted,
+                            "evicted mempool transactions the new tip makes invalid"
+                        );
+                        send_to_peers_ids.retain(|id| !evicted.contains(id));
+                        invalidated_ids.extend(evicted);
+                    }
                 }
             }
 
@@ -1272,6 +1339,21 @@ impl Service<Request> for Mempool {
                     trace!(?req, "got mempool request");
 
                     let transactions: Vec<_> = storage.transactions().values().cloned().collect();
+                    // Ycash: a transaction whose expiry is the tip stays stored (ycashd's
+                    // `removeExpired`), but no block after the tip may include it (`CreateNewBlock`
+                    // skips `IsExpiredTx`); its dependents keep their dependency on it, so the
+                    // template leaves them out too (kogany W6-c).
+                    #[cfg(feature = "ycash")]
+                    let transactions = {
+                        let next_height = self
+                            .latest_chain_tip
+                            .best_tip_height()
+                            .and_then(|height| height.next().ok())
+                            .unwrap_or(Height(0));
+                        let mut transactions = transactions;
+                        transactions.retain(|tx| !tip_recheck::is_expired_at(tx, next_height));
+                        transactions
+                    };
                     let transaction_dependencies = storage.transaction_dependencies().clone();
 
                     trace!(?req, transactions_count = ?transactions.len(), "answered mempool request");
