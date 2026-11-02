@@ -790,3 +790,195 @@ fn registry_records_encode() {
     assert_eq!(k[33..], [0, 0, 0, 1]);
     let _ = PubKeyBytes::from_slice(&[2; 33]);
 }
+
+#[test]
+fn verify_tx_bundle_reference_price() {
+    use kogany_yellowback::attest::price::{
+        bundle_facts, ref_height_in_window, verify_tx_bundle, BundleLogAccumulator,
+    };
+    use kogany_yellowback::attest::BundleError;
+    let mut f = MiniChain::new();
+    f.arm(5);
+    f.empty(3);
+    let r = f.tip - 1;
+    let h = f.tip + 1;
+    assert!(ref_height_in_window(&f.p, h, r));
+    assert!(!ref_height_in_window(&f.p, h, h));
+    assert!(!ref_height_in_window(
+        &f.p,
+        h,
+        h - i64::from(f.p.ref_window) - 1
+    ));
+    let selector = outpoint_selector(&OutPoint {
+        txid: u256s("1234"),
+        n: 0,
+    });
+    let basis = f.bases.get(&r).cloned();
+    let sel = selected(basis.as_ref(), &f.reg, &f.p, r, &selector);
+    assert_eq!(sel.len(), 3); // M_SELECT + K_SLACK
+    let hashes = |x: i64| f.block_hash(x);
+    let c = |x: i64| u32::try_from(x).unwrap();
+    let mk_tx = |atts: &[kogany_yellowback::attest::Attestation]| VaultTx {
+        txid: Hash32([0x55; 32]),
+        coinbase: false,
+        inputs: vec![carrier_in(&enc(atts), None, 0)],
+        outputs: vec![VaultTxOut {
+            value: 0,
+            script_pubkey: vec![0x6a],
+        }],
+    };
+    let prices = [50_000u32, 51_000, 49_000];
+    let atts: Vec<_> = sel
+        .iter()
+        .zip(prices)
+        .map(|(seq, price)| {
+            signed_att(
+                &f.hot[usize::from(*seq)],
+                *seq,
+                price,
+                c(r),
+                &f.block_hash(r).unwrap(),
+            )
+        })
+        .collect();
+    let tx = mk_tx(&atts);
+    let (got_sel, v) = verify_tx_bundle(
+        &tx,
+        &f.p,
+        r,
+        &selector,
+        false,
+        basis.as_ref(),
+        &f.reg,
+        &hashes,
+        None,
+    );
+    assert_eq!(got_sel, sel);
+    let v = v.unwrap();
+    assert_eq!(v.c, atts);
+    // Equal bonds and a shared founding origin: equal weights; Q_LOW / Q_HIGH of {49000, 50000, 51000}.
+    let w0 = attestor_weight(&f.attestor(sel[0]), &f.attest, &f.p, r);
+    assert!(sel
+        .iter()
+        .all(|s| attestor_weight(&f.attestor(*s), &f.attest, &f.p, r) == w0));
+    let total = 3i64;
+    let at = |q: i32| -> u32 {
+        let threshold = (total * i64::from(q) + 9999) / 10_000;
+        let mut sorted = prices;
+        sorted.sort_unstable();
+        sorted[usize::try_from(threshold.max(1) - 1).unwrap()]
+    };
+    assert_eq!(v.a_mint, Some(i64::from(at(f.p.q_low_bps))));
+    assert_eq!(v.a_claim, Some(i64::from(at(f.p.q_high_bps))));
+    // An unselected attestor: "member" (MINT-9's mint9-bundle-member).
+    let outsider: u16 = (0..5).find(|s| !sel.contains(s)).unwrap();
+    let mut bad = atts.clone();
+    bad[0] = signed_att(
+        &f.hot[usize::from(outsider)],
+        outsider,
+        50_000,
+        c(r),
+        &f.block_hash(r).unwrap(),
+    );
+    let (_, v2) = verify_tx_bundle(
+        &mk_tx(&bad),
+        &f.p,
+        r,
+        &selector,
+        false,
+        basis.as_ref(),
+        &f.reg,
+        &hashes,
+        None,
+    );
+    assert_eq!(v2.unwrap_err(), BundleError::Member);
+    // No snapshot at R: nobody is selected.
+    let (s3, v3) = verify_tx_bundle(&tx, &f.p, r, &selector, false, None, &f.reg, &hashes, None);
+    assert!(s3.is_empty());
+    assert_eq!(v3.unwrap_err(), BundleError::Member);
+    // The block's bundle log: a held rule commits its facts; a failed one is ignored.
+    let facts = bundle_facts(
+        &tx,
+        &f.p,
+        r,
+        &selector,
+        false,
+        basis.as_ref(),
+        &f.reg,
+        &hashes,
+        None,
+    );
+    assert!(facts.carrier_present && facts.verified());
+    assert_eq!(facts.seqs(), sel);
+    let mut acc = BundleLogAccumulator::new();
+    assert!(acc.row().is_none());
+    let failed = bundle_facts(
+        &mk_tx(&bad),
+        &f.p,
+        r,
+        &selector,
+        false,
+        basis.as_ref(),
+        &f.reg,
+        &hashes,
+        None,
+    );
+    acc.commit(&failed);
+    assert!(acc.row().is_none());
+    acc.commit(&facts);
+    acc.commit(&facts);
+    let row = acc.row().unwrap();
+    assert_eq!(row.a_mint(), v.a_mint);
+    assert_eq!(row.a_claim(), v.a_claim);
+    let mut sorted_sel = sel.clone();
+    sorted_sel.sort_unstable();
+    assert_eq!(row.selected_seqs, sorted_sel);
+    assert_eq!(row.seqs.len(), 3); // deduplicated
+    assert!(row.seqs.windows(2).all(|w| w[0] <= w[1]));
+    assert_eq!(row.cited_heights, vec![c(r); 3]);
+    let plain = VaultTx {
+        inputs: vec![],
+        ..tx.clone()
+    };
+    assert!(
+        !bundle_facts(
+            &plain,
+            &f.p,
+            r,
+            &selector,
+            false,
+            basis.as_ref(),
+            &f.reg,
+            &hashes,
+            None
+        )
+        .carrier_present
+    );
+}
+
+#[test]
+fn attested_fee_price_trust() {
+    use kogany_yellowback::attest::price::{
+        attested_fee_price, fee_price_trusted, HALT_DIVERGENCE, HALT_GLOBAL_RATIO, HALT_NO_PRICE,
+    };
+    // The highest window median when trusted; HALT-2 alone still publishes (U-27).
+    assert_eq!(
+        attested_fee_price(Some(10), Some(30), Some(20), 0),
+        Some(30)
+    );
+    assert_eq!(
+        attested_fee_price(Some(10), None, Some(20), HALT_GLOBAL_RATIO),
+        Some(20)
+    );
+    assert_eq!(
+        attested_fee_price(Some(10), Some(30), Some(20), HALT_NO_PRICE),
+        None
+    );
+    assert_eq!(
+        attested_fee_price(Some(10), Some(30), Some(20), HALT_DIVERGENCE),
+        None
+    );
+    assert_eq!(attested_fee_price(None, None, None, 0), None);
+    assert!(fee_price_trusted(0) && fee_price_trusted(HALT_GLOBAL_RATIO));
+    assert!(!fee_price_trusted(1 << 6)); // an unknown future bit withholds it
+}
