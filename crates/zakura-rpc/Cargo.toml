@@ -37,6 +37,10 @@ indexer = ["indexer-rpc", "zakura-state/indexer"]
 # Experimental internal miner support
 internal-miner = []
 
+# The Ycash network profile (kogany): Ycash answers in the stock RPCs (the YDF coinbase output,
+# `getblocksubsidy`, `chain`, `validateaddress`), see zakura-chain's `ycash` feature.
+ycash = ["zakura-chain/ycash", "zakura-consensus/ycash"]
+
 # Test-only features
 
 # Exposes `server::fuzz`, the entry points of the fuzz targets in `qa/fuzz/rpc`

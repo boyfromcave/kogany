@@ -16,5 +16,7 @@ pub mod subsidy;
 pub mod transaction;
 pub mod unified_address;
 pub mod validate_address;
+#[cfg(feature = "ycash")]
+pub mod ycash;
 pub mod z_validate_address;
 pub mod zec;
