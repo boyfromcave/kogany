@@ -1192,6 +1192,7 @@ dependencies = [
  "async-trait",
  "hex",
  "kogany-vault",
+ "kogany-yellowback",
  "serde",
  "serde_json",
  "tokio",
