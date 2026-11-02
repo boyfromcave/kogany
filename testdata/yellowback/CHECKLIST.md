@@ -118,6 +118,16 @@ first.
 | `ownerSpends[].sighash`, `.amount`, `.branchId`, `.nIn`, `.falconEntropy` | **not replayed here**: `pq::Verify`, `VerifyScript` under the vault flags and the Falcon re-sign are W3 (kogany-pq, the script crate) |
 | `ownerSpends[].name` | `owner_spends_template_half` (failure message) |
 
+Sighash replay (W2-c), `crates/zakura-chain/tests/vault_sighash.rs`
+(`vault_vector_sighashes_replay_under_the_vault_branch_id`), through Zakura's native v4 (ZIP-243)
+sighash under `NetworkUpgrade::Vault`, the file checked against `PIN` first:
+
+| key | Rust assertion |
+|---|---|
+| `branchId` | equals `NetworkUpgrade::Vault.branch_id()` (the one definition, `network_upgrade.rs`) |
+| `spends[].tx`, `.nIn`, `.scriptCode`, `.amount`, `.branchId`, `.sighash` | `Transaction::sighash(Vault, SIGHASH_ALL\|ANYONECANPAY, ..)` equals `sighash`; under Canopy it differs |
+| `ownerSpends[].tx`, `.nIn`, `.scriptCode`, `.amount`, `.branchId`, `.sighash` | the same with `SIGHASH_ALL` |
+
 Also from ycash6 `src/vault/act.cpp`, not a schema key: `act_carrier_edges` (more than
 `MAX_ACT_SIGS` signatures → `bad-vault-act-sigs`, exactly `MAX_ACT_SIGS` decodes, the `"YV"` carrier
 test, a header-27 signature decodes but fails the field rules).
