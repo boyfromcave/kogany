@@ -2,7 +2,7 @@
 
 Zakura release tags must be created by the
 [`Create release`](../.github/workflows/create-release.yml) workflow. The
-workflow validates that the requested `v*` tag matches the `zakura` package
+workflow validates that the requested `v*` tag matches the `kogany` package
 version, builds and verifies the release assets from that exact commit, and
 then creates the tag by publishing a complete pre-release. The tag push then
 triggers [`release-binaries.yml`](../.github/workflows/release-binaries.yml) to

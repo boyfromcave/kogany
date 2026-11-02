@@ -107,7 +107,7 @@ class AffectedSemverPackagesTest(unittest.TestCase):
             self.package("zakura-rpc"),
             self.package("zakura-network"),
             self.package("private", publish=[]),
-            self.package("zakura"),
+            self.package("kogany"),
             self.package("zakura-header-chain"),
         ]
 
@@ -171,14 +171,14 @@ class AffectedSemverPackagesTest(unittest.TestCase):
         packages = [
             self.package("library"),
             self.package(
-                "zakura",
+                "kogany",
                 dependencies=[self.dependency("library")],
             ),
         ]
 
         affected = affected_semver_packages.affected_publishable_packages(
             self.metadata(packages),
-            changed_files=["library/src/lib.rs", "zakura/src/main.rs"],
+            changed_files=["library/src/lib.rs", "kogany/src/main.rs"],
         )
 
         self.assertEqual(affected, ["library"])

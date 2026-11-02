@@ -146,7 +146,7 @@ run_leg() {
   # The metrics endpoint carries the mempool backpressure counters, and the
   # internal miner produces the blocks that let the workload drain.
   ( cd "$NODE_SRC_DIR" && cargo build --release \
-      --features internal-miner,prometheus --package zakura --bin zakurad ) || {
+      --features internal-miner,prometheus --package kogany --bin zakurad ) || {
     echo "leg ${label}: build of ${commit} failed" >&2
     return 91
   }

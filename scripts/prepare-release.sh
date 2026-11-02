@@ -292,7 +292,7 @@ declare -A publish_target=()
 
 metadata="$(cargo metadata --format-version 1 --no-deps)"
 zakura_old="$(
-  jq -r '.packages[] | select(.name == "zakura") | .version' <<<"$metadata"
+  jq -r '.packages[] | select(.name == "kogany") | .version' <<<"$metadata"
 )"
 
 # Match base-tag packages by Cargo package name rather than their current
@@ -950,7 +950,7 @@ if [ -z "$suffix" ]; then
   # (cargo release version deliberately skips the replace step).
   echo
   echo "==> Updating the README install tag"
-  cargo release replace --verbose --execute --no-confirm --allow-branch '*' -p zakura
+  cargo release replace --verbose --execute --no-confirm --allow-branch '*' -p kogany
 fi
 
 if [ "$eos_floored" = 1 ]; then

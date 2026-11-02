@@ -104,7 +104,7 @@ use zakura::{
 };
 
 use crate::{
-    application::{build_version, user_agent, LAST_WARN_ERROR_LOG_SENDER},
+    application::{build_version, user_agent, LAST_WARN_ERROR_LOG_SENDER, NODE_NAME, PRODUCT_NAME},
     components::{
         health,
         inbound::{self, InboundSetupData, MAX_INBOUND_RESPONSE_TIME},
@@ -372,7 +372,10 @@ impl StartCmd {
         // kogany (W6-b): the network-fee policy `yed_getinfo` reports, as ycashd's init sets it.
         #[cfg(feature = "ycash")]
         kogany_rpc::yed::fees::install_node_policy(
-            config.mempool.yed_node_policy().map_err(|error| eyre!(error))?,
+            config
+                .mempool
+                .yed_node_policy()
+                .map_err(|error| eyre!(error))?,
         );
 
         if config.zcashd_compat.enabled {
@@ -1018,7 +1021,7 @@ impl StartCmd {
             spawn_erased(std::future::pending().in_current_span());
         node_tasks.track(&miner_task_handle);
 
-        info!("spawned initial Zakura tasks");
+        info!("spawned initial {PRODUCT_NAME} tasks");
 
         let (zcashd_compat_shutdown_tx, zcashd_compat_shutdown_rx) = watch::channel(false);
         let mut zcashd_compat_task_handle =
@@ -1234,7 +1237,7 @@ impl StartCmd {
             }
         };
 
-        info!("exiting Zakura: asking other tasks to stop");
+        info!("exiting {PRODUCT_NAME}: asking other tasks to stop");
         shutdown.cancel();
         zakura_chain::shutdown::set_shutting_down();
 
@@ -1293,7 +1296,7 @@ impl StartCmd {
         old_databases_task_handle.abort();
 
         info!(
-            "exiting Zakura: all tasks have been asked to stop, waiting for remaining tasks to finish"
+            "exiting {PRODUCT_NAME}: all tasks have been asked to stop, waiting for remaining tasks to finish"
         );
 
         Self::finish_shutdown(exit_status, writer_health.writer_failure())
@@ -1392,7 +1395,7 @@ impl StartCmd {
     pub(crate) fn run(&self, config: Arc<ZakuradConfig>) -> Result<(), Report> {
         let runtime = new_runtime();
 
-        info!("Starting zakurad");
+        info!("Starting {NODE_NAME}");
 
         runtime.run_with_graceful_shutdown(|shutdown, shutdown_cleanup_required| {
             self.start(
@@ -1404,7 +1407,7 @@ impl StartCmd {
             )
         })?;
 
-        info!("stopping zakurad");
+        info!("stopping {NODE_NAME}");
 
         Ok(())
     }

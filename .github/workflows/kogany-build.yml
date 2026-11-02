@@ -8,7 +8,7 @@ name: kogany-build
 # `needs:` between them, so a failed check is re-run alone. The feature-off clippy and the
 # workspace-wide nightly rustfmt stay upstream's (lint.yml); these are kogany's additions.
 #
-#   check (matrix)   `cargo check -p zakura`, ycash feature off and on
+#   check (matrix)   `cargo check -p kogany`, ycash feature off and on
 #   clippy (matrix)  `-D warnings` with the ycash feature, one crate group per job; the pure
 #                    kogany crates carry their own clippy.toml (plan §4.2 rule 6)
 #   fmt              stable rustfmt over the kogany-* crates
@@ -51,13 +51,13 @@ jobs:
           cache-on-failure: true
           cache-save-if: ${{ github.ref == 'refs/heads/upgrade/vault' || startsWith(github.ref, 'refs/heads/vaults/') }}
       - uses: ./.github/actions/setup-zakura-build
-      - name: cargo check -p zakura (ycash feature ${{ matrix.ycash && 'on' || 'off' }})
+      - name: cargo check -p kogany (ycash feature ${{ matrix.ycash && 'on' || 'off' }})
         env:
           YCASH: ${{ matrix.ycash }}
         run: |
           features=()
           if [ "$YCASH" = true ]; then features=(--features ycash); fi
-          cargo check --locked -p zakura --all-targets "${features[@]}"
+          cargo check --locked -p kogany --all-targets "${features[@]}"
 
   clippy:
     name: clippy ${{ matrix.group }}
@@ -82,7 +82,7 @@ jobs:
           - group: zakura-rpc-network
             args: -p zakura-rpc -p zakura-network --features zakura-rpc/ycash,zakura-network/ycash
           - group: zakurad
-            args: -p zakura --features zakura/ycash
+            args: -p kogany --features kogany/ycash
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:

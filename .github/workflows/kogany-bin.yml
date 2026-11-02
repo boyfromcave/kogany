@@ -57,7 +57,7 @@ jobs:
           cache-save-if: ${{ github.repository == 'boyfromcave/kogany' && (github.ref == 'refs/heads/upgrade/vault' || startsWith(github.ref, 'refs/heads/vaults/')) }}
       - uses: ./.github/actions/setup-zakura-build
       - name: cargo build koganyd --features ycash
-        run: cargo build --locked -p zakura --bin koganyd --features ycash
+        run: cargo build --locked -p kogany --bin koganyd --features ycash
       - name: Pack koganyd-bin.tgz
         env:
           REPO: boyfromcave/kogany

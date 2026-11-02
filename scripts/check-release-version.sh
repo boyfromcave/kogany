@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Check that a release tag matches the `zakura` package version.
+# Check that a release tag matches the `kogany` package version.
 #
 # Release binaries are built in Docker without `.git`, so `zakurad --version`
 # reports CARGO_PKG_VERSION, not the tag: tagging without bumping the package
@@ -50,7 +50,7 @@ fi
 # without a Cargo.lock.
 package_version="$(
   cargo metadata --format-version 1 --no-deps --manifest-path "${repo_root}/Cargo.toml" \
-    | jq -r '.packages[] | select(.name == "zakura") | .version'
+    | jq -r '.packages[] | select(.name == "kogany") | .version'
 )"
 
 if [ -z "$package_version" ]; then
@@ -67,7 +67,7 @@ Release tag ${RELEASE_TAG} does not match the 'zakura' package version.
 
 Bump the package version on the release branch before tagging, for example:
 
-  cargo release version --verbose --execute --allow-branch '*' -p zakura <level>
+  cargo release version --verbose --execute --allow-branch '*' -p kogany <level>
 
 See .github/PULL_REQUEST_TEMPLATE/release-checklist.md ("Update Zakura Version").
 EOF

@@ -190,7 +190,7 @@ T-0 involves zero authoring — only pushing and clicking. The branch carries:
    compromise.)
 2. **The complete release prep**, per the
    [hotfix release checklist](../.github/PULL_REQUEST_TEMPLATE/hotfix-release-checklist.md):
-   - `zakura` package version bump (hotfixes are `patch`) and changed-crate
+   - `kogany` package version bump (hotfixes are `patch`) and changed-crate
      bumps (`cargo release version ...`). When de-rc'ing an rc line to its
      stable version, two things need explicit care: re-run
      `cargo semver-checks` against the published **stable** baselines —

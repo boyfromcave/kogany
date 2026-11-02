@@ -3469,6 +3469,10 @@ where
         #[cfg(not(target_os = "windows"))]
         if self.network.is_regtest() {
             match unix::raise_interrupt() {
+                // kogany: ycashd's reply (ycash6 `src/rpc/server.cpp:291`).
+                #[cfg(feature = "ycash")]
+                Ok(_) => Ok("Ycash server stopping".to_string()),
+                #[cfg(not(feature = "ycash"))]
                 Ok(_) => Ok("Zakura server stopping".to_string()),
                 Err(error) => Err(ErrorObject::new(
                     ErrorCode::InternalError,

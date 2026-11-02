@@ -139,7 +139,7 @@ jobs:
       - name: Check default x86 assembly features
         if: ${{ !cancelled() }}
         run: |
-          cargo tree --locked --package zakura --target x86_64-unknown-linux-gnu \
+          cargo tree --locked --package kogany --target x86_64-unknown-linux-gnu \
             -e features -i zakura-pasta-curves > "$RUNNER_TEMP/pasta-default-features"
           grep -F 'zakura-pasta-curves feature "x86_64-asm"' "$RUNNER_TEMP/pasta-default-features"
           if grep -F 'zakura-pasta-curves feature "portable"' "$RUNNER_TEMP/pasta-default-features"; then
@@ -303,7 +303,7 @@ jobs:
 
       - name: Ensure no arbitrary or proptest dependency on default build
         if: ${{ !cancelled() }}
-        run: cargo +stable tree --package zakura -e=features,no-dev | grep -Eq "arbitrary|proptest" && exit 1 || exit 0
+        run: cargo +stable tree --package kogany -e=features,no-dev | grep -Eq "arbitrary|proptest" && exit 1 || exit 0
 
   header-conformance:
     name: header conformance
@@ -395,7 +395,7 @@ jobs:
         if: ${{ !cancelled() }}
         run: |
           denied='^(zakura-iroh|zakura-iroh-base|zakura-iroh-dns|zakura-iroh-relay|netwatch|netdev|netlink-.*|n0-.*|hickory-.*|papaya|seize|iroh-metrics|tokio-websockets|noq.*|quinn|quinn-udp|ed25519-dalek|nix|memoffset) '
-          hits=$(cargo tree --locked -p zakura -e normal --prefix none | grep -E "$denied" | sort -u || true)
+          hits=$(cargo tree --locked -p kogany -e normal --prefix none | grep -E "$denied" | sort -u || true)
           if [ -n "$hits" ]; then
             echo "zakurad's dependency graph contains packages that docs/specs/zakura-quic.md DEP-1 forbids:"
             echo "$hits"
@@ -408,7 +408,7 @@ jobs:
         if: ${{ !cancelled() }}
         run: |
           denied='^(zakura-scheduler|zakura-sim|zakura-storage|corosensei) '
-          hits=$(cargo tree --locked -p zakura -e normal,build --target all --prefix none | grep -E "$denied" | sort -u || true)
+          hits=$(cargo tree --locked -p kogany -e normal,build --target all --prefix none | grep -E "$denied" | sort -u || true)
           if [ -n "$hits" ]; then
             echo "zakurad's dependency graph contains test-only simulator packages:"
             echo "$hits"

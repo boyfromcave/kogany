@@ -165,4 +165,4 @@ jobs:
         with:
           tool: cargo-nextest
       - name: nextest profile kogany-regtest (ycash feature)
-        run: cargo nextest run --locked --profile kogany-regtest -p zakura --features ycash
+        run: cargo nextest run --locked --profile kogany-regtest -p kogany --features ycash

@@ -1,6 +1,11 @@
 [package]
 # Crate metadata
-name = "zakura"
+#
+# kogany: the package is `kogany`, the Ycash node (the Yellowback lead architect, 2026-11-02), so
+# cargo prints "Compiling kogany v<version>". The directory (`crates/zakurad`), the `[lib]` name
+# (`zakurad`) and the version line (upstream Zakura's, below) stay upstream's, so upstream syncs keep
+# merging; the build metadata is kogany's (`+kogany.<n>.g<sha>`, `build/metadata.rs`).
+name = "kogany"
 # When bumping this version, also update the `cargo install --git ... --tag`
 # line in the top-level README.md: it is this package's crates.io readme, so a
 # stale tag ships on the crate page. The pre-release-replacements rule in
@@ -42,7 +47,7 @@ test = false
 # kogany: the Ycash node's binary (the Yellowback lead architect, 2026-11-02). The same entry point
 # as `zakurad`, built only with `--features ycash`; in that build the `zakurad` binary refuses to
 # run (`src/bin/zakurad/main.rs`), so a Ycash node never runs, or installs, under Zcash's name.
-# The package stays `zakura` so upstream syncs stay cheap.
+# The package is `kogany` (above); the directory and the `[lib]` name stay upstream's.
 [[bin]]
 name = "koganyd"
 path = "src/bin/koganyd/main.rs"

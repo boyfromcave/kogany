@@ -77,7 +77,7 @@ class ContinuousSyncTests(unittest.TestCase):
                  patch.object(sync, "run", side_effect=command):
                 self.assertEqual(sync.build_binary(config, sha), target)
                 self.assertEqual(target.read_bytes(), b"instrumented binary")
-                self.assertIn(["cargo", "build", "--release", "--locked", "-p", "zakura",
+                self.assertIn(["cargo", "build", "--release", "--locked", "-p", "kogany",
                                "--features", "sync-metrics"], commands)
                 self.assertEqual(json.loads(target.with_suffix(".json").read_text())["features"],
                                  ["sync-metrics"])

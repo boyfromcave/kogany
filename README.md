@@ -13,6 +13,7 @@ describe the node's architecture; this file covers what is different on Ycash.
 
 - [The three Ycash node lines](#the-three-ycash-node-lines)
 - [Building](#building)
+- [Versioning](#versioning)
 - [Networks, ports and identifiers](#networks-ports-and-identifiers)
 - [Directories and files](#directories-and-files)
 - [Running](#running)
@@ -37,16 +38,16 @@ behaviour. The Yellowback workspace (`AGENTS.md` there) holds the plans and the 
 
 ## Building
 
-`koganyd` is the `zakura` package's `ycash` build:
+`koganyd` is the `kogany` package's `ycash` build:
 
 ```sh
-cargo build --release --locked -p zakura --bin koganyd --features ycash
+cargo build --release --locked -p kogany --bin koganyd --features ycash
 ```
 
 The `ycash` feature switches the forked librustzcash crates (`zakura-common-ycash`, pinned in the
 root `Cargo.toml` under `[patch.crates-io]`) to their Ycash values. The same build also links a
 `zakurad` binary, which refuses to run: a Ycash node never runs, or installs, under Zcash's name.
-Without the feature, `cargo build -p zakura` builds upstream's Zcash `zakurad` and no `koganyd`.
+Without the feature, `cargo build -p kogany` builds upstream's Zcash `zakurad` and no `koganyd`.
 
 The container image is upstream's `docker/Dockerfile` with the same switch: with `ycash` in the
 `FEATURES` build argument it builds and ships `koganyd` (and no `zakurad`), without it upstream's
@@ -56,6 +57,28 @@ The container image is upstream's `docker/Dockerfile` with the same switch: with
 docker build -f docker/Dockerfile --target runtime --build-arg FEATURES="default-release-binaries ycash" -t koganyd .
 docker run --rm --entrypoint koganyd koganyd --version
 ```
+
+## Versioning
+
+The package is `kogany` (cargo prints `Compiling kogany v1.8.0-rc1`); its directory,
+`crates/zakurad`, and its library name, `zakurad`, stay upstream's so upstream syncs keep merging.
+The version line is Zakura's: the package version is the Zakura version kogany tracks
+(`1.8.0-rc1` now). The build metadata is kogany's own, counted from the tag
+`kogany-ycash-baseline`, never from an upstream `v*` tag; for example:
+
+```text
+$ koganyd --version
+koganyd 1.8.0-rc1+kogany.31.g4e67df4e3a1b
+```
+
+`31` is the number of commits since `kogany-ycash-baseline`
+(`git describe --tags --match kogany-ycash-baseline --long`), `g…` the commit, and `.modified` is
+appended for uncommitted changes. A build without `.git` (the Docker image) has no count and
+prints `koganyd 1.8.0-rc1+kogany.g<commit>` from the commit it was given (`SHORT_SHA`). The same
+version is in the startup diagnostics and the `kogany.build.info` metric. The user agent carries
+the package version only, `/koganyd:1.8.0-rc1/`: ycashd keeps only `[A-Za-z0-9 .-/:]` of a peer's
+subversion, so a `+` would be dropped. Upstream's `zakurad` (built without the `ycash` feature)
+keeps Zakura's scheme.
 
 ## Networks, ports and identifiers
 
@@ -75,7 +98,7 @@ with a Zcash network's on one host.
 - Ycash mainnet and regtest share Zcash's magic. A Zcash peer is refused by its protocol version
   (Ycash peers advertise at least 270013) and by its port (8233, 18233), and the Zakura P2P v2
   overlay, which identifies a chain by its genesis hash, is off (decision K-11).
-- User agent: `/koganyd:<version>/`.
+- User agent: `/koganyd:<package version>/`, e.g. `/koganyd:1.8.0-rc1/` ([Versioning](#versioning)).
 - Addresses: transparent `s1…`/`s3…` on mainnet, `sm…` on the testnets and regtest; Sapling
   `ys…`, `ytestsapling…`, `yregtestsapling…`; post-quantum `sq…`, `tq…`, `rq…`; Yellowback (YED)
   `yb…`, `yt…`, `yr…`. Coin type 347 on mainnet.
