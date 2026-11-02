@@ -38,8 +38,9 @@ indexer = ["indexer-rpc", "zakura-state/indexer"]
 internal-miner = []
 
 # The Ycash network profile (kogany): Ycash answers in the stock RPCs (the YDF coinbase output,
-# `getblocksubsidy`, `chain`, `validateaddress`), see zakura-chain's `ycash` feature. kogany W8: the
-# coinbase tag and the vault and YED template filter read kogany-yellowback and kogany-vault.
+# `getblocksubsidy`, `chain`, `validateaddress` with the post-quantum addresses, `chainwork`,
+# `testnetprofile`), see zakura-chain's `ycash` feature. kogany W8: the coinbase tag and the
+# vault and YED template filter read kogany-yellowback and kogany-vault too.
 ycash = ["zakura-chain/ycash", "zakura-consensus/ycash", "dep:kogany-vault", "dep:kogany-yellowback"]
 
 # Test-only features
@@ -118,7 +119,9 @@ zakura-network = { path = "../zakura-network", version = "11.0.0-rc0" }
 zakura-node-services = { path = "../zakura-node-services", version = "5.0.1-rc0" }
 zakura-script = { path = "../zakura-script", version = "5.0.1-rc0" }
 zakura-state = { path = "../zakura-state", version = "11.1.0-rc0" }
-# kogany W8 (the `ycash` feature): the coinbase tag codec and the vault state machine.
+
+# kogany W7-c (`ycash` feature): the post-quantum address codec and TX_PQPKH script for
+# `validateaddress`; W8: the coinbase tag codec and the vault state machine.
 kogany-vault = { path = "../kogany-vault", optional = true }
 kogany-yellowback = { path = "../kogany-yellowback", optional = true }
 rustls = { version = "0.23.40", default-features = false, features = ["ring", "std", "tls12"] }

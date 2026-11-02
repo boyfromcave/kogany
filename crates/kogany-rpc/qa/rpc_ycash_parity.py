@@ -36,6 +36,7 @@ Stdlib only.
 
 import argparse
 import base64
+import hashlib
 import json
 import os
 import re
@@ -64,8 +65,6 @@ ACCEPTED = [
     # getblockchaininfo
     ('getblockchaininfo', r'\.initial_block_download_complete$', 'zakura',
      'a zcashd 6.x field Zakura does not serve; no client reads it'),
-    ('getblockchaininfo', r'\.chainwork$', 'zakura',
-     'Zakura reports chainwork as 0 (methods.rs GetBlockchainInfoResponse); no client reads it'),
     ('getblockchaininfo', r'\.size_on_disk$', 'zakura', 'a different database'),
     ('getblockchaininfo', r'\.transactions$', 'zakura', 'a zcashd 6.x field Zakura does not serve'),
     ('getblockchaininfo|getblock', r'\.valuePools(\[\d\]\.monitored)?$', 'zakura',
@@ -112,6 +111,9 @@ ACCEPTED = [
     ('getrawtransaction', r'\.(in_active_chain|orchard)$', 'zakura', 'Zakura extensions'),
     ('getrawtransaction', r'\.vin\[\d+\]\.(value|valueZat|valueSat|address)$', 'zakura',
      'zcashd -insightexplorer spent-output fields Zakura does not serve'),
+    ('getblock|getrawtransaction', r'(\.tx\[\d+\])?\.vout\[\d+\]\.(spentTxId|spentIndex|spentHeight)$', 'zakura',
+     'zcashd -insightexplorer spent-index fields Zakura does not serve; they appear when the '
+     "wallet's coin selection spends one of the compared coinbases"),
     # gettxout
     ('gettxout', r'\.(version|coinbase)$', 'zakura', 'zcashd fields Zakura does not serve'),
     # z_gettreestate: lightwalletd-dd reads height, hash, time, sapling (common.go:103-113).
@@ -169,7 +171,8 @@ ACCEPTED = [
 # src/template.rs:14-67 and src/rpc.rs:208-214), and the coinbase fields every template must agree
 # on, as full-path patterns: a difference here fails the run even where an ACCEPTED row matches.
 CLIENT_FIELDS = {
-    'getblockchaininfo': r'\.(chain|blocks|bestblockhash|upgrades(\.[0-9a-f]{8}(\.(name|activationheight|status))?)?|consensus(\.\w+)?)$',
+    # chainwork: chain-viz reads it (chain-viz src/rpc.rs BlockchainInfo, plan W7-c F1).
+    'getblockchaininfo': r'\.(chain|testnetprofile|chainwork|blocks|bestblockhash|upgrades(\.[0-9a-f]{8}(\.(name|activationheight|status))?)?|consensus(\.\w+)?)$',
     'getblock': r'\.(hash|height|time|bits|previousblockhash|finalsaplingroot|tx(\[\d+\](\.(txid|hex))?)?)$|=answer$',
     'getrawtransaction': r'\.(hex|height|txid|version|expiryheight|vout(\[\d+\]\.(value|valueZat|n|scriptPubKey(\.\w+)?))?)$|=answer$',
     'z_gettreestate': r'\.(height|hash|time|sapling(\.commitments(\.finalState)?|\.skipHash)?)$',
@@ -186,7 +189,7 @@ CLIENT_FIELDS = {
                         # is live (ycash6 src/rpc/mining.cpp:830-847).
                         r'coinbaseaux(\.flags)?|yellowback(\.\w+)?|'
                         r'coinbase\.(header|versiongroupid|height_push|outputs.*|locktime)|proposal.*)$',
-    'validateaddress': r'\.(isvalid|address|scriptPubKey)$',
+    'validateaddress': r'\.(isvalid|address|scriptPubKey|pqscheme|pqkeyhash)$',
     'getblocksubsidy': r'\.(miner|founders|totalblocksubsidy)$',
 }
 
@@ -195,6 +198,20 @@ WALLET_ONLY = {
     'dumpprivkey': 'lightwalletd-dd regtest helper; wallet',
     'yed_mint': 'lightwalletd-dd regtest helper; a YED wallet RPC (W7-b/yewd)',
 }
+
+
+B58 = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz'
+
+
+def base58check(payload):
+    """ycashd's EncodeBase58Check of version || body."""
+    data = payload + hashlib.sha256(hashlib.sha256(payload).digest()).digest()[:4]
+    n = int.from_bytes(data, 'big')
+    out = ''
+    while n:
+        n, rem = divmod(n, 58)
+        out = B58[rem] + out
+    return '1' * (len(data) - len(data.lstrip(b'\0'))) + out
 
 
 class RpcError(Exception):
@@ -592,7 +609,9 @@ def run(args):
         # mempools, in both templates, then mined.
         txid = spend_with_zip317_fee(y, recipient)
         raw = y.ok('getrawtransaction', txid, 0)
-        r.both('sendrawtransaction', raw)
+        # ycashd's third parameter, allowyedburn (H7): without a Yellowback wallet it changes
+        # nothing, on either node (W7-c).
+        r.both('sendrawtransaction', raw, False, True)
         r.both('getrawmempool')
         r.template()
         r.mine()
@@ -644,6 +663,19 @@ def run(args):
                      'not-an-address'):
             r.both('validateaddress', addr)
             r.both('z_validateaddress', addr)
+        # Post-quantum addresses (W7-c): rq… for both schemes, an unregistered scheme, another
+        # network's tq…/sq…, and the Yellowback yr… forms, which the stock validateaddress does
+        # not know (N9). ycashd decodes a PQ address chain-wide; its wallet makes one only once
+        # Vault is active (getnewaddress "" "pq"), which this chain never activates.
+        key_hash = bytes(range(32))
+        for addr in (base58check(b'\x4c\x51\x01' + key_hash),     # rq…, SLH-DSA-SHA2-128s
+                     base58check(b'\x4c\x51\x02' + key_hash),     # rq…, FN-DSA-512
+                     base58check(b'\x4c\x51\x03' + key_hash),     # unregistered scheme
+                     base58check(b'\x4f\x61\x01' + key_hash),     # tq…, the testnets'
+                     base58check(b'\x4d\xd9\x02' + key_hash),     # sq…, mainnet's
+                     base58check(b'\x57\x10\x01' + key_hash),     # yr…, a YED PQ address
+                     base58check(b'\x20\x02' + key_hash[:20])):   # yr…, a YED key-hash address
+            r.both('validateaddress', addr)
         tip_raw = y.ok('getblock', y.ok('getbestblockhash'), 0)
         r.both('submitblock', tip_raw)
         r.both('submitblock', '00')
