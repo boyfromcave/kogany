@@ -417,9 +417,13 @@ impl zcash_protocol::consensus::Parameters for Network {
         &self,
         nu: zcash_protocol::consensus::NetworkUpgrade,
     ) -> Option<zcash_protocol::consensus::BlockHeight> {
-        // Ycash: zakura-protocol's Ycash upgrade is not scheduled on any
-        // Zakura network until the ycash profile (W1-Y1) adds it.
-        if nu == zcash_protocol::consensus::NetworkUpgrade::Ycash {
+        // Ycash: zakura-protocol's Ycash and Vault upgrades are not scheduled
+        // on any Zakura network until W1-Y1 and W2-b add them.
+        if matches!(
+            nu,
+            zcash_protocol::consensus::NetworkUpgrade::Ycash
+                | zcash_protocol::consensus::NetworkUpgrade::Vault
+        ) {
             return None;
         }
         NetworkUpgrade::from(nu)
