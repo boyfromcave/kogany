@@ -166,6 +166,21 @@ pub const MAX_INBOUND_CONCURRENCY: usize = 500;
 /// transactions have no source peer and are not counted against the cap.
 pub const MAX_INBOUND_CONCURRENCY_PER_PEER: usize = 5;
 
+/// kogany (F-S5-16): the most inv-announced transaction ids one peer may have waiting for a
+/// download slot after [`MAX_INBOUND_CONCURRENCY_PER_PEER`] refused them.
+///
+/// ycashd keeps every announced id in its per-peer request queue (`mapAskFor`), so a burst of
+/// announcements is fully downloaded; Zakura dropped the ids past the per-peer cap, and neither
+/// side announced them again (a burst of 7 `z_sendmany` transactions lost 2). The cap stays
+/// (`GHSA-4fc2-h7jh-287c`); the refused ids wait here, bounded, and are queued again as the
+/// peer's slots free.
+#[cfg(feature = "ycash")]
+pub const MAX_DEFERRED_PER_PEER: usize = 100;
+
+/// kogany (F-S5-16): the most deferred ids across all peers ([`MAX_DEFERRED_PER_PEER`]).
+#[cfg(feature = "ycash")]
+pub const MAX_DEFERRED: usize = MAX_INBOUND_CONCURRENCY;
+
 /// A marker struct for the oneshot channels which cancel a pending download and verify.
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 struct CancelDownloadAndVerify;
@@ -291,6 +306,11 @@ where
     /// Receives [`Self::state_failures_tx`]'s transactions.
     #[cfg(feature = "ycash")]
     state_failures: mpsc::UnboundedReceiver<super::state_retry::Retry>,
+
+    /// kogany (F-S5-16): inv-announced ids the per-peer cap refused, oldest first, with their
+    /// announcing peer ([`MAX_DEFERRED_PER_PEER`]).
+    #[cfg(feature = "ycash")]
+    deferred: std::collections::VecDeque<(UnminedTxId, QueueSource)>,
 }
 
 impl<ZN, ZV, ZS> Stream for Downloads<ZN, ZV, ZS>
@@ -441,6 +461,8 @@ where
             state_failures_tx,
             #[cfg(feature = "ycash")]
             state_failures,
+            #[cfg(feature = "ycash")]
+            deferred: Default::default(),
         }
     }
 
@@ -528,6 +550,10 @@ where
                     "too many transactions queued for this peer: ignored transaction"
                 );
                 metrics::counter!("mempool.full_queue.per_peer.total").increment(1);
+                #[cfg(feature = "ycash")]
+                if let Gossip::Id(txid) = &gossiped_tx {
+                    self.defer(*txid, source.clone());
+                }
                 return Err(MempoolError::FullQueue);
             }
         }
@@ -822,9 +848,55 @@ where
             let _ = cancel_tx.send(CancelDownloadAndVerify);
         }
         self.pending_per_peer.clear();
+        #[cfg(feature = "ycash")]
+        self.deferred.clear();
         assert!(self.pending.is_empty());
         assert!(self.cancel_handles.is_empty());
         metrics::gauge!("mempool.currently.queued.transactions",).set(self.in_flight as f64);
+    }
+
+    /// kogany (F-S5-16): keeps an inv-announced id the per-peer cap refused, within the bounds.
+    #[cfg(feature = "ycash")]
+    fn defer(&mut self, txid: UnminedTxId, source: QueueSource) {
+        if self.deferred.len() >= MAX_DEFERRED
+            || self.deferred.iter().any(|(id, _)| *id == txid)
+            || self
+                .deferred
+                .iter()
+                .filter(|(_, peer)| *peer == source)
+                .count()
+                >= MAX_DEFERRED_PER_PEER
+        {
+            return;
+        }
+        self.deferred.push_back((txid, source));
+    }
+
+    /// kogany (F-S5-16): the deferred ids whose peer has a free download slot now, oldest first,
+    /// at most as many per peer as it has free slots. The caller queues each again with
+    /// [`Self::download_if_needed_and_verify`] unless the mempool already has or refused it.
+    #[cfg(feature = "ycash")]
+    pub fn take_deferred_ready(&mut self) -> Vec<(Gossip, QueueSource)> {
+        let mut free: HashMap<QueueSource, usize> = HashMap::new();
+        let mut ready = Vec::new();
+        let pending_per_peer = &self.pending_per_peer;
+        let cancel_handles = &self.cancel_handles;
+        self.deferred.retain(|(txid, source)| {
+            if cancel_handles.contains_key(txid) {
+                return false;
+            }
+            let slots = free.entry(source.clone()).or_insert_with(|| {
+                MAX_INBOUND_CONCURRENCY_PER_PEER
+                    .saturating_sub(pending_per_peer.get(source).copied().unwrap_or(0))
+            });
+            if *slots == 0 {
+                return true;
+            }
+            *slots -= 1;
+            ready.push((Gossip::Id(*txid), source.clone()));
+            false
+        });
+        ready
     }
 
     /// Decrement the per-peer pending count for `source`, removing the entry
@@ -1012,6 +1084,69 @@ mod tests {
             .transaction_requests()
             .any(|(tx, retry_source)| tx.id() == transaction.id()
                 && retry_source.as_ref() == Some(&source)));
+    }
+
+    /// kogany F-S5-16: a burst of 7 inv-announced ids from one peer with the per-peer cap at 5:
+    /// the 2 refused ids are kept and queued again once the peer's slots free, so all 7 are
+    /// downloaded; the deferred ids stay bounded per peer.
+    #[cfg(feature = "ycash")]
+    #[tokio::test]
+    async fn ycash_burst_past_the_per_peer_cap_is_downloaded_when_slots_free() {
+        assert_eq!(MAX_INBOUND_CONCURRENCY_PER_PEER, 5);
+        let mut downloads = pending_downloads();
+        let source = QueueSource::LegacySocket(([127, 0, 0, 1], 18344).into());
+        let ids: Vec<UnminedTxId> = (0..7).map(tx_id).collect();
+
+        let refused = ids
+            .iter()
+            .filter(|id| {
+                downloads
+                    .download_if_needed_and_verify(Gossip::Id(**id), Some(source.clone()), None)
+                    .is_err()
+            })
+            .count();
+        assert_eq!(refused, 2, "the cap refuses the 6th and 7th");
+        assert!(
+            downloads.take_deferred_ready().is_empty(),
+            "no slot is free yet"
+        );
+
+        // Two downloads finish (here: cancelled as mined), freeing two slots.
+        let finished: HashSet<transaction::Hash> =
+            ids[..2].iter().map(|id| id.mined_id()).collect();
+        downloads.cancel(&finished);
+        let ready = downloads.take_deferred_ready();
+        assert_eq!(
+            ready
+                .iter()
+                .map(|(gossip, _)| gossip.id())
+                .collect::<Vec<_>>(),
+            ids[5..].to_vec()
+        );
+        for (gossip, peer) in ready {
+            downloads
+                .download_if_needed_and_verify(gossip, Some(peer), None)
+                .expect("a freed slot takes the deferred id");
+        }
+        for id in &ids[2..] {
+            assert!(
+                downloads.cancel_handles.contains_key(id),
+                "{id:?} is downloading"
+            );
+        }
+        assert!(downloads.take_deferred_ready().is_empty());
+
+        // The deferred ids are bounded per peer.
+        for index in 100..(100 + u64::try_from(MAX_DEFERRED_PER_PEER).unwrap() + 10) {
+            let _ = downloads.download_if_needed_and_verify(
+                Gossip::Id(tx_id(index)),
+                Some(source.clone()),
+                None,
+            );
+        }
+        assert_eq!(downloads.deferred.len(), MAX_DEFERRED_PER_PEER);
+        downloads.cancel_all();
+        assert!(downloads.deferred.is_empty());
     }
 
     #[tokio::test]

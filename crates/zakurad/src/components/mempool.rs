@@ -1237,6 +1237,15 @@ impl Service<Request> for Mempool {
                 }
             }
 
+            // Ycash: inv-announced ids the per-peer download cap refused are queued again as
+            // their peer's slots free (kogany F-S5-16).
+            #[cfg(feature = "ycash")]
+            for (gossip, source) in tx_downloads.take_deferred_ready() {
+                if storage.should_download_or_verify(gossip.id()).is_ok() {
+                    let _ = tx_downloads.download_if_needed_and_verify(gossip, Some(source), None);
+                }
+            }
+
             // Handle best chain tip changes
             if let Some(TipAction::Grow { block }) = tip_action {
                 tracing::trace!(block_height = ?block.height, "handling blocks added to tip");

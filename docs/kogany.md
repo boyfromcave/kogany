@@ -50,3 +50,7 @@ behaviours follow ycashd's there, each against Zakura's own:
   on) leaves the node without a payout key: it emits no tag and `yed_setquote` refuses
   `no-payout-address`, as a ycashd mining to its wallet does. A Yellowback-live node can then mine
   to a transparent address without naming a payout key.
+- **Transaction relay.** An inv-announced transaction id the per-peer download cap
+  (`MAX_INBOUND_CONCURRENCY_PER_PEER`, 5) refuses is kept, bounded, and requested again when a
+  slot frees, as ycashd keeps every announced id in its request queue: a burst of announcements is
+  fully downloaded.
