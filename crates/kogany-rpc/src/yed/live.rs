@@ -938,7 +938,7 @@ mod pruned_tests {
         use zakura_state::constants::{min_pruning_retention, MIN_PRUNING_RETENTION};
         use zakura_state::yed::UNDO_KEEP;
         use zakura_state::MAX_BLOCK_REORG_HEIGHT;
-        assert!(MIN_PRUNING_RETENTION > UNDO_KEEP + MAX_BLOCK_REORG_HEIGHT);
+        const { assert!(MIN_PRUNING_RETENTION > UNDO_KEEP + MAX_BLOCK_REORG_HEIGHT) };
         for network in [Network::Mainnet, Network::new_default_testnet()] {
             assert_eq!(min_pruning_retention(&network), MIN_PRUNING_RETENTION);
         }
