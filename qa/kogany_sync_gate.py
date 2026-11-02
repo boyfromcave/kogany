@@ -6,7 +6,7 @@
 
   qa/kogany_sync_gate.py --kogany URL --ycash URL --ycash-user U --ycash-password P
                          [--from H] [--to H] [--state FILE] [--follow SECONDS]
-                         [--treestate-every N] [--kogany-log FILE]
+                         [--treestate-every N] [--kogany-log FILE] [--recheck]
 
 Both nodes sync the same network independently (kogany from live peers, ycash6 from its own).
 For every height up to the lower of the two tips (or `--to`) the driver asks both nodes over
@@ -26,6 +26,10 @@ With `--kogany-log`, the gate also counts kogany's rejected blocks (`could not b
 `could not be full-verified`, `error downloading and verifying block`) at or below the compared
 height: the gate wants zero. `TooHigh` / `Finished` above a partial checkpoint list's end is the
 list ending (the router's fail-safe), not a rejected block, and is counted separately.
+
+`--recheck` compares again, at their heights only, every mismatch the state file records and
+every tree-state sample that differed, keeps the differences that remain and exits: after a kogany
+RPC fix, the synced range need not be compared again.
 
 Progress is kept in `--state` (JSON), so a rerun resumes after the last compared height; with
 `--follow` the driver keeps comparing as the tips advance, sleeping between rounds. Exit 0 when
@@ -250,6 +254,43 @@ def run_round(kogany, ycash, state, args):
     save_state(args.state, state)
 
 
+def recheck(kogany, ycash, state, args):
+    """Compare again every recorded mismatch and every non-identical tree-state sample; keep
+    only the differences that remain (after a kogany fix, without re-syncing the range)."""
+    blocks = sorted({m["height"] for m in state["mismatches"] if not m.get("rpc")})
+    trees = sorted({m["height"] for m in state["mismatches"] if m.get("rpc") == "z_gettreestate"}
+                   | {t["height"] for t in state["treestate_samples"] if not t["identical"]})
+    kept = [m for m in state["mismatches"] if m.get("rpc") not in (None, "z_gettreestate")]
+    # The ZIP-221 check is ycash6 against ycash6; a recheck cannot change it.
+    kept += [{"height": m["height"], "diffs": [d for d in m["diffs"] if d[0].startswith("zip221")]}
+             for m in state["mismatches"] if not m.get("rpc")
+             and any(d[0].startswith("zip221") for d in m["diffs"])]
+    for i in range(0, len(blocks), args.batch):
+        heights = blocks[i:i + args.batch]
+        calls = [("getblock", [str(x), 1]) for x in heights]
+        for height, (k_block, k_err), (y_block, y_err) in zip(heights, kogany.batch(calls), ycash.batch(calls)):
+            if k_err or y_err or k_block is None or y_block is None:
+                raise GateError("getblock %d: kogany %s, ycash6 %s" % (height, k_err, y_err))
+            diffs = compare_blocks(height, k_block, y_block)
+            if diffs:
+                kept.append({"height": height, "diffs": diffs})
+    by_height = {t["height"]: t for t in state["treestate_samples"]}
+    for height in trees:
+        shared, ts_diffs = compare_treestates(kogany.call("z_gettreestate", str(height)),
+                                              ycash.call("z_gettreestate", str(height)))
+        if height in by_height:
+            by_height[height].update(fields=shared, identical=not ts_diffs)
+        if ts_diffs:
+            kept.append({"height": height, "diffs": ts_diffs, "rpc": "z_gettreestate"})
+    before = len(state["mismatches"])
+    state["mismatches"] = sorted(kept, key=lambda m: m["height"])
+    state.setdefault("rechecks", []).append({
+        "updated": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "blocks": len(blocks), "treestates": len(trees),
+        "mismatches_before": before, "mismatches_after": len(state["mismatches"])})
+    save_state(args.state, state)
+
+
 def summary(state):
     keep = ("compared_through", "kogany_tip", "ycash_tip", "rounds", "rejected_blocks",
             "rejections_beyond", "updated")
@@ -278,6 +319,8 @@ def main(argv=None):
     ap.add_argument("--batch", type=int, default=100)
     ap.add_argument("--kogany-log", help="kogany's log file, scanned for rejected blocks")
     ap.add_argument("--fail-fast", action="store_true")
+    ap.add_argument("--recheck", action="store_true",
+                    help="compare again the recorded mismatches and differing tree states, then exit")
     ap.add_argument("--verbose", action="store_true")
     args = ap.parse_args(argv)
 
@@ -285,6 +328,10 @@ def main(argv=None):
     ycash = Rpc(args.ycash, args.ycash_user, args.ycash_password)
     state = load_state(args.state)
     try:
+        if args.recheck:
+            recheck(kogany, ycash, state, args)
+            print(json.dumps(dict(summary(state), recheck=state["rechecks"][-1])), flush=True)
+            return 1 if state["mismatches"] else 0
         while True:
             run_round(kogany, ycash, state, args)
             print(json.dumps(summary(state)), flush=True)

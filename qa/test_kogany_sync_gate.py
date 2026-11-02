@@ -50,6 +50,31 @@ class SyncGateTest(unittest.TestCase):
              "sprout": {"commitments": {"finalState": "ef"}}}
         self.assertEqual(gate.compare_treestates(k, y), (["sapling.finalState"], []))
 
+    def test_recheck_keeps_only_the_differences_that_remain(self):
+        class Fake:
+            def __init__(self, blocks, trees):
+                self.blocks, self.trees = blocks, trees
+            def batch(self, calls):
+                return [(self.blocks[int(p[0])], None) for _, p in calls]
+            def call(self, method, height):
+                return self.trees[int(height)]
+        tree = lambda st: {"sapling": {"commitments": {"finalState": st, "finalRoot": "r"}}}
+        kogany = Fake({5: block(finalsaplingroot="3e"), 6: block(finalsaplingroot="00")},
+                      {9: tree("01"), 10: tree("02")})
+        ycash = Fake({5: block(finalsaplingroot="3e"), 6: block(finalsaplingroot="3e")},
+                     {9: tree("01"), 10: tree("03")})
+        state = {"compared_through": 10, "rounds": 1,
+                 "mismatches": [{"height": 5, "diffs": [["finalsaplingroot", "00", "3e"]]},
+                                {"height": 6, "diffs": [["finalsaplingroot", "00", "3e"]]},
+                                {"height": 9, "diffs": [["sapling.finalState", "0100", "01"]], "rpc": "z_gettreestate"}],
+                 "treestate_samples": [{"height": 9, "fields": [], "identical": False},
+                                       {"height": 10, "fields": [], "identical": False}]}
+        args = type("A", (), {"batch": 100, "state": None})()
+        gate.recheck(kogany, ycash, state, args)
+        self.assertEqual([m["height"] for m in state["mismatches"]], [6, 10])
+        self.assertEqual([t["identical"] for t in state["treestate_samples"]], [True, False])
+        self.assertEqual(state["rechecks"][-1]["mismatches_before"], 3)
+
     def test_log_scan_separates_the_list_end(self):
         with tempfile.NamedTemporaryFile("w", delete=False) as f:
             f.write("block could not be checkpointed due to: block at Height(500) is higher than the maximum checkpoint Height(400)\n")
