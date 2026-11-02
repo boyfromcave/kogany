@@ -3046,6 +3046,11 @@ impl Service<ReadRequest> for ReadStateService {
                 )))
             }
 
+            // kogany (S5, F-S5-19): getblock of a side-chain, invalidated or rejected block.
+            ReadRequest::OffChainBlock(hash) => Ok(ReadResponse::OffChainBlock(
+                state.latest_non_finalized_state().off_chain_block(&hash),
+            )),
+
             // kogany (W6-c): the YED module's mempool check at the best chain tip (admission
             // and the tip re-check's sweep).
             ReadRequest::BestChainYedMempoolCheck(txs) => {

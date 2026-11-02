@@ -1401,6 +1401,24 @@ where
     BlockVerifierRouter: BlockVerifierService,
     SyncStatus: ChainSyncStatus + Clone + Send + Sync + 'static,
 {
+    /// kogany (S5, F-S5-19): the block `hash` off the best chain (side chain, invalidated or
+    /// rejected) and its height, as ycashd's block index still holds it.
+    #[cfg(feature = "ycash")]
+    async fn ycash_off_chain_block(
+        &self,
+        hash: block::Hash,
+    ) -> Option<(Arc<block::Block>, block::Height)> {
+        match self
+            .read_state
+            .clone()
+            .oneshot(zakura_state::ReadRequest::OffChainBlock(hash))
+            .await
+        {
+            Ok(zakura_state::ReadResponse::OffChainBlock(found)) => found,
+            _ => None,
+        }
+    }
+
     /// Create a new instance of the RPC handler.
     //
     // TODO:
@@ -2485,6 +2503,13 @@ where
                     {
                         return Err(types::ycash::PRUNED_BLOCK).map_error(ErrorCode::InternalError);
                     }
+                    // kogany (S5, F-S5-19): ycashd serves a block off the best chain too.
+                    #[cfg(feature = "ycash")]
+                    if let Some(hash) = hash_or_height.hash() {
+                        if let Some((block, _height)) = self.ycash_off_chain_block(hash).await {
+                            return Ok(GetBlockResponse::Raw(block.into()));
+                        }
+                    }
                     Err("Block not found").map_error(server::error::LegacyCode::InvalidParameter)
                 }
                 _ => unreachable!("unmatched response to a block request"),
@@ -2514,6 +2539,69 @@ where
                 previous_block_hash,
                 next_block_hash,
             } = *block_header;
+
+            // kogany (S5, F-S5-19): a block off the best chain, from the block itself.
+            #[cfg(feature = "ycash")]
+            if confirmations == -1 {
+                if let Some((block, _)) = self.ycash_off_chain_block(hash).await {
+                    let size = block.zcash_serialize_to_vec().map_misc_error()?.len();
+                    let tx: Vec<GetBlockTransaction> = block
+                        .transactions
+                        .iter()
+                        .map(|t| {
+                            if verbosity == 1 {
+                                GetBlockTransaction::Hash(t.hash())
+                            } else {
+                                GetBlockTransaction::Object(Box::new(
+                                    TransactionObject::from_transaction(
+                                        t.clone(),
+                                        Some(height),
+                                        Some(confirmations),
+                                        &network,
+                                        Some(block.header.time),
+                                        Some(hash),
+                                        Some(false),
+                                        t.hash(),
+                                    ),
+                                ))
+                            }
+                        })
+                        .collect();
+                    return Ok(GetBlockResponse::Object(Box::new(BlockObject {
+                        hash,
+                        confirmations,
+                        height: Some(height),
+                        version: Some(version),
+                        merkle_root: Some(merkle_root),
+                        time: Some(time),
+                        nonce: Some(nonce),
+                        solution: Some(solution),
+                        bits: Some(bits),
+                        difficulty: Some(difficulty),
+                        n_tx: tx.len(),
+                        tx,
+                        trees: GetBlockTrees {
+                            sapling: SaplingTrees {
+                                size: sapling_tree_size,
+                            },
+                            ..Default::default()
+                        },
+                        chain_supply: None,
+                        value_pools: None,
+                        size: Some(size as i64),
+                        block_commitments: Some(block_commitments),
+                        final_sapling_root: Some(final_sapling_root),
+                        final_orchard_root: None,
+                        chain_history_root: Some(types::ycash::chain_history_root(
+                            &network,
+                            height,
+                            block_commitments,
+                        )),
+                        previous_block_hash: Some(previous_block_hash),
+                        next_block_hash: None,
+                    })));
+                }
+            }
 
             // # Concurrency
             //
@@ -2725,16 +2813,32 @@ where
                 // Reference for the legacy error code:
                 // <https://github.com/zcash/zcash/blob/99ad6fdc3a549ab510422820eea5e5ce9f60a5fd/src/rpc/blockchain.cpp#L629>
                 .map_error(server::error::LegacyCode::InvalidParameter)?;
+        let best_chain_header = self
+            .read_state
+            .clone()
+            .oneshot(zakura_state::ReadRequest::BlockHeader(hash_or_height))
+            .await;
+        // kogany (S5, F-S5-19): a block off the best chain (a side chain, an invalidated or a
+        // rejected block) is ycashd's header with `confirmations: -1`.
+        #[cfg(feature = "ycash")]
+        let best_chain_header = match (best_chain_header, hash_or_height.hash()) {
+            (Err(error), Some(hash)) => match self.ycash_off_chain_block(hash).await {
+                Some((block, height)) => Ok(zakura_state::ReadResponse::BlockHeader {
+                    header: block.header.clone(),
+                    hash,
+                    height,
+                    next_block_hash: None,
+                }),
+                None => Err(error),
+            },
+            (response, _) => response,
+        };
         let zakura_state::ReadResponse::BlockHeader {
             header,
             hash,
             height,
             next_block_hash,
-        } = self
-            .read_state
-            .clone()
-            .oneshot(zakura_state::ReadRequest::BlockHeader(hash_or_height))
-            .await
+        } = best_chain_header
             .map_err(|_| "block height not in best chain")
             .map_error(
                 // ## Compatibility with `zcashd`.
@@ -2764,6 +2868,19 @@ where
             .await?
             else {
                 panic!("unexpected response to SaplingTree request")
+            };
+
+            // kogany (S5, F-S5-19): an off-chain block has no tree the best-chain reads find; its
+            // tree fields are the header's (an empty tree's size).
+            #[cfg(feature = "ycash")]
+            let sapling_tree = match sapling_tree {
+                Some(tree) => Some(tree),
+                None if next_block_hash.is_none()
+                    && self.ycash_off_chain_block(hash).await.is_some() =>
+                {
+                    Some(Default::default())
+                }
+                None => None,
             };
 
             // This could be `None` if there's a chain reorg between state queries.

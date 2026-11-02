@@ -260,6 +260,12 @@ where
     /// Channels used to cancel the request that an unready service is doing.
     cancel_handles: HashMap<D::Key, oneshot::Sender<CancelClientWork>>,
 
+    /// kogany (S5, F-S5-16): transaction ids a broadcast found this busy peer unable to take,
+    /// advertised once it is ready again (ycashd relays every accepted transaction to every
+    /// peer). At most [`MAX_PENDING_TX_ADVERTS_PER_PEER`] per peer; dropped with the peer.
+    #[cfg(feature = "ycash")]
+    pending_tx_adverts: HashMap<D::Key, HashSet<zakura_chain::transaction::UnminedTxId>>,
+
     // Peer Validation
     //
     /// An endpoint to see the minimum peer protocol version in real time.
@@ -322,6 +328,10 @@ where
         self.shut_down_tasks_and_channels(&mut cx);
     }
 }
+
+/// kogany (S5, F-S5-16): the most transaction ids queued for one busy peer.
+#[cfg(feature = "ycash")]
+pub(crate) const MAX_PENDING_TX_ADVERTS_PER_PEER: usize = 1_000;
 
 impl<D, C> PeerSet<D, C>
 where
@@ -387,6 +397,8 @@ where
             // Busy peers
             unready_services: FuturesUnordered::new(),
             cancel_handles: HashMap::new(),
+            #[cfg(feature = "ycash")]
+            pending_tx_adverts: HashMap::new(),
 
             // Peer validation
             minimum_peer_version,
@@ -881,6 +893,8 @@ where
     /// If the peer does not exist, does nothing.
     fn remove(&mut self, key: &D::Key) {
         self.find_response_stalls.clear(*key);
+        #[cfg(feature = "ycash")]
+        self.pending_tx_adverts.remove(key);
 
         if let Some(ready_service) = self.take_ready_service(key) {
             // A ready service has no work to cancel, so just drop it.
@@ -1391,8 +1405,56 @@ where
 
     /// Broadcasts the same request to lots of ready peers, ignoring return values.
     fn route_broadcast(&mut self, req: Request) -> <Self as tower::Service<Request>>::Future {
+        // kogany (S5, F-S5-16): every ready peer gets the inv now, every busy one once it is
+        // ready (`flush_pending_tx_adverts`), as ycashd's `RelayTransaction` reaches every peer.
+        #[cfg(feature = "ycash")]
+        if let Request::AdvertiseTransactionIds(ids, _) = &req {
+            let busy: Vec<D::Key> = self.cancel_handles.keys().copied().collect();
+            for key in busy {
+                let pending = self.pending_tx_adverts.entry(key).or_default();
+                for id in ids {
+                    if pending.len() >= MAX_PENDING_TX_ADVERTS_PER_PEER {
+                        break;
+                    }
+                    pending.insert(*id);
+                }
+            }
+            let all = self.ready_services.len();
+            return self.route_multiple(req, all);
+        }
         // Broadcasts ignore the response
         self.route_multiple(req, self.number_of_peers_to_broadcast())
+    }
+
+    /// kogany (S5, F-S5-16): advertises the queued transaction ids to each peer that is ready
+    /// again; drops the queues of peers that left.
+    #[cfg(feature = "ycash")]
+    fn flush_pending_tx_adverts(&mut self) {
+        if self.pending_tx_adverts.is_empty() {
+            return;
+        }
+        let (ready, busy) = (&self.ready_services, &self.cancel_handles);
+        self.pending_tx_adverts
+            .retain(|key, _| ready.contains_key(key) || busy.contains_key(key));
+        let ready_keys: Vec<D::Key> = self
+            .pending_tx_adverts
+            .keys()
+            .filter(|key| self.ready_services.contains_key(*key))
+            .copied()
+            .collect();
+        for key in ready_keys {
+            let Some(ids) = self.pending_tx_adverts.remove(&key) else {
+                continue;
+            };
+            let Some(mut svc) = self.take_ready_service(&key) else {
+                continue;
+            };
+            let fut = svc.call(Request::AdvertiseTransactionIds(ids, None));
+            self.push_unready(key, svc);
+            tokio::spawn(async move {
+                let _ = fut.await;
+            });
+        }
     }
 
     /// Pace legacy inventory through the corresponding uploads, including busy sidecars.
@@ -1444,6 +1506,8 @@ where
         let _poll_pending: Poll<()> = self.poll_background_errors(cx)?;
 
         let _ = self.poll_peers(cx)?;
+        #[cfg(feature = "ycash")]
+        self.flush_pending_tx_adverts();
         self.prune_block_gossip_peers();
         self.publish_block_gossip_peers();
 

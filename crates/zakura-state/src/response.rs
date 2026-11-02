@@ -526,6 +526,10 @@ pub enum ReadResponse {
     /// [`ReadRequest::YedSnapshot`].
     YedSnapshot(Option<crate::service::yed::YedSnapshot>),
 
+    /// kogany (S5, F-S5-19): response to [`ReadRequest::OffChainBlock`]: the block and its
+    /// height.
+    OffChainBlock(Option<(Arc<Block>, block::Height)>),
+
     /// kogany (W6-c): response to [`ReadRequest::BestChainYedMempoolCheck`]; see
     /// [`Response::YedMempoolCheck`].
     YedMempoolCheck {
@@ -824,7 +828,7 @@ impl TryFrom<ReadResponse> for Response {
 
             ReadResponse::BlockInfo(block_info) => Ok(Response::BlockInfo(block_info)),
             ReadResponse::VaultSnapshot(snapshot) => Ok(Response::VaultSnapshot(snapshot)),
-            ReadResponse::YedSnapshot(_) => {
+            ReadResponse::YedSnapshot(_) | ReadResponse::OffChainBlock(_) => {
                 Err("there is no corresponding Response for this ReadResponse")
             }
             ReadResponse::YedMempoolCheck { tip, reasons } => {

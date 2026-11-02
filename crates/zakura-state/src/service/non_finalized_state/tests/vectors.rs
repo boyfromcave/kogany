@@ -1716,3 +1716,45 @@ fn ycash_invalidations_at_one_height_are_kept_by_hash() -> Result<()> {
 
     Ok(())
 }
+
+/// kogany (S5, F-S5-19): `getblock` of a block off the best chain. A side-chain block and an
+/// invalidated block are found with their heights; a best-chain block and an unknown one are
+/// not (the best chain answers those).
+#[test]
+fn off_chain_blocks_are_found_by_hash() -> Result<()> {
+    let _init_guard = zakura_test::init();
+
+    for network in Network::iter() {
+        let block1: Arc<Block> = Arc::new(network.test_block(653599, 583999).unwrap());
+        let best = block1.make_fake_child().set_work(10);
+        let side = block1.make_fake_child().set_work(5);
+        let doomed = best.make_fake_child().set_work(10);
+
+        let mut state = NonFinalizedState::new(&network);
+        let finalized_state = FinalizedState::new(&Config::ephemeral(), &network)
+            .expect("opening an ephemeral database should succeed");
+        finalized_state
+            .set_finalized_value_pool(ValueBalance::<NonNegative>::fake_populated_pool());
+
+        state.commit_new_chain(block1.clone().prepare(), &finalized_state)?;
+        state.commit_block(best.clone().prepare(), &finalized_state)?;
+        state.commit_block(side.clone().prepare(), &finalized_state)?;
+        state.commit_block(doomed.clone().prepare(), &finalized_state)?;
+        state.invalidate_block(doomed.hash())?;
+
+        let height1 = block1.coinbase_height().unwrap();
+        let (found, height) = state
+            .off_chain_block(&side.hash())
+            .expect("the side-chain block is found");
+        assert_eq!((found.hash(), height), (side.hash(), (height1 + 1).unwrap()));
+        let (found, height) = state
+            .off_chain_block(&doomed.hash())
+            .expect("the invalidated block is found");
+        assert_eq!((found.hash(), height), (doomed.hash(), (height1 + 2).unwrap()));
+        assert!(state.off_chain_block(&best.hash()).is_none());
+        assert!(state.off_chain_block(&block1.hash()).is_none());
+        assert!(state.off_chain_block(&block::Hash([7; 32])).is_none());
+    }
+
+    Ok(())
+}

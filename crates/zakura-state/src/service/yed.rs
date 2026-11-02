@@ -86,6 +86,14 @@ pub struct YellowbackConfig {
 
     /// `-yellowbackmintrequiresarmed`: MINT requires an ARMED snapshot (H-1).
     pub mint_requires_armed: bool,
+
+    /// `-yellowbacktestfault` (regtest only, not hashed into the parameters): inject one index
+    /// fault, `storage:<check|commit>[:<height>]` (the next evaluated block, or the one at
+    /// `height`, stops the node as a storage failure does, U-21) or `crash:<height>` (the process
+    /// aborts when that block is evaluated). ycashd's `storage:undo`, `template` and `schema`
+    /// have no kogany counterpart (no undo step, no template-side index check, no schema
+    /// version) and are refused.
+    pub test_fault: Option<String>,
 }
 
 impl Default for YellowbackConfig {
@@ -99,6 +107,7 @@ impl Default for YellowbackConfig {
                 .name()
                 .to_owned(),
             mint_requires_armed: kogany_yellowback::params::REGTEST_DEFAULT_MINT_REQUIRES_ARMED,
+            test_fault: None,
         }
     }
 }
@@ -122,6 +131,7 @@ impl YellowbackConfig {
                 "mint_requires_armed",
                 self.mint_requires_armed != d.mint_requires_armed,
             ),
+            ("test_fault", self.test_fault.is_some()),
         ]
         .into_iter()
         .find(|(_, set)| *set)
@@ -163,6 +173,9 @@ impl YellowbackConfig {
         }
         if !(0..=0x7FFF_FFFF).contains(&self.attest_arm_min) {
             return Err("yellowback.attest_arm_min must be >= 0".to_owned());
+        }
+        if let Some(spec) = &self.test_fault {
+            YedTestFault::parse(spec)?;
         }
         Ok(())
     }
@@ -247,6 +260,81 @@ pub fn chain_yed_effect(
 ) -> Result<YedBlockEffect, YedEvaluationFailed> {
     check_rules_stamp(db)?;
     evaluate_yed_block(p, &parent_chain.yed_view(db), input)
+}
+
+// ---- test fault injection (regtest) ------------------------------------------------------
+
+/// A parsed `yellowback.test_fault` (ycash6 `YellowbackIndex::SetTestFault`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum YedTestFault {
+    /// `storage:<check|commit>[:<height>]`: one evaluation fails as a storage fault.
+    Storage(Option<Height>),
+    /// `crash:<height>`: the process aborts at that block.
+    Crash(Height),
+}
+
+impl YedTestFault {
+    /// Parses ycashd's spec; the forms kogany has no counterpart for are refused.
+    pub fn parse(spec: &str) -> Result<YedTestFault, String> {
+        let height = |h: &str| -> Result<Height, String> {
+            match h.parse::<i64>() {
+                Ok(h) if (1..=0x7FFF_FFFF).contains(&h) => Ok(Height(h as u32)),
+                _ => Err("yellowback.test_fault: bad height".to_owned()),
+            }
+        };
+        let parts: Vec<&str> = spec.split(':').collect();
+        match parts.as_slice() {
+            ["crash", h] => Ok(YedTestFault::Crash(height(h)?)),
+            ["storage", "check" | "commit"] => Ok(YedTestFault::Storage(None)),
+            ["storage", "check" | "commit", h] => Ok(YedTestFault::Storage(Some(height(h)?))),
+            ["storage", "undo", ..] | ["template"] | ["schema"] => Err(format!(
+                "yellowback.test_fault: {spec} has no kogany counterpart \
+                 (no undo step, template-side index check or schema version)"
+            )),
+            _ => Err("yellowback.test_fault: expected storage:<check|commit>[:<height>] \
+                      or crash:<height>"
+                .to_owned()),
+        }
+    }
+}
+
+/// The armed fault: the spec it came from and the fault, `None` once it fired.
+static YED_TEST_FAULT: std::sync::Mutex<Option<(String, Option<YedTestFault>)>> =
+    std::sync::Mutex::new(None);
+
+/// Fires `config.test_fault` once, when `height` (a block being committed, not a template
+/// check) matches it: a storage fault is returned, a crash aborts the process. Regtest only (the
+/// configuration refuses the key elsewhere).
+pub fn maybe_inject_yed_test_fault(
+    config: &YellowbackConfig,
+    height: Height,
+) -> Result<(), YedEvaluationFailed> {
+    let Some(spec) = &config.test_fault else {
+        return Ok(());
+    };
+    let mut armed = YED_TEST_FAULT
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    if armed.as_ref().map(|(s, _)| s) != Some(spec) {
+        *armed = Some((spec.clone(), YedTestFault::parse(spec).ok()));
+    }
+    let Some((_, fault)) = armed.as_mut() else {
+        return Ok(());
+    };
+    match *fault {
+        Some(YedTestFault::Storage(at)) if at.is_none_or(|at| at == height) => {
+            *fault = None;
+            tracing::error!(?height, "yellowback.test_fault: injecting a storage fault");
+            Err(YedEvaluationFailed::Unhealthy(
+                "injected storage fault (yellowback.test_fault)".to_owned(),
+            ))
+        }
+        Some(YedTestFault::Crash(at)) if at == height => {
+            tracing::error!(?height, "yellowback.test_fault: crashing");
+            std::process::abort()
+        }
+        _ => Ok(()),
+    }
 }
 
 // ---- health -------------------------------------------------------------------------------
@@ -617,4 +705,39 @@ pub fn finalized_yed_snapshot_below(
         patch,
         None,
     ))
+}
+
+#[cfg(test)]
+mod ycash_test_fault_tests {
+    use super::*;
+
+    /// kogany (S5): `yellowback.test_fault` takes ycashd's storage and crash forms and refuses the
+    /// rest; a storage fault fires once, at its height.
+    #[test]
+    fn ycash_test_fault_parses_and_fires_once() {
+        assert_eq!(
+            YedTestFault::parse("storage:commit"),
+            Ok(YedTestFault::Storage(None))
+        );
+        assert_eq!(
+            YedTestFault::parse("storage:check:7"),
+            Ok(YedTestFault::Storage(Some(Height(7))))
+        );
+        assert_eq!(
+            YedTestFault::parse("crash:9"),
+            Ok(YedTestFault::Crash(Height(9)))
+        );
+        for bad in ["storage:undo", "template", "schema", "storage:bogus", "crash:0", "x"] {
+            assert!(YedTestFault::parse(bad).is_err(), "{bad}");
+        }
+        let config = YellowbackConfig {
+            test_fault: Some("storage:commit:5".to_owned()),
+            ..Default::default()
+        };
+        assert!(config.validate().is_ok());
+        assert_eq!(config.regtest_only_key_set(), Some("test_fault"));
+        assert!(maybe_inject_yed_test_fault(&config, Height(4)).is_ok());
+        assert!(maybe_inject_yed_test_fault(&config, Height(5)).is_err());
+        assert!(maybe_inject_yed_test_fault(&config, Height(5)).is_ok());
+    }
 }
