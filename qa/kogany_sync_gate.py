@@ -23,9 +23,9 @@ JSON-RPC and requires byte-identical answers for:
     nodes report.
 
 With `--kogany-log`, the gate also counts kogany's rejected blocks (`could not be checkpointed`,
-`could not be full-verified`) at or below the compared height: the gate wants zero. A rejection
-`TooHigh` above a partial checkpoint list's end is the list ending, not a rejected block, and is
-counted separately.
+`could not be full-verified`, `error downloading and verifying block`) at or below the compared
+height: the gate wants zero. `TooHigh` / `Finished` above a partial checkpoint list's end is the
+list ending (the router's fail-safe), not a rejected block, and is counted separately.
 
 Progress is kept in `--state` (JSON), so a rerun resumes after the last compared height; with
 `--follow` the driver keeps comparing as the tips advance, sleeping between rounds. Exit 0 when
@@ -158,8 +158,10 @@ def compare_treestates(k_state, y_state):
     return shared, diffs
 
 
-REJECTED = re.compile(r"could not be (checkpointed|full-verified)")
-TOO_HIGH = re.compile(r"higher than the maximum checkpoint")
+# The router's errors, and the syncer's report of them (`zakurad::components::sync`).
+REJECTED = re.compile(r"could not be (checkpointed|full-verified)|error downloading and verifying block")
+# Past a partial list's end the checkpoint verifier answers `TooHigh`, then `Finished`.
+TOO_HIGH = re.compile(r"higher than the maximum checkpoint|TooHigh|source: Finished")
 HEIGHT = re.compile(r"[Hh]eight\((\d+)\)")
 
 

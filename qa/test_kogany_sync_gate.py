@@ -55,11 +55,12 @@ class SyncGateTest(unittest.TestCase):
             f.write("block could not be checkpointed due to: block at Height(500) is higher than the maximum checkpoint Height(400)\n")
             f.write("block could not be full-verified due to: bad thing at Height(300)\n")
             f.write("block could not be checkpointed due to: something at Height(900)\n")
+            f.write("WARN error downloading and verifying block e=Invalid { error: Checkpoint { source: Finished }, height: Height(410), \n")
         try:
             rejected, beyond, samples = gate.scan_log(f.name, 400)
         finally:
             os.unlink(f.name)
-        self.assertEqual((rejected, beyond, len(samples)), (1, 2, 1))
+        self.assertEqual((rejected, beyond, len(samples)), (1, 3, 1))
 
 
 class CheckpointsTest(unittest.TestCase):
