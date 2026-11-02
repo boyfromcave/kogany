@@ -280,22 +280,18 @@ pub fn transaction_reject(error: &TransactionError, context: Context) -> CxxReje
     let unmapped = || CxxReject::Unmapped(error.to_string());
     match error {
         // main.cpp:6059-6063, 1975 (a loose coinbase), 1870.
-        E::CoinbasePosition { .. } | E::NotCoinbase { .. } => CxxReject::invalid("bad-cb-missing"),
-        E::CoinbaseAfterFirst { .. } => CxxReject::invalid("bad-cb-multiple"),
-        E::CoinbaseInMempool { .. } => CxxReject::invalid("coinbase"),
-        E::NonCoinbaseHasCoinbaseInput { .. } => CxxReject::invalid("bad-txns-prevout-null"),
+        E::CoinbasePosition | E::NotCoinbase => CxxReject::invalid("bad-cb-missing"),
+        E::CoinbaseAfterFirst => CxxReject::invalid("bad-cb-multiple"),
+        E::CoinbaseInMempool => CxxReject::invalid("coinbase"),
+        E::NonCoinbaseHasCoinbaseInput => CxxReject::invalid("bad-txns-prevout-null"),
         // main.cpp:1836-1861, 1154, 1184.
-        E::CoinbaseHasJoinSplit { .. } => CxxReject::invalid("bad-cb-has-joinsplits"),
-        E::CoinbaseHasSpend { .. } => CxxReject::invalid("bad-cb-has-spend-description"),
-        E::CoinbaseHasOutputPreHeartwood { .. } => {
-            CxxReject::invalid("bad-cb-has-output-description")
-        }
-        E::CoinbaseHasEnableSpendsOrchard { .. } | E::CoinbaseHasOrchardShieldedData { .. } => {
+        E::CoinbaseHasJoinSplit => CxxReject::invalid("bad-cb-has-joinsplits"),
+        E::CoinbaseHasSpend => CxxReject::invalid("bad-cb-has-spend-description"),
+        E::CoinbaseHasOutputPreHeartwood => CxxReject::invalid("bad-cb-has-output-description"),
+        E::CoinbaseHasEnableSpendsOrchard | E::CoinbaseHasOrchardShieldedData => {
             CxxReject::invalid("bad-cb-has-orchard-spend")
         }
-        E::CoinbaseOutputsNotDecryptable { .. } => {
-            CxxReject::invalid("bad-cb-output-desc-invalid-ct")
-        }
+        E::CoinbaseOutputsNotDecryptable => CxxReject::invalid("bad-cb-output-desc-invalid-ct"),
         // main.cpp:1986 (mempool, CheckFinalTx) and 6220 (block, ContextualCheckBlock).
         E::LockedUntilAfterBlockHeight { .. } | E::LockedUntilAfterBlockTime { .. } => {
             if mempool {
@@ -309,12 +305,12 @@ pub fn transaction_reject(error: &TransactionError, context: Context) -> CxxReje
         E::ExpiredTransaction { .. } => CxxReject::invalid("tx-overwinter-expired"),
         E::Subsidy(subsidy) => CxxReject::invalid(subsidy_reason(subsidy)),
         // main.cpp:1557, 1569.
-        E::WrongVersion { .. } => CxxReject::invalid("bad-txns-version-too-low"),
+        E::WrongVersion => CxxReject::invalid("bad-txns-version-too-low"),
         E::UnsupportedByNetworkUpgrade { .. } => CxxReject::invalid("bad-tx-version-group-id"),
         // main.cpp:1597, 1612, 1638.
-        E::NoInputs { .. } => CxxReject::invalid("bad-txns-no-source-of-funds"),
-        E::NoOutputs { .. } => CxxReject::invalid("bad-txns-no-sink-of-funds"),
-        E::BadBalance { .. } => CxxReject::invalid("bad-txns-valuebalance-nonzero"),
+        E::NoInputs => CxxReject::invalid("bad-txns-no-source-of-funds"),
+        E::NoOutputs => CxxReject::invalid("bad-txns-no-sink-of-funds"),
+        E::BadBalance => CxxReject::invalid("bad-txns-valuebalance-nonzero"),
         // A block's scripts are checked in parallel, whose failure carries no reason
         // (main.cpp:4337-4338, `state.DoS(100, false)`): BIP 22 "rejected".
         E::Script(script) => {
@@ -325,19 +321,19 @@ pub fn transaction_reject(error: &TransactionError, context: Context) -> CxxReje
             }
         }
         // main.cpp:2295-2298, 1481, 1509.
-        E::SaplingVerificationFailed { .. }
+        E::SaplingVerificationFailed
         | E::Groth16 { .. }
         | E::MalformedGroth16 { .. }
         | E::RedJubjub { .. } => CxxReject::invalid("bad-sapling-bundle-authorization"),
-        E::SmallOrder { .. } => CxxReject::invalid("bad-txns-sapling-bundle-invalid"),
-        E::Halo2VerificationFailed { .. } | E::RedPallas { .. } => {
+        E::SmallOrder => CxxReject::invalid("bad-txns-sapling-bundle-invalid"),
+        E::Halo2VerificationFailed | E::RedPallas { .. } => {
             CxxReject::invalid("bad-orchard-bundle-authorization")
         }
         E::Ed25519 { .. } => CxxReject::invalid("bad-txns-joinsplit-verification-failed"),
         // main.cpp:1731, 1193, 1631-1775, 3003-3006.
-        E::BothVPubsNonZero { .. } => CxxReject::invalid("bad-txns-vpubs-both-nonzero"),
-        E::DisabledAddToSproutPool { .. } => CxxReject::invalid("bad-txns-vpub_old-nonzero"),
-        E::IncorrectFee { .. } => CxxReject::invalid("bad-txns-in-belowout"),
+        E::BothVPubsNonZero => CxxReject::invalid("bad-txns-vpubs-both-nonzero"),
+        E::DisabledAddToSproutPool => CxxReject::invalid("bad-txns-vpub_old-nonzero"),
+        E::IncorrectFee => CxxReject::invalid("bad-txns-in-belowout"),
         E::Balance { .. } => CxxReject::invalid("bad-txns-valuebalance-toolarge"),
         E::Amount { .. } => CxxReject::invalid("bad-txns-txouttotal-toolarge"),
         // CheckTransactionWithoutProofVerification: bad-txns-inputs-duplicate; the shielded
@@ -352,9 +348,9 @@ pub fn transaction_reject(error: &TransactionError, context: Context) -> CxxReje
         E::DuplicateOrchardNullifier { .. } => {
             CxxReject::invalid("bad-orchard-nullifiers-duplicate")
         }
-        E::NotEnoughFlags { .. } => CxxReject::invalid("bad-tx-orchard-flags-disable-actions"),
+        E::NotEnoughFlags => CxxReject::invalid("bad-tx-orchard-flags-disable-actions"),
         // main.cpp:2025-2031: no coins for an input is "Missing inputs" (no reject code).
-        E::TransparentInputNotFound { .. } => CxxReject::MissingInputs,
+        E::TransparentInputNotFound => CxxReject::MissingInputs,
         E::ValidateContextError(context_error) => context_reject(context_error, context),
         // main.cpp:2958, 2969.
         E::ImmatureTransparentCoinbaseSpend { .. } => {
@@ -371,16 +367,14 @@ pub fn transaction_reject(error: &TransactionError, context: Context) -> CxxReje
         E::NonStandardScriptSigNotPushOnly { .. } => {
             CxxReject::reject(REJECT_NONSTANDARD, "scriptsig-not-pushonly")
         }
-        E::NonStandardInputs { .. } => {
+        E::NonStandardInputs => {
             CxxReject::reject(REJECT_NONSTANDARD, "bad-txns-nonstandard-inputs")
         }
         // main.cpp:1266, 1276.
-        E::WrongConsensusBranchId { .. } | E::WrongConsensusBranchIdNu6_3GracePeriod { .. } => {
+        E::WrongConsensusBranchId | E::WrongConsensusBranchIdNu6_3GracePeriod => {
             CxxReject::invalid("bad-tx-consensus-branch-id-mismatch")
         }
-        E::MissingConsensusBranchId { .. } => {
-            CxxReject::invalid("bad-tx-consensus-branch-id-missing")
-        }
+        E::MissingConsensusBranchId => CxxReject::invalid("bad-tx-consensus-branch-id-missing"),
         // main.cpp:1663-1675.
         E::SaplingIOsExceedBlockLimit { .. } => {
             CxxReject::invalid("bad-tx-too-many-sapling-spends")
@@ -391,21 +385,21 @@ pub fn transaction_reject(error: &TransactionError, context: Context) -> CxxReje
         // Zcash-only rules (NU5 coinbase expiry, NU6.3 pools, Ironwood, ZIP 234 budgets, proof
         // sizes) that a Ycash network never reaches, and node-internal failures.
         E::CoinbaseExpiryBlockHeight { .. }
-        | E::CoinbaseHasEnableSpendsIronwood { .. }
+        | E::CoinbaseHasEnableSpendsIronwood
         | E::CoinbaseConstruction { .. }
         | E::InternalDowncastError { .. }
-        | E::DisabledAddToOrchardPool { .. }
+        | E::DisabledAddToOrchardPool
         | E::DuplicateIronwoodNullifier { .. }
-        | E::NotEnoughIronwoodFlags { .. }
-        | E::OrchardHasEnableCrossAddress { .. }
+        | E::NotEnoughIronwoodFlags
+        | E::OrchardHasEnableCrossAddress
         | E::ValidateMempoolLockTimeError { .. }
         | E::IronwoodActionsExceedBlockLimit { .. }
         | E::SproutJoinSplitsExceedBlockLimit { .. }
         | E::ShieldedCostExceedsBlockBudget { .. }
         | E::Io { .. }
         | E::TryFromSlice { .. }
-        | E::OrchardProofSize { .. }
-        | E::IronwoodProofSize { .. }
+        | E::OrchardProofSize
+        | E::IronwoodProofSize
         | E::Other { .. } => unmapped(),
     }
 }
