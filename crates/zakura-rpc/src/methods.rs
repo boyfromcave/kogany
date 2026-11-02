@@ -4423,6 +4423,37 @@ where
             .parse()
             .map_error(server::error::LegacyCode::InvalidParameter)?;
 
+        // Ycash (S5 parity): ycashd's `reconsiderblock` clears the invalidity of a known block
+        // that has none as a no-op (`ReconsiderBlock`, `src/main.cpp`), and refuses only an
+        // unknown hash, `-5 "Block not found"`.
+        #[cfg(feature = "ycash")]
+        {
+            let result = self
+                .state
+                .clone()
+                .oneshot(zakura_state::Request::ReconsiderBlock(block_hash))
+                .await;
+            return match result {
+                Ok(zakura_state::Response::Reconsidered(block_hashes)) => Ok(block_hashes),
+                Ok(_) => unreachable!("unmatched response to a reconsider block request"),
+                // zakura-state's `ReconsiderError::MissingInvalidatedBlock` (not exported).
+                Err(error) if error.to_string().contains("was not previously invalidated") => {
+                    match call_service(
+                        self.state.clone(),
+                        zakura_state::Request::KnownBlock(block_hash),
+                    )
+                    .await?
+                    {
+                        zakura_state::Response::KnownBlock(Some(_)) => Ok(Vec::new()),
+                        _ => Err("Block not found")
+                            .map_error(server::error::LegacyCode::InvalidAddressOrKey),
+                    }
+                }
+                Err(error) => Err(error.to_string()).map_misc_error(),
+            };
+        }
+
+        #[allow(unreachable_code)]
         call_service(
             self.state.clone(),
             zakura_state::Request::ReconsiderBlock(block_hash),

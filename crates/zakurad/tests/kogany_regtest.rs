@@ -768,6 +768,17 @@ async fn kogany_regtest_vault_spend_reorg_restart() -> Result<()> {
         .await?;
     wait_for(&node, |h| h == tip_before).await?;
     assert_eq!(state_hash(&node.vault_info().await?), state_before);
+    // S5 parity: ycashd's reconsiderblock of a known block it did not invalidate is a no-op, and
+    // of an unknown hash -5 "Block not found".
+    node.ok("reconsiderblock", &format!(r#"["{tip_before}"]"#))
+        .await?;
+    assert_eq!(node.best_hash().await?, tip_before);
+    let unknown = node
+        .call("reconsiderblock", &format!(r#"["{}"]"#, "11".repeat(32)))
+        .await?
+        .expect_err("an unknown block is refused");
+    assert_eq!(unknown["code"], -5, "{unknown}");
+    assert_eq!(unknown["message"], "Block not found", "{unknown}");
 
     // Two more blocks, then the restart: the same tip, blocks and set state.
     node.generate(2).await?;
