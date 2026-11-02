@@ -57,11 +57,7 @@ fn regtest() -> Network {
 
 #[test]
 fn version_table_is_ycashd_n_protocol_version() {
-    let networks = [
-        Network::Mainnet,
-        Network::new_default_testnet(),
-        regtest(),
-    ];
+    let networks = [Network::Mainnet, Network::new_default_testnet(), regtest()];
 
     for &(upgrade, mainnet, testnet, regtest) in YCASHD_PROTOCOL_VERSIONS {
         for (network, expected) in networks.iter().zip([mainnet, testnet, regtest]) {
@@ -92,14 +88,20 @@ fn upgrades_ycashd_never_schedules_are_unreachable() {
             min_specified_for_upgrade(&Network::Mainnet, upgrade),
             Version(UNREACHABLE_PROTOCOL_VERSION),
         );
-        assert!(min_specified_for_upgrade(&Network::Mainnet, upgrade) > CURRENT_NETWORK_PROTOCOL_VERSION);
+        assert!(
+            min_specified_for_upgrade(&Network::Mainnet, upgrade)
+                > CURRENT_NETWORK_PROTOCOL_VERSION
+        );
     }
 }
 
 #[test]
 fn kogany_advertises_the_canopy_era_version() {
     assert_eq!(CURRENT_NETWORK_PROTOCOL_VERSION, Version(270_013));
-    assert_eq!(CURRENT_NETWORK_PROTOCOL_VERSION, Version(CURRENT_PROTOCOL_VERSION));
+    assert_eq!(
+        CURRENT_NETWORK_PROTOCOL_VERSION,
+        Version(CURRENT_PROTOCOL_VERSION)
+    );
     assert!(CURRENT_NETWORK_PROTOCOL_VERSION >= MIN_PEER_PROTO_VERSION);
 }
 
@@ -116,7 +118,9 @@ fn minimum_peer_version_is_the_ycash_floor_in_every_band() {
         );
     }
 
-    let testnet_band_starts = [0, 207_500, 280_000, 510_248, 510_250, 510_252, 510_254, 2_000_000];
+    let testnet_band_starts = [
+        0, 207_500, 280_000, 510_248, 510_250, 510_252, 510_254, 2_000_000,
+    ];
     for height in testnet_band_starts {
         assert_eq!(
             Version::min_remote_for_height(&Network::new_default_testnet(), Height(height)),
@@ -152,7 +156,9 @@ fn zcash_versions_are_below_the_floor() {
     }
     // ycashd 4.5.0 and Yolk advertise exactly the floor; ycash6 advertises 270200.
     for ycash in [270_013, 270_200] {
-        assert!(Version(ycash) >= Version::min_remote_for_height(&Network::Mainnet, Height(3_000_000)));
+        assert!(
+            Version(ycash) >= Version::min_remote_for_height(&Network::Mainnet, Height(3_000_000))
+        );
     }
 }
 
@@ -183,7 +189,9 @@ fn inventory_filter_keeps_everything_but_msg_wtx() {
         assert!(is_ycash_inventory(&inventory));
     }
     assert!(is_ycash_inventory(&InventoryHash::Error));
-    assert!(is_ycash_inventory(&InventoryHash::FilteredBlock(block::Hash([3; 32]))));
+    assert!(is_ycash_inventory(&InventoryHash::FilteredBlock(
+        block::Hash([3; 32])
+    )));
     assert!(!is_ycash_inventory(&wtx()));
 
     let mut mixed = legacy_inventory();
@@ -277,8 +285,17 @@ fn p2p_v2_is_off_on_every_network() {
         Network::new_ycash_testnet_slow(),
         regtest(),
     ] {
-        for stack in [P2pStack::Default, P2pStack::Legacy, P2pStack::Zakura, P2pStack::Dual] {
-            assert_eq!(stack.resolve(&network), P2pStack::Legacy, "{stack:?} on {network:?}");
+        for stack in [
+            P2pStack::Default,
+            P2pStack::Legacy,
+            P2pStack::Zakura,
+            P2pStack::Dual,
+        ] {
+            assert_eq!(
+                stack.resolve(&network),
+                P2pStack::Legacy,
+                "{stack:?} on {network:?}"
+            );
 
             let config = Config {
                 network: network.clone(),
@@ -296,14 +313,25 @@ fn configuring_p2p_v2_is_refused() {
     for stack in ["zakura", "dual"] {
         let error = toml::from_str::<Config>(&format!("p2p_stack = \"{stack}\""))
             .expect_err("a v2 stack is refused on Ycash");
-        assert!(error.to_string().contains("K-11"), "unexpected error: {error}");
+        assert!(
+            error.to_string().contains("K-11"),
+            "unexpected error: {error}"
+        );
     }
     for setting in ["v2_p2p = true", "legacy_p2p = false"] {
         let error = toml::from_str::<Config>(setting).expect_err("a v2 stack is refused on Ycash");
-        assert!(error.to_string().contains("K-11"), "unexpected error: {error}");
+        assert!(
+            error.to_string().contains("K-11"),
+            "unexpected error: {error}"
+        );
     }
 
-    for stack in ["p2p_stack = \"legacy\"", "p2p_stack = \"default\"", "v2_p2p = false", ""] {
+    for stack in [
+        "p2p_stack = \"legacy\"",
+        "p2p_stack = \"default\"",
+        "v2_p2p = false",
+        "",
+    ] {
         let config = toml::from_str::<Config>(stack).expect("a legacy stack is accepted");
         assert!(config.legacy_p2p() && !config.v2_p2p());
     }

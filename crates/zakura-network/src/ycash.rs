@@ -120,11 +120,7 @@ pub fn is_ycash_inventory(inventory: &InventoryHash) -> bool {
 /// Returns `hashes` without the inventory Ycash peers cannot parse ([`is_ycash_inventory`]), for
 /// an outbound `inv`, `getdata` or `notfound` message.
 pub(crate) fn outbound_inventory(hashes: &[InventoryHash]) -> Vec<InventoryHash> {
-    let kept: Vec<InventoryHash> = hashes
-        .iter()
-        .copied()
-        .filter(is_ycash_inventory)
-        .collect();
+    let kept: Vec<InventoryHash> = hashes.iter().copied().filter(is_ycash_inventory).collect();
 
     if kept.len() != hashes.len() {
         tracing::debug!(

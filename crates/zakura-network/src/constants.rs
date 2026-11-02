@@ -349,6 +349,7 @@ pub const TIMESTAMP_TRUNCATION_SECONDS: u32 = 30 * 60;
 // minimum.
 #[cfg(not(feature = "ycash"))]
 const CURRENT_NETWORK_PROTOCOL_VERSION_VALUE: u32 = 170_190; // NU7 (Mainnet + Testnet).
+
 // kogany: the Ycash version, see `crate::ycash::CURRENT_PROTOCOL_VERSION`.
 #[cfg(feature = "ycash")]
 const CURRENT_NETWORK_PROTOCOL_VERSION_VALUE: u32 = crate::ycash::CURRENT_PROTOCOL_VERSION;
