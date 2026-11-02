@@ -95,7 +95,8 @@ impl ChainVaultOverlay {
             .sum()
     }
 
-    fn push(&mut self, delta: &VaultDelta) {
+    /// Pushes a block's delta (the newest block's values win).
+    pub(crate) fn push(&mut self, delta: &VaultDelta) {
         if delta.is_empty() {
             return;
         }
@@ -110,7 +111,8 @@ impl ChainVaultOverlay {
         }
     }
 
-    fn pop(&mut self, delta: &VaultDelta, position: RevertPosition) {
+    /// Pops a block's delta from the tip (back to `before`) or the root (finalized).
+    pub(crate) fn pop(&mut self, delta: &VaultDelta, position: RevertPosition) {
         if delta.is_empty() {
             return;
         }

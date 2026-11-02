@@ -501,23 +501,41 @@ impl DiskWriteBatch {
         finalized: &FinalizedBlock,
         spent_utxos_by_outpoint: &HashMap<transparent::OutPoint, transparent::Utxo>,
     ) {
-        if vault_network_params(network).is_none_or(|p| !p.is_active(finalized.height)) {
+        self.prepare_vault_batch_for_block(
+            zakura_db,
+            network,
+            &finalized.block,
+            finalized.height,
+            finalized.hash,
+            &finalized.transaction_hashes,
+            spent_utxos_by_outpoint,
+        )
+    }
+
+    /// [`Self::prepare_vault_batch`] from the block's parts.
+    #[allow(clippy::too_many_arguments)]
+    pub fn prepare_vault_batch_for_block(
+        &mut self,
+        zakura_db: &ZakuraDb,
+        network: &Network,
+        block: &Block,
+        height: Height,
+        hash: block::Hash,
+        transaction_hashes: &[transaction::Hash],
+        spent_utxos_by_outpoint: &HashMap<transparent::OutPoint, transparent::Utxo>,
+    ) {
+        if vault_network_params(network).is_none_or(|p| !p.is_active(height)) {
             return;
         }
-        let txs = vault_txs(&finalized.block, &finalized.transaction_hashes);
+        let txs = vault_txs(block, transaction_hashes);
         let (delta, skipped) = block_vault_delta_total(
             network,
             &zakura_db.vault_state(),
             &txs,
-            finalized.height,
+            height,
             &UtxoCoins(spent_utxos_by_outpoint),
         );
-        report_skipped(
-            "finalized write",
-            finalized.height,
-            finalized.hash,
-            &skipped,
-        );
+        report_skipped("finalized write", height, hash, &skipped);
         self.prepare_vault_delta_batch(zakura_db, &delta);
     }
 
@@ -536,3 +554,6 @@ impl DiskWriteBatch {
         }
     }
 }
+
+#[cfg(test)]
+mod tests;
