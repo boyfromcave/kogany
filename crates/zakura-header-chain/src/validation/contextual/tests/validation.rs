@@ -482,15 +482,26 @@ fn median_and_production_max_time_boundaries_are_exact() {
         ..Default::default()
     });
 
+    // kogany: the default Testnet's max-time start is 653,606 on Zcash and 510,256 on the
+    // re-forked Ycash testnet.
+    #[cfg(not(feature = "ycash"))]
+    let testnet_max_time = 653_606;
+    #[cfg(feature = "ycash")]
+    let testnet_max_time = zakura_chain::parameters::TESTNET_MAX_TIME_START_HEIGHT.0;
+
     for (network, height, max_is_active) in [
         (Network::Mainnet, block::Height(1), false),
         (Network::Mainnet, block::Height(2), true),
         (
             Network::new_default_testnet(),
-            block::Height(653_605),
+            block::Height(testnet_max_time - 1),
             false,
         ),
-        (Network::new_default_testnet(), block::Height(653_606), true),
+        (
+            Network::new_default_testnet(),
+            block::Height(testnet_max_time),
+            true,
+        ),
         (configured_testnet_height_one, block::Height(1), true),
         (configured_regtest_height_one, block::Height(1), true),
     ] {
