@@ -571,3 +571,46 @@ fn owner_spends_template_half() {
     assert_eq!(falcon, 1);
     assert_eq!(released, 2);
 }
+
+/// A key field whose header is not `0x02`/`0x03` re-encodes as 33 zero bytes (C++ `Writer::key`
+/// on an invalid `CPubKey`), so `decode_act`'s round trip refuses it as malformed unless the key
+/// bytes are all zero; `decode_payload` alone still decodes it (W3-e verdict replay,
+/// qa/fuzz/vault, Vault/fuzz-20261025-10.bin).
+#[test]
+fn act_key_without_compressed_header_is_malformed() {
+    use kogany_vault::act::{decode_act, decode_payload, ActError};
+    let heartbeat = |key: [u8; 33]| {
+        let mut p = b"YV\x01\x03".to_vec();
+        p.extend_from_slice(&[0x11; 32]);
+        p.extend_from_slice(&key);
+        let mut spk = vec![0x6a, u8::try_from(p.len()).unwrap()];
+        spk.extend_from_slice(&p);
+        (p, spk)
+    };
+    let mut good = [0x5a; 33];
+    good[0] = 0x02;
+    for (key, act_ok) in [
+        (good, true),
+        ([0; 33], true),
+        ([0x04; 33], false),
+        (
+            {
+                let mut k = [0; 33];
+                k[32] = 1;
+                k
+            },
+            false,
+        ),
+    ] {
+        let (p, spk) = heartbeat(key);
+        assert!(decode_payload(&p).is_ok());
+        assert_eq!(
+            decode_act(&spk).map(|_| ()),
+            if act_ok {
+                Ok(())
+            } else {
+                Err(ActError::Malformed)
+            }
+        );
+    }
+}

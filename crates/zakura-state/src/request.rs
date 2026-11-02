@@ -484,6 +484,11 @@ pub struct ContextuallyVerifiedBlock {
     /// kogany (W4-c): the block's Vault set-state change set over its parent's state (empty
     /// before the Vault activation height). Pushed onto and reverted from the chain's overlay.
     pub(crate) vault_delta: Arc<crate::service::non_finalized_state::VaultDelta>,
+
+    /// kogany (W5-e): the block's Yellowback (YED) effect over its parent's index state: its
+    /// delta (pushed onto and reverted from the chain's overlay) and the module's verdict (not
+    /// yet a rejection: W5-f).
+    pub(crate) yed_effect: Arc<crate::service::yed::YedBlockEffect>,
 }
 
 /// Wraps note commitment trees and the history tree together.
@@ -685,6 +690,7 @@ impl ContextuallyVerifiedBlock {
             chain_value_pool_change,
             receipt_order,
             vault_delta: Default::default(),
+            yed_effect: Default::default(),
         })
     }
 }

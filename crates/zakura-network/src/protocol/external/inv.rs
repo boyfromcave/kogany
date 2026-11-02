@@ -158,6 +158,10 @@ impl ZcashDeserialize for InventoryHash {
             1 => Ok(InventoryHash::Tx(reader.read_value()?)),
             2 => Ok(InventoryHash::Block(reader.read_value()?)),
             3 => Ok(InventoryHash::FilteredBlock(reader.read_value()?)),
+            // kogany: Ycash never uses MSG_WTX (`crate::ycash::is_ycash_inventory`).
+            #[cfg(feature = "ycash")]
+            5 => Err(SerializationError::Parse(crate::ycash::MSG_WTX_REFUSED)),
+            #[cfg(not(feature = "ycash"))]
             5 => Ok(InventoryHash::Wtx(reader.read_value()?)),
 
             _ => Err(SerializationError::Parse("invalid inventory code")),

@@ -48,6 +48,8 @@ pub use chain::{benchmark_height_map, HeightMapBenchmarkSample};
 pub(crate) use chain::{Chain, SpendingTransactionId};
 // kogany (W4-c)
 pub use chain::vault::{ChainVaultOverlay, ChainVaultView, VaultDelta};
+// kogany (W5-e)
+pub use chain::yed::{ChainYedOverlay, ChainYedView};
 pub(crate) use created_utxos::CreatedUtxos;
 pub(crate) use shared_map::SharedMap;
 
@@ -897,6 +899,15 @@ impl NonFinalizedState {
             finalized_state,
             &contextual,
         )?);
+
+        // kogany (W5-e): the block's YED effect over the parent fork's index state, pushed onto
+        // the chain's overlay with the block; stops the node when it cannot be evaluated (U-21).
+        contextual.yed_effect = Arc::new(crate::service::yed::block_yed_effect_for_chain(
+            &self.network,
+            &new_chain,
+            finalized_state,
+            &contextual,
+        ));
 
         let parallel_update_start = Instant::now();
         let result = Self::validate_and_update_parallel(
