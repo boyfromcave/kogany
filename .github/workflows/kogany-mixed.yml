@@ -86,17 +86,26 @@ jobs:
             runs=$(gh run list -R "$YCASH6_REPO" -w yellowback-tests.yml -c "$REV" -L 20 --json databaseId,event,headSha \
               -q ".[] | select(.headSha == \"$REV\") | $trusted | .databaseId")
           fi
+          echo "ycash6 yellowback-tests.yml runs at $REV (push, schedule or dispatch): ${runs:-none}"
           for r in $runs; do
             for name in ycash6-node-bin node-bin; do
-              if gh run download "$r" -R "$YCASH6_REPO" -n "$name" -D "$RUNNER_TEMP/dl" 2>/dev/null \
+              rm -rf "$RUNNER_TEMP/dl"
+              if gh run download "$r" -R "$YCASH6_REPO" -n "$name" -D "$RUNNER_TEMP/dl" 2> "$RUNNER_TEMP/dl.err" \
                  && [ -f "$RUNNER_TEMP/dl/node-bin.tgz" ]; then
-                tar -tzf "$RUNNER_TEMP/dl/node-bin.tgz" | grep -qx 'src/ycashd'
+                # List to a file, then grep it: `tar | grep -q` fails the step under pipefail when
+                # grep exits at the match and tar's next write hits the closed pipe (exit 2 or 141).
+                tar -tzf "$RUNNER_TEMP/dl/node-bin.tgz" > "$RUNNER_TEMP/node-bin.list"
+                if ! grep -qx 'src/ycashd' "$RUNNER_TEMP/node-bin.list"; then
+                  echo "::error::run $r's $name holds a node-bin.tgz without src/ycashd"
+                  exit 1
+                fi
                 echo "ycashd: $YCASH6_REPO run $r ($name) at $REV" >> "$GITHUB_STEP_SUMMARY"
                 exit 0
               fi
+              echo "run $r, artifact $name: $(tr '\n' ' ' < "$RUNNER_TEMP/dl.err")"
             done
           done
-          echo "::error::no node-bin of $YCASH6_REPO at $REV in a push, schedule or dispatch run (expired, or none): dispatch its yellowback-tests.yml with tier bin at that commit"
+          echo "::error::no node-bin of $YCASH6_REPO at $REV. Needed: a push, schedule or workflow_dispatch run of its .github/workflows/yellowback-tests.yml at exactly that commit whose bin job uploaded the ycash6-node-bin or node-bin artifact (node-bin.tgz), not yet expired (https://github.com/$YCASH6_REPO/actions/workflows/yellowback-tests.yml). Dispatch it with tier bin at $REV, or bump YCASH6_REV here to a commit that has one."
           exit 1
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
