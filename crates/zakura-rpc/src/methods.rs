@@ -2759,7 +2759,11 @@ where
                     #[cfg(feature = "ycash")]
                     {
                         match header.commitment(&network, height) {
-                            Ok(Commitment::PreSaplingReserved(bytes)) => bytes,
+                            // ycashd prints the field in display order (byte-reversed).
+                            Ok(Commitment::PreSaplingReserved(mut bytes)) => {
+                                bytes.reverse();
+                                bytes
+                            }
                             _ => [0; 32],
                         }
                     }
@@ -2774,7 +2778,20 @@ where
             let block_commitments = match header.commitment(&network, height).expect(
                 "Unexpected failure while parsing the blockcommitments field in get_block_header",
             ) {
-                Commitment::PreSaplingReserved(bytes) => bytes,
+                Commitment::PreSaplingReserved(bytes) => {
+                    // kogany (Y8): ycashd prints hashBlockCommitments in display order; upstream
+                    // Zakura's own output is unchanged in a Zcash build.
+                    #[cfg(feature = "ycash")]
+                    {
+                        let mut bytes = bytes;
+                        bytes.reverse();
+                        bytes
+                    }
+                    #[cfg(not(feature = "ycash"))]
+                    {
+                        bytes
+                    }
+                }
                 Commitment::FinalSaplingRoot(_) => final_sapling_root,
                 Commitment::ChainHistoryActivationReserved => [0; 32],
                 Commitment::ChainHistoryRoot(root) => root.bytes_in_display_order(),
