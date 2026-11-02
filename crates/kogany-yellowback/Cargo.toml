@@ -1,0 +1,22 @@
+[package]
+name = "kogany-yellowback"
+version = "0.1.0"
+authors = ["The Ycash developers"]
+description = "The Ycash Yellowback (YED) rule module of the vault network upgrade: fixed-point arithmetic and parameters, the Rust face of ycash6 src/yellowback/"
+license = "MIT"
+repository = "https://github.com/boyfromcave/kogany"
+edition.workspace = true
+rust-version.workspace = true
+publish = false
+
+# Dependency-light by design (coordination brief): no zakura-* crate, so the module's pure layers build in
+# seconds and replay the pinned cross-line vectors ahead of the upstream waves.
+[dependencies]
+
+[dev-dependencies]
+hex = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+
+[lints]
+workspace = true

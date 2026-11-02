@@ -121,3 +121,17 @@ first.
 Also from ycash6 `src/vault/act.cpp`, not a schema key: `act_carrier_edges` (more than
 `MAX_ACT_SIGS` signatures → `bad-vault-act-sigs`, exactly `MAX_ACT_SIGS` decodes, the `"YV"` carrier
 test, a header-27 signature decodes but fails the field rules).
+
+## yellowback_math_cases.json
+
+Consumer: `crates/kogany-yellowback` (W5-a). C++: ycash6 `src/test/yellowback_math_tests.cpp`
+(`math_spec_rational_cases`). The test checks the file's SHA-256 against `PIN` before replaying it,
+in debug and in release (`--release`, `--profile ci-tests`).
+
+| key | Rust test (`crates/kogany-yellowback/tests/math_cases.rs`) |
+|---|---|
+| `description` | not consumed (prose) |
+| `cases` | `math_spec_rational_cases` (67 rows; every row checked, the count asserted) |
+| `cases[].fn` | `math_spec_rational_cases` (the eleven functions; an unknown name fails) |
+| `cases[].args` | `math_spec_rational_cases` (positional, as the C++ `arg(k)`; mainnet `Params` where the function takes them) |
+| `cases[].expect` | `math_spec_rational_cases` (`null` = `None` for the `std::optional` functions; a bool for `IsUnderwater`) |
