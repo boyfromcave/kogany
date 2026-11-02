@@ -435,6 +435,7 @@ fn peer_action(error: &TransactionError) -> PeerAction {
         VaultRejected { .. }
         | VaultTemplateSetState { .. }
         | NonMandatoryScriptFlag { .. }
+        | NonStandardTransaction { .. }
         | YellowbackRejected { .. } => Ignore,
 
         // The verifier failed, or the error does not name the rule that failed.

@@ -43,7 +43,10 @@ use zcash_script::interpreter;
 
 use crate::{error::TransactionError, BoxError};
 
-use super::check::ycash_standard::{find_vault_template_input, vault_template_fails_on_set_state};
+use super::check::ycash_standard::{
+    find_vault_template_input, is_standard_tx, require_standard, vault_template_fails_on_set_state,
+    RelayPolicy,
+};
 
 /// `MAX_OP_RETURN_RELAY` (ycash6 `script/standard.h`): an act output longer than this is what
 /// `IsByteLevelActFailure` scores.
@@ -147,6 +150,25 @@ pub fn check_vault_rules(
         );
         TransactionError::VaultRejected { reason, byte_level }
     })
+}
+
+/// ycashd's order for a transaction `check_vault_rules` refused: `IsStandardTx` (outputs
+/// included) runs first where standardness is required, so a non-standard transaction is
+/// reported as that (W6-a finding F-3, for the vault pair). The relay knobs are ycashd's
+/// defaults (`-datacarriersize` 83; the mempool storage applies the configured ones).
+pub fn non_standard_first(
+    network: &Network,
+    tx: &Transaction,
+    height: Height,
+) -> Option<TransactionError> {
+    if !require_standard(network) {
+        return None;
+    }
+    is_standard_tx(tx, network, height, &RelayPolicy::default())
+        .err()
+        .map(|reason| TransactionError::NonStandardTransaction {
+            reason: reason.as_str().to_owned(),
+        })
 }
 
 /// The interpreter error inside a script failure, if any.

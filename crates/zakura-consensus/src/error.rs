@@ -351,6 +351,13 @@ pub enum TransactionError {
         script_error: String,
     },
 
+    /// kogany (W6-c): a transaction the Vault rules refuse is non-standard as well, which ycashd
+    /// reports first (`IsStandardTx`, outputs included, runs before `vault::CheckTx`;
+    /// `REJECT_NONSTANDARD`, DoS 0). `reason` is ycashd's (`scriptpubkey`, `dust`, ...).
+    #[cfg(feature = "ycash")]
+    #[error("mempool transaction is non-standard: {reason}")]
+    NonStandardTransaction { reason: String },
+
     /// kogany (W6-c): the Yellowback (YED) rule module refuses the transaction for the next
     /// block (ycash6 `MempoolCheckReason` in `AcceptToMemoryPool`, `src/main.cpp:2255-2261`):
     /// the module's state moves with the tip, so DoS 0. `reason` is the module's verdict
@@ -571,6 +578,7 @@ impl TransactionError {
             Self::VaultRejected { .. }
             | Self::VaultTemplateSetState { .. }
             | Self::NonMandatoryScriptFlag { .. }
+            | Self::NonStandardTransaction { .. }
             | Self::YellowbackRejected { .. } => {
                 BodyVerificationClass::Retryable(TransientBodyFailureKind::VerifierUnavailable)
             }
@@ -659,6 +667,7 @@ impl TransactionError {
             VaultRejected { .. }
             | VaultTemplateSetState { .. }
             | NonMandatoryScriptFlag { .. }
+            | NonStandardTransaction { .. }
             | YellowbackRejected { .. } => 0,
 
             // TODO: Consider add peer penalty 1 if these are very old

@@ -706,8 +706,8 @@ def cases_vault(chain, v):
     v.offer(chain, '%s/op-return-84' % mode, chain.build([(0, op_return(81))], 1000), REJECT_POLICY)
 
     # A `YV` carrier of 1,200 bytes passes standardness and then fails (its act does not decode on
-    # ycashd; its signature, corrupted, on both: kogany has no act check in the mempool yet); one
-    # of 1,201 bytes is non-standard.
+    # ycashd; its signature, corrupted, on both: the signature check runs first); one of 1,201
+    # bytes is non-standard, which both report before the act rules (W6-c).
     v.offer(chain, '%s/act-1200-badsig' % mode,
             corrupt_signature(chain.build([(0, act_carrier(1200))], 1000)), REJECT_CONSENSUS)
     v.offer(chain, '%s/act-1201' % mode, chain.build([(0, act_carrier(1201))], 1000), REJECT_POLICY)

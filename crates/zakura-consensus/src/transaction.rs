@@ -678,7 +678,10 @@ where
                     req.height(),
                     vault_state,
                     &spent_utxos,
-                )?;
+                )
+                .map_err(|error| {
+                    vault_mempool::non_standard_first(&network, &tx, req.height()).unwrap_or(error)
+                })?;
                 vault_mempool::check_template_input(
                     &network,
                     &tx,
