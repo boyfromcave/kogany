@@ -23,6 +23,31 @@ use crate::{
     config::ZakuradConfig,
 };
 
+/// The node binary's name in user-facing messages: `koganyd` in the Ycash build, `zakurad`
+/// upstream.
+pub const NODE_NAME: &str = if cfg!(feature = "ycash") {
+    "koganyd"
+} else {
+    "zakurad"
+};
+
+/// The node's product name in user-facing messages: `kogany` in the Ycash build, `Zakura`
+/// upstream.
+pub const PRODUCT_NAME: &str = if cfg!(feature = "ycash") {
+    "kogany"
+} else {
+    "Zakura"
+};
+
+/// The package-style lowercase name used in metric names and fatal errors: `kogany` in the
+/// Ycash build, `zakura` upstream (the package is `kogany`; upstream's `zakurad` keeps the
+/// `zakura` names its dashboards and tests expect).
+pub const PACKAGE_NAME: &str = if cfg!(feature = "ycash") {
+    "kogany"
+} else {
+    "zakura"
+};
+
 /// The last log event that occurred in the application.
 pub static LAST_WARN_ERROR_LOG_SENDER: LazyLock<
     watch::Sender<Option<(String, tracing::Level, chrono::DateTime<chrono::Utc>)>>,
@@ -35,17 +60,30 @@ pub static LAST_WARN_ERROR_LOG_SENDER: LazyLock<
 /// - the git commit.
 ///
 /// For details, see <https://semver.org/>
+///
+/// kogany: the Ycash build (`koganyd`) uses kogany's scheme instead, see
+/// [`kogany_build_metadata`]: the package version (the Zakura line kogany tracks) plus
+/// `+kogany.<n>.g<sha>`, `<n>` counted from the `kogany-ycash-baseline` tag.
+#[cfg_attr(feature = "ycash", allow(unreachable_code))]
 pub fn build_version() -> Version {
     // CARGO_PKG_VERSION is always a valid SemVer 2.0 version.
     const CARGO_PKG_VERSION: &str = env!("CARGO_PKG_VERSION");
 
     // We're using the same library as cargo uses internally, so this is guaranteed.
-    let fallback_version = CARGO_PKG_VERSION.parse().unwrap_or_else(|error| {
+    let fallback_version: Version = CARGO_PKG_VERSION.parse().unwrap_or_else(|error| {
         panic!(
             "unexpected invalid CARGO_PKG_VERSION: {error:?} in {CARGO_PKG_VERSION:?}, \
              should have been checked by cargo"
         )
     });
+
+    // kogany: never an upstream `v*` tag's version; the version core is always the package's.
+    #[cfg(feature = "ycash")]
+    {
+        let mut version = fallback_version;
+        version.build = kogany_build_metadata(option_env!("KOGANY_GIT_DESCRIBE"), git_commit());
+        return version;
+    }
 
     let mut version = vergen_build_version().unwrap_or(fallback_version);
 
@@ -151,6 +189,50 @@ fn vergen_build_version() -> Option<Version> {
     semver.parse().ok()
 }
 
+/// kogany: the build metadata of `koganyd`'s version, `kogany.<n>.g<sha>`.
+///
+/// `describe` is `git describe --tags --match kogany-ycash-baseline --long --abbrev=12` (with
+/// `-dirty` appended for uncommitted changes, shown as `.modified`), so `<n>` is the number of
+/// commits since kogany's baseline tag, never since an upstream Zakura `v*` tag. Without it (a
+/// Docker or source-archive build has no `.git`), the supplied `commit` gives `kogany.g<sha>`; with
+/// neither, the metadata is just `kogany`.
+#[cfg(feature = "ycash")]
+pub fn kogany_build_metadata(describe: Option<&str>, commit: Option<&str>) -> BuildMetadata {
+    const PREFIX: &str = "kogany-ycash-baseline-";
+
+    let from_describe = describe.and_then(|describe| {
+        let rest = describe.strip_prefix(PREFIX)?;
+        let mut parts = rest.split('-');
+        let count = parts.next()?;
+        let sha = parts.next()?;
+        let modified = match parts.next() {
+            None => false,
+            Some("dirty") => true,
+            Some(_) => return None,
+        };
+        if parts.next().is_some()
+            || count.is_empty()
+            || !count.bytes().all(|b| b.is_ascii_digit())
+            || !sha.starts_with('g')
+        {
+            return None;
+        }
+        // SemVer build identifiers may have leading zeros, but `git describe` never prints them.
+        let mut build = format!("kogany.{count}.{sha}");
+        if modified {
+            build.push_str(".modified");
+        }
+        BuildMetadata::new(&build).ok()
+    });
+
+    from_describe
+        .or_else(|| {
+            let short_commit: String = commit?.chars().take(12).collect();
+            BuildMetadata::new(&format!("kogany.g{short_commit}")).ok()
+        })
+        .unwrap_or_else(|| BuildMetadata::new("kogany").expect("valid build metadata"))
+}
+
 /// Returns the git commit for this build, if available.
 ///
 /// # Accuracy
@@ -176,6 +258,11 @@ pub fn release_version() -> Version {
 /// The User-Agent string provided by the node.
 ///
 /// This must be a valid [BIP 14] user agent.
+///
+/// kogany: `/koganyd:<package version>/`, without the `+kogany.<n>.g<sha>` build metadata:
+/// ycashd keeps only `[A-Za-z0-9 .-/:]` of a peer's subversion (`SAFE_CHARS_SUBVERSION`,
+/// `ycash6 src/util/strencodings.cpp:25`, applied at `src/main.cpp:8020`), so a `+` would be
+/// dropped and the version run together.
 ///
 /// [BIP 14]: https://github.com/bitcoin/bips/blob/master/bip-0014.mediawiki
 #[cfg_attr(feature = "ycash", allow(unreachable_code))]
@@ -229,7 +316,7 @@ fn run(command: &EntryPoint) -> i32 {
 /// Prints an error that stopped `zakurad` from starting.
 #[allow(clippy::print_stderr)]
 fn report_fatal_error(error: &Report) {
-    eprintln!("error: {} fatal error: {error}", env!("CARGO_PKG_NAME"));
+    eprintln!("error: {PACKAGE_NAME} fatal error: {error}");
 }
 
 /// Installs a panic hook that prints the default panic report, followed by the
@@ -261,10 +348,10 @@ fn start(command: &EntryPoint) -> Result<(Arc<ZakuradConfig>, Tracing), Report> 
             // The line break and the indentation after it are part of the message that
             // `zakurad` has always printed.
             eprintln!(
-                "error: Zakura could not load the provided configuration file and/or environment variables.\
+                "error: {PRODUCT_NAME} could not load the provided configuration file and/or environment variables.\
                  This might mean you are using a deprecated format of the file, or are attempting to
                      configure deprecated or unknown fields via environment variables.\
-                 You can generate a valid config by running \"zakurad generate\", \
+                 You can generate a valid config by running \"{NODE_NAME} generate\", \
                  and diff it against yours to examine any format inconsistencies."
             );
             return Err(eyre!("I/O operation failed: Configuration error: {e}"));
@@ -416,7 +503,12 @@ fn start(command: &EntryPoint) -> Result<(Arc<ZakuradConfig>, Tracing), Report> 
         other_net_name => other_net_name,
     };
     let global_span = if let Some(git_commit) = git_commit() {
-        error_span!("", zakurad = git_commit, net)
+        // kogany: the commit field is named after the binary.
+        #[cfg(feature = "ycash")]
+        let span = error_span!("", koganyd = git_commit, net);
+        #[cfg(not(feature = "ycash"))]
+        let span = error_span!("", zakurad = git_commit, net);
+        span
     } else {
         error_span!("", net)
     };
@@ -437,4 +529,105 @@ fn start(command: &EntryPoint) -> Result<(Arc<ZakuradConfig>, Tracing), Report> 
     }
 
     Ok((Arc::new(config), tracing))
+}
+
+#[cfg(all(test, feature = "ycash"))]
+mod kogany_version_tests {
+    use semver::{BuildMetadata, Version};
+
+    use super::{build_version, kogany_build_metadata, release_version, user_agent};
+
+    fn metadata(describe: Option<&str>, commit: Option<&str>) -> String {
+        kogany_build_metadata(describe, commit).to_string()
+    }
+
+    #[test]
+    fn describe_counts_commits_since_the_kogany_baseline() {
+        let commit = Some("f96338437a7e1f2fb07c0e1a2b3c4d5e6f708192");
+        assert_eq!(
+            metadata(Some("kogany-ycash-baseline-26-gf96338437a7e"), commit),
+            "kogany.26.gf96338437a7e"
+        );
+        assert_eq!(
+            metadata(Some("kogany-ycash-baseline-0-gf96338437a7e"), None),
+            "kogany.0.gf96338437a7e"
+        );
+        assert_eq!(
+            metadata(Some("kogany-ycash-baseline-3-gf96338437a7e-dirty"), None),
+            "kogany.3.gf96338437a7e.modified"
+        );
+    }
+
+    #[test]
+    fn without_git_the_supplied_commit_is_used() {
+        // A Docker build has no `.git`: only the commit passed in (`SHORT_SHA`) is known.
+        assert_eq!(
+            metadata(None, Some("f96338437a7e1f2fb07c0e1a2b3c4d5e6f708192")),
+            "kogany.gf96338437a7e"
+        );
+        assert_eq!(metadata(None, None), "kogany");
+    }
+
+    #[test]
+    fn upstream_tags_are_never_used() {
+        // An upstream Zakura `git describe` is not kogany's: fall back to the commit.
+        assert_eq!(
+            metadata(Some("v1.7.0-458-gfd3d6bece"), Some("fd3d6bece0123")),
+            "kogany.gfd3d6bece012"
+        );
+        assert_eq!(
+            metadata(Some("kogany-ycash-baseline-x-gabc"), None),
+            "kogany"
+        );
+        assert_eq!(
+            metadata(Some("kogany-ycash-baseline-1-abc"), None),
+            "kogany"
+        );
+        assert_eq!(
+            metadata(Some("kogany-ycash-baseline-1-gabc-x"), None),
+            "kogany"
+        );
+    }
+
+    #[test]
+    fn build_version_is_the_package_line_plus_kogany_metadata() {
+        let version = build_version();
+        let package: Version = env!("CARGO_PKG_VERSION").parse().expect("valid");
+        assert_eq!(
+            (version.major, version.minor, version.patch, &version.pre),
+            (package.major, package.minor, package.patch, &package.pre)
+        );
+        assert!(version.build.as_str().starts_with("kogany"), "{version}");
+
+        // When this build saw kogany's tag, the count is the one in its `git describe`.
+        if let Some(describe) = option_env!("KOGANY_GIT_DESCRIBE") {
+            let count = describe
+                .strip_prefix("kogany-ycash-baseline-")
+                .and_then(|rest| rest.split('-').next())
+                .expect("kogany describe");
+            assert!(
+                version
+                    .build
+                    .as_str()
+                    .starts_with(&format!("kogany.{count}.g")),
+                "{version} from {describe}"
+            );
+        }
+
+        assert_eq!(release_version().build, BuildMetadata::EMPTY);
+        assert_eq!(release_version().to_string(), env!("CARGO_PKG_VERSION"));
+    }
+
+    #[test]
+    fn user_agent_carries_no_build_metadata() {
+        let user_agent = user_agent();
+        assert_eq!(
+            user_agent,
+            format!("/koganyd:{}/", env!("CARGO_PKG_VERSION"))
+        );
+        // ycashd's SAFE_CHARS_SUBVERSION.
+        assert!(user_agent
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || " .-/:".contains(c)));
+    }
 }

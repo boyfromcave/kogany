@@ -24,9 +24,16 @@ pub fn start_endpoint(config: &Config) {
                 // Expose binary metadata to metrics, using a single time series with
                 // value 1:
                 //     https://www.robustperception.io/exposing-the-software-version-to-prometheus
+                //
+                // kogany: `kogany.build.info` with the full build version (`+kogany.<n>.g<sha>`)
+                // in the Ycash build; upstream's `zakura.build.info` and package version otherwise.
+                #[cfg(feature = "ycash")]
+                let version = crate::application::build_version().to_string();
+                #[cfg(not(feature = "ycash"))]
+                let version = env!("CARGO_PKG_VERSION");
                 metrics::counter!(
-                    format!("{}.build.info", env!("CARGO_PKG_NAME")),
-                    "version" => env!("CARGO_PKG_VERSION")
+                    format!("{}.build.info", crate::application::PACKAGE_NAME),
+                    "version" => version
                 )
                 .increment(1);
 
@@ -34,8 +41,10 @@ pub fn start_endpoint(config: &Config) {
             }
             Err(e) => panic!(
                 "Opening metrics endpoint listener {addr:?} failed: {e}. \
-                     Hint: Check if another zakurad or zcashd process is running. \
-                     Try changing the metrics endpoint_addr in the Zakura config.",
+                     Hint: Check if another {} or zcashd process is running. \
+                     Try changing the metrics endpoint_addr in the {} config.",
+                crate::application::NODE_NAME,
+                crate::application::PRODUCT_NAME,
             ),
         }
     }
