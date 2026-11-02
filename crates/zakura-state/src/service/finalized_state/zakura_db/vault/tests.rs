@@ -618,3 +618,168 @@ fn format_upgrade_accepts_a_database_below_activation() {
         kogany_vault::state::SetState::new().state_hash()
     );
 }
+
+/// Workspace pruning assessment KP-2 (decision 4: Pruned allowed with Zakura's floor, no floor at
+/// the vault height): the recorded ycash6 chains through the full write paths on a **pruned**
+/// database, whose window is counted from the finalized tip, against the same run on an archive
+/// database. The first block of the non-finalized part has the finalized tip for its parent: the
+/// fork point of the deepest reorg a node can take, `retention` blocks above the pruned edge.
+///
+/// - the finalized part is committed through `commit_finalized_direct` (the checkpoint path);
+///   online pruning deletes the bodies of the Vault-epoch blocks below the edge;
+/// - the rest is committed through `NonFinalizedState` (contextual validation and the vault delta
+///   of `validate_and_commit`), every recorded `statehash` checked at the chain tip;
+/// - reorgs: the block above the finalized tip is invalidated (back to the finalized state:
+///   ycashd's statehash there) and reconsidered (forward again), then one in the middle;
+/// - finalizing the rest keeps pruning; the database ends at ycashd's statehash, with the same
+///   vault entries as the archive run: nothing the vault rules read was in a pruned body.
+///
+/// The retention is below Zakura's floor (the unvalidated constructor) so the 255-block chains
+/// prune at all; the floor itself is `kogany-rpc`'s constant-relation test and the mixed-regtest
+/// scenario (`qa/rpc-tests/kogany_pruned_edge.py`, retention 1,001).
+#[cfg(feature = "ycash")]
+#[test]
+fn pruned_reorg_at_the_retention_edge_equals_archive_and_ycash6() {
+    use crate::{
+        arbitrary::Prepare,
+        service::{non_finalized_state::NonFinalizedState, vault::finalized_vault_snapshot},
+        PruningConfig, StorageMode,
+    };
+    use zakura_chain::block::genesis::regtest_genesis_block;
+
+    const RETENTION: u32 = 8;
+    const NON_FINALIZED: usize = 12;
+    let _init_guard = zakura_test::init();
+    for name in FIXTURES {
+        let fx = fixture(name);
+        let network = Network::new_regtest(
+            ConfiguredActivationHeights {
+                overwinter: Some(1),
+                sapling: Some(1),
+                ycash: Some(1),
+                blossom: Some(1),
+                heartwood: Some(1),
+                canopy: Some(1),
+                vault: Some(fx.params.activation_height.0),
+                ..Default::default()
+            }
+            .into(),
+        );
+        register_vault_params_for_test(&network, fx.params);
+        let split = fx.blocks.len() - NON_FINALIZED;
+        let want = |i: usize| fx.blocks[i].statehash.clone();
+
+        let run = |storage_mode: StorageMode| {
+            let config = Config {
+                storage_mode,
+                ..Config::ephemeral()
+            };
+            let mut state = FinalizedState::new_with_debug_without_storage_validation(
+                &config, &network, false, false,
+            )
+            .expect("the ephemeral state opens");
+            state
+                .commit_finalized_direct(regtest_genesis_block().into(), None, None, "kp-2")
+                .expect("genesis commits");
+            for b in &fx.blocks[..split] {
+                state
+                    .commit_finalized_direct(b.block.clone().into(), None, None, "kp-2")
+                    .unwrap_or_else(|e| panic!("{name}: block {:?} commits: {e:?}", b.height));
+            }
+            let finalized_tip = fx.blocks[split - 1].height;
+            let at_finalized = hex(&finalized_vault_snapshot(&state.db).state_hash());
+            if let Some(w) = want(split - 1) {
+                assert_eq!(at_finalized, w, "{name}: the finalized tip");
+            }
+
+            let mut nfs = NonFinalizedState::new(&network);
+            for (k, b) in fx.blocks[split..].iter().enumerate() {
+                let prepared = b.block.clone().prepare();
+                if k == 0 {
+                    nfs.commit_new_chain(prepared, &state.db)
+                } else {
+                    nfs.commit_block(prepared, &state.db)
+                }
+                .unwrap_or_else(|e| panic!("{name}: block {:?} validates: {e:?}", b.height));
+                if let Some(w) = want(split + k) {
+                    let tip = nfs.best_chain().expect("a chain");
+                    assert_eq!(
+                        hex(&chain_tip_vault_snapshot(tip, &state.db).state_hash()),
+                        w,
+                        "{name}: chain tip {:?}",
+                        b.height
+                    );
+                }
+            }
+            let tip_hash = |nfs: &NonFinalizedState| {
+                nfs.best_chain()
+                    .map(|c| hex(&chain_tip_vault_snapshot(c, &state.db).state_hash()))
+                    .unwrap_or_else(|| hex(&finalized_vault_snapshot(&state.db).state_hash()))
+            };
+            let at_tip = tip_hash(&nfs);
+
+            // The deepest reorg: the fork point is the finalized tip.
+            let edge = fx.blocks[split].block.hash();
+            nfs.invalidate_block(edge).expect("the edge block is non-finalized");
+            assert!(nfs.best_chain().is_none(), "{name}: back to the finalized tip");
+            assert_eq!(tip_hash(&nfs), at_finalized, "{name}: the state at the fork point");
+            nfs.reconsider_block(edge, &state.db)
+                .expect("the edge block is reconsidered");
+            assert_eq!(tip_hash(&nfs), at_tip, "{name}: forward again");
+            // A shallower one.
+            let mid = split + NON_FINALIZED / 2;
+            nfs.invalidate_block(fx.blocks[mid].block.hash())
+                .expect("a middle block is non-finalized");
+            if let Some(w) = want(mid - 1) {
+                assert_eq!(tip_hash(&nfs), w, "{name}: after popping to {:?}", fx.blocks[mid - 1].height);
+            }
+            nfs.reconsider_block(fx.blocks[mid].block.hash(), &state.db)
+                .expect("the middle block is reconsidered");
+            assert_eq!(tip_hash(&nfs), at_tip, "{name}: forward again (middle)");
+
+            // Finalize the rest: pruning advances with the finalized tip.
+            while nfs.best_chain_len().unwrap_or(0) > 0 {
+                let block = nfs.finalize();
+                state
+                    .commit_finalized_direct(block, None, None, "kp-2")
+                    .expect("a finalized block commits");
+            }
+            let end = hex(&finalized_vault_snapshot(&state.db).state_hash());
+            assert_eq!(end, at_tip, "{name}: finalizing keeps the tip's state");
+            assert_eq!(Some(end), fx.blocks.last().unwrap().statehash.clone());
+            let body_at_activation = state
+                .db
+                .block(fx.params.activation_height.into())
+                .is_some();
+            (
+                state.db.lowest_retained_height(),
+                body_at_activation,
+                finalized_tip,
+                state.db.vault_canonical_entries(),
+            )
+        };
+
+        let (archive_lowest, archive_body, _, archive_entries) = run(StorageMode::Archive);
+        let (pruned_lowest, pruned_body, finalized_tip, pruned_entries) =
+            run(StorageMode::Pruned(PruningConfig {
+                tx_retention: RETENTION,
+            }));
+        assert_eq!(archive_lowest, None);
+        assert!(archive_body);
+        let tip = fx.blocks.last().unwrap().height;
+        assert_eq!(
+            pruned_lowest,
+            Some(Height(tip.0 - RETENTION + 1)),
+            "{name}: the window is counted from the finalized tip"
+        );
+        assert!(
+            finalized_tip.0 - RETENTION + 1 > fx.params.activation_height.0,
+            "{name}: the edge reorg's fork point is above pruned Vault-epoch blocks"
+        );
+        assert!(!pruned_body, "{name}: the activation block's body was pruned");
+        assert_eq!(
+            pruned_entries, archive_entries,
+            "{name}: the pruned database holds the archive's vault state"
+        );
+    }
+}
