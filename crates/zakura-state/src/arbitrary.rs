@@ -121,6 +121,7 @@ impl ContextuallyVerifiedBlock {
             chain_value_pool_change: ValueBalance::zero(),
             receipt_order,
             vault_delta: Default::default(),
+            yed_effect: Default::default(),
         }
     }
 }
