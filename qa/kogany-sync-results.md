@@ -14,3 +14,4 @@ The Y8 gate wants zero mismatches and zero rejected blocks.
 |---|---|---|---|---|---|---|
 | 570,000 | 570,000 | `0000014fbc5917ba8bcacf3336faf588d86b32443aa3a490a587af5750c77ec5` | 570,000 | 3,922 (all RPC-encoding, below) | 0 | 763,686 (PARTIAL) |
 | 1,100,006 | 1,100,006 | `00000388cfe0577f8f2264f001b8ae213f477571af4e873b7d27e54e612205d5` | 1,100,006 | 4,097 (4,094 RPC-encoding, 3 driver-side ZIP-221 off-by-one, below) | 0 | 1,519,286 (PARTIAL) |
+| 2,275,000 | 2,275,000 | `000006e55442b4075b60733b91132476f7d897ea34f9218f3ffb187f02c9183c` | 2,275,000 | 3,871 (pre-Sapling `finalsaplingroot` byte order, fixed on the integration tip; recheck pending) | 0 | 2,869,686 (PARTIAL) |
