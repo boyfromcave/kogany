@@ -440,17 +440,27 @@ pub fn yed_snapshot_by_hash<'a>(
     if tip.1 == hash {
         return Some(finalized_yed_snapshot(db));
     }
-    // A finalized block below the tip: walk the undo records down from the tip.
-    let target = db.height(hash)?;
+    finalized_yed_snapshot_below(db, tip.0, db.height(hash)?, hash)
+}
+
+/// The YED state after the finalized block `target` (`target_hash`), `from` being the finalized
+/// tip: the finalized state with the stored undo records of the blocks `from` down to
+/// `target + 1` applied, newest first. `None` when `target` is more than [`UNDO_KEEP`] below
+/// `from`, or above it.
+pub fn finalized_yed_snapshot_below(
+    db: &ZakuraDb,
+    from: Height,
+    target: Height,
+    target_hash: block::Hash,
+) -> Option<YedSnapshot> {
+    if target > from || from.0.saturating_sub(target.0) > UNDO_KEEP {
+        return None;
+    }
     let mut patch: BTreeMap<YedKey, Option<YedRecord>> = BTreeMap::new();
-    let mut h = tip.0;
+    let mut h = from;
     while h > target {
-        if tip.0.0.saturating_sub(h.0) >= UNDO_KEEP {
-            return None;
-        }
-        let undo = db.yed_undo(h);
         // No record: a block below the start height (or with Yellowback off) wrote nothing.
-        for (k, before) in undo.map(|u| u.before).unwrap_or_default() {
+        for (k, before) in db.yed_undo(h).map(|u| u.before).unwrap_or_default() {
             let key = YedKey::decode(&k)?;
             let value = match before {
                 Some(v) => Some(YedRecord::decode(key.table(), &v)?),
@@ -460,5 +470,5 @@ pub fn yed_snapshot_by_hash<'a>(
         }
         h = h.previous().ok()?;
     }
-    Some(YedSnapshot::new(db, Some((target, hash)), patch))
+    Some(YedSnapshot::new(db, Some((target, target_hash)), patch))
 }

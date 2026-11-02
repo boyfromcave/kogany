@@ -66,7 +66,7 @@ impl DiskFormatUpgrade for Upgrade {
 }
 
 /// `Some(reason)` when the database holds YED-epoch blocks without their index.
-fn missing_yed_epoch(tip: Option<Height>, db: &ZakuraDb) -> Option<String> {
+pub(crate) fn missing_yed_epoch(tip: Option<Height>, db: &ZakuraDb) -> Option<String> {
     let tip = tip?;
     let p = yed_params_for_db(db).ok()??;
     (i64::from(tip.0) >= i64::from(p.start_height) && db.yed_tip().is_none()).then(|| {
