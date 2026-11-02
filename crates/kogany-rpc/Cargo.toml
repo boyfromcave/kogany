@@ -16,7 +16,7 @@ publish = false
 # The Ycash network profile (tests/live_state.rs replays Ycash regtest blocks), and the
 # `getblocktemplate` hooks over the Yellowback state (plan W8, `mining`), which need
 # zakura-rpc's `ycash` hooks.
-ycash = ["zakura-chain/ycash", "zakura-rpc/ycash", "zakura-script/ycash"]
+ycash = ["zakura-chain/ycash", "zakura-rpc/ycash", "zakura-script/ycash", "zakura-state/ycash"]
 
 [dependencies]
 async-trait = { workspace = true }

@@ -22,7 +22,7 @@ categories = ["asynchronous", "cryptography::cryptocurrencies"]
 default = []
 
 # The Ycash network profile (kogany), see zakura-chain's `ycash` feature.
-ycash = ["zakura-chain/ycash", "zakura-header-chain/ycash", "zakura-script/ycash", "dep:kogany-vault", "dep:kogany-yellowback", "dep:kogany-pq"]
+ycash = ["zakura-chain/ycash", "zakura-header-chain/ycash", "zakura-script/ycash", "zakura-state/ycash", "dep:kogany-vault", "dep:kogany-yellowback", "dep:kogany-pq"]
 
 # Legacy flags accepted for build compatibility; the progress display is removed.
 progress-bar = ["howudoin", "zakura-state/progress-bar"]
