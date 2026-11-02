@@ -8,7 +8,7 @@ use zcash_address::{ToAddress, ZcashAddress};
 use zcash_protocol::consensus::NetworkType;
 
 use zakura_chain::{
-    block::Height,
+    block::{ChainHistoryMmrRootHash, Height},
     parameters::{
         testnet::{ConfiguredActivationHeights, RegtestParameters},
         Network, NetworkUpgrade,
@@ -21,7 +21,6 @@ use zakura_state::GetBlockTemplateChainInfo;
 
 use crate::config::mining;
 use crate::methods::{
-    tests::utils::fake_history_tree,
     types::{
         get_block_template::{
             proposal::proposal_block_from_template, BlockTemplateResponse, MinerParams,
@@ -29,6 +28,12 @@ use crate::methods::{
         long_poll::LongPollInput,
     },
 };
+
+/// The chain history root the test state reports. A distinct fixed value rather than
+/// `fake_history_tree(&Network::Mainnet)`: that tree is built from Zcash Mainnet block 1,046,400,
+/// which precedes Ycash Mainnet Heartwood (1,100,003), so it cannot be built with `ycash`; and the
+/// test is on regtest, where only the value the template carries into the header matters.
+const CHAIN_HISTORY_ROOT: [u8; 32] = [0x5a; 32];
 
 /// A template for the block after `tip` on `network`.
 fn template_after(network: &Network, tip: Height) -> BlockTemplateResponse {
@@ -50,7 +55,7 @@ fn template_after(network: &Network, tip: Height) -> BlockTemplateResponse {
         cur_time: 1654008617.into(),
         min_time: 1654008606.into(),
         max_time: 1654008728.into(),
-        chain_history_root: fake_history_tree(&Network::Mainnet).hash(),
+        chain_history_root: Some(ChainHistoryMmrRootHash::from(CHAIN_HISTORY_ROOT)),
         value_pools: Default::default(),
     };
     let long_poll_id = LongPollInput::new(
@@ -95,6 +100,7 @@ fn templates_across_the_vault_activation_commit_to_the_chain_history_root() {
             .default_roots
             .chain_history_root
             .bytes_in_serialized_order();
+        assert_eq!(chain_history_root, CHAIN_HISTORY_ROOT, "{height:?}");
         assert_eq!(
             *block.header.commitment_bytes, chain_history_root,
             "{height:?}"
