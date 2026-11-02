@@ -849,8 +849,11 @@ pub fn standard_script_check(
     }
     let nu = NetworkUpgrade::current(network, height);
     let inputs = tx.inputs().len();
-    let template_input =
-        find_vault_template_input(spent_outputs.iter().map(|o| Some(o.lock_script.as_raw_bytes())));
+    let template_input = find_vault_template_input(
+        spent_outputs
+            .iter()
+            .map(|o| Some(o.lock_script.as_raw_bytes())),
+    );
     let cached = zakura_script::CachedFfiTransaction::new(tx, spent_outputs, nu)
         .map_err(|error| (0, error))?;
     let context =

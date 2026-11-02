@@ -346,7 +346,13 @@ fn is_scored_but_never_bans(error: &TransactionError) -> bool {
 /// kogany (W6-c): a byte-level act failure scores 10 (ycashd) without a ban.
 #[cfg(feature = "ycash")]
 fn is_scored_ycash_verdict(error: &TransactionError) -> bool {
-    matches!(error, TransactionError::VaultRejected { byte_level: true, .. })
+    matches!(
+        error,
+        TransactionError::VaultRejected {
+            byte_level: true,
+            ..
+        }
+    )
 }
 
 #[cfg(not(feature = "ycash"))]

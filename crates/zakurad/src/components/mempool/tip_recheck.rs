@@ -75,7 +75,9 @@ pub(super) fn evicts(error: &TransactionError) -> bool {
         | TransactionError::Script(_) => true,
         TransactionError::ValidateContextError(error) => matches!(
             **error,
-            Ctx::VaultTimeLock { .. } | Ctx::UnsatisfiedSequenceLock { .. } | Ctx::VaultRejected { .. }
+            Ctx::VaultTimeLock { .. }
+                | Ctx::UnsatisfiedSequenceLock { .. }
+                | Ctx::VaultRejected { .. }
         ),
         _ => false,
     }
@@ -264,12 +266,17 @@ where
             tip: yed_tip,
             reasons,
         }) if yed_tip == Some(tip) => {
-            evictions.extend(rest_ids.into_iter().zip(reasons).filter_map(|(mined_id, reason)| {
-                Some(Eviction {
-                    mined_id,
-                    error: TransactionError::YellowbackRejected { reason: reason? },
-                })
-            }));
+            evictions.extend(
+                rest_ids
+                    .into_iter()
+                    .zip(reasons)
+                    .filter_map(|(mined_id, reason)| {
+                        Some(Eviction {
+                            mined_id,
+                            error: TransactionError::YellowbackRejected { reason: reason? },
+                        })
+                    }),
+            );
         }
         _ => return stale,
     }
@@ -358,7 +365,8 @@ mod tests {
     #[tokio::test]
     async fn the_recheck_evicts_vault_failures_and_yed_refusals() {
         let _init_guard = zakura_test::init();
-        let mut verifier = MockService::build().for_unit_tests::<tx::Request, tx::Response, BoxError>();
+        let mut verifier =
+            MockService::build().for_unit_tests::<tx::Request, tx::Response, BoxError>();
         let mut read_state =
             MockService::build().for_unit_tests::<zs::ReadRequest, zs::ReadResponse, BoxError>();
         let act = verified_tx(1, act_script(), 0);
@@ -434,7 +442,8 @@ mod tests {
     #[tokio::test]
     async fn a_retryable_failure_keeps_the_transaction() {
         let _init_guard = zakura_test::init();
-        let mut verifier = MockService::build().for_unit_tests::<tx::Request, tx::Response, BoxError>();
+        let mut verifier =
+            MockService::build().for_unit_tests::<tx::Request, tx::Response, BoxError>();
         let mut read_state =
             MockService::build().for_unit_tests::<zs::ReadRequest, zs::ReadResponse, BoxError>();
         let act = verified_tx(1, act_script(), 0);
@@ -471,7 +480,8 @@ mod tests {
     #[tokio::test]
     async fn a_moved_tip_drops_the_recheck() {
         let _init_guard = zakura_test::init();
-        let mut verifier = MockService::build().for_unit_tests::<tx::Request, tx::Response, BoxError>();
+        let mut verifier =
+            MockService::build().for_unit_tests::<tx::Request, tx::Response, BoxError>();
         let mut read_state =
             MockService::build().for_unit_tests::<zs::ReadRequest, zs::ReadResponse, BoxError>();
         let run = tokio::spawn(recheck(
@@ -568,7 +578,10 @@ mod tests {
         let tx = verified_tx(1, vec![0x51], 100);
         assert!(!is_expired_at(&tx, Height(100)));
         assert!(is_expired_at(&tx, Height(101)));
-        assert!(!is_expired_at(&verified_tx(1, vec![0x51], 0), Height(5_000_000)));
+        assert!(!is_expired_at(
+            &verified_tx(1, vec![0x51], 0),
+            Height(5_000_000)
+        ));
     }
 
     #[test]
@@ -612,9 +625,7 @@ mod tests {
         };
         assert_eq!(extra_misbehavior_score(&state), None);
         assert_eq!(
-            extra_misbehavior_score(&TransactionError::YellowbackRejected {
-                reason: "x".into()
-            }),
+            extra_misbehavior_score(&TransactionError::YellowbackRejected { reason: "x".into() }),
             None
         );
     }

@@ -41,11 +41,11 @@ use zakura_state as zs;
 use crate::{error::TransactionError, primitives, script, BoxError};
 
 pub mod check;
+#[cfg(test)]
+mod tests;
 /// kogany (W6-c): the Vault and YED mempool checks for the next block.
 #[cfg(feature = "ycash")]
 pub mod vault_mempool;
-#[cfg(test)]
-mod tests;
 
 /// A timeout applied to UTXO lookup requests.
 ///

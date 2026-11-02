@@ -498,7 +498,11 @@ fn mempool_expired_basic_for_network(network: Network) -> Result<()> {
     //
     // kogany (W6-c): on Ycash a transaction is expired once the tip is past its expiry height
     // (ycashd `removeExpired`), so the tip here is one higher.
-    let tip = if cfg!(feature = "ycash") { Height(2) } else { Height(1) };
+    let tip = if cfg!(feature = "ycash") {
+        Height(2)
+    } else {
+        Height(1)
+    };
     let expired = storage.remove_expired_transactions(tip);
     assert!(expired.contains(&tx_id));
     let everything_in_mempool: HashSet<UnminedTxId> = storage.tx_ids().collect();
@@ -549,7 +553,11 @@ fn mempool_expiration_reports_removed_dependent_transactions() -> Result<()> {
     )?;
 
     // kogany (W6-c): on Ycash the parent expires once the tip passes its expiry height.
-    let tip = if cfg!(feature = "ycash") { Height(2) } else { Height(1) };
+    let tip = if cfg!(feature = "ycash") {
+        Height(2)
+    } else {
+        Height(1)
+    };
     let removed = storage.remove_expired_transactions(tip);
 
     assert_eq!(removed, HashSet::from([parent_id, dependent_id]));

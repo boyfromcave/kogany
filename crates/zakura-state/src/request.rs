@@ -2312,7 +2312,9 @@ impl TryFrom<Request> for ReadRequest {
                 Ok(ReadRequest::VaultSnapshot { parent_hash })
             }
             Request::BestChainVaultSnapshot => Ok(ReadRequest::BestChainVaultSnapshot),
-            Request::BestChainYedMempoolCheck(txs) => Ok(ReadRequest::BestChainYedMempoolCheck(txs)),
+            Request::BestChainYedMempoolCheck(txs) => {
+                Ok(ReadRequest::BestChainYedMempoolCheck(txs))
+            }
             Request::AnyChainBlock(hash_or_height) => {
                 Ok(ReadRequest::AnyChainBlock(hash_or_height))
             }

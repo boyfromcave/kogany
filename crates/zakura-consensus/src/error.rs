@@ -356,7 +356,9 @@ pub enum TransactionError {
     /// the module's state moves with the tip, so DoS 0. `reason` is the module's verdict
     /// (ycashd's reject reason is `bad-yellowback-<reason>`).
     #[cfg(feature = "ycash")]
-    #[error("yellowback module refuses the transaction for the next block: bad-yellowback-{reason}")]
+    #[error(
+        "yellowback module refuses the transaction for the next block: bad-yellowback-{reason}"
+    )]
     YellowbackRejected { reason: String },
 }
 

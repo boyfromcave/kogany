@@ -85,7 +85,8 @@ pub fn is_byte_level_act_failure<'a>(
 /// Is `spk` V- or I-shaped (`MatchVault` / `MatchIntent` != `NONE`, a malformed shape
 /// included)?
 pub fn is_template_shaped(spk: &[u8]) -> bool {
-    !matches!(match_vault(spk), Shape::NotTemplate) || !matches!(match_intent(spk), Shape::NotTemplate)
+    !matches!(match_vault(spk), Shape::NotTemplate)
+        || !matches!(match_intent(spk), Shape::NotTemplate)
 }
 
 /// `IsVaultRelevant(tx, view)` (ycash6 `src/vault/node.cpp:128`): does `tx` touch the
@@ -109,11 +110,9 @@ pub fn is_vault_relevant(
         .iter()
         .any(|o| is_template_shaped(o.lock_script.as_raw_bytes()))
         || tx.inputs().iter().any(|input| {
-            input.outpoint().is_some_and(|outpoint| {
-                state
-                    .bond(&zs::vault::vault_outpoint(&outpoint))
-                    .is_some()
-            })
+            input
+                .outpoint()
+                .is_some_and(|outpoint| state.bond(&zs::vault::vault_outpoint(&outpoint)).is_some())
         })
 }
 
@@ -211,8 +210,8 @@ pub fn check_template_input(
         }
         _ => return Ok(()),
     };
-    let standard = ScriptContext::new(network.clone(), height, Some(state.clone()))
-        .with_standard_policy();
+    let standard =
+        ScriptContext::new(network.clone(), height, Some(state.clone())).with_standard_policy();
     let current = NetworkUpgrade::current(network, height);
     let current_branch = current.branch_id().map_or(0, u32::from);
     let previous = previous_epoch(network, height);
@@ -305,10 +304,8 @@ where
     ZS::Future: Send + 'static,
 {
     let expiry_height = tx.expiry_height().map_or(0, |h| h.0);
-    let request = zs::Request::BestChainYedMempoolCheck(vec![(
-        zs::vault::vault_tx(tx, txid),
-        expiry_height,
-    )]);
+    let request =
+        zs::Request::BestChainYedMempoolCheck(vec![(zs::vault::vault_tx(tx, txid), expiry_height)]);
     let zs::Response::YedMempoolCheck { tip, reasons } = state
         .oneshot(request)
         .await
@@ -346,9 +343,18 @@ mod tests {
         let short = act_output(60);
         assert!(long.len() > MAX_OP_RETURN_RELAY && short.len() <= MAX_OP_RETURN_RELAY);
         for reason in BYTE_LEVEL_REASONS {
-            assert!(is_byte_level_act_failure(reason, [long.as_slice()]), "{reason}");
-            assert!(!is_byte_level_act_failure(reason, [short.as_slice()]), "{reason}");
-            assert!(!is_byte_level_act_failure(reason, [] as [&[u8]; 0]), "{reason}");
+            assert!(
+                is_byte_level_act_failure(reason, [long.as_slice()]),
+                "{reason}"
+            );
+            assert!(
+                !is_byte_level_act_failure(reason, [short.as_slice()]),
+                "{reason}"
+            );
+            assert!(
+                !is_byte_level_act_failure(reason, [] as [&[u8]; 0]),
+                "{reason}"
+            );
         }
         // State-dependent reasons are never byte-level.
         for reason in [
@@ -358,10 +364,16 @@ mod tests {
             "bad-txns-vault-release",
             "bad-txns-vault-inputs-missing",
         ] {
-            assert!(!is_byte_level_act_failure(reason, [long.as_slice()]), "{reason}");
+            assert!(
+                !is_byte_level_act_failure(reason, [long.as_slice()]),
+                "{reason}"
+            );
         }
         // `bad-vault-act-sigs` counts only when the act itself does not decode for that reason.
-        assert!(!is_byte_level_act_failure("bad-vault-act-sigs", [long.as_slice()]));
+        assert!(!is_byte_level_act_failure(
+            "bad-vault-act-sigs",
+            [long.as_slice()]
+        ));
     }
 
     #[test]
@@ -391,7 +403,9 @@ mod tests {
             assert_eq!(error.mempool_misbehavior_score(), 0, "{error:?}");
         }
         // The texts carry ycashd's reasons, which the harness's verdict map reads.
-        assert!(byte_level.to_string().ends_with(": bad-vault-act-malformed"));
+        assert!(byte_level
+            .to_string()
+            .ends_with(": bad-vault-act-malformed"));
         assert!(TransactionError::YellowbackRejected {
             reason: "mint-6".into()
         }
