@@ -17,10 +17,9 @@
 //! - there is no finalized undo: the offline `rollback` refuses to cross the Vault activation
 //!   height and asks for a resync (K-14).
 //!
-//! The activation height is the seam [`vault_network_params`]: until the Vault network upgrade is
-//! in `zakura-chain` (plan W2-b) it answers `None` on every network, so the delta is empty and
-//! nothing is written. Tests register parameters per network with
-//! [`register_vault_params_for_test`].
+//! The activation height is [`vault_network_params`]: `None` where the network does not schedule
+//! the Vault upgrade (every Zcash network), so the delta is empty and nothing is written. Tests
+//! may register parameters per network with [`register_vault_params_for_test`].
 
 use std::collections::{BTreeMap, HashMap};
 
@@ -90,17 +89,36 @@ impl VaultNetworkParams {
 
 /// The Vault parameters of `network`, `None` when the upgrade is not scheduled there.
 ///
-/// **Seam (W2-b):** `zakura-chain` has no `NetworkUpgrade::Vault` yet, so this answers `None`
-/// everywhere except for networks a test registered. When W2-b lands, the body becomes
-/// `NetworkUpgrade::Vault.activation_height(network)` with the profile's minimum set maturity,
-/// and nothing else in this module changes.
+/// The activation height is [`Network::vault_activation_height`] (W2-b: explicit membership in
+/// the activation list, never a fallback to a later upgrade's height). The minimum set maturity
+/// is [`vault_min_set_maturity`]. A network a test registered answers its registered parameters
+/// first.
 pub fn vault_network_params(network: &Network) -> Option<VaultNetworkParams> {
     #[cfg(any(test, feature = "proptest-impl"))]
     if let Some(params) = test_params::lookup(network) {
         return Some(params);
     }
-    let _ = network;
-    None
+    Some(VaultNetworkParams {
+        activation_height: network.vault_activation_height()?,
+        min_set_maturity: vault_min_set_maturity(network),
+    })
+}
+
+/// The `testnet-yb-fast` profile's network magic (`ycash6 src/chainparams.cpp:644-647`), the one
+/// profile with a short set maturity.
+const YCASH_TESTNET_FAST_MAGIC: [u8; 4] = [0xf7, 0x79, 0x62, 0xd3];
+
+/// D-Q-31's `Consensus::Params::nVaultMinSetMaturity` of `network` (ycash6
+/// `src/chainparams.cpp:643,664,769`): regtest 2, `testnet-yb-fast` 48, mainnet,
+/// `testnet-yb-slow` and every other network the default 16,128.
+pub fn vault_min_set_maturity(network: &Network) -> u32 {
+    if network.is_regtest() {
+        2
+    } else if network.magic().0 == YCASH_TESTNET_FAST_MAGIC {
+        48
+    } else {
+        kogany_vault::state::MIN_SET_MATURITY
+    }
 }
 
 /// Registers Vault parameters for one test network instance (matched by identity of its

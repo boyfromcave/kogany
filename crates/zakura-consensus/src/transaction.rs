@@ -214,6 +214,11 @@ pub enum Request {
         height: block::Height,
         /// The time that the block was mined.
         time: DateTime<Utc>,
+        /// kogany (W4-d): the Vault set state after the block's parent, which the scripts of the
+        /// block read (ycash6 `ConnectBlock`'s `vaultSnapshot`). `None` where the Vault upgrade is
+        /// not active at `height`, or where the parent's state is unknown: every set opcode then
+        /// fails closed. Fetched once per block by the block verifier.
+        vault_snapshot: Option<zs::vault::VaultSnapshot>,
     },
     /// Verify the supplied transaction as part of the mempool.
     ///
@@ -648,6 +653,9 @@ where
 
             tracing::trace!(?tx_id, "got state UTXOs");
 
+            // kogany (W4-d): the set state the scripts read.
+            let vault_state = Self::vault_script_state(&req, &network, state.clone()).await?;
+
             let mut async_checks = match tx.as_ref() {
                 Transaction::V1 { .. } | Transaction::V2 { .. } | Transaction::V3 { .. } => {
                     tracing::debug!(?tx, "got transaction with wrong version");
@@ -663,6 +671,7 @@ where
                     cached_ffi_transaction.clone(),
                     joinsplit_data.as_deref(),
                     tx_id,
+                    vault_state,
                 )?,
                 Transaction::V5 {
                     ..
@@ -672,6 +681,7 @@ where
                     script_verifier,
                     cached_ffi_transaction.clone(),
                     wtx_id.expect("a v5 transaction has a witnessed transaction ID"),
+                    vault_state,
                 )?,
                 Transaction::V6 {
                     ..
@@ -681,6 +691,7 @@ where
                     script_verifier,
                     cached_ffi_transaction.clone(),
                     wtx_id.expect("a v6 transaction has a witnessed transaction ID"),
+                    vault_state,
                 )?,
             };
 
@@ -1021,6 +1032,7 @@ where
         cached_ffi_transaction: Arc<CachedFfiTransaction>,
         joinsplit_data: Option<&transaction::JoinSplitData<Groth16Proof>>,
         tx_id: UnminedTxId,
+        vault_state: Option<VaultStateSnapshot>,
     ) -> Result<AsyncChecks, TransactionError> {
         let tx = request.transaction();
         let nu = request.upgrade(network);
@@ -1038,6 +1050,7 @@ where
             network,
             script_verifier,
             cached_ffi_transaction,
+            vault_state,
         )?
         .and(Self::verify_sprout_shielded_data(joinsplit_data, &sighash)?)
         .and(Self::verify_sapling_bundle(sapling_bundle, &sighash, tx_id)))
@@ -1137,6 +1150,7 @@ where
         script_verifier: script::Verifier,
         cached_ffi_transaction: Arc<CachedFfiTransaction>,
         wtx_id: transaction::WtxId,
+        vault_state: Option<VaultStateSnapshot>,
     ) -> Result<AsyncChecks, TransactionError> {
         let transaction = request.transaction();
         let nu = request.upgrade(network);
@@ -1155,6 +1169,7 @@ where
             network,
             script_verifier,
             cached_ffi_transaction,
+            vault_state,
         )?
         .and(Self::verify_sapling_bundle(
             sapling_bundle,
@@ -1221,6 +1236,7 @@ where
         script_verifier: script::Verifier,
         cached_ffi_transaction: Arc<CachedFfiTransaction>,
         wtx_id: transaction::WtxId,
+        vault_state: Option<VaultStateSnapshot>,
     ) -> Result<AsyncChecks, TransactionError> {
         let transaction = request.transaction();
         let nu = request.upgrade(network);
@@ -1240,6 +1256,7 @@ where
             network,
             script_verifier,
             cached_ffi_transaction,
+            vault_state,
         )?
         .and(Self::verify_sapling_bundle(
             sapling_bundle,
@@ -1284,16 +1301,13 @@ where
         network: &Network,
         script_verifier: script::Verifier,
         cached_ffi_transaction: Arc<CachedFfiTransaction>,
+        vault_state: Option<VaultStateSnapshot>,
     ) -> Result<AsyncChecks, TransactionError> {
         let transaction = request.transaction();
         // kogany W3-c: every input is verified with the flags of this network and height and the
         // set state after the parent block (ycash6 `CScriptCheck` with `GetVaultScriptFlags` and
         // `vault::SetSigChecker`).
-        let script_context = ScriptContext::new(
-            network.clone(),
-            request.height(),
-            Self::vault_script_state(request),
-        );
+        let script_context = ScriptContext::new(network.clone(), request.height(), vault_state);
 
         if transaction.is_coinbase() {
             // The script verifier only verifies PrevOut inputs and their corresponding UTXOs.
@@ -1319,17 +1333,50 @@ where
         }
     }
 
-    /// The set state the scripts of `request` read: the state after the parent of the block
-    /// (block requests) or after the best chain tip (mempool requests), ycash6's `SetSnapshot`.
+    /// The set state the scripts of `request` read (ycash6's `SetSnapshot`): for a block request
+    /// the state after the block's parent, which the block verifier fetched once for the block;
+    /// for a mempool request the state at the best chain tip, the parent of the next block.
     ///
-    /// TODO(kogany W4-d `snapshot-hook`): return the fork-aware snapshot
-    /// (`zakura_state::vault::vault_snapshot_by_hash` of the parent hash, through
-    /// `zs::ReadRequest::VaultSnapshot { parent_hash }`) once the request carries it. Until then
-    /// `None`: before Vault no set opcode evaluates, and from Vault every set opcode fails closed
-    /// (no threshold, never released). Never an empty `SetState`, in which every unknown set is
-    /// released.
-    fn vault_script_state(_request: &Request) -> Option<VaultStateSnapshot> {
-        None
+    /// `None` where the Vault upgrade is not active at the request's height (no set opcode
+    /// evaluates), and for a block whose parent's state is unknown: every set opcode then fails
+    /// closed (no threshold, never released). Never an empty `SetState`, in which every unknown
+    /// set is released (W3-c finding F-2).
+    ///
+    /// A mempool request whose tip moved past the request's height gets a retryable error.
+    async fn vault_script_state(
+        request: &Request,
+        network: &Network,
+        state: Timeout<ZS>,
+    ) -> Result<Option<VaultStateSnapshot>, TransactionError> {
+        let height = request.height();
+        if !network.is_vault_active(height) {
+            return Ok(None);
+        }
+        let snapshot = match request {
+            Request::Block { vault_snapshot, .. } => vault_snapshot.clone(),
+            Request::Mempool { .. } => {
+                let zs::Response::VaultSnapshot(snapshot) = state
+                    .oneshot(zs::Request::BestChainVaultSnapshot)
+                    .await
+                    .map_err(|e| TransactionError::Other(e.to_string()))?
+                else {
+                    unreachable!("Request::BestChainVaultSnapshot always responds with VaultSnapshot")
+                };
+                let at_parent = snapshot
+                    .as_ref()
+                    .and_then(|s| s.tip)
+                    .and_then(|(tip, _)| tip.next().ok())
+                    == Some(height);
+                if !at_parent {
+                    return Err(TransactionError::Other(format!(
+                        "the vault set state is not at the parent of height {height:?}: \
+                         the chain tip moved, retry"
+                    )));
+                }
+                snapshot
+            }
+        };
+        Ok(snapshot.map(|s| s.state as VaultStateSnapshot))
     }
 
     /// Verifies a transaction's Sprout shielded join split data.
