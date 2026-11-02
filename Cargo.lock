@@ -1196,9 +1196,11 @@ dependencies = [
  "serde",
  "serde_json",
  "tokio",
+ "tower",
  "tracing",
  "zakura-chain",
  "zakura-rpc",
+ "zakura-state",
 ]
 
 [[package]]
