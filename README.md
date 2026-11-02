@@ -48,6 +48,15 @@ root `Cargo.toml` under `[patch.crates-io]`) to their Ycash values. The same bui
 `zakurad` binary, which refuses to run: a Ycash node never runs, or installs, under Zcash's name.
 Without the feature, `cargo build -p zakura` builds upstream's Zcash `zakurad` and no `koganyd`.
 
+The container image is upstream's `docker/Dockerfile` with the same switch: with `ycash` in the
+`FEATURES` build argument it builds and ships `koganyd` (and no `zakurad`), without it upstream's
+`zakurad`. The image's default command, `node`, runs whichever is installed:
+
+```sh
+docker build -f docker/Dockerfile --target runtime --build-arg FEATURES="default-release-binaries ycash" -t koganyd .
+docker run --rm --entrypoint koganyd koganyd --version
+```
+
 ## Networks, ports and identifiers
 
 Every value equals ycashd's (ycash6 `src/chainparams.cpp`, `src/chainparamsbase.cpp`); the test

@@ -97,21 +97,37 @@ if [[ -n ${CONFIG_FILE_PATH} && -f ${CONFIG_FILE_PATH} ]]; then
     CONFIG_ARGS=(--config "${CONFIG_FILE_PATH}")
 fi
 
+# kogany: the image ships one node binary, `koganyd` when built with the `ycash` feature (its
+# `zakurad` refuses to run there) and `zakurad` otherwise. "node" (the image's CMD) and bare
+# flags run whichever is installed.
+if command -v koganyd >/dev/null 2>&1; then
+  NODE_BIN=koganyd
+else
+  NODE_BIN=zakurad
+fi
+
 # Main Script Logic
-# - If "$1" is "--", "-", or "zakurad", run `zakurad`
+# - If "$1" is "node", "--" or "-", run the installed node binary
 #   with the remaining params.
+# - If "$1" is "zakurad" or "koganyd", run that binary with the remaining params.
 # - If "$1" is "test", handle test execution
 # - Otherwise run "$@" directly.
 case "$1" in
---* | -* | zakurad)
+node | --* | -*)
   shift
-  exec_as_user zakurad "${CONFIG_ARGS[@]}" "$@"
+  exec_as_user "${NODE_BIN}" "${CONFIG_ARGS[@]}" "$@"
+  ;;
+zakurad | koganyd)
+  bin="$1"
+  shift
+  exec_as_user "${bin}" "${CONFIG_ARGS[@]}" "$@"
   ;;
 test)
   shift
-  if [[ "$1" == "zakurad" ]]; then
+  if [[ "$1" == "zakurad" || "$1" == "koganyd" ]]; then
+    bin="$1"
     shift
-    exec_as_user zakurad "${CONFIG_ARGS[@]}" "$@"
+    exec_as_user "${bin}" "${CONFIG_ARGS[@]}" "$@"
   elif [[ -n "${NEXTEST_PROFILE}" ]]; then
     # All test filtering and scoping logic is handled by .config/nextest.toml
     echo "Running tests with nextest profile: ${NEXTEST_PROFILE}"
