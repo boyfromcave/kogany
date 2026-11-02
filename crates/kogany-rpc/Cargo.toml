@@ -1,0 +1,29 @@
+[package]
+name = "kogany-rpc"
+version = "0.1.0"
+authors = ["The Ycash developers"]
+description = "kogany's JSON-RPC methods for the vault primitive and Yellowback (vault_*, set_*, later yed_*), dispatched beside Zakura's RpcServer"
+license = "MIT"
+repository = "https://github.com/boyfromcave/kogany"
+edition.workspace = true
+rust-version.workspace = true
+publish = false
+
+# The integration hook crate (plan W7): it implements zakura-rpc's RpcMethods, so it depends on
+# zakura-rpc and zakura-chain; the vault parsing is kogany-vault's.
+[dependencies]
+async-trait = { workspace = true }
+hex = { workspace = true }
+serde = { workspace = true, features = ["serde_derive"] }
+serde_json = { workspace = true, features = ["raw_value"] }
+tracing = { workspace = true }
+
+kogany-vault = { path = "../kogany-vault" }
+zakura-chain = { path = "../zakura-chain", version = "11.0.0-rc0" }
+zakura-rpc = { path = "../zakura-rpc", version = "13.0.1-rc0", default-features = false }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+
+[lints]
+workspace = true

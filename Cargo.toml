@@ -22,6 +22,7 @@ members = [
         "crates/kogany-pq",
         "crates/kogany-vault",
         "crates/kogany-yellowback",
+        "crates/kogany-rpc",
 ]
 
 # The asset packaging crate publishes on the release-state cadence rather than with the

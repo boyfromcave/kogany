@@ -1186,6 +1186,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "kogany-rpc"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "hex",
+ "kogany-vault",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+ "zakura-chain",
+ "zakura-rpc",
+]
+
+[[package]]
 name = "kogany-vault"
 version = "0.1.0"
 dependencies = [
@@ -2749,6 +2764,7 @@ dependencies = [
  "hyper-util",
  "indexmap",
  "insta",
+ "kogany-rpc",
  "libc",
  "metrics",
  "pin-project",

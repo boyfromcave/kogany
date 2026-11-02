@@ -745,18 +745,26 @@ impl StartCmd {
         });
 
         let rpc_task_handle = if config.rpc.listen_addr.is_some() {
-            zakura_rpc::node::start_server(&rpc_impl, config.rpc.clone())
-                .await
-                .expect("server should start")
+            zakura_rpc::server::kogany_extension::start_node_server(
+                &rpc_impl,
+                kogany_rpc::node_extension(&config.network.network, latest_chain_tip.clone()),
+                config.rpc.clone(),
+            )
+            .await
+            .expect("server should start")
         } else {
             spawn_erased(std::future::pending().in_current_span())
         };
         node_tasks.track(&rpc_task_handle);
 
         let admin_rpc_task_handle = if config.rpc.admin_listen_addr.is_some() {
-            zakura_rpc::node::start_admin_server(&rpc_impl, config.rpc.clone())
-                .await
-                .expect("admin server should start")
+            zakura_rpc::server::kogany_extension::start_node_admin_server(
+                &rpc_impl,
+                kogany_rpc::node_extension(&config.network.network, latest_chain_tip.clone()),
+                config.rpc.clone(),
+            )
+            .await
+            .expect("admin server should start")
         } else {
             spawn_erased(std::future::pending().in_current_span())
         };
