@@ -246,6 +246,30 @@ pub fn chain_yed_effect(
     evaluate_yed_block(p, &parent_chain.yed_view(db), input)
 }
 
+// ---- health -------------------------------------------------------------------------------
+
+/// The node's index health (ycash6 `SetUnhealthy`): kogany's index has no unhealthy state on the
+/// block path — a block it cannot evaluate stops the node — so only a read-path storage failure
+/// (the mempool check) sets it, and the next block's evaluation then stops the node.
+static YED_UNHEALTHY: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
+
+/// Marks the index unhealthy (the first reason is kept).
+pub fn mark_yed_unhealthy(reason: String) {
+    tracing::error!(%reason, "Yellowback index unhealthy: the next block stops the node");
+    let mut unhealthy = YED_UNHEALTHY
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    unhealthy.get_or_insert(reason);
+}
+
+/// `UnhealthyReason()`: `None` while healthy (`yed_getinfo.health`, W5-f).
+pub fn yed_unhealthy_reason() -> Option<String> {
+    YED_UNHEALTHY
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .clone()
+}
+
 // ---- snapshots ----------------------------------------------------------------------------
 
 /// The YED state after one block (ycash6 reads one `State` under `cs_yellowback`): what the
@@ -300,12 +324,14 @@ impl YedSnapshot {
         patch: BTreeMap<YedKey, Option<YedRecord>>,
     ) -> YedSnapshot {
         let network = db.network();
+        let params = yed_network_params(&network, &db.config().yellowback)
+            .ok()
+            .flatten();
         YedSnapshot {
             tip,
-            params: yed_network_params(&network, &db.config().yellowback)
-                .ok()
-                .flatten(),
-            network: yed_network_name(&network),
+            params,
+            // The records carry `Params::network` (the C++ `params.network`).
+            network: params.map_or(yed_network_name(&network), |p| p.network),
             patch: Arc::new(patch),
             db: db.clone(),
         }
@@ -370,6 +396,60 @@ impl YedSnapshot {
         }
         let s = self.snapshot_at(i64::from(tip.height))?;
         attested_fee_price(s.pfast(), s.pmid(), s.pslow(), s.halt_mask)
+    }
+
+    /// `MempoolCheckLocked` (ycash6 `src/yellowback/index.cpp`): the module's check of a
+    /// transaction for the next block over this snapshot (the tip's), `None` = admitted, else
+    /// the reason (a verdict, [`MEMPOOL_EXPIRY`](kogany_yellowback::state::MEMPOOL_EXPIRY), or
+    /// [`UNHEALTHY`](kogany_yellowback::state::UNHEALTHY)). The C++ guards:
+    ///
+    /// - Yellowback not live on this node (ycashd's stopped or absent index): `None`;
+    /// - the index unhealthy: `UNHEALTHY`, admitting nothing that might touch the module;
+    /// - a storage failure while reading (a record that does not decode): the index is marked
+    ///   unhealthy ([`mark_yed_unhealthy`]) and the transaction refused with `UNHEALTHY`; the
+    ///   next block's evaluation then stops the node, as ycashd's next `ConnectBlock` aborts.
+    ///
+    /// `expiry_height` is the transaction's `nExpiryHeight` (0 = none). For W6-b.
+    pub fn mempool_check(
+        &self,
+        tx: &kogany_vault::state::VaultTx,
+        expiry_height: u32,
+    ) -> Option<String> {
+        let p = self.params.as_ref()?;
+        if tx.coinbase {
+            return None;
+        }
+        if yed_unhealthy_reason().is_some() {
+            return Some(kogany_yellowback::state::UNHEALTHY.to_owned());
+        }
+        // The index is in step with the chain, so its tip is the chain's.
+        let next_height = self
+            .index_tip()
+            .map(|t| i64::from(t.height))
+            .or(self.tip.map(|(h, _)| i64::from(h.0)))
+            .map_or(0, |h| h.saturating_add(1));
+        let checked = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            kogany_yellowback::state::mempool_check_reason(
+                self,
+                p,
+                next_height,
+                tx,
+                expiry_height,
+                None,
+            )
+        }));
+        match checked {
+            Ok(reason) => reason,
+            Err(panic) => {
+                let what = panic
+                    .downcast_ref::<String>()
+                    .cloned()
+                    .or_else(|| panic.downcast_ref::<&str>().map(|s| (*s).to_owned()))
+                    .unwrap_or_default();
+                mark_yed_unhealthy(format!("storage failure in MempoolCheck: {what}"));
+                Some(kogany_yellowback::state::UNHEALTHY.to_owned())
+            }
+        }
     }
 
     /// Every record, canonical key → canonical value (the tables of the state hash and the rest).

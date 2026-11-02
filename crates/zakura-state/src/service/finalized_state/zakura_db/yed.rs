@@ -319,6 +319,10 @@ pub enum YedEvaluationFailed {
     #[error("the index was built under other Yellowback parameters than this configuration's")]
     ParamsChanged,
 
+    /// A read-path storage failure marked the index unhealthy (`SetUnhealthy`).
+    #[error("the Yellowback index is unhealthy ({0})")]
+    Unhealthy(String),
+
     /// A block the module judges invalid reached the finalized write path.
     #[error(
         "block {height} {hash} is invalid under the YED module ({reason}) but is being \
@@ -504,6 +508,9 @@ pub fn evaluate_yed_block(
 /// The rules stamp check (`SyncToChain`): an index with a tip stamped with another
 /// [`RULES_VERSION`] cannot evaluate. An index without the stamp reads as version 1, as in C++.
 pub fn check_rules_stamp(db: &ZakuraDb) -> Result<(), YedEvaluationFailed> {
+    if let Some(reason) = crate::service::yed::yed_unhealthy_reason() {
+        return Err(YedEvaluationFailed::Unhealthy(reason));
+    }
     if FinalizedYedState(db).tip().is_none() {
         return Ok(());
     }

@@ -377,7 +377,8 @@ fn golden_finalized_path_equals_pinned_across_restart() {
     }
     assert!(finalized_yed_snapshot_below(&db, top, Height(top.0 + 1), block::Hash([0; 32])).is_none());
 
-    // Restart at the tip.
+    // Restart at the tip (a snapshot holds a database handle).
+    drop(snapshot);
     let entries = db.yed_canonical_entries();
     drop(db);
     let db = open_db(&config, &network);
@@ -421,7 +422,7 @@ fn golden_chain_reorg_finalization_and_checkpoint_path() {
                     .push(carrier_cv(&carriers[valid.len()], effect))
                     .unwrap();
                 let child = YedBlockInput {
-                    height: b.input.height + 1,
+                    height: Height(b.input.height.0 + 1),
                     hash: block::Hash([0xee; 32]),
                     parent: b.input.hash,
                     txs: vec![b.input.txs[0].clone()],
@@ -622,7 +623,7 @@ fn cannot_evaluate_is_a_failure_not_a_skip() {
 
     // A parent that is not the index tip (a gap, or a sibling's child).
     let mut gap = next.clone();
-    gap.height = next.height + 1;
+    gap.height = Height(next.height.0 + 1);
     assert!(matches!(
         finalized_yed_effect(&db, Some(&g.p), &gap),
         Err(YedEvaluationFailed::TipMismatch { .. })
@@ -1387,7 +1388,7 @@ fn overlay_equivalence_v3() {
     let residual = g.residual(g.f.tip - 1);
     let cited = g.f.tip - 1;
     let h = g.f.tip + 1;
-    let reg = g.f.register_tx(5, 0, 0, None);
+    let reg = g.f.register_tx(5, 10 * kogany_yellowback::params::COIN, -1, None);
     let claim = g.claim(
         SpendOpts {
             residual_value: Some(residual),
@@ -1453,4 +1454,45 @@ fn overlay_equivalence_v3() {
         before
     );
     assert_eq!(before, g.f.state.canonical_entries());
+}
+
+/// `MempoolCheckLocked` over a snapshot: a transaction the module makes invalid at the next
+/// height is refused with its verdict, a valid one is admitted, and with Yellowback off nothing
+/// is checked.
+#[test]
+fn mempool_check_over_the_tip_snapshot() {
+    let _init_guard = zakura_test::init();
+    let g = golden();
+    let network = network_with(g.p);
+    let dir = TempDir::new().unwrap();
+    let db = open_db(&config_at(dir.path()), &network);
+    let first_invalid = g.blocks.iter().position(|b| b.invalid).unwrap();
+    for b in g.blocks[..first_invalid].iter() {
+        let e = finalized_yed_effect(&db, Some(&g.p), &b.input).unwrap();
+        commit(&db, b.input.height, b.input.hash, &e);
+    }
+    let bad = &g.blocks[first_invalid];
+    let good = &g.blocks[first_invalid + 1];
+    assert_eq!(bad.input.height, good.input.height);
+    let snapshot = finalized_yed_snapshot(&db);
+    assert!(snapshot.is_live());
+    let refused: Vec<String> = bad.input.txs[1..]
+        .iter()
+        .filter_map(|tx| snapshot.mempool_check(tx, 0))
+        .collect();
+    assert_eq!(refused, vec!["bad-mint-amount".to_owned()]);
+    for tx in &good.input.txs {
+        assert_eq!(snapshot.mempool_check(tx, 0), None);
+    }
+    assert_eq!(snapshot.attested_fee_price(), {
+        let s = snapshot.snapshot_at(i64::from(snapshot.index_tip().unwrap().height)).unwrap();
+        kogany_yellowback::attest::price::attested_fee_price(s.pfast(), s.pmid(), s.pslow(), s.halt_mask)
+    });
+    let off = Network::new_regtest(ConfiguredActivationHeights::default().into());
+    let off_dir = TempDir::new().unwrap();
+    let off_db = open_db(&config_at(off_dir.path()), &off);
+    let off_snapshot = finalized_yed_snapshot(&off_db);
+    assert!(!off_snapshot.is_live());
+    assert_eq!(off_snapshot.mempool_check(&bad.input.txs[1], 0), None);
+    assert_eq!(off_snapshot.attested_fee_price(), None);
 }
