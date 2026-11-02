@@ -15,7 +15,7 @@ use crate::block::Height;
 
 use super::{
     network::magic::Magic,
-    network_upgrade::{ConsensusBranchId, NetworkUpgrade, NetworkUpgrade::*},
+    network_upgrade::{NetworkUpgrade, NetworkUpgrade::*},
 };
 
 /// Network upgrade activation heights on Ycash mainnet.
@@ -103,31 +103,6 @@ pub(super) const TESTNET_ACTIVATION_HEIGHTS: &[(Height, NetworkUpgrade)] = &[
     (testnet::CANOPY, Canopy),
 ];
 
-/// Ycash consensus branch IDs, `NetworkUpgradeInfo` (`ycash6 src/consensus/upgrades.cpp:12-99`).
-///
-/// Overwinter and Sapling are Zcash's (shared history). Ycash, Blossom, Heartwood, Canopy and NU5
-/// are Ycash's own; NU5's `0xf919a198` is reserved for a Ycash NU5 (decision K-7) and has no
-/// height. NU6, NU6.1 and NU6.2 keep Zcash's values, as ycashd does, and stay inactive. NU6.3 and
-/// NU7 do not exist on ycashd; they keep Zakura's values and have no height. These must equal the
-/// common fork's `BranchId` values under its `ycash` feature, or the conversion to
-/// `zcash_protocol` rejects Ycash transactions (lane B trap T1).
-pub(super) const CONSENSUS_BRANCH_IDS: &[(NetworkUpgrade, ConsensusBranchId)] = &[
-    (Overwinter, ConsensusBranchId(0x5ba81b19)),
-    (Sapling, ConsensusBranchId(0x76b809bb)),
-    (Ycash, ConsensusBranchId(0x374d694f)),
-    (Blossom, ConsensusBranchId(0x8e471bd6)),
-    (Heartwood, ConsensusBranchId(0x66314da3)),
-    (Canopy, ConsensusBranchId(0x19bd2d2f)),
-    (Nu5, ConsensusBranchId(0xf919a198)),
-    (Nu6, ConsensusBranchId(0xc8e71055)),
-    (Nu6_1, ConsensusBranchId(0x4dec4df0)),
-    (Nu6_2, ConsensusBranchId(0x5437f330)),
-    (Nu6_3, ConsensusBranchId(0x37a5165b)),
-    (Nu7, ConsensusBranchId(0x77190ad9)),
-    #[cfg(zcash_unstable = "zfuture")]
-    (ZFuture, ConsensusBranchId(0xfffffffd)),
-];
-
 /// Ycash network magics. Mainnet and Regtest share Zcash's (`ycash6 src/chainparams.cpp:224-227,
 /// 820-823`), so Zakura's [`magics::MAINNET`](super::constants::magics::MAINNET) and
 /// [`magics::REGTEST`](super::constants::magics::REGTEST) are used unchanged. The re-forked
@@ -210,3 +185,6 @@ impl super::Network {
             .expect("the hard-coded slow testnet profile is a valid configured testnet")
     }
 }
+
+#[cfg(test)]
+mod tests;

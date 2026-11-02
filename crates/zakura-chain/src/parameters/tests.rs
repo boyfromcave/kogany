@@ -228,6 +228,12 @@ fn branch_id_consistent(network: Network) {
     let network_upgrades: HashSet<&NetworkUpgrade> = branch_id_list.keys().collect();
 
     for &network_upgrade in network_upgrades {
+        // kogany: a Zcash build never schedules the Ycash upgrade, so its height is only the
+        // fallback to Blossom's, where Blossom's branch ID is current.
+        if cfg!(not(feature = "ycash")) && network_upgrade == NetworkUpgrade::Ycash {
+            continue;
+        }
+
         let height = network_upgrade.activation_height(&network);
 
         // Skip network upgrades that don't have activation heights yet
@@ -264,6 +270,8 @@ const NETWORK_UPGRADES_IN_ORDER: &[NetworkUpgrade] = &[
     BeforeOverwinter,
     Overwinter,
     Sapling,
+    // kogany: the Ycash upgrade, between Sapling and Blossom (plan K-1).
+    Ycash,
     Blossom,
     Heartwood,
     Canopy,

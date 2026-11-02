@@ -1841,6 +1841,13 @@ impl Network {
         if let Self::Testnet(params) = self {
             params.funding_streams()
         } else {
+            // Ycash mainnet has no ZIP 207/214 funding streams (lane B §1 row 6).
+            #[cfg(feature = "ycash")]
+            {
+                static YCASH_MAINNET_FUNDING_STREAMS: Vec<FundingStreams> = Vec::new();
+                &YCASH_MAINNET_FUNDING_STREAMS
+            }
+            #[cfg(not(feature = "ycash"))]
             &mainnet::FUNDING_STREAMS
         }
     }

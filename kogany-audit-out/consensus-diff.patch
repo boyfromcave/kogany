@@ -1,0 +1,784 @@
+diff --git a/crates/zakura-chain/src/block/commitment.rs b/crates/zakura-chain/src/block/commitment.rs
+index 4141e6d37..e05aa0f37 100644
+--- a/crates/zakura-chain/src/block/commitment.rs
++++ b/crates/zakura-chain/src/block/commitment.rs
+@@ -115,7 +115,7 @@ impl Commitment {
+ 
+         match NetworkUpgrade::current_with_activation_height(network, height) {
+             (Genesis | BeforeOverwinter | Overwinter, _) => Ok(PreSaplingReserved(bytes)),
+-            (Sapling | Blossom, _) => match sapling::tree::Root::try_from(bytes) {
++            (Sapling | Ycash | Blossom, _) => match sapling::tree::Root::try_from(bytes) {
+                 Ok(root) => Ok(FinalSaplingRoot(root)),
+                 _ => Err(InvalidSapingRootBytes),
+             },
+diff --git a/crates/zakura-chain/src/parameters.rs b/crates/zakura-chain/src/parameters.rs
+index fc86a5b20..fb7d44af9 100644
+--- a/crates/zakura-chain/src/parameters.rs
++++ b/crates/zakura-chain/src/parameters.rs
+@@ -18,6 +18,8 @@ mod genesis;
+ mod network;
+ mod network_upgrade;
+ mod transaction;
++#[cfg(feature = "ycash")]
++pub mod ycash;
+ 
+ #[cfg(any(test, feature = "proptest-impl"))]
+ pub mod arbitrary;
+diff --git a/crates/zakura-chain/src/parameters/constants.rs b/crates/zakura-chain/src/parameters/constants.rs
+index 952380ac0..8fafa162d 100644
+--- a/crates/zakura-chain/src/parameters/constants.rs
++++ b/crates/zakura-chain/src/parameters/constants.rs
+@@ -77,6 +77,7 @@ pub mod activation_heights {
+         pub const NU6_3: Height = Height(4_134_000);
+         /// The block height at which [`NU7`](crate::parameters::NetworkUpgrade::Nu7)
+         /// activates on Testnet.
++        #[cfg_attr(feature = "ycash", allow(dead_code))]
+         pub(in crate::parameters) const NU7: Height = Height(4_465_026);
+     }
+ 
+@@ -108,6 +109,7 @@ pub mod activation_heights {
+         pub const NU6_3: Height = Height(3_428_143);
+         /// The block height at which [`NU7`](crate::parameters::NetworkUpgrade::Nu7)
+         /// activates on Mainnet, assigned by [ZIP 259](https://zips.z.cash/zip-0259).
++        #[cfg_attr(feature = "ycash", allow(dead_code))]
+         pub(in crate::parameters) const NU7: Height = Height(3_543_405);
+     }
+ }
+diff --git a/crates/zakura-chain/src/parameters/network.rs b/crates/zakura-chain/src/parameters/network.rs
+index 9c3affd43..c2e7576e6 100644
+--- a/crates/zakura-chain/src/parameters/network.rs
++++ b/crates/zakura-chain/src/parameters/network.rs
+@@ -23,11 +23,13 @@ mod tests;
+ // This is DISTINCT from the NU6.2 *activation* (re-enable) height (3_364_600, see
+ // `network_upgrade.rs`), which lands 1_174 blocks later. Do NOT change this value: it is
+ // already deployed, so changing it would fork from live v4.5.3 nodes in the disable window.
++#[cfg_attr(feature = "ycash", allow(dead_code))]
+ const MAINNET_TEMPORARY_ORCHARD_DISABLING_SOFT_FORK_HEIGHT: Height = Height(3_363_426);
+ 
+ // Default Testnet temporary Orchard-disabling soft-fork height. As on Mainnet, this is DISTINCT
+ // from the NU6.2 *activation* (re-enable) height (4_052_000, see `network_upgrade.rs`), which
+ // lands 3_500 blocks later.
++#[cfg_attr(feature = "ycash", allow(dead_code))]
+ const TESTNET_TEMPORARY_ORCHARD_DISABLING_SOFT_FORK_HEIGHT: Height = Height(4_048_500);
+ 
+ /// An enum describing the kind of network, whether it's the production mainnet or a testnet.
+@@ -253,8 +255,14 @@ impl Network {
+     /// Get the default port associated to this network.
+     pub fn default_port(&self) -> u16 {
+         match self {
++            #[cfg(feature = "ycash")]
++            Network::Mainnet => super::ycash::ports::MAINNET,
++            #[cfg(feature = "ycash")]
++            Network::Testnet(params) => super::ycash::testnet_default_port(params),
++            #[cfg(not(feature = "ycash"))]
+             Network::Mainnet => 8233,
+             // TODO: Add a `default_port` field to `testnet::Parameters` to return here. (zcashd uses 18344 for Regtest)
++            #[cfg(not(feature = "ycash"))]
+             Network::Testnet(_params) => 18233,
+         }
+     }
+@@ -351,6 +359,10 @@ impl Network {
+     /// actions in transactions activates, if it is configured for this network.
+     pub fn temporary_orchard_disabling_soft_fork_height(&self) -> Option<Height> {
+         match self {
++            // Ycash mainnet never had this Zcash soft fork.
++            #[cfg(feature = "ycash")]
++            Network::Mainnet => None,
++            #[cfg(not(feature = "ycash"))]
+             Network::Mainnet => Some(MAINNET_TEMPORARY_ORCHARD_DISABLING_SOFT_FORK_HEIGHT),
+             Network::Testnet(parameters) => {
+                 parameters.temporary_orchard_disabling_soft_fork_height()
+diff --git a/crates/zakura-chain/src/parameters/network/error.rs b/crates/zakura-chain/src/parameters/network/error.rs
+index 8bf392731..610e98aae 100644
+--- a/crates/zakura-chain/src/parameters/network/error.rs
++++ b/crates/zakura-chain/src/parameters/network/error.rs
+@@ -56,6 +56,10 @@ pub enum ParametersBuilderError {
+     #[non_exhaustive]
+     OutOfOrderUpgrades,
+ 
++    #[error("the Ycash network upgrade can only be scheduled in a `ycash` build")]
++    #[non_exhaustive]
++    YcashUpgradeNeedsYcashBuild,
++
+     #[error("difficulty limits are valid expanded values")]
+     #[non_exhaustive]
+     InvaildDifficultyLimits,
+diff --git a/crates/zakura-chain/src/parameters/network/subsidy.rs b/crates/zakura-chain/src/parameters/network/subsidy.rs
+index 3886d3c84..eab08d566 100644
+--- a/crates/zakura-chain/src/parameters/network/subsidy.rs
++++ b/crates/zakura-chain/src/parameters/network/subsidy.rs
+@@ -26,6 +26,8 @@ use crate::{
+     transparent,
+ };
+ 
++// The `ycash` profile derives the first halving, so it does not read `testnet::FIRST_HALVING`.
++#[cfg_attr(feature = "ycash", allow(unused_imports))]
+ use constants::{
+     mainnet, testnet, BLOSSOM_POW_TARGET_SPACING_RATIO, FUNDING_STREAM_RECEIVER_DENOMINATOR,
+     FUNDING_STREAM_SPECIFICATION, LOCKBOX_SPECIFICATION, MAX_BLOCK_SUBSIDY,
+@@ -267,6 +269,9 @@ pub trait ParameterSubsidy {
+ /// Network methods related to Block Subsidy and Funding Streams
+ impl ParameterSubsidy for Network {
+     fn height_for_first_halving(&self) -> Height {
++        // On Ycash the first halving is pre-Blossom and unrelated to Canopy (850,000 on mainnet,
++        // lane B §1 row 5), so every Ycash network derives it.
++        //
+         // First halving on Mainnet is at Canopy
+         // while in Testnet is at block constant height of `1_116_000`
+         // <https://zips.z.cash/protocol/protocol.pdf#zip214fundingstreams>
+@@ -274,9 +279,13 @@ impl ParameterSubsidy for Network {
+         // Regtest and configured testnets derive it, because their target
+         // spacings, including the 25 second spacing after NU7, set the height.
+         match self {
++            #[cfg(feature = "ycash")]
++            _ => height_for_halving(1, self).expect("first halving height should be available"),
++            #[cfg(not(feature = "ycash"))]
+             Network::Mainnet => NetworkUpgrade::Canopy
+                 .activation_height(self)
+                 .expect("canopy activation height should be available"),
++            #[cfg(not(feature = "ycash"))]
+             Network::Testnet(params) => {
+                 if params.is_default_testnet() {
+                     testnet::FIRST_HALVING
+diff --git a/crates/zakura-chain/src/parameters/network/subsidy/constants/testnet.rs b/crates/zakura-chain/src/parameters/network/subsidy/constants/testnet.rs
+index e2da036e7..02be5d430 100644
+--- a/crates/zakura-chain/src/parameters/network/subsidy/constants/testnet.rs
++++ b/crates/zakura-chain/src/parameters/network/subsidy/constants/testnet.rs
+@@ -15,6 +15,7 @@ use crate::parameters::{
+ /// as specified in [protocol specification §7.10.1][7.10.1]
+ ///
+ /// [7.10.1]: https://zips.z.cash/protocol/protocol.pdf#zip214fundingstreams
++#[cfg_attr(feature = "ycash", allow(dead_code))]
+ pub(crate) const FIRST_HALVING: Height = Height(1_116_000);
+ 
+ /// The start height of post-NU6 funding streams on Testnet as described in [ZIP-1015](https://zips.z.cash/zip-1015).
+diff --git a/crates/zakura-chain/src/parameters/network/testnet.rs b/crates/zakura-chain/src/parameters/network/testnet.rs
+index aa01243a4..8ea2648ad 100644
+--- a/crates/zakura-chain/src/parameters/network/testnet.rs
++++ b/crates/zakura-chain/src/parameters/network/testnet.rs
+@@ -186,6 +186,7 @@ impl From<&BTreeMap<Height, NetworkUpgrade>> for ConfiguredActivationHeights {
+                 }
+                 NetworkUpgrade::Overwinter => &mut configured_activation_heights.overwinter,
+                 NetworkUpgrade::Sapling => &mut configured_activation_heights.sapling,
++                NetworkUpgrade::Ycash => &mut configured_activation_heights.ycash,
+                 NetworkUpgrade::Blossom => &mut configured_activation_heights.blossom,
+                 NetworkUpgrade::Heartwood => &mut configured_activation_heights.heartwood,
+                 NetworkUpgrade::Canopy => &mut configured_activation_heights.canopy,
+@@ -553,6 +554,9 @@ pub struct ConfiguredActivationHeights {
+     pub overwinter: Option<u32>,
+     /// Activation height for `Sapling` network upgrade.
+     pub sapling: Option<u32>,
++    /// Activation height for the `Ycash` network upgrade. Only a `ycash` build accepts one.
++    #[serde(rename = "Ycash", default, skip_serializing_if = "Option::is_none")]
++    pub ycash: Option<u32>,
+     /// Activation height for `Blossom` network upgrade.
+     pub blossom: Option<u32>,
+     /// Activation height for `Heartwood` network upgrade.
+@@ -591,6 +595,7 @@ impl ConfiguredActivationHeights {
+             before_overwinter,
+             overwinter,
+             sapling,
++            ycash,
+             blossom,
+             heartwood,
+             canopy,
+@@ -614,6 +619,7 @@ impl ConfiguredActivationHeights {
+             before_overwinter,
+             overwinter,
+             sapling,
++            ycash,
+             blossom,
+             heartwood,
+             canopy,
+@@ -634,6 +640,7 @@ impl ConfiguredActivationHeights {
+             self.before_overwinter,
+             self.overwinter,
+             self.sapling,
++            self.ycash,
+             self.blossom,
+             self.heartwood,
+             self.canopy,
+@@ -657,6 +664,7 @@ impl ConfiguredActivationHeights {
+             before_overwinter: self.before_overwinter.or(base.before_overwinter),
+             overwinter: self.overwinter.or(base.overwinter),
+             sapling: self.sapling.or(base.sapling),
++            ycash: self.ycash.or(base.ycash),
+             blossom: self.blossom.or(base.blossom),
+             heartwood: self.heartwood.or(base.heartwood),
+             canopy: self.canopy.or(base.canopy),
+@@ -790,7 +798,11 @@ impl Default for ParametersBuilder {
+     fn default() -> Self {
+         Self {
+             network_name: "UnknownTestnet".to_string(),
++            #[cfg(not(feature = "ycash"))]
+             network_magic: magics::TESTNET,
++            // The `ycash` profile's default testnet is the re-forked testnet's `fast` profile.
++            #[cfg(feature = "ycash")]
++            network_magic: crate::parameters::ycash::magics::TESTNET_FAST,
+             // # Correctness
+             //
+             // `Genesis` network upgrade activation height must always be 0
+@@ -810,20 +822,35 @@ impl Default for ParametersBuilder {
+                 .expect("difficulty limits are valid expanded values"),
+             disable_pow: false,
+             max_block_time_start_height: None,
++            // Ycash has no ZIP 207/214 funding streams (lane B §1 row 6).
++            #[cfg(not(feature = "ycash"))]
+             funding_streams: testnet::FUNDING_STREAMS.clone(),
++            #[cfg(not(feature = "ycash"))]
+             inherited_funding_stream_ranges: vec![true; testnet::FUNDING_STREAMS.len()],
++            #[cfg(feature = "ycash")]
++            funding_streams: Vec::new(),
++            #[cfg(feature = "ycash")]
++            inherited_funding_stream_ranges: Vec::new(),
+             should_lock_funding_stream_address_period: false,
+             pre_blossom_halving_interval: PRE_BLOSSOM_HALVING_INTERVAL,
+             post_blossom_halving_interval: POST_BLOSSOM_HALVING_INTERVAL,
+             should_allow_unshielded_coinbase_spends: false,
++            #[cfg(not(feature = "ycash"))]
+             lockbox_disbursements: testnet::NU6_1_LOCKBOX_DISBURSEMENTS
+                 .iter()
+                 .map(|(addr, amount)| (addr.to_string(), *amount))
+                 .collect(),
++            // Ycash has no NU6.1 lockbox.
++            #[cfg(feature = "ycash")]
++            lockbox_disbursements: Vec::new(),
+             checkpoints: TESTNET_CHECKPOINT_LIST.clone(),
++            #[cfg(not(feature = "ycash"))]
+             temporary_orchard_disabling_soft_fork_height: Some(
+                 super::TESTNET_TEMPORARY_ORCHARD_DISABLING_SOFT_FORK_HEIGHT,
+             ),
++            // The Ycash testnet never had this Zcash soft fork.
++            #[cfg(feature = "ycash")]
++            temporary_orchard_disabling_soft_fork_height: None,
+             #[cfg(any(test, feature = "proptest-impl"))]
+             test_nsm_reissuance_height: None,
+             // Configured networks derive their seed unless an override is supplied.
+@@ -902,6 +929,7 @@ impl ParametersBuilder {
+             before_overwinter,
+             overwinter,
+             sapling,
++            ycash,
+             blossom,
+             heartwood,
+             canopy,
+@@ -921,6 +949,12 @@ impl ParametersBuilder {
+             return Err(ParametersBuilderError::LockFundingStreams);
+         }
+ 
++        // A Zcash build never schedules the Ycash upgrade (kogany plan §2.3).
++        #[cfg(not(feature = "ycash"))]
++        if ycash.is_some() {
++            return Err(ParametersBuilderError::YcashUpgradeNeedsYcashBuild);
++        }
++
+         // # Correctness
+         //
+         // These must be in order so that later network upgrades overwrite prior ones
+@@ -931,6 +965,7 @@ impl ParametersBuilder {
+                 .map(|h| (h, BeforeOverwinter))
+                 .chain(overwinter.into_iter().map(|h| (h, Overwinter)))
+                 .chain(sapling.into_iter().map(|h| (h, Sapling)))
++                .chain(ycash.into_iter().map(|h| (h, Ycash)))
+                 .chain(blossom.into_iter().map(|h| (h, Blossom)))
+                 .chain(heartwood.into_iter().map(|h| (h, Heartwood)))
+                 .chain(canopy.into_iter().map(|h| (h, Canopy)))
+diff --git a/crates/zakura-chain/src/parameters/network_upgrade.rs b/crates/zakura-chain/src/parameters/network_upgrade.rs
+index d052c372c..9fa6e0fb8 100644
+--- a/crates/zakura-chain/src/parameters/network_upgrade.rs
++++ b/crates/zakura-chain/src/parameters/network_upgrade.rs
+@@ -40,6 +40,11 @@ pub enum NetworkUpgrade {
+     Overwinter,
+     /// The Zcash protocol after the Sapling upgrade.
+     Sapling,
++    /// The Ycash protocol after the Ycash fork from Zcash (branch ID `0x374d694f`).
++    ///
++    /// Present in every build so the exhaustive matches compile identically; only the `ycash`
++    /// profile schedules it. Ycash-era rules gate on `current >= Ycash` inside that profile only.
++    Ycash,
+     /// The Zcash protocol after the Blossom upgrade.
+     Blossom,
+     /// The Zcash protocol after the Heartwood upgrade.
+@@ -75,6 +80,7 @@ const NETWORK_UPGRADES: &[NetworkUpgrade] = &[
+     BeforeOverwinter,
+     Overwinter,
+     Sapling,
++    Ycash,
+     Blossom,
+     Heartwood,
+     Canopy,
+@@ -128,6 +134,7 @@ impl fmt::Display for NetworkUpgrade {
+ /// Don't use this directly; use NetworkUpgrade::activation_list() so that
+ /// we can switch to fake activation heights for some tests.
+ #[allow(unused)]
++#[cfg(not(feature = "ycash"))]
+ pub(super) const MAINNET_ACTIVATION_HEIGHTS: &[(block::Height, NetworkUpgrade)] = {
+     use super::constants::activation_heights::mainnet::*;
+     &[
+@@ -146,6 +153,10 @@ pub(super) const MAINNET_ACTIVATION_HEIGHTS: &[(block::Height, NetworkUpgrade)]
+         (NU7, Nu7),
+     ]
+ };
++/// Ycash mainnet network upgrade activation heights (the `ycash` profile).
++#[cfg(feature = "ycash")]
++pub(super) const MAINNET_ACTIVATION_HEIGHTS: &[(block::Height, NetworkUpgrade)] =
++    super::ycash::MAINNET_ACTIVATION_HEIGHTS;
+ /// Testnet network upgrade activation heights.
+ ///
+ /// This is actually a bijective map, but it is const, so we use a vector, and
+@@ -156,6 +167,7 @@ pub(super) const MAINNET_ACTIVATION_HEIGHTS: &[(block::Height, NetworkUpgrade)]
+ /// Don't use this directly; use NetworkUpgrade::activation_list() so that
+ /// we can switch to fake activation heights for some tests.
+ #[allow(unused)]
++#[cfg(not(feature = "ycash"))]
+ pub(super) const TESTNET_ACTIVATION_HEIGHTS: &[(block::Height, NetworkUpgrade)] = {
+     use super::constants::activation_heights::testnet::*;
+     &[
+@@ -174,6 +186,10 @@ pub(super) const TESTNET_ACTIVATION_HEIGHTS: &[(block::Height, NetworkUpgrade)]
+         (NU7, Nu7),
+     ]
+ };
++/// Ycash testnet network upgrade activation heights (the `ycash` profile, both testnet profiles).
++#[cfg(feature = "ycash")]
++pub(super) const TESTNET_ACTIVATION_HEIGHTS: &[(block::Height, NetworkUpgrade)] =
++    super::ycash::TESTNET_ACTIVATION_HEIGHTS;
+ 
+ /// The Consensus Branch Id, used to bind transactions and blocks to a
+ /// particular network upgrade.
+@@ -256,9 +272,12 @@ impl TryFrom<ConsensusBranchId> for zcash_protocol::consensus::BranchId {
+ ///
+ /// This is actually a bijective map, but it is const, so we use a vector, and
+ /// do the uniqueness check in the unit tests.
++#[cfg(not(feature = "ycash"))]
+ pub(crate) const CONSENSUS_BRANCH_IDS: &[(NetworkUpgrade, ConsensusBranchId)] = &[
+     (Overwinter, ConsensusBranchId(0x5ba81b19)),
+     (Sapling, ConsensusBranchId(0x76b809bb)),
++    // Inert in this build: no Zcash network schedules the Ycash upgrade.
++    (Ycash, ConsensusBranchId(0x374d694f)),
+     (Blossom, ConsensusBranchId(0x2bb40e60)),
+     (Heartwood, ConsensusBranchId(0xf5b9230b)),
+     (Canopy, ConsensusBranchId(0xe9ff75a6)),
+@@ -273,6 +292,12 @@ pub(crate) const CONSENSUS_BRANCH_IDS: &[(NetworkUpgrade, ConsensusBranchId)] =
+     (ZFuture, ConsensusBranchId(0xfffffffd)),
+ ];
+ 
++/// Ycash network upgrade consensus branch IDs (the `ycash` profile), the same on every Ycash
++/// network.
++#[cfg(feature = "ycash")]
++pub(crate) const CONSENSUS_BRANCH_IDS: &[(NetworkUpgrade, ConsensusBranchId)] =
++    super::ycash::CONSENSUS_BRANCH_IDS;
++
+ /// The target block spacing before Blossom.
+ const PRE_BLOSSOM_POW_TARGET_SPACING: i64 = 150;
+ 
+@@ -372,8 +397,14 @@ const TESTNET_MINIMUM_DIFFICULTY_START_HEIGHT: block::Height = block::Height(299
+ ///
+ /// Part of the block header consensus rules in the Zcash specification at
+ /// <https://zips.z.cash/protocol/protocol.pdf#blockheader>
++#[cfg(not(feature = "ycash"))]
+ pub const TESTNET_MAX_TIME_START_HEIGHT: block::Height = block::Height(653_606);
+ 
++/// The activation height for the block maximum time rule on the Ycash testnet (the `ycash`
++/// profile).
++#[cfg(feature = "ycash")]
++pub const TESTNET_MAX_TIME_START_HEIGHT: block::Height = super::ycash::testnet::MAX_TIME_START_HEIGHT;
++
+ impl Network {
+     /// Returns a map between activation heights and network upgrades for `network`,
+     /// in ascending height order.
+@@ -502,7 +533,9 @@ impl NetworkUpgrade {
+     /// [`POST_BLOSSOM_POW_TARGET_SPACING`] from the Zcash specification.
+     pub fn target_spacing(&self) -> Duration {
+         let spacing_seconds = match self {
+-            Genesis | BeforeOverwinter | Overwinter | Sapling => PRE_BLOSSOM_POW_TARGET_SPACING,
++            Genesis | BeforeOverwinter | Overwinter | Sapling | Ycash => {
++                PRE_BLOSSOM_POW_TARGET_SPACING
++            }
+             Blossom | Heartwood | Canopy | Nu5 | Nu6 | Nu6_1 | Nu6_2 | Nu6_3 => {
+                 POST_BLOSSOM_POW_TARGET_SPACING.into()
+             }
+@@ -608,8 +641,8 @@ impl NetworkUpgrade {
+     /// `PoWAveragingWindow` in ZIP 218, which widens the window at NU7.
+     pub fn averaging_window(&self) -> usize {
+         match self {
+-            Genesis | BeforeOverwinter | Overwinter | Sapling | Blossom | Heartwood | Canopy
+-            | Nu5 | Nu6 | Nu6_1 | Nu6_2 | Nu6_3 => PRE_NU7_POW_AVERAGING_WINDOW,
++            Genesis | BeforeOverwinter | Overwinter | Sapling | Ycash | Blossom | Heartwood
++            | Canopy | Nu5 | Nu6 | Nu6_1 | Nu6_2 | Nu6_3 => PRE_NU7_POW_AVERAGING_WINDOW,
+             Nu7 => POST_NU7_POW_AVERAGING_WINDOW,
+ 
+             #[cfg(zcash_unstable = "zfuture")]
+diff --git a/crates/zakura-chain/src/parameters/ycash.rs b/crates/zakura-chain/src/parameters/ycash.rs
+new file mode 100644
+index 000000000..3f3ef7e40
+--- /dev/null
++++ b/crates/zakura-chain/src/parameters/ycash.rs
+@@ -0,0 +1,212 @@
++//! The Ycash network profile (kogany), compiled under the `ycash` cargo feature.
++//!
++//! In a `ycash` build every network is a Ycash network: [`Network::Mainnet`] is Ycash mainnet,
++//! the default [`Network::Testnet`] is the re-forked Ycash testnet's `fast` profile, and Regtest is
++//! Ycash regtest. The values here replace Zakura's Zcash tables in place, the way ycashd rewrites
++//! zcashd's `CMainParams` (kogany plan §2.3, decision K-5). Every value cites the C++ line it
++//! mirrors: `ycash6` at `65cb4ae0f` (`vaults/kogany-compat` = `upgrade/vault`).
++//!
++//! The Vault upgrade is not part of this module: it is runtime-gated by its height (W2-b).
++//!
++//! [`Network::Mainnet`]: super::Network::Mainnet
++//! [`Network::Testnet`]: super::Network::Testnet
++
++use crate::block::Height;
++
++use super::{
++    network::magic::Magic,
++    network_upgrade::{ConsensusBranchId, NetworkUpgrade, NetworkUpgrade::*},
++};
++
++/// Network upgrade activation heights on Ycash mainnet.
++///
++/// `ycash6 src/chainparams.cpp:114-160` (`CMainParams`): the shared Zcash history up to
++/// Sapling, the Ycash fork at 570,000, then Blossom, Heartwood and Canopy three blocks apart.
++/// NU5, NU6, NU6.1, NU6.2 (and NU6.3, NU7, which ycashd does not define) have no height.
++pub mod mainnet {
++    use crate::block::Height;
++
++    /// The block height at which `BeforeOverwinter` activates on Ycash mainnet.
++    pub const BEFORE_OVERWINTER: Height = Height(1);
++    /// The block height at which `Overwinter` activates on Ycash mainnet (shared with Zcash).
++    pub const OVERWINTER: Height = Height(347_500);
++    /// The block height at which `Sapling` activates on Ycash mainnet (shared with Zcash).
++    pub const SAPLING: Height = Height(419_200);
++    /// The block height of the Ycash fork, `UPGRADE_YCASH` (`ycash6 src/chainparams.cpp:130`).
++    pub const YCASH: Height = Height(570_000);
++    /// The block height at which `Blossom` activates on Ycash mainnet.
++    pub const BLOSSOM: Height = Height(1_100_000);
++    /// The block height at which `Heartwood` activates on Ycash mainnet.
++    pub const HEARTWOOD: Height = Height(1_100_003);
++    /// The block height at which `Canopy` activates on Ycash mainnet.
++    pub const CANOPY: Height = Height(1_100_006);
++
++    /// The hash of the Ycash fork block, `UPGRADE_YCASH.hashActivationBlock`
++    /// (`ycash6 src/chainparams.cpp:131-132`). Zakura enforces it through the checkpoint list.
++    pub const YCASH_ACTIVATION_BLOCK_HASH: &str =
++        "0000014fbc5917ba8bcacf3336faf588d86b32443aa3a490a587af5750c77ec5";
++}
++
++/// Network upgrade activation heights on the re-forked Ycash testnet, shared by its `fast` and
++/// `slow` profiles (decision K-10; the legacy testnet3 profile is dropped).
++///
++/// `ycash6 src/chainparams.cpp:429-459` (`CTestNetParams`): Zcash testnet history through
++/// 510,247, the new fork block at 510,248, then Blossom, Heartwood and Canopy two blocks apart.
++pub mod testnet {
++    use crate::block::Height;
++
++    /// The block height at which `BeforeOverwinter` activates on the Ycash testnet.
++    pub const BEFORE_OVERWINTER: Height = Height(1);
++    /// The block height at which `Overwinter` activates on the Ycash testnet (Zcash testnet's).
++    pub const OVERWINTER: Height = Height(207_500);
++    /// The block height at which `Sapling` activates on the Ycash testnet (Zcash testnet's).
++    pub const SAPLING: Height = Height(280_000);
++    /// The block height of the re-forked Ycash testnet's fork block.
++    pub const YCASH: Height = Height(510_248);
++    /// The block height at which `Blossom` activates on the Ycash testnet.
++    pub const BLOSSOM: Height = Height(510_250);
++    /// The block height at which `Heartwood` activates on the Ycash testnet.
++    pub const HEARTWOOD: Height = Height(510_252);
++    /// The block height at which `Canopy` activates on the Ycash testnet.
++    pub const CANOPY: Height = Height(510_254);
++
++    /// The first height of the maximum block time rule on the Ycash testnet:
++    /// `nFutureTimestampSoftForkHeight = Blossom + 6` (`ycash6 src/chainparams.cpp:538`).
++    pub const MAX_TIME_START_HEIGHT: Height = Height(510_256);
++
++    /// The highest Zcash testnet height whose checkpoint the Ycash testnet shares: the last block
++    /// before the re-fork (`ycash6 src/chainparams.cpp:581-583`, testnet-prefix-v1 manifest).
++    pub const LAST_SHARED_HEIGHT: Height = Height(510_247);
++}
++
++/// Ycash mainnet activation list, in height order.
++pub(super) const MAINNET_ACTIVATION_HEIGHTS: &[(Height, NetworkUpgrade)] = &[
++    (Height(0), Genesis),
++    (mainnet::BEFORE_OVERWINTER, BeforeOverwinter),
++    (mainnet::OVERWINTER, Overwinter),
++    (mainnet::SAPLING, Sapling),
++    (mainnet::YCASH, Ycash),
++    (mainnet::BLOSSOM, Blossom),
++    (mainnet::HEARTWOOD, Heartwood),
++    (mainnet::CANOPY, Canopy),
++];
++
++/// Ycash testnet activation list, in height order (both profiles).
++pub(super) const TESTNET_ACTIVATION_HEIGHTS: &[(Height, NetworkUpgrade)] = &[
++    (Height(0), Genesis),
++    (testnet::BEFORE_OVERWINTER, BeforeOverwinter),
++    (testnet::OVERWINTER, Overwinter),
++    (testnet::SAPLING, Sapling),
++    (testnet::YCASH, Ycash),
++    (testnet::BLOSSOM, Blossom),
++    (testnet::HEARTWOOD, Heartwood),
++    (testnet::CANOPY, Canopy),
++];
++
++/// Ycash consensus branch IDs, `NetworkUpgradeInfo` (`ycash6 src/consensus/upgrades.cpp:12-99`).
++///
++/// Overwinter and Sapling are Zcash's (shared history). Ycash, Blossom, Heartwood, Canopy and NU5
++/// are Ycash's own; NU5's `0xf919a198` is reserved for a Ycash NU5 (decision K-7) and has no
++/// height. NU6, NU6.1 and NU6.2 keep Zcash's values, as ycashd does, and stay inactive. NU6.3 and
++/// NU7 do not exist on ycashd; they keep Zakura's values and have no height. These must equal the
++/// common fork's `BranchId` values under its `ycash` feature, or the conversion to
++/// `zcash_protocol` rejects Ycash transactions (lane B trap T1).
++pub(super) const CONSENSUS_BRANCH_IDS: &[(NetworkUpgrade, ConsensusBranchId)] = &[
++    (Overwinter, ConsensusBranchId(0x5ba81b19)),
++    (Sapling, ConsensusBranchId(0x76b809bb)),
++    (Ycash, ConsensusBranchId(0x374d694f)),
++    (Blossom, ConsensusBranchId(0x8e471bd6)),
++    (Heartwood, ConsensusBranchId(0x66314da3)),
++    (Canopy, ConsensusBranchId(0x19bd2d2f)),
++    (Nu5, ConsensusBranchId(0xf919a198)),
++    (Nu6, ConsensusBranchId(0xc8e71055)),
++    (Nu6_1, ConsensusBranchId(0x4dec4df0)),
++    (Nu6_2, ConsensusBranchId(0x5437f330)),
++    (Nu6_3, ConsensusBranchId(0x37a5165b)),
++    (Nu7, ConsensusBranchId(0x77190ad9)),
++    #[cfg(zcash_unstable = "zfuture")]
++    (ZFuture, ConsensusBranchId(0xfffffffd)),
++];
++
++/// Ycash network magics. Mainnet and Regtest share Zcash's (`ycash6 src/chainparams.cpp:224-227,
++/// 820-823`), so Zakura's [`magics::MAINNET`](super::constants::magics::MAINNET) and
++/// [`magics::REGTEST`](super::constants::magics::REGTEST) are used unchanged. The re-forked
++/// testnet profiles have their own (`ycash6 src/chainparams.cpp:644-647,665-668`).
++pub mod magics {
++    use super::Magic;
++
++    /// The re-forked Ycash testnet, `fast` profile (`testnet-yb-fast`).
++    pub const TESTNET_FAST: Magic = Magic([0xf7, 0x79, 0x62, 0xd3]);
++    /// The re-forked Ycash testnet, `slow` profile (`testnet-yb-slow`).
++    pub const TESTNET_SLOW: Magic = Magic([0xf7, 0x79, 0x62, 0xd4]);
++}
++
++/// Default P2P ports (`nDefaultPort`, `ycash6 src/chainparams.cpp:228,648,669,824`).
++pub mod ports {
++    /// Ycash mainnet.
++    pub const MAINNET: u16 = 8833;
++    /// Ycash testnet, `fast` profile.
++    pub const TESTNET_FAST: u16 = 18833;
++    /// Ycash testnet, `slow` profile.
++    pub const TESTNET_SLOW: u16 = 18933;
++    /// Ycash regtest.
++    pub const REGTEST: u16 = 18344;
++
++    /// Default RPC ports (`ycash6 src/chainparamsbase.cpp`), for the RPC configuration (W1-Y6).
++    pub mod rpc {
++        /// Ycash mainnet.
++        pub const MAINNET: u16 = 8832;
++        /// Ycash testnet, `fast` profile.
++        pub const TESTNET_FAST: u16 = 18832;
++        /// Ycash testnet, `slow` profile.
++        pub const TESTNET_SLOW: u16 = 18932;
++        /// Ycash regtest.
++        pub const REGTEST: u16 = 18832;
++    }
++}
++
++/// Seeds, for the network configuration (W1-Y5).
++///
++/// Mainnet has one DNS seeder (`ycash6 src/chainparams.cpp:241-242`) and no fixed seeds yet
++/// (`pnSeed6_main` is empty, `src/chainparamsseeds.h`). The re-forked testnet profiles have fixed
++/// seeds only, all empty until the testnet's rc1 (`ycash6 src/chainparams.cpp:560-562`).
++pub mod seeds {
++    /// Ycash mainnet DNS seeders, with the mainnet port.
++    pub const MAINNET_DNS: &[&str] = &["seed.ycash.xyz:8833"];
++    /// Ycash testnet DNS seeders: none (fixed seeds only).
++    pub const TESTNET_DNS: &[&str] = &[];
++}
++
++/// Network names. The names Zakura displays stay `Mainnet`, `Testnet` and `Regtest`, and the
++/// BIP70 names `main` / `test` match ycashd's `strNetworkID`. The `slow` testnet profile is a
++/// configured testnet with this name (`strTestnetProfile`, `ycash6 src/chainparams.cpp:661`).
++pub mod names {
++    /// The `slow` Ycash testnet profile.
++    pub const TESTNET_SLOW: &str = "TestnetSlow";
++}
++
++/// The default P2P port of a Ycash testnet or regtest network: Regtest's, then the `slow`
++/// profile's for its magic, and the `fast` profile's otherwise (configured testnets included).
++pub(super) fn testnet_default_port(params: &super::testnet::Parameters) -> u16 {
++    if params.is_regtest() {
++        ports::REGTEST
++    } else if params.network_magic() == magics::TESTNET_SLOW {
++        ports::TESTNET_SLOW
++    } else {
++        ports::TESTNET_FAST
++    }
++}
++
++impl super::Network {
++    /// Creates the re-forked Ycash testnet's `slow` profile: the `fast` profile's consensus
++    /// values with the `slow` profile's magic and name (`CTestNetSlowParams`,
++    /// `ycash6 src/chainparams.cpp:658-672`). The two profiles differ only in Vault parameters,
++    /// which W2-b adds.
++    pub fn new_ycash_testnet_slow() -> Self {
++        super::testnet::Parameters::build()
++            .with_network_name(names::TESTNET_SLOW)
++            .and_then(|builder| builder.with_network_magic(magics::TESTNET_SLOW))
++            .and_then(|builder| builder.to_network())
++            .expect("the hard-coded slow testnet profile is a valid configured testnet")
++    }
++}
+diff --git a/crates/zakura-chain/src/transaction/arbitrary.rs b/crates/zakura-chain/src/transaction/arbitrary.rs
+index a6569c9ac..af2b43e5d 100644
+--- a/crates/zakura-chain/src/transaction/arbitrary.rs
++++ b/crates/zakura-chain/src/transaction/arbitrary.rs
+@@ -793,9 +793,10 @@ impl Arbitrary for Transaction {
+             }
+             NetworkUpgrade::Overwinter => Self::v2_strategy(ledger_state),
+             NetworkUpgrade::Sapling => Self::v3_strategy(ledger_state),
+-            NetworkUpgrade::Blossom | NetworkUpgrade::Heartwood | NetworkUpgrade::Canopy => {
+-                Self::v4_strategy(ledger_state)
+-            }
++            NetworkUpgrade::Ycash
++            | NetworkUpgrade::Blossom
++            | NetworkUpgrade::Heartwood
++            | NetworkUpgrade::Canopy => Self::v4_strategy(ledger_state),
+             NetworkUpgrade::Nu5
+             | NetworkUpgrade::Nu6
+             | NetworkUpgrade::Nu6_1
+diff --git a/crates/zakura-consensus/Cargo.toml b/crates/zakura-consensus/Cargo.toml
+index ad6d7be87..14a1e2ac5 100644
+--- a/crates/zakura-consensus/Cargo.toml
++++ b/crates/zakura-consensus/Cargo.toml
+@@ -21,6 +21,9 @@ categories = ["asynchronous", "cryptography::cryptocurrencies"]
+ [features]
+ default = []
+ 
++# The Ycash network profile (kogany), see zakura-chain's `ycash` feature.
++ycash = ["zakura-chain/ycash", "zakura-header-chain/ycash"]
++
+ # Legacy flags accepted for build compatibility; the progress display is removed.
+ progress-bar = ["howudoin", "zakura-state/progress-bar"]
+ howudoin = []
+diff --git a/crates/zakura-consensus/src/primitives/halo2.rs b/crates/zakura-consensus/src/primitives/halo2.rs
+index 77d571fce..08ca34c14 100644
+--- a/crates/zakura-consensus/src/primitives/halo2.rs
++++ b/crates/zakura-consensus/src/primitives/halo2.rs
+@@ -391,8 +391,8 @@ fn lazy_verifier_for(network_upgrade: NetworkUpgrade) -> &'static LazyLock<Verif
+         // verifier because that is the only key under which any Orchard
+         // history before NU6.2 verifies; routing them anywhere else cannot be
+         // correct.
+-        Genesis | BeforeOverwinter | Overwinter | Sapling | Blossom | Heartwood | Canopy | Nu5
+-        | Nu6 | Nu6_1 => &VERIFIER_PRE_NU6_2,
++        Genesis | BeforeOverwinter | Overwinter | Sapling | Ycash | Blossom | Heartwood | Canopy
++        | Nu5 | Nu6 | Nu6_1 => &VERIFIER_PRE_NU6_2,
+ 
+         // NU6.2 ships the fixed circuit and is the only upgrade that uses it:
+         // it is active from the NU6.2 activation height until NU6.3.
+diff --git a/crates/zakura-consensus/src/transaction.rs b/crates/zakura-consensus/src/transaction.rs
+index 7b781f111..eaf954d39 100644
+--- a/crates/zakura-consensus/src/transaction.rs
++++ b/crates/zakura-consensus/src/transaction.rs
+@@ -1069,6 +1069,7 @@ where
+             // Note: Here we verify the transaction version number of the above two rules, the group
+             // id is checked in zakura-chain crate, in the transaction serialize.
+             NetworkUpgrade::Sapling
++            | NetworkUpgrade::Ycash
+             | NetworkUpgrade::Blossom
+             | NetworkUpgrade::Heartwood
+             | NetworkUpgrade::Canopy
+@@ -1181,6 +1182,7 @@ where
+             | NetworkUpgrade::BeforeOverwinter
+             | NetworkUpgrade::Overwinter
+             | NetworkUpgrade::Sapling
++            | NetworkUpgrade::Ycash
+             | NetworkUpgrade::Blossom
+             | NetworkUpgrade::Heartwood
+             | NetworkUpgrade::Canopy => Err(TransactionError::UnsupportedByNetworkUpgrade(
+diff --git a/crates/zakura-consensus/src/transaction/tests.rs b/crates/zakura-consensus/src/transaction/tests.rs
+index 9e5cc1bbe..9f0541ffc 100644
+--- a/crates/zakura-consensus/src/transaction/tests.rs
++++ b/crates/zakura-consensus/src/transaction/tests.rs
+@@ -4532,6 +4532,7 @@ fn v4_deprecation_boundary() {
+ fn configured_network_with_nu7(nu7: Option<Height>) -> Network {
+     Parameters::build()
+         .with_activation_heights(ConfiguredActivationHeights {
++            ycash: None,
+             before_overwinter: Some(1),
+             overwinter: Some(2),
+             sapling: Some(3),
+diff --git a/crates/zakura-consensus/src/transaction/tests/prop.rs b/crates/zakura-consensus/src/transaction/tests/prop.rs
+index 58894d257..8c6ad08e4 100644
+--- a/crates/zakura-consensus/src/transaction/tests/prop.rs
++++ b/crates/zakura-consensus/src/transaction/tests/prop.rs
+@@ -365,7 +365,7 @@ fn sanitize_transaction_version(
+             Genesis | BeforeOverwinter | Overwinter => {
+                 unreachable!("mock transparent transaction tests only use Sapling-onward heights")
+             }
+-            Sapling | Blossom | Heartwood | Canopy => (4, 4),
++            Sapling | Ycash | Blossom | Heartwood | Canopy => (4, 4),
+             Nu5 | Nu6 | Nu6_1 | Nu6_2 => (4, 5),
+             Nu6_3 => (4, 6),
+             Nu7 => (5, 5),
+diff --git a/crates/zakura-consensus/tests/nu7_diff_dump.rs b/crates/zakura-consensus/tests/nu7_diff_dump.rs
+index 0f74bb1ae..a3b0ae158 100644
+--- a/crates/zakura-consensus/tests/nu7_diff_dump.rs
++++ b/crates/zakura-consensus/tests/nu7_diff_dump.rs
+@@ -335,6 +335,7 @@ fn build_testnet(a: u32) -> Result<Network, String> {
+             NetworkUpgrade::BeforeOverwinter => h.before_overwinter = v,
+             NetworkUpgrade::Overwinter => h.overwinter = v,
+             NetworkUpgrade::Sapling => h.sapling = v,
++            NetworkUpgrade::Ycash => h.ycash = v,
+             NetworkUpgrade::Blossom => h.blossom = v,
+             NetworkUpgrade::Heartwood => h.heartwood = v,
+             NetworkUpgrade::Canopy => h.canopy = v,
+@@ -361,6 +362,7 @@ fn build_regtest() -> Result<Network, String> {
+         before_overwinter: one,
+         overwinter: one,
+         sapling: one,
++        ycash: None,
+         blossom: one,
+         heartwood: one,
+         canopy: one,
+diff --git a/crates/zakura-state/src/service/finalized_state/tests/prop.rs b/crates/zakura-state/src/service/finalized_state/tests/prop.rs
+index fcbf4a04c..3e9df00e2 100644
+--- a/crates/zakura-state/src/service/finalized_state/tests/prop.rs
++++ b/crates/zakura-state/src/service/finalized_state/tests/prop.rs
+@@ -300,6 +300,7 @@ fn v4_transaction_with_interstitial_anchor(old_anchor_tree: &SproutTree) -> Arc<
+ fn vct_test_network() -> Network {
+     ParametersBuilder::default()
+         .with_activation_heights(ConfiguredActivationHeights {
++            ycash: None,
+             before_overwinter: Some(1),
+             overwinter: Some(10),
+             sapling: Some(15),
+@@ -420,6 +421,7 @@ fn all_upgrades_and_wrong_commitments_with_fake_activation_heights() -> Result<(
+ 
+     let network = ParametersBuilder::default()
+         .with_activation_heights(ConfiguredActivationHeights {
++            ycash: None,
+             // These fixture values place NU5 within the generated chains.
+             // The test fails if a generated chain does not cross NU5.
+             before_overwinter: Some(1),
+diff --git a/crates/zakura-state/src/service/finalized_state/tests/rollback.rs b/crates/zakura-state/src/service/finalized_state/tests/rollback.rs
+index f4bf7f510..122b3f2c3 100644
+--- a/crates/zakura-state/src/service/finalized_state/tests/rollback.rs
++++ b/crates/zakura-state/src/service/finalized_state/tests/rollback.rs
+@@ -956,6 +956,7 @@ fn rollback_truncates_commitment_roots_above_the_target_tip() {
+ fn modern_rollback_network() -> Network {
+     TestnetParameters::build()
+         .with_activation_heights(ConfiguredActivationHeights {
++            ycash: None,
+             before_overwinter: Some(1),
+             overwinter: Some(2),
+             sapling: Some(3),
+diff --git a/crates/zakura-state/src/service/finalized_state/vct_fast_sync_fixture.rs b/crates/zakura-state/src/service/finalized_state/vct_fast_sync_fixture.rs
+index cd60b53dc..edbd2d993 100644
+--- a/crates/zakura-state/src/service/finalized_state/vct_fast_sync_fixture.rs
++++ b/crates/zakura-state/src/service/finalized_state/vct_fast_sync_fixture.rs
+@@ -110,6 +110,7 @@ impl VctFastSyncedChain {
+     pub fn generate() -> Self {
+         let network = ParametersBuilder::default()
+             .with_activation_heights(ConfiguredActivationHeights {
++                ycash: None,
+                 before_overwinter: Some(1),
+                 overwinter: Some(10),
+                 sapling: Some(15),

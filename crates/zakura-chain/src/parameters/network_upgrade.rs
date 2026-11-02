@@ -292,11 +292,31 @@ pub(crate) const CONSENSUS_BRANCH_IDS: &[(NetworkUpgrade, ConsensusBranchId)] = 
     (ZFuture, ConsensusBranchId(0xfffffffd)),
 ];
 
-/// Ycash network upgrade consensus branch IDs (the `ycash` profile), the same on every Ycash
-/// network.
+/// Ycash consensus branch IDs (the `ycash` profile), the same on every Ycash network, `NetworkUpgradeInfo` (`ycash6 src/consensus/upgrades.cpp:12-99`).
+///
+/// Overwinter and Sapling are Zcash's (shared history). Ycash, Blossom, Heartwood, Canopy and NU5
+/// are Ycash's own; NU5's `0xf919a198` is reserved for a Ycash NU5 (decision K-7) and has no
+/// height. NU6, NU6.1 and NU6.2 keep Zcash's values, as ycashd does, and stay inactive. NU6.3 and
+/// NU7 do not exist on ycashd; they keep Zakura's values and have no height. These must equal the
+/// common fork's `BranchId` values under its `ycash` feature, or the conversion to
+/// `zcash_protocol` rejects Ycash transactions (lane B trap T1).
 #[cfg(feature = "ycash")]
-pub(crate) const CONSENSUS_BRANCH_IDS: &[(NetworkUpgrade, ConsensusBranchId)] =
-    super::ycash::CONSENSUS_BRANCH_IDS;
+pub(crate) const CONSENSUS_BRANCH_IDS: &[(NetworkUpgrade, ConsensusBranchId)] = &[
+    (Overwinter, ConsensusBranchId(0x5ba81b19)),
+    (Sapling, ConsensusBranchId(0x76b809bb)),
+    (Ycash, ConsensusBranchId(0x374d694f)),
+    (Blossom, ConsensusBranchId(0x8e471bd6)),
+    (Heartwood, ConsensusBranchId(0x66314da3)),
+    (Canopy, ConsensusBranchId(0x19bd2d2f)),
+    (Nu5, ConsensusBranchId(0xf919a198)),
+    (Nu6, ConsensusBranchId(0xc8e71055)),
+    (Nu6_1, ConsensusBranchId(0x4dec4df0)),
+    (Nu6_2, ConsensusBranchId(0x5437f330)),
+    (Nu6_3, ConsensusBranchId(0x37a5165b)),
+    (Nu7, ConsensusBranchId(0x77190ad9)),
+    #[cfg(zcash_unstable = "zfuture")]
+    (ZFuture, ConsensusBranchId(0xfffffffd)),
+];
 
 /// The target block spacing before Blossom.
 const PRE_BLOSSOM_POW_TARGET_SPACING: i64 = 150;
@@ -403,7 +423,8 @@ pub const TESTNET_MAX_TIME_START_HEIGHT: block::Height = block::Height(653_606);
 /// The activation height for the block maximum time rule on the Ycash testnet (the `ycash`
 /// profile).
 #[cfg(feature = "ycash")]
-pub const TESTNET_MAX_TIME_START_HEIGHT: block::Height = super::ycash::testnet::MAX_TIME_START_HEIGHT;
+pub const TESTNET_MAX_TIME_START_HEIGHT: block::Height =
+    super::ycash::testnet::MAX_TIME_START_HEIGHT;
 
 impl Network {
     /// Returns a map between activation heights and network upgrades for `network`,
