@@ -276,3 +276,22 @@ fn default_miner_addresses_are_ycash() {
         "{error}"
     );
 }
+
+/// `finalState` (W9-c finding 4): trailing empty parents dropped, interior ones kept; anything
+/// that is not a commitment tree is returned unchanged.
+#[test]
+fn tree_parents_are_trimmed_as_ycashd() {
+    let some = |b: u8| [vec![1u8], vec![b; 32]].concat();
+    let mut tree = [some(1), vec![0], vec![31], some(2), vec![0], some(3)].concat();
+    tree.extend(std::iter::repeat_n(0u8, 28));
+    let trimmed = super::trim_tree_parents(tree);
+    assert_eq!(
+        trimmed,
+        [some(1), vec![0], vec![3], some(2), vec![0], some(3)].concat()
+    );
+    assert_eq!(super::trim_tree_parents(trimmed.clone()), trimmed);
+    let empty = vec![0u8, 0, 0];
+    assert_eq!(super::trim_tree_parents(empty.clone()), empty);
+    let junk = vec![7u8, 1, 2];
+    assert_eq!(super::trim_tree_parents(junk.clone()), junk);
+}

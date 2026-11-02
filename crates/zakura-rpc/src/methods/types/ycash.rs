@@ -362,5 +362,46 @@ pub fn is_pre_nu5(network: &Network, height: Height) -> bool {
     NetworkUpgrade::current(network, height) < NetworkUpgrade::Nu5
 }
 
+/// `z_gettreestate`'s `finalState` as ycashd writes it (kogany W9-c finding 4): the
+/// incremental-merkle-tree serialization (`Optional left`, `Optional right`, `CompactSize n`,
+/// `n x Optional parent`) without trailing empty parents. ycashd grows its tree append by append,
+/// so the topmost parent it holds is never empty; Zakura rebuilds the tree from a frontier with
+/// every level present. Bytes that do not parse are returned unchanged.
+pub fn trim_tree_parents(bytes: Vec<u8>) -> Vec<u8> {
+    fn optional(b: &[u8], at: usize) -> Option<usize> {
+        match b.get(at)? {
+            0 => Some(at + 1),
+            1 if b.len() >= at + 33 => Some(at + 33),
+            _ => None,
+        }
+    }
+    let parse = || -> Option<Vec<u8>> {
+        let after_left = optional(&bytes, 0)?;
+        let after_right = optional(&bytes, after_left)?;
+        let count = usize::from(*bytes.get(after_right)?);
+        if count >= 0xfd {
+            return None;
+        }
+        let mut parents = Vec::with_capacity(count);
+        let mut at = after_right + 1;
+        for _ in 0..count {
+            let next = optional(&bytes, at)?;
+            parents.push(bytes.get(at..next)?);
+            at = next;
+        }
+        if at != bytes.len() {
+            return None;
+        }
+        while parents.last().is_some_and(|p| p == &[0]) {
+            parents.pop();
+        }
+        let mut out = bytes.get(..after_right)?.to_vec();
+        out.push(u8::try_from(parents.len()).ok()?);
+        parents.iter().for_each(|p| out.extend_from_slice(p));
+        Some(out)
+    };
+    parse().unwrap_or(bytes)
+}
+
 #[cfg(test)]
 mod tests;

@@ -520,6 +520,34 @@ mod tests {
         }
     }
 
+    /// Ycash (kogany W9-c finding 3): the plain post-quantum address round-trips, and its
+    /// index hash is ycash6's `CScript::AddressHash` (Hash160(scheme || keyHash)).
+    #[cfg(feature = "ycash")]
+    #[test]
+    fn plain_pq_address_round_trips() {
+        let key_hash = [0x42u8; 32];
+        let address = Address::PayToPqKeyHash {
+            network_kind: NetworkKind::Regtest,
+            scheme: 2,
+            key_hash,
+        };
+        let text = address.to_string();
+        assert!(text.starts_with("rq"), "{text}");
+        assert_eq!(text.parse::<Address>().unwrap(), address);
+        let mut id = vec![2u8];
+        id.extend_from_slice(&key_hash);
+        assert_eq!(address.hash_bytes(), Address::hash_payload(&id));
+        let mut script = vec![0x20];
+        script.extend_from_slice(&key_hash);
+        script.extend_from_slice(&[0x52, 0xc2]);
+        assert_eq!(address.script().as_raw_bytes(), script.as_slice());
+        // an unregistered scheme is not an address
+        let mut data = vec![0x4C, 0x51, 9];
+        data.extend_from_slice(&key_hash);
+        let unknown = bs58::encode(data).with_check().into_string();
+        assert!(unknown.parse::<Address>().is_err());
+    }
+
     #[test]
     fn pubkey_mainnet() {
         let _init_guard = zakura_test::init();

@@ -3158,6 +3158,9 @@ where
         };
         let (sapling_tree, sapling_root) =
             sapling.map_or((None, None), |(tree, root)| (Some(tree), Some(root)));
+        // kogany W9-c: ycashd's `finalState` has no trailing empty parents.
+        #[cfg(feature = "ycash")]
+        let sapling_tree = sapling_tree.map(types::ycash::trim_tree_parents);
 
         let orchard = if network.is_nu_active(consensus::NetworkUpgrade::Nu5, height.into()) {
             match call_service(
