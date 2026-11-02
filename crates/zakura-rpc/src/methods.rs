@@ -4799,11 +4799,7 @@ pub struct GetBlockchainInfoResponse {
     /// Ycash (W7-c): the total work of the best chain through the tip, as ycashd's 64-digit hex
     /// string; omitted while kogany is still summing it (`types::ycash::chain_work`).
     #[cfg(feature = "ycash")]
-    #[serde(
-        default,
-        rename = "chainwork",
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[serde(default, rename = "chainwork", skip_serializing_if = "Option::is_none")]
     chain_work_hex: Option<String>,
 
     /// Whether this node's blocks are subject to pruning, that is, whether it

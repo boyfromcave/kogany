@@ -145,7 +145,10 @@ fn mainnet_getblocksubsidy_matches_ycashd() {
 #[test]
 fn testnet_profile_matches_ycashd() {
     assert_eq!(testnet_profile(&Network::Mainnet), None);
-    assert_eq!(testnet_profile(&Network::new_regtest(Default::default())), None);
+    assert_eq!(
+        testnet_profile(&Network::new_regtest(Default::default())),
+        None
+    );
     assert_eq!(
         testnet_profile(&Network::new_default_testnet()).as_deref(),
         Some("fast")
@@ -233,7 +236,11 @@ fn default_miner_addresses_are_ycash() {
     use crate::config::mining::{default_miner_address, Config, MinerAddressType};
     use zakura_chain::parameters::NetworkKind;
 
-    for kind in [NetworkKind::Mainnet, NetworkKind::Testnet, NetworkKind::Regtest] {
+    for kind in [
+        NetworkKind::Mainnet,
+        NetworkKind::Testnet,
+        NetworkKind::Regtest,
+    ] {
         for addr_type in [
             MinerAddressType::Transparent,
             MinerAddressType::Sapling,

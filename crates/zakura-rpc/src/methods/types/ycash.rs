@@ -52,7 +52,14 @@ pub fn testnet_profile(network: &Network) -> Option<String> {
     if !network.is_a_test_network() || network.is_regtest() {
         return None;
     }
-    Some(if network.magic() == magics::TESTNET_SLOW { "slow" } else { "fast" }.to_string())
+    Some(
+        if network.magic() == magics::TESTNET_SLOW {
+            "slow"
+        } else {
+            "fast"
+        }
+        .to_string(),
+    )
 }
 
 /// The cumulative work cached by [`chain_work`]: the network's genesis hash, and the work from
@@ -148,7 +155,10 @@ where
 }
 
 /// The [`ChainWorkCache`] of the genesis block: its own work.
-async fn genesis_work<ReadState>(read_state: ReadState, genesis: block::Hash) -> Option<ChainWorkCache>
+async fn genesis_work<ReadState>(
+    read_state: ReadState,
+    genesis: block::Hash,
+) -> Option<ChainWorkCache>
 where
     ReadState: ReadStateService,
 {
