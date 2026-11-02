@@ -32,6 +32,41 @@ use super::state::*;
 /// ycash6 `DEFAULT_YELLOWBACK_FEE` (`src/yellowback/params.h:94`).
 pub const DEFAULT_YELLOWBACK_FEE: i64 = 1_000;
 
+/// ycash6 `MinerConfig::quoteMaxAge` (`-yellowbackquotemaxage`, `src/yellowback/index.h:123`):
+/// a held quote older than this builds no tag (MINER-1).
+pub const QUOTE_MAX_AGE_SECONDS: i64 = 1_800;
+
+/// The miner's payout key: the P2PKH key hash of the configured miner address (ycash6
+/// `-yellowbackpayoutaddress`, defaulting to the mining address's key, `src/init.cpp`), set once
+/// at start by `zakurad` ([`set_payout_address`]).
+static PAYOUT_KEY: std::sync::OnceLock<Option<[u8; 20]>> = std::sync::OnceLock::new();
+
+/// A transparent P2PKH receiver's key hash.
+struct P2pkhKey([u8; 20]);
+
+impl zcash_address::TryFromAddress for P2pkhKey {
+    type Error = &'static str;
+
+    fn try_from_transparent_p2pkh(
+        _network: zcash_protocol::consensus::NetworkType,
+        data: [u8; 20],
+    ) -> Result<Self, zcash_address::ConversionError<Self::Error>> {
+        Ok(P2pkhKey(data))
+    }
+}
+
+/// Sets the miner's payout key from the node's miner address (`mining.miner_address`); only a
+/// transparent P2PKH address has one (MINER-2: otherwise no tag). The first call wins.
+pub fn set_payout_address(address: Option<&zcash_address::ZcashAddress>) {
+    let key = address.and_then(|a| a.clone().convert::<P2pkhKey>().ok().map(|k| k.0));
+    let _ = PAYOUT_KEY.set(key);
+}
+
+/// The miner's payout key, `None` without a P2PKH miner address.
+pub fn payout_key() -> Option<[u8; 20]> {
+    PAYOUT_KEY.get().copied().flatten()
+}
+
 /// The node-local miner state (`QuoteHolder`): the held quote and when it was set (seconds).
 #[derive(Clone, Copy, Debug, Default)]
 struct Quote {
@@ -120,6 +155,23 @@ where
         let tip_height = index.tip().map_or(-1, |t| t.height);
         let quote = self.held_quote();
         let price = index.snap.attested_fee_price();
+        // ycash6 `GetMinerStatus` (`src/yellowback/index.cpp:766-786`).
+        let now = now_seconds();
+        let payout = payout_key();
+        let healthy = index.health().healthy;
+        let fresh = quote.is_some_and(|q| now.saturating_sub(q.received_at) <= QUOTE_MAX_AGE_SECONDS);
+        let quote_kind = if healthy && payout.is_some() && fresh {
+            "quote"
+        } else {
+            "none"
+        };
+        let (registered, eligible) = match payout {
+            Some(key) if healthy && tip_height >= i64::from(params.start_height) => (
+                kogany_yellowback::state::registered(&index.snap, &params, &key, tip_height),
+                eligible_payees(&index.snap, &params, tip_height).contains(&key),
+            ),
+            _ => (false, false),
+        };
         Ok(Some(YedSnapshot {
             chain_height,
             params,
@@ -134,12 +186,11 @@ where
                 },
                 preferred_attestor: None,
                 miner: MinerStatus {
-                    // Followers have no payout key (K-16; the W8 pool tag is the miner's).
-                    payout_key: None,
-                    quote_kind: if quote.is_some() { "quote" } else { "none" },
-                    quote_age_seconds: quote.map(|q| now_seconds().saturating_sub(q.received_at)),
-                    registered: false,
-                    eligible: false,
+                    payout_key: payout,
+                    quote_kind,
+                    quote_age_seconds: quote.map(|q| now.saturating_sub(q.received_at)),
+                    registered,
+                    eligible,
                     quote: quote.map(|q| HeldQuote {
                         price_micro_usd: q.price_micro_usd,
                         source_mask: q.source_mask,
@@ -180,11 +231,20 @@ where
                 source_mask,
                 received_at: now,
             });
+        let payout = payout_key();
         Ok(QuoteAck {
             received_at: now,
-            // Without a payout key no tag is built (MINER-1).
-            next_kind: "none",
-            payout_key: None,
+            // MINER-1..3: a quote tag iff a quote is held, the node has a payout key and the
+            // index is healthy.
+            next_kind: if price_micro_usd != 0
+                && payout.is_some()
+                && zakura_state::yed::yed_unhealthy_reason().is_none()
+            {
+                "quote"
+            } else {
+                "none"
+            },
+            payout_key: payout,
         })
     }
 

@@ -103,6 +103,7 @@ async fn mempool_verify(
                     zakura_state::vault::VaultSnapshot {
                         tip: Some((tip, zakura_chain::block::Hash([0; 32]))),
                         state: Default::default(),
+                        yed_params: None,
                     },
                 )));
         }

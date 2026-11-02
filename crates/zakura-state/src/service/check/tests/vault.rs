@@ -212,12 +212,12 @@ fn check_vault_accepts_the_recorded_chain_and_rejects_acts_out_of_order() {
                 continue;
             }
             if first {
-                mempool_vault_check(&network, &parent_state, tx, txid, b.height, &all_coins)
+                mempool_vault_check(&network, &parent_state, None, tx, txid, b.height, &all_coins)
                     .unwrap_or_else(|r| panic!("block {:?}'s first tx passes: {r}", b.height));
                 first = false;
             }
             if let Err(reason) =
-                mempool_vault_check(&network, &base_state, tx, txid, b.height, &all_coins)
+                mempool_vault_check(&network, &base_state, None, tx, txid, b.height, &all_coins)
             {
                 assert!(reason.starts_with("bad-"), "a ycash6 reason: {reason}");
                 any_failed = true;

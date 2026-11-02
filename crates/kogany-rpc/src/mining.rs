@@ -336,6 +336,7 @@ mod tests {
                     || zakura_state::vault::VaultSnapshot {
                         tip: None,
                         state: served,
+                        yed_params: None,
                     },
                 )))
             }
