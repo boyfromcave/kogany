@@ -2954,6 +2954,7 @@ dependencies = [
  "futures-util",
  "getset",
  "hex",
+ "kogany-pq",
  "kogany-vault",
  "kogany-yellowback",
  "metrics",
