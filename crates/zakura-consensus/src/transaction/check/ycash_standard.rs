@@ -530,17 +530,18 @@ fn is_standard_output_script(
 ) -> Result<TxOutType, NonStandardReason> {
     let kind = solver(spk).ok_or(NonStandardReason::ScriptPubKey)?;
     match &kind {
-        TxOutType::Solver(solver::ScriptKind::MultiSig { required, pubkeys }) => {
-            let n = pubkeys.len();
-            if !(1..=3).contains(&n) || *required < 1 || usize::from(*required) > n {
-                return Err(NonStandardReason::ScriptPubKey);
-            }
+        TxOutType::Solver(solver::ScriptKind::MultiSig { required, pubkeys })
+            if !(1..=3).contains(&pubkeys.len())
+                || *required < 1
+                || usize::from(*required) > pubkeys.len() =>
+        {
+            return Err(NonStandardReason::ScriptPubKey);
         }
-        TxOutType::Solver(solver::ScriptKind::NullData { .. }) => {
-            if !policy.accept_datacarrier || spk.as_raw_bytes().len() > policy.max_datacarrier_bytes
-            {
-                return Err(NonStandardReason::DataCarrier);
-            }
+        TxOutType::Solver(solver::ScriptKind::NullData { .. })
+            if !policy.accept_datacarrier
+                || spk.as_raw_bytes().len() > policy.max_datacarrier_bytes =>
+        {
+            return Err(NonStandardReason::DataCarrier);
         }
         _ => {}
     }

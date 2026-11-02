@@ -46,7 +46,7 @@ fn regtest_vault() -> Network {
 /// A configured testnet with Vault at height 10: Falcon follows Vault there (`pqFalconHeight`
 /// 0), the kogany stand-in for the C++ `-pqfalcon=1` regtest.
 fn testnet_vault_falcon() -> Network {
-    let params = testnet::Parameters::build()
+    testnet::Parameters::build()
         .with_activation_heights(ConfiguredActivationHeights {
             overwinter: Some(1),
             sapling: Some(1),
@@ -55,8 +55,7 @@ fn testnet_vault_falcon() -> Network {
         })
         .expect("Vault after Sapling and before NU5 is a valid schedule")
         .to_network()
-        .expect("the configured testnet has valid parameters");
-    params
+        .expect("the configured testnet has valid parameters")
 }
 
 /// `uint256S("0x<n>")`: the value `n` in internal (little-endian) byte order.
