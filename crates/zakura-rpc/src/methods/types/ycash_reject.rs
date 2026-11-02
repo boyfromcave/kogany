@@ -862,9 +862,20 @@ pub(crate) fn block_decode_failed() -> crate::server::jsonrpc::ErrorObject {
 /// state computed `cur_time` from the system clock, so the mock time replaces it, within the
 /// template's `[mintime, maxtime]` as the state clamps it.
 pub(crate) fn with_mock_cur_time(
-    mut chain_info: zakura_state::GetBlockTemplateChainInfo,
+    chain_info: zakura_state::GetBlockTemplateChainInfo,
 ) -> zakura_state::GetBlockTemplateChainInfo {
-    if let Some(mock) = crate::server::kogany_extension::mock_clock::mock_time() {
+    with_cur_time(
+        chain_info,
+        crate::server::kogany_extension::mock_clock::mock_time(),
+    )
+}
+
+/// `chain_info` with `cur_time` from `mock` (Unix seconds) when it is set.
+fn with_cur_time(
+    mut chain_info: zakura_state::GetBlockTemplateChainInfo,
+    mock: Option<i64>,
+) -> zakura_state::GetBlockTemplateChainInfo {
+    if let Some(mock) = mock {
         // A mock time outside u32 is clamped to its range, then to the template's.
         let seconds = u32::try_from(mock.max(0)).unwrap_or(u32::MAX);
         chain_info.cur_time = zakura_chain::serialization::DateTime32::from(seconds)

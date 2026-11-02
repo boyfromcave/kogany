@@ -727,7 +727,8 @@ fn block_reasons_are_bip22_strings() {
 
 #[test]
 fn setmocktime_moves_the_template_cur_time() {
-    use crate::server::kogany_extension::mock_clock;
+    // The pure step: the process clock is not touched, so the other template tests of this
+    // binary keep the system clock.
     use zakura_chain::{
         block, serialization::DateTime32, value_balance::ValueBalance,
         work::difficulty::CompactDifficulty,
@@ -743,15 +744,15 @@ fn setmocktime_moves_the_template_cur_time() {
         value_pools: ValueBalance::zero(),
     };
     // Unset: the state's clock stands.
-    assert_eq!(with_mock_cur_time(info.clone()).cur_time, info.cur_time);
-    mock_clock::set_mock_time(1_001_801);
+    assert_eq!(with_cur_time(info.clone(), None).cur_time, info.cur_time);
     assert_eq!(
-        with_mock_cur_time(info.clone()).cur_time,
+        with_cur_time(info.clone(), Some(1_001_801)).cur_time,
         DateTime32::from(1_001_801)
     );
     // Within [mintime, maxtime], as the state clamps the system clock.
-    mock_clock::set_mock_time(2_000_000);
-    assert_eq!(with_mock_cur_time(info.clone()).cur_time, info.max_time);
-    mock_clock::set_mock_time(0);
-    assert_eq!(with_mock_cur_time(info.clone()).cur_time, info.cur_time);
+    assert_eq!(
+        with_cur_time(info.clone(), Some(2_000_000)).cur_time,
+        info.max_time
+    );
+    assert_eq!(with_cur_time(info.clone(), Some(1)).cur_time, info.min_time);
 }

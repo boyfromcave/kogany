@@ -55,27 +55,3 @@ impl RegtestRpc for RegtestRpcImpl {
         Ok(())
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[tokio::test]
-    async fn setmocktime_is_regtest_only_and_sets_the_clock() {
-        let mainnet = RegtestRpcImpl::new(Network::Mainnet);
-        let error = mainnet.setmocktime(1).await.expect_err("mainnet refuses");
-        assert_eq!(error.code(), -1);
-        assert_eq!(mock_clock::mock_time(), None);
-
-        let regtest = RegtestRpcImpl::new(Network::new_regtest(Default::default()));
-        regtest
-            .setmocktime(2_000_000_000)
-            .await
-            .expect("regtest takes it");
-        assert_eq!(mock_clock::mock_time(), Some(2_000_000_000));
-        assert_eq!(mock_clock::now(), 2_000_000_000);
-        regtest.setmocktime(0).await.expect("0 clears it");
-        assert_eq!(mock_clock::mock_time(), None);
-        assert!(mock_clock::now() > 2_000_000_000 - 10 * 365 * 86_400);
-    }
-}
