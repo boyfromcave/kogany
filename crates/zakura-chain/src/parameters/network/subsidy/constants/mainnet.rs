@@ -1,5 +1,8 @@
 //! Mainnet-specific constants for block subsidies.
 
+// kogany: the `ycash` profile has no Zcash funding streams, so it reads none of these.
+#![cfg_attr(feature = "ycash", allow(dead_code))]
+
 use std::sync::LazyLock;
 
 use crate::parameters::{

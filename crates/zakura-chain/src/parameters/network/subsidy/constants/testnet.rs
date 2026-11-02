@@ -15,6 +15,7 @@ use crate::parameters::{
 /// as specified in [protocol specification §7.10.1][7.10.1]
 ///
 /// [7.10.1]: https://zips.z.cash/protocol/protocol.pdf#zip214fundingstreams
+#[cfg_attr(feature = "ycash", allow(dead_code))]
 pub(crate) const FIRST_HALVING: Height = Height(1_116_000);
 
 /// The start height of post-NU6 funding streams on Testnet as described in [ZIP-1015](https://zips.z.cash/zip-1015).
@@ -109,9 +110,11 @@ pub(crate) const FUNDING_STREAM_ECC_ADDRESSES: [&str; FUNDING_STREAMS_NUM_ADDRES
 ];
 
 /// Number of founder addresses on Testnet.
+#[cfg_attr(feature = "ycash", allow(dead_code))]
 pub(crate) const NUM_FOUNDER_ADDRESSES: usize = 48;
 
 /// List of founder addresses on Testnet.
+#[cfg_attr(feature = "ycash", allow(dead_code))]
 pub(crate) const FOUNDER_ADDRESS_LIST: [&str; NUM_FOUNDER_ADDRESSES] = [
     "t2UNzUUx8mWBCRYPRezvA363EYXyEpHokyi",
     "t2N9PH9Wk9xjqYg9iin1Ua3aekJqfAtE543",

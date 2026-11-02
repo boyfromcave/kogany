@@ -11,6 +11,8 @@ edition.workspace = true
 rust-version.workspace = true
 
 [features]
+# The Ycash network profile (kogany), see zakura-chain's `ycash` feature.
+ycash = ["zakura-chain/ycash"]
 fuzz-impl = []
 test-support = []
 

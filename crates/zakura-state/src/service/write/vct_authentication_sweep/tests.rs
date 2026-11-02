@@ -101,6 +101,7 @@ fn empty_ironwood_root() -> ironwood::tree::Root {
 fn parameters(checkpoint_blocks: Option<&[Arc<Block>]>) -> Network {
     let builder = ParametersBuilder::default()
         .with_activation_heights(ConfiguredActivationHeights {
+            ycash: None,
             before_overwinter: Some(1),
             overwinter: Some(2),
             sapling: Some(3),
@@ -182,6 +183,7 @@ fn generate_chain(network: &Network) -> Vec<Arc<Block>> {
                 joinsplit_data: None,
             },
             NetworkUpgrade::Sapling
+            | NetworkUpgrade::Ycash
             | NetworkUpgrade::Blossom
             | NetworkUpgrade::Heartwood
             | NetworkUpgrade::Canopy => Transaction::V4 {
@@ -227,7 +229,9 @@ fn generate_chain(network: &Network) -> Vec<Arc<Block>> {
             transactions,
         });
         let commitment = match upgrade {
-            NetworkUpgrade::Sapling | NetworkUpgrade::Blossom => <[u8; 32]>::from(sapling_root),
+            NetworkUpgrade::Sapling | NetworkUpgrade::Ycash | NetworkUpgrade::Blossom => {
+                <[u8; 32]>::from(sapling_root)
+            }
             NetworkUpgrade::Heartwood if height == Height(HEARTWOOD) => [0; 32],
             NetworkUpgrade::Heartwood | NetworkUpgrade::Canopy => history_tree
                 .hash()

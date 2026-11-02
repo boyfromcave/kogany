@@ -174,7 +174,7 @@ pub fn prepare_headers(
             // Equihash solution under the authenticated proof-of-work policy.
             rules
                 .pow_policy
-                .validate_solution(header)
+                .validate_solution(header, *height)
                 .map_err(|error| invalid(offset, HeaderRule::Equihash, error))?;
 
             // Accept current timestamps; assign an exact deadline to future ones.

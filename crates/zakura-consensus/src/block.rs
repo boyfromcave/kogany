@@ -43,6 +43,9 @@ pub use request::{PreparedCandidateSource, Request};
 
 #[cfg(test)]
 mod tests;
+// kogany: YDF coinbase golden vectors from Ycash mainnet (W1-Y3).
+#[cfg(all(test, feature = "ycash"))]
+mod ycash_tests;
 
 /// Bounds the optional read that can prove an input missing at the block's parent.
 const PARENT_INPUT_CHECK_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
@@ -427,7 +430,7 @@ where
                 // Do the difficulty checks first, to raise the threshold for
                 // attacks that use any other fields.
                 check::difficulty_is_valid(&block.header, &network, &height, &hash)?;
-                check::equihash_solution_is_valid(&block.header, &network)?;
+                check::equihash_solution_is_valid(&block.header, &network, &height)?;
             }
 
             if let Some(admission) = &mined {

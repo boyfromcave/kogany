@@ -33,7 +33,7 @@ fn pow_policy_waiver_is_derived_only_from_custom_network_identity() {
     let mut wrong_shape = *regtest_genesis_block().header;
     wrong_shape.solution = equihash::Solution::for_proposal();
     assert!(matches!(
-        regtest_policy.validate_solution(&wrong_shape),
+        regtest_policy.validate_solution(&wrong_shape, block::Height(1)),
         Err(equihash::Error::InvalidSolutionSize { .. })
     ));
 
@@ -50,5 +50,7 @@ fn pow_policy_waiver_is_derived_only_from_custom_network_identity() {
         solution: equihash::Solution::for_proposal(),
         ..*regtest_genesis_block().header
     };
-    assert!(custom_policy.validate_solution(&proposal_header).is_ok());
+    assert!(custom_policy
+        .validate_solution(&proposal_header, block::Height(1))
+        .is_ok());
 }
