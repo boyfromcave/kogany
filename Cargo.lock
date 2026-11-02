@@ -2761,6 +2761,7 @@ dependencies = [
  "hyper-util",
  "indexmap",
  "insta",
+ "kogany-rpc",
  "libc",
  "metrics",
  "pin-project",

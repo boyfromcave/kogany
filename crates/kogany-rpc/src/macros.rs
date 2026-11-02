@@ -11,7 +11,7 @@
 //!
 //! So this macro takes the same trait syntax, and implements `RpcMethods` for a local wrapper,
 //! `dispatch = Name`, defined as `pub struct Name<T>(pub T)`. Its parameter decoding is a copy of
-//! the `@decode` arm of `rpc_trait!` at kogany-legacy `2b062412c5` (`jsonrpc.rs:950-1054`), over
+//! the `@decode` arm of `rpc_trait!` at kogany-legacy `2b062412c5` (`jsonrpc.rs:960-1053`), over
 //! the same public helpers (`Params`, `NextParam`, `MissingParam`, `param_name_matches`), so
 //! positional and named parameters, omitted trailing `Option`s and the invalid-params errors
 //! (`-32602`, which the server's middleware turns into zcashd's `-1`) behave exactly as for
