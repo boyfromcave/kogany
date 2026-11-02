@@ -609,7 +609,17 @@ where
                 // scriptSigs, and high-sigop P2SH redeem scripts) *before*
                 // doing expensive script verification, to avoid DoS attacks on
                 // the script interpreter.
-                check::mempool_standard_input_scripts(tx.as_ref(), &spent_outputs)?;
+                //
+                // Ycash (W1-Y9): ycashd checks standardness only where `RequireStandard()`, which
+                // regtest is not (ycash6 `chainparams.cpp:839`, `main.cpp:1979,2070`); the
+                // mempool storage applies it there when `accept_non_standard` is off.
+                #[cfg(feature = "ycash")]
+                let check_standard = !network.is_regtest();
+                #[cfg(not(feature = "ycash"))]
+                let check_standard = true;
+                if check_standard {
+                    check::mempool_standard_input_scripts(tx.as_ref(), &spent_outputs)?;
+                }
             }
 
             let mempool_transaction = req.mempool_transaction();
@@ -619,9 +629,14 @@ where
                 // VerifiedUnminedTx::new() repeats this check to preserve its constructor
                 // invariant.
                 let fee = Self::miner_fee(tx.as_ref(), &spent_utxos)?;
+                #[cfg(not(feature = "ycash"))]
                 let unpaid_actions = transaction::zip317::unpaid_actions(unmined_tx, fee);
 
+                #[cfg(not(feature = "ycash"))]
                 transaction::zip317::mempool_checks(unpaid_actions, fee, unmined_tx.size())?;
+                // A Ycash network replaces ZIP-317 with its own fee rules (W1-Y9).
+                #[cfg(feature = "ycash")]
+                transaction::ycash_relay::mempool_checks(unmined_tx, fee)?;
                 miner_fee = Some(fee);
             }
 

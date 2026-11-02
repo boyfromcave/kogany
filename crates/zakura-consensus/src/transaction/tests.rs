@@ -5826,6 +5826,7 @@ fn shielded_outputs_are_not_decryptable_for_fake_v5_blocks() {
     }
 }
 
+#[cfg_attr(feature = "ycash", ignore = "Ycash has no ZIP-317 relay rule (W1-Y9)")]
 #[tokio::test]
 async fn mempool_zip317_error() {
     let mut state: MockService<_, _, _, _> = MockService::build().for_prop_tests();

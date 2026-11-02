@@ -761,7 +761,14 @@ impl Mempool {
             self.verification_finished.clone(),
         ));
         self.active_state = ActiveState::Enabled {
+            #[cfg(not(feature = "ycash"))]
             storage: storage::Storage::new(&self.config),
+            // Ycash: the network selects the standardness policy (kogany W1-Y9).
+            #[cfg(feature = "ycash")]
+            storage: storage::Storage::new_for_network(
+                &self.config,
+                self.chain_tip_change.network(),
+            ),
             tx_downloads,
             pending_gossip_tx_ids: HashSet::new(),
             last_seen_tip_hash,
