@@ -1,4 +1,6 @@
 //! Randomised property tests for Zebra's Zcash network protocol types.
+// kogany: the Zcash-fixture tests are not built with `ycash`, leaving their helpers unused.
+#![cfg_attr(feature = "ycash", allow(unused_imports, dead_code))]
 
 use bytes::BytesMut;
 use proptest::{collection::vec, prelude::*};
@@ -28,6 +30,8 @@ const MAX_INVENTORY_HASH_BYTES: usize = 70;
 proptest! {
     /// Test if [`InventoryHash`] is not changed after serializing and deserializing it.
     #[test]
+    // kogany: Zcash MSG_WTX (V5) inventory, which Ycash does not use; not run on Ycash.
+    #[cfg(not(feature = "ycash"))]
     fn inventory_hash_roundtrip(inventory_hash in any::<InventoryHash>()) {
         let mut bytes = Vec::new();
 
@@ -86,6 +90,8 @@ proptest! {
     /// Test if a [`Message::{Inv, GetData}`] is not changed after encoding and decoding it.
     // TODO: Update this test to cover all `Message` variants.
     #[test]
+    // kogany: Zcash MSG_WTX (V5) inventory, which Ycash does not use; not run on Ycash.
+    #[cfg(not(feature = "ycash"))]
     fn inv_and_getdata_message_roundtrip(
         message in prop_oneof!(Message::inv_strategy(), Message::get_data_strategy()),
     ) {

@@ -1,4 +1,6 @@
 //! Fixed test vectors for zakura-network configuration.
+// kogany: the Zcash-fixture tests are not built with `ycash`, leaving their helpers unused.
+#![cfg_attr(feature = "ycash", allow(unused_imports, dead_code))]
 
 use std::{collections::HashSet, fs, net::SocketAddr, time::Duration};
 
@@ -42,6 +44,9 @@ fn default_testnet_zakura_bootstrap_peers() -> Vec<String> {
 }
 
 #[test]
+// kogany: Zcash's network defaults (ports 8233/18233, the identity directory, the v2 stack
+// default); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn parse_config_listen_addr() {
     let _init_guard = zakura_test::init();
 
@@ -131,6 +136,9 @@ async fn empty_peer_cache_update_preserves_existing_cache() {
 }
 
 #[test]
+// kogany: Zcash upgrade schedules (NU5 to NU7, NU6.3 protocol versions; a Ycash network rejects NU5
+// with Vault); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn configured_nsm_seed_is_preserved_and_controls_public_peer_compatibility() {
     use zakura_chain::parameters::subsidy::ParameterSubsidy;
 
@@ -198,6 +206,9 @@ fn public_network_parameters_are_not_configurable() {
 }
 
 #[test]
+// kogany: Zcash upgrade schedules (NU5 to NU7, NU6.3 protocol versions; a Ycash network rejects NU5
+// with Vault); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn old_revision_2_range_is_allowed_only_on_a_configured_testnet() {
     let _init_guard = zakura_test::init();
 
@@ -228,6 +239,8 @@ fn old_revision_2_range_is_allowed_only_on_a_configured_testnet() {
 }
 
 #[test]
+// kogany: the Zakura P2P v2 stack, which is off on Ycash (K-11); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn testnet_params_serialization_roundtrip() {
     let _init_guard = zakura_test::init();
 
@@ -274,6 +287,9 @@ fn zakura_node_secret_key_is_redacted_from_debug_and_serialization() {
 }
 
 #[test]
+// kogany: Zcash's network defaults (ports 8233/18233, the identity directory, the v2 stack
+// default); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn identity_dir_defaults_and_roundtrips() {
     let _init_guard = zakura_test::init();
 
@@ -303,6 +319,9 @@ fn identity_dir_defaults_and_roundtrips() {
 }
 
 #[test]
+// kogany: Zcash's network defaults (ports 8233/18233, the identity directory, the v2 stack
+// default); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn p2p_stack_defaults_by_network_and_roundtrips() {
     let _init_guard = zakura_test::init();
 
@@ -422,6 +441,9 @@ fn explicit_zakura_bootstrap_peers_override_network_defaults() {
 }
 
 #[test]
+// kogany: Zcash Testnet's Zakura P2P v2 bootstrap peers; the v2 stack is off on Ycash (K-11), which
+// has none; not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn zakura_warns_on_loopback_listener_with_public_bootstrap_peers() {
     let _init_guard = zakura_test::init();
 
@@ -502,6 +524,8 @@ fn zakura_dev_network_defaults_off_and_roundtrips() {
 }
 
 #[test]
+// kogany: the Zakura P2P v2 stack, which is off on Ycash (K-11); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn canonical_p2p_stack_names_parse() {
     let _init_guard = zakura_test::init();
 
@@ -532,6 +556,8 @@ fn p2p_stack_rejects_unknown_values() {
 }
 
 #[test]
+// kogany: the Zakura P2P v2 stack, which is off on Ycash (K-11); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn deprecated_p2p_flags_map_onto_p2p_stack() {
     let _init_guard = zakura_test::init();
 
@@ -589,6 +615,8 @@ fn deprecated_p2p_flags_conflict_with_p2p_stack() {
 }
 
 #[test]
+// kogany: the Zakura P2P v2 stack, which is off on Ycash (K-11); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn p2p_v2_old_config_without_zakura_fields_uses_safe_defaults() {
     let _init_guard = zakura_test::init();
 
@@ -676,6 +704,8 @@ fn p2p_v2_unknown_future_config_fields_are_rejected() {
 }
 
 #[test]
+// kogany: the Zakura P2P v2 stack, which is off on Ycash (K-11); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn p2p_v2_config_roundtrip_keeps_dconfig_zakura_fields() {
     let _init_guard = zakura_test::init();
 
@@ -817,6 +847,8 @@ fn configured_regtest_checkpoints_preserve_regtest_identity() {
 }
 
 #[test]
+// kogany: the Zakura P2P v2 stack, which is off on Ycash (K-11); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn zakura_bootstrap_peers_parse_in_nested_config() {
     let _init_guard = zakura_test::init();
 
@@ -848,6 +880,8 @@ fn zakura_bootstrap_peers_parse_in_nested_config() {
 }
 
 #[test]
+// kogany: the Zakura P2P v2 stack, which is off on Ycash (K-11); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn zakura_peer_memory_budget_lowers_or_refuses_at_load() {
     let _init_guard = zakura_test::init();
 
@@ -926,6 +960,8 @@ fn zakura_peer_memory_budget_lowers_or_refuses_at_load() {
 /// An unused QUIC budget cannot reject legacy startup, but every resolved
 /// stack that runs v2 must enforce it before the endpoint starts.
 #[test]
+// kogany: the Zakura P2P v2 stack, which is off on Ycash (K-11); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn zakura_peer_memory_budget_only_rejects_v2_stacks() {
     let _init_guard = zakura_test::init();
 
@@ -967,6 +1003,9 @@ fn zakura_peer_memory_budget_only_rejects_v2_stacks() {
 }
 
 #[test]
+// kogany: Zcash's network defaults (ports 8233/18233, the identity directory, the v2 stack
+// default); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn default_config_uses_ipv6() {
     let _init_guard = zakura_test::init();
     let config = Config::default();
@@ -981,6 +1020,8 @@ fn default_config_uses_ipv6() {
 }
 
 #[test]
+// kogany: the Zakura P2P v2 stack, which is off on Ycash (K-11); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn funding_streams_serialization_roundtrip() {
     let _init_guard = zakura_test::init();
 
@@ -1009,6 +1050,8 @@ fn funding_streams_serialization_roundtrip() {
 /// Checks that a configured Testnet's temporary Orchard-disabling soft fork height
 /// survives a serialization round-trip.
 #[test]
+// kogany: the Zakura P2P v2 stack, which is off on Ycash (K-11); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn temporary_orchard_disabling_soft_fork_height_serialization_roundtrip() {
     let _init_guard = zakura_test::init();
 
@@ -1040,6 +1083,8 @@ fn temporary_orchard_disabling_soft_fork_height_serialization_roundtrip() {
 }
 
 #[test]
+// kogany: the Zakura P2P v2 stack, which is off on Ycash (K-11); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn max_block_time_start_height_serialization_roundtrip() {
     let _init_guard = zakura_test::init();
     let start_height = Height(42);
@@ -1066,6 +1111,8 @@ fn max_block_time_start_height_serialization_roundtrip() {
 /// Checks that a configured Testnet with no funding streams keeps none after a
 /// serialization round-trip, instead of inheriting the built-in Testnet streams.
 #[test]
+// kogany: the Zakura P2P v2 stack, which is off on Ycash (K-11); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn cleared_funding_streams_serialization_roundtrip() {
     let _init_guard = zakura_test::init();
     let mut config = Config {
@@ -1089,6 +1136,9 @@ fn cleared_funding_streams_serialization_roundtrip() {
 }
 
 #[test]
+// kogany: Zcash upgrade schedules (NU5 to NU7, NU6.3 protocol versions; a Ycash network rejects NU5
+// with Vault); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn nsm_reissuance_height_is_derived_after_config_roundtrip() {
     use zakura_chain::parameters::{
         subsidy::{is_zip234_active, nsm_reissuance_height},
@@ -1229,6 +1279,9 @@ fn zakura_secret_key_is_persisted_and_stable_across_restarts() {
 /// by the automatic persistence path; a disabled cache dir still yields a
 /// persistent Zakura identity path outside the cache directory.
 #[test]
+// kogany: Zcash's network defaults (ports 8233/18233, the identity directory, the v2 stack
+// default); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn zakura_secret_key_honors_configured_key_and_disabled_cache() {
     let _init_guard = zakura_test::init();
 
@@ -1457,6 +1510,9 @@ fn regtest_accepts_checkpoints_covering_delayed_canopy() {
 /// `deploy/nu7-fork/test_fork.py`. Loading it here proves zakurad accepts the shape
 /// the deployer writes, which a TOML parser alone cannot.
 #[test]
+// kogany: Zcash upgrade schedules (NU5 to NU7, NU6.3 protocol versions; a Ycash network rejects NU5
+// with Vault); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn rendered_nu7_fork_config_loads() {
     let document: toml::Value = toml::from_str(include_str!("data/nu7-fork-node.toml"))
         .expect("the rendered fork config is TOML");
@@ -1505,6 +1561,9 @@ fn configured_testnet(activation_heights: &str, inherit: Option<bool>) -> Result
 }
 
 #[test]
+// kogany: Zcash upgrade schedules (NU5 to NU7, NU6.3 protocol versions; a Ycash network rejects NU5
+// with Vault); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn activation_height_overlay_preserves_public_testnet_history() {
     let _init_guard = zakura_test::init();
 
@@ -1531,6 +1590,9 @@ fn activation_height_overlay_preserves_public_testnet_history() {
 const ALL_BUT_NU6_3: &str = r#"BeforeOverwinter = 1, Overwinter = 207500, Sapling = 280000, Blossom = 584000, Heartwood = 903800, Canopy = 1028500, NU5 = 1842420, NU6 = 2976000, "NU6.1" = 3536500, "NU6.2" = 4052000, NU7 = 4420652"#;
 
 #[test]
+// kogany: Zcash upgrade schedules (NU5 to NU7, NU6.3 protocol versions; a Ycash network rejects NU5
+// with Vault); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn activation_heights_still_replace_the_defaults_unless_inherited() {
     let _init_guard = zakura_test::init();
 
@@ -1565,6 +1627,9 @@ fn activation_heights_still_replace_the_defaults_unless_inherited() {
 }
 
 #[test]
+// kogany: Zcash upgrade schedules (NU5 to NU7, NU6.3 protocol versions; a Ycash network rejects NU5
+// with Vault); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn activation_height_overlay_changes_only_configured_upgrades() {
     let _init_guard = zakura_test::init();
 

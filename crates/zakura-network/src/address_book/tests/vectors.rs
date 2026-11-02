@@ -73,9 +73,14 @@ fn gossiped_change(
 /// even when peer priority separates those addresses in `by_addr`.
 #[test]
 fn misbehavior_ban_removes_all_addresses_for_ip() {
-    let banned_addr: crate::PeerSocketAddr = "127.0.0.1:8233".parse().unwrap();
+    // kogany: the network's default port (Ycash refuses Zcash's 8233 as a peer port).
+    let banned_addr: crate::PeerSocketAddr = format!("127.0.0.1:{}", Mainnet.default_port())
+        .parse()
+        .unwrap();
     let other_port_same_ip: crate::PeerSocketAddr = "127.0.0.1:8234".parse().unwrap();
-    let unrelated_addr: crate::PeerSocketAddr = "127.0.0.2:8233".parse().unwrap();
+    let unrelated_addr: crate::PeerSocketAddr = format!("127.0.0.2:{}", Mainnet.default_port())
+        .parse()
+        .unwrap();
 
     let mut address_book =
         AddressBook::new("0.0.0.0:0".parse().unwrap(), &Mainnet, 2, Span::current());

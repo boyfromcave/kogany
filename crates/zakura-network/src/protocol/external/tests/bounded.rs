@@ -1,5 +1,7 @@
 //! Check that `inv`, `addr`, and `addrv2` payloads decode the same from a slice
 //! as from a stream, and that slices reject counts the input cannot hold.
+// kogany: the Zcash-fixture tests are not built with `ycash`, leaving their helpers unused.
+#![cfg_attr(feature = "ycash", allow(unused_imports, dead_code))]
 
 use std::fmt::Debug;
 
@@ -57,6 +59,8 @@ fn assert_rejects_oversized_count<T: ZcashDeserialize + TrustedPreallocate + Deb
 }
 
 #[test]
+// kogany: Zcash MSG_WTX (V5) inventory, which Ycash does not use; not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn inv_decodes_the_same_from_a_slice() {
     let _init_guard = zakura_test::init();
 

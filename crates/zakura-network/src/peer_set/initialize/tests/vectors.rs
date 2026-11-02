@@ -345,6 +345,9 @@ async fn peer_limit_zero_testnet() {
 
 /// Test zakura-network with a peer limit of one inbound and one outbound peer on mainnet.
 #[tokio::test]
+// kogany: reaches Ycash Mainnet's only DNS seed, seed.ycash.xyz, which does not resolve (SERVFAIL,
+// 2026-11-02), so init retries an empty peer list forever; not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn peer_limit_one_mainnet() {
     let _init_guard = zakura_test::init();
 
@@ -380,6 +383,9 @@ async fn peer_limit_one_testnet() {
 
 /// Test zakura-network with a peer limit of two inbound and three outbound peers on mainnet.
 #[tokio::test]
+// kogany: reaches Ycash Mainnet's only DNS seed, seed.ycash.xyz, which does not resolve (SERVFAIL,
+// 2026-11-02), so init retries an empty peer list forever; not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn peer_limit_two_mainnet() {
     let _init_guard = zakura_test::init();
 
@@ -518,7 +524,10 @@ async fn written_peer_cache_is_automatically_read_on_startup() {
 
 /// Adds a recent gossiped peer that is eligible for the disk cache.
 fn add_cacheable_peer(address_book: &Arc<std::sync::Mutex<AddressBook>>) -> PeerSocketAddr {
-    let peer = "127.0.0.1:8233".parse().expect("valid test peer address");
+    // kogany: the network's default port (Ycash refuses Zcash's 8233 as a peer port).
+    let peer = format!("127.0.0.1:{}", Mainnet.default_port())
+        .parse()
+        .expect("valid test peer address");
     let change =
         MetaAddr::new_gossiped_meta_addr(peer, PeerServices::NODE_NETWORK, DateTime32::now())
             .new_gossiped_change()
@@ -2400,8 +2409,9 @@ async fn spawn_replenishment_crawler_with(
             u32::try_from(address_number).expect("small replenishment test address count fits u32");
         let ip =
             Ipv4Addr::from(u32::from(Ipv4Addr::new(127, 2, 0, 0)).saturating_add(address_number));
+        // kogany: the network's default port (Ycash refuses Zcash's 8233 as a peer port).
         let addr = MetaAddr::new_gossiped_meta_addr(
-            SocketAddr::new(ip.into(), 8233).into(),
+            SocketAddr::new(ip.into(), config.network.default_port()).into(),
             PeerServices::NODE_NETWORK,
             DateTime32::now(),
         )

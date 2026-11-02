@@ -1,4 +1,6 @@
 //! Fixed test vectors for external protocol messages.
+// kogany: the Zcash-fixture tests are not built with `ycash`, leaving their helpers unused.
+#![cfg_attr(feature = "ycash", allow(unused_imports, dead_code))]
 
 use std::io::Write;
 
@@ -14,6 +16,8 @@ use crate::{
 
 /// Test if deserializing [`InventoryHash::Wtx`] does not produce an error.
 #[test]
+// kogany: Zcash MSG_WTX (V5) inventory, which Ycash does not use; not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn parses_msg_wtx_inventory_type() {
     let _init_guard = zakura_test::init();
 
