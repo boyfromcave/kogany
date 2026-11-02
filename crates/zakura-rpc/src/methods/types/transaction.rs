@@ -837,7 +837,14 @@ impl ScriptPubKey {
         {
             let (req_sigs, r#type, addresses) =
                 super::ycash_script::script_pub_key_fields(&self.hex, self.r#type, _network);
+            // Zakura's disassembler stops at the Ycash opcodes (`[error]`).
+            let asm = if self.asm.contains("[error]") {
+                super::ycash_script::script_to_asm(self.hex.as_raw_bytes())
+            } else {
+                self.asm
+            };
             Self {
+                asm,
                 req_sigs,
                 r#type,
                 addresses,

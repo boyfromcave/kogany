@@ -1,5 +1,5 @@
 //! kogany's regtest control RPCs beside Zakura's `generate` (plan W7-e, decision K-26):
-//! `setmocktime` (`ycash6 src/rpc/misc.cpp` `setmocktime`), which the shared regtest scripts
+//! `setmocktime` (`ycash6 src/rpc/misc.cpp:518-552` `setmocktime`), which the shared regtest scripts
 //! (`yellowback_mining`, `_quote`, `_stratum`) and the parity sidecar's façade call.
 //!
 //! The clock is zakura-rpc's [`mock_clock`]: `getblocktemplate`'s `curtime` and the YED miner
@@ -48,7 +48,7 @@ impl RegtestRpc for RegtestRpcImpl {
             // ycashd: `throw runtime_error(...)`, answered as RPC_MISC_ERROR (-1).
             return Err(ErrorObject::new(
                 -1,
-                "setmocktime for regression testing (-regtest mode) only",
+                "setmocktime: for regression testing (-regtest mode) only",
             ));
         }
         mock_clock::set_mock_time(timestamp);

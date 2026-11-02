@@ -4425,6 +4425,11 @@ where
                     tx_version,
                     last_seen_hash,
                 })) => {
+                    // Ycash (W7-e): ycashd prunes unspendable outputs from its coins view.
+                    #[cfg(feature = "ycash")]
+                    if types::ycash_script::is_unspendable(&output.lock_script) {
+                        return Ok(GetTxOutResponse(None));
+                    }
                     return Ok(GetTxOutResponse(Some(
                         types::transaction::OutputObject::from_output(
                             &output,
@@ -4434,7 +4439,7 @@ where
                             false,
                             self.network(),
                         ),
-                    )))
+                    )));
                 }
                 mempool::Response::TransparentOutput(Some(CreatedOrSpent::Spent)) => {
                     return Ok(GetTxOutResponse(None))
@@ -4471,6 +4476,11 @@ where
                     // return null if the output is not found
                     None => return Ok(GetTxOutResponse(None)),
                 };
+                // Ycash (W7-e): ycashd prunes unspendable outputs from its coins view.
+                #[cfg(feature = "ycash")]
+                if types::ycash_script::is_unspendable(&output.lock_script) {
+                    return Ok(GetTxOutResponse(None));
+                }
 
                 // Prune state outputs that are spent
                 let is_spent = {

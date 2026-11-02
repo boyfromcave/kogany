@@ -11,14 +11,16 @@ use zakura_chain::block::Height;
 use zakura_consensus::error::TransactionError;
 use zakura_state::ValidateContextError;
 use zcash_script::{
-    interpreter::Error as InterpreterError, op, opcode::PossiblyBad,
-    script::ComponentType, script::Error as ScriptError,
+    interpreter::Error as InterpreterError, op, opcode::PossiblyBad, script::ComponentType,
+    script::Error as ScriptError,
 };
 
 use super::*;
 
 fn repo_file(path: &str) -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..").join(path)
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .join(path)
 }
 
 fn read_json(path: &str) -> Value {
@@ -80,16 +82,17 @@ fn bip68_error(sequence: u32) -> ValidateContextError {
         joinsplit_data: None,
         sapling_shielded_data: None,
     };
-    zakura_state::check::transparent_sequence_locks(&network, &tx, Height(11), |_| {
-        Some(Height(10))
-    })
-    .expect_err("the lock is not satisfied")
+    zakura_state::check::transparent_sequence_locks(&network, &tx, Height(11), |_| Some(Height(10)))
+        .expect_err("the lock is not satisfied")
 }
 
 /// `UnsatisfiedSequenceLock`: a 5-block relative lock on a coin one block old.
 fn sequence_lock() -> ValidateContextError {
     let error = bip68_error(5);
-    assert!(matches!(error, ValidateContextError::UnsatisfiedSequenceLock { .. }));
+    assert!(matches!(
+        error,
+        ValidateContextError::UnsatisfiedSequenceLock { .. }
+    ));
     error
 }
 
@@ -266,9 +269,9 @@ fn script_reasons() -> Vec<(&'static str, &'static str, Source)> {
         (
             "tx",
             "non-final",
-            Produced(mempool(TransactionError::LockedUntilAfterBlockHeight(Height(
-                20,
-            )))),
+            Produced(mempool(TransactionError::LockedUntilAfterBlockHeight(
+                Height(20),
+            ))),
         ),
         (
             "tx",
@@ -347,7 +350,8 @@ fn script_reasons() -> Vec<(&'static str, &'static str, Source)> {
         ("tx", "bad-vault-bond-frozen"),
         ("tx", "bad-vault-bond-locked"),
     ] {
-        let rendered = vault_reason(reason).unwrap_or_else(|| panic!("no VaultReject for {reason}"));
+        let rendered =
+            vault_reason(reason).unwrap_or_else(|| panic!("no VaultReject for {reason}"));
         rows.push((rpc, reason, Pending(VAULT, rendered)));
     }
 
@@ -356,13 +360,28 @@ fn script_reasons() -> Vec<(&'static str, &'static str, Source)> {
     for (reason, verdict) in [
         ("bad-yellowback-*", verdict::BAD_MINT_COLLATERAL),
         ("bad-yellowback-bad-mint-amount", verdict::BAD_MINT_AMOUNT),
-        ("bad-yellowback-bad-mint-collateral", verdict::BAD_MINT_COLLATERAL),
-        ("bad-yellowback-bad-mint-owner-key", verdict::BAD_MINT_OWNER_KEY),
-        ("bad-yellowback-bad-mint-vault-script", verdict::BAD_MINT_VAULT_SCRIPT),
-        ("bad-yellowback-bad-redeem-early-fee", verdict::BAD_REDEEM_EARLY_FEE),
+        (
+            "bad-yellowback-bad-mint-collateral",
+            verdict::BAD_MINT_COLLATERAL,
+        ),
+        (
+            "bad-yellowback-bad-mint-owner-key",
+            verdict::BAD_MINT_OWNER_KEY,
+        ),
+        (
+            "bad-yellowback-bad-mint-vault-script",
+            verdict::BAD_MINT_VAULT_SCRIPT,
+        ),
+        (
+            "bad-yellowback-bad-redeem-early-fee",
+            verdict::BAD_REDEEM_EARLY_FEE,
+        ),
         ("bad-yellowback-bad-yed-holder", verdict::BAD_YED_HOLDER),
         ("bad-yellowback-mempool-expiry", "mempool-expiry"),
-        ("bad-yellowback-mint-halted-unarmed", verdict::MINT_HALTED_UNARMED),
+        (
+            "bad-yellowback-mint-halted-unarmed",
+            verdict::MINT_HALTED_UNARMED,
+        ),
         (
             "bad-yellowback-vault-claim-not-underwater",
             verdict::VAULT_CLAIM_NOT_UNDERWATER,
@@ -372,7 +391,10 @@ fn script_reasons() -> Vec<(&'static str, &'static str, Source)> {
         ("intent-cancel-cosign", verdict::INTENT_CANCEL_COSIGN),
         ("intent-cancel-no-refund", verdict::INTENT_CANCEL_NO_REFUND),
         ("attestor-bond-below-min", verdict::ATTESTOR_BOND_BELOW_MIN),
-        ("attestor-register-retired", verdict::ATTESTOR_REGISTER_RETIRED),
+        (
+            "attestor-register-retired",
+            verdict::ATTESTOR_REGISTER_RETIRED,
+        ),
         ("attestor-revive-retired", verdict::ATTESTOR_REVIVE_RETIRED),
         ("attestor-set-act", verdict::ATTESTOR_SET_ACT),
     ] {
@@ -438,8 +460,11 @@ fn renderings_are_ycashd_texts() {
         "64: non-mandatory-script-verify-flag (NOPx reserved for soft-fork upgrades)"
     );
     assert_eq!(
-        transaction_reject(&TransactionError::TransparentInputNotFound, Context::Mempool)
-            .rpc_error(),
+        transaction_reject(
+            &TransactionError::TransparentInputNotFound,
+            Context::Mempool
+        )
+        .rpc_error(),
         Some((-25, "Missing inputs".to_owned()))
     );
     assert_eq!(
@@ -512,7 +537,8 @@ fn mempool_rejections_render_from_the_type_or_the_storage_text() {
         let error: Box<dyn StdError + Send + Sync> = text.into();
         assert_eq!(mempool_reject(error.as_ref()), expected, "{text}");
     }
-    let in_mempool: Box<dyn StdError + Send + Sync> = "transaction already exists in mempool".into();
+    let in_mempool: Box<dyn StdError + Send + Sync> =
+        "transaction already exists in mempool".into();
     assert!(send_raw_transaction_error(in_mempool.as_ref()).is_none());
 
     // A VaultReject anywhere in the source chain renders without a row.
@@ -637,13 +663,20 @@ fn every_documented_reason_has_a_kogany_source() {
     }
     assert!(unexplained.is_empty(), "no kogany source: {unexplained:#?}");
     assert_eq!(transaction + kogany + yewd + other, rows.len());
-    assert!(transaction >= 1 && kogany >= 10 && yewd >= 30, "{transaction} {kogany} {yewd} {other}");
+    assert!(
+        transaction >= 1 && kogany >= 10 && yewd >= 30,
+        "{transaction} {kogany} {yewd} {other}"
+    );
 }
 
 fn strings(value: &Value) -> Vec<String> {
     value
         .as_array()
-        .map(|a| a.iter().filter_map(|v| v.as_str().map(str::to_owned)).collect())
+        .map(|a| {
+            a.iter()
+                .filter_map(|v| v.as_str().map(str::to_owned))
+                .collect()
+        })
         .unwrap_or_default()
 }
 
@@ -673,13 +706,44 @@ fn block_reasons_are_bip22_strings() {
     };
     assert_eq!(block_reject(&error), "bad-txns-nonfinal");
     let error = RouterError::Block {
-        source: Box::new(VerifyBlockError::Commit(CommitBlockError::ValidateContextError(
-            Box::new(sequence_lock()),
-        ))),
+        source: Box::new(VerifyBlockError::Commit(
+            CommitBlockError::ValidateContextError(Box::new(sequence_lock())),
+        )),
     };
     assert_eq!(block_reject(&error), "bad-txns-nonfinal");
     assert_eq!(
         CxxReject::Unmapped("x".to_owned()).block_reason(),
         "rejected"
     );
+}
+
+#[test]
+fn setmocktime_moves_the_template_cur_time() {
+    use crate::server::kogany_extension::mock_clock;
+    use zakura_chain::{
+        block, serialization::DateTime32, value_balance::ValueBalance,
+        work::difficulty::CompactDifficulty,
+    };
+    let info = zakura_state::GetBlockTemplateChainInfo {
+        tip_hash: block::Hash([0; 32]),
+        tip_height: Height(100),
+        chain_history_root: None,
+        expected_difficulty: CompactDifficulty::default(),
+        cur_time: DateTime32::from(1_000_000),
+        min_time: DateTime32::from(999_000),
+        max_time: DateTime32::from(1_005_400),
+        value_pools: ValueBalance::zero(),
+    };
+    // Unset: the state's clock stands.
+    assert_eq!(with_mock_cur_time(info.clone()).cur_time, info.cur_time);
+    mock_clock::set_mock_time(1_001_801);
+    assert_eq!(
+        with_mock_cur_time(info.clone()).cur_time,
+        DateTime32::from(1_001_801)
+    );
+    // Within [mintime, maxtime], as the state clamps the system clock.
+    mock_clock::set_mock_time(2_000_000);
+    assert_eq!(with_mock_cur_time(info.clone()).cur_time, info.max_time);
+    mock_clock::set_mock_time(0);
+    assert_eq!(with_mock_cur_time(info.clone()).cur_time, info.cur_time);
 }

@@ -95,22 +95,26 @@ ACCEPTED = [
      'DISCOURAGE_UPGRADABLE_NOPS) in every mempool, regtest included',
      'consensus flags only (zakura-script lib.rs:170)', 'unchanged: needs a policy flag set in '
      'zakura-script (W3-c) and its use for Request::Mempool (W6-a); wallet transactions never differ', []),
-    ('open', 'absurd fee', 'rpc/rawtransaction.cpp:1346 fRejectAbsurdFee: maxTxFee 0.1 YEC unless allowhighfees',
-     'allow_high_fees ignored (methods.rs send_raw_transaction)', 'unchanged: an RPC rule, W7-e', []),
+    ('ported', 'absurd fee', 'rpc/rawtransaction.cpp:1346 fRejectAbsurdFee: maxTxFee 0.1 YEC unless allowhighfees',
+     'allow_high_fees ignored (methods.rs send_raw_transaction)',
+     'W7-e: ycash_reject::send_raw_transaction_prechecks, "256: absurdly-high-fee, ..." (rpc_reject_parity.py)',
+     ['default/absurd-fee']),
     ('open', 'expiry eviction at the tip', 'txmempool.cpp:785-805 removeExpired(h): expiry < h',
      'storage.rs remove_expired: expiry <= tip', 'unchanged: ycashd keeps a transaction whose expiry is '
      'the tip for one more block, though no block can mine it; W6-c (tip-recheck)', []),
     ('open', 'template selection of low-fee transactions', 'miner.cpp:304 -blockunpaidactionlimit SIZE_MAX',
      'zip317.rs BLOCK_UNPAID_ACTION_LIMIT 0 in getblocktemplate', 'unchanged: kogany accepts a default-fee '
      'spend but its own template may leave it out; W8 (mining)', []),
-    ('open', 'reject codes and texts', 'the reject code and reason in the RPC error',
-     'Zakura texts, -25/-26/-22', 'unchanged: compared by class (KOGANY_REASON_MAP below); W7-e', []),
+    ('ported', 'reject codes and texts', 'the reject code and reason in the RPC error',
+     'Zakura texts, -25/-26/-22', 'W7-e: ycashd\'s "<code>: <reason>", -25, -27 (zakura-rpc ycash_reject); '
+     'classified with the C++ table first, KOGANY_REASON_MAP for a binary before W7-e', []),
 ]
 
 # ycashd's sendrawtransaction errors -> class (the harness's table: ycash6 qa/rpc-tests/test_framework/
 # kogany.py REJECT_CODE_MAP, classify_cxx_tx). "<code>: <reason>" for an ATMP reject.
 CXX_REASON_MAP = [
     ('tx-expiring-soon', REJECT_POLICY),
+    ('transaction already in block chain', REJECT_POLICY),
     ('Missing inputs', REJECT_STATE),
     ('non-final', REJECT_POLICY),
     ('bad-txns-inputs-spent', REJECT_STATE),
@@ -149,7 +153,7 @@ def classify_cxx(error):
     head, sep, rest = message.partition(': ')
     if sep and head.isdigit():
         code, reason = int(head), rest.split(',')[0].strip()
-        if code in (0x40, 0x41, 0x42, 0x12):
+        if code in (0x40, 0x41, 0x42, 0x12, 0x100, 0x102):   # incl. REJECT_HIGHFEE, REJECT_CONFLICT
             return REJECT_POLICY, message
     else:
         reason = message.strip()
@@ -160,8 +164,13 @@ def classify_cxx(error):
 
 
 def classify_kogany(error):
+    """kogany's answer -> class: from W7-e kogany answers ycashd's texts, so the C++ table comes
+    first; KOGANY_REASON_MAP (Zakura's texts) classifies a binary before W7-e."""
     if error is None:
         return ACCEPT, ''
+    cls, message = classify_cxx(error)
+    if cls != UNCLASSIFIED:
+        return cls, message
     message = error.get('message', '') if isinstance(error, dict) else str(error)
     for pattern, cls, _src in KOGANY_REASON_MAP:
         if re.search(pattern, message):
@@ -418,6 +427,10 @@ def cases_common(chain, v, mode):
             ACCEPT)
     v.offer(chain, '%s/locktime-next-final-seq' % mode,
             chain.build([(COIN, pay)], 1000, lock_time=nxt + 50, sequence=SEQUENCE_FINAL), ACCEPT)
+
+    # A fee above 0.1 YEC without allowhighfees (rawtransaction.cpp:1346).
+    if mode == 'default':
+        v.offer(chain, '%s/absurd-fee' % mode, chain.build([(COIN, pay)], 20000000), REJECT_POLICY)
 
     # A repeat of an accepted transaction: already in both mempools.
     again = chain.build([(COIN, pay)], 1000)
