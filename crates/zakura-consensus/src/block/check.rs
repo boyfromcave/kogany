@@ -154,10 +154,11 @@ pub fn difficulty_is_valid(
     Ok(())
 }
 
-/// Returns `Ok(())` if the `EquihashSolution` is valid for `header` on `network`
+/// Returns `Ok(())` if the `EquihashSolution` is valid for `header` on `network` at `height`
 pub fn equihash_solution_is_valid(
     header: &Header,
     network: &Network,
+    height: &Height,
 ) -> Result<(), equihash::Error> {
     // # Consensus
     //
@@ -168,7 +169,7 @@ pub fn equihash_solution_is_valid(
     // The Equihash `(n, k)` parameters are bound to `network`, so a peer cannot
     // downgrade the proof of work to the trivial Regtest `(48, 5)` parameters
     // by sending a short 36-byte solution on Mainnet or Testnet.
-    PowPolicy::validating(network).validate_solution(header)
+    PowPolicy::validating(network).validate_solution(header, *height)
 }
 
 /// Returns `Ok()` with the deferred pool balance change of the coinbase transaction if the block

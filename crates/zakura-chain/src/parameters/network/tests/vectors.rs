@@ -588,10 +588,10 @@ fn configured_max_block_time_policy_is_local() {
     assert!(!configured_regtest.is_max_block_time_enforced(Height(41)));
     assert!(configured_regtest.is_max_block_time_enforced(regtest_height));
     Solution::for_proposal_for_network(&configured_regtest)
-        .validate_shape(&configured_regtest)
+        .validate_shape(&configured_regtest, crate::block::Height(1))
         .expect("a configured Regtest keeps the authenticated (48, 5) solution shape");
     assert!(Solution::for_proposal()
-        .validate_shape(&configured_regtest)
+        .validate_shape(&configured_regtest, crate::block::Height(1))
         .is_err());
 }
 

@@ -666,7 +666,7 @@ where
             )?;
         } else {
             crate::block::check::difficulty_is_valid(&block.header, &self.network, &height, &hash)?;
-            crate::block::check::equihash_solution_is_valid(&block.header, &self.network)?;
+            crate::block::check::equihash_solution_is_valid(&block.header, &self.network, &height)?;
         }
 
         // The commit task calculates this value after the parent commits at ZIP 234 heights.
