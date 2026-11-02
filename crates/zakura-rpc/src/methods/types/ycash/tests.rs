@@ -112,3 +112,30 @@ fn mainnet_shares_match_ycashd() {
     assert_eq!(chain_name(&Network::new_default_testnet()), "test");
     assert!(is_testnet_field(&Network::new_default_testnet()));
 }
+
+/// `getblocksubsidy` on Ycash mainnet: `(height, miner, founders, totalblocksubsidy)` in zatoshis,
+/// as a ycash6 mainnet node at 65cb4ae0f answers them (`ycash-cli getblocksubsidy <height>`).
+#[test]
+fn mainnet_getblocksubsidy_matches_ycashd() {
+    use zakura_chain::parameters::subsidy::{founders_reward, miner_subsidy};
+
+    let main = Network::Mainnet;
+    for (height, miner, founders, total) in [
+        (569_999, 1_000_000_000, 250_000_000, 1_250_000_000),
+        (570_000, 1_187_500_000, 62_500_000, 1_250_000_000),
+        (2_274_999, 296_875_000, 15_625_000, 312_500_000),
+        (2_275_000, 296_875_000, 15_625_000, 312_500_000),
+        (3_000_000, 148_437_500, 7_812_500, 156_250_000),
+    ] {
+        let h = Height(height);
+        let s = subsidy(&main, height);
+        assert_eq!(s, zat(total), "total at {height}");
+        let stock_miner = miner_subsidy(h, &main, s).expect("a valid miner subsidy");
+        let fields = subsidy_fields(&main, h, s, stock_miner, founders_reward(&main, h));
+        assert_eq!(
+            fields,
+            Ok((zat(miner), zat(founders))),
+            "miner and founders at {height}"
+        );
+    }
+}

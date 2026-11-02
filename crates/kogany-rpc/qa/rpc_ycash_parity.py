@@ -18,7 +18,7 @@ calls of the two clients that read kogany through stock RPC (plan W1-Y6, survey 
   `z_gettreestate`, `getaddresstxids`, `getaddressbalance`, `getaddressutxos`;
 - yolo: `getblocktemplate`, `submitblock`, `validateaddress`, `getblockchaininfo`;
 
-and `getblocksubsidy`. Every kogany template is also checked by ycashd in proposal mode (consensus
+and `getblocksubsidy`, and `z_validateaddress` for the Ycash address kinds. Every kogany template is also checked by ycashd in proposal mode (consensus
 validity without proof of work), and its coinbase outputs, amounts and scripts, are compared with
 ycashd's own template's.
 
@@ -158,6 +158,11 @@ ACCEPTED = [
      'wallet fields'),
     ('validateaddress', r'\.(script|hex|addresses|sigsrequired)$', 'wallet',
      'the wallet\'s description of a P2SH redeem script it knows'),
+    ('z_validateaddress', r'\.(type|address_type|diversifier|diversifiedtransmissionkey)$', 'zakura',
+     "Zakura's z_validateaddress shape (address_type for type, no Sapling key parts); "
+     'isvalid and address agree; no client of the call sets uses it'),
+    ('z_validateaddress', r'\.(ismine|iswatchonly|pubkey|iscompressed|account|script|hex|addresses|'
+     r'sigsrequired|isscript)$', 'wallet', 'wallet fields, as in validateaddress'),
     ('validateaddress', r'\.isscript$', 'wallet',
      'ycashd sends isscript from its wallet only; Zakura always sends it'),
 ]
@@ -637,6 +642,7 @@ def run(args):
                      y.ok('z_getnewaddress', 'sapling'),
                      'not-an-address'):
             r.both('validateaddress', addr)
+            r.both('z_validateaddress', addr)
         tip_raw = y.ok('getblock', y.ok('getbestblockhash'), 0)
         r.both('submitblock', tip_raw)
         r.both('submitblock', '00')
