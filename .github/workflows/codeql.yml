@@ -10,7 +10,7 @@ name: codeql
 # Actions workflows themselves.
 #
 #   build-mode none for every language: CodeQL extracts the sources without compiling the workspace,
-#   so this runs in minutes; the build-backed coverage is tests-unit.yml and kogany-yellowback.yml.
+#   so this runs in minutes; the build-backed coverage is tests-unit.yml, kogany-build.yml and kogany-tests.yml.
 #   Query suite: security-extended. The generated gRPC bindings are not analysed (the same list as
 #   .semgrepignore).
 #
@@ -20,8 +20,9 @@ name: codeql
 #   introduces.
 on:
   push:
-    branches: ['upgrade/vault', 'vaults/kogany-compat']
+    branches: ['upgrade/vault', 'vaults/**']
   pull_request:
+    branches: ['upgrade/vault', 'vaults/**', 'kc/**']
   schedule:
     - cron: '41 4 * * 1'
   workflow_dispatch:

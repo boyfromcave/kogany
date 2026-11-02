@@ -6,7 +6,7 @@
 
   qa/kogany_audit.py [--repo DIR] [--base REF] [--upstream REF] [--out DIR] <leg> [<leg> ...]
 
-Legs (`all` runs every one; kogany-yellowback.yml runs `all`):
+Legs (`all` runs every one; kogany-audit.yml runs each leg as its own job):
 
   consensus-diff  (a) report-only. The delta of the consensus path set
                   (qa/kogany-consensus-paths.txt) and of the forked crates' Cargo.lock entries,
@@ -20,9 +20,14 @@ Legs (`all` runs every one; kogany-yellowback.yml runs `all`):
   dormancy        blocking. No upstream Rust test function present at --upstream is missing at
                   HEAD (plan §2.5: every Zakura test, NU5-NU7 and Ironwood included, keeps running
                   on the feature-off build; a deleted one fails the gate).
-  workflows       blocking. Every file in .github/workflows is classified in
-                  .github/kogany-workflows.txt and every entry exists. --print-disable prints the
-                  `gh workflow disable` commands for the `off` entries.
+  workflows       blocking. Every workflow file is classified in .github/kogany-workflows.txt and
+                  lives where its state says (`off` in .github/workflows-off/, which GitHub never
+                  runs; the rest in .github/workflows/), and every file in .github/workflows/
+                  keeps to the trigger policy: events only push, pull_request, schedule,
+                  workflow_dispatch and workflow_call (no create, delete, merge_group,
+                  pull_request_target, workflow_run, ...); push only with a branches filter within
+                  upgrade/vault and vaults/**; pull_request only with a branches filter within
+                  upgrade/vault, vaults/** and kc/**; no branches-ignore, no tag pushes.
 
 The report-only legs exit 0 whatever they find (non-zero only on an error); the blocking legs exit
 1 on a finding. Reports go to --out (default kogany-audit-out/) and to stdout; with
@@ -326,6 +331,161 @@ def leg_dormancy(repo, base, upstream, out, args):
 
 
 # --- workflows ----------------------------------------------------------------------------------
+#
+# Where each state lives. GitHub runs only files directly under .github/workflows/, so an `off`
+# workflow is moved, byte for byte, to .github/workflows-off/: inert whatever the repository's
+# Actions settings say, and git's rename detection carries an upstream edit to it across a sync.
+WORKFLOW_DIR = ".github/workflows"
+WORKFLOW_OFF_DIR = ".github/workflows-off"
+# The trigger policy (the lead architect, 2026-11-01; .github/README-kogany.md "Triggers"): nothing
+# runs for a branch that is not ours. Pushes only to upgrade/vault and vaults/**; pull requests only
+# into upgrade/vault, vaults/** and kc/**; no create/delete (the inherited-branch cleanup deletes
+# hundreds of branches), no merge queue, no pull_request_target, no workflow_run fan-out.
+ALLOWED_EVENTS = ("push", "pull_request", "schedule", "workflow_dispatch", "workflow_call")
+PUSH_BRANCHES = ("upgrade/vault", "vaults/**")
+PR_BRANCHES = ("upgrade/vault", "vaults/**", "kc/**")
+
+
+def _yaml_scalar(text):
+    text = text.strip()
+    if len(text) >= 2 and text[0] == text[-1] and text[0] in "'\"":
+        return text[1:-1]
+    return text
+
+
+def _strip_comment(line):
+    """`line` without a trailing `# comment` (outside quotes)."""
+    quote = None
+    for i, c in enumerate(line):
+        if quote:
+            if c == quote:
+                quote = None
+        elif c in "'\"":
+            quote = c
+        elif c == "#" and (i == 0 or line[i - 1] in " \t"):
+            return line[:i].rstrip()
+    return line.rstrip()
+
+
+def _flow_list(text):
+    inner = text.strip()[1:-1]
+    return [_yaml_scalar(x) for x in inner.split(",") if x.strip()]
+
+
+def _inline(text):
+    text = text.strip()
+    if text.startswith("[") and text.endswith("]"):
+        return _flow_list(text)
+    if text == "{}":
+        return {}
+    if text in ("", "~", "null"):
+        return None
+    return _yaml_scalar(text)
+
+
+def _block(lines, i, indent):
+    """Parse the block of `lines` from `i` at `indent`: (value, next index). Mappings, block and
+    flow lists and scalars: the subset GitHub workflow triggers use."""
+    if i < len(lines) and lines[i][1].startswith("- "):
+        items = []
+        while i < len(lines) and lines[i][0] == indent and lines[i][1].startswith("- "):
+            body = lines[i][1][2:]
+            if ":" in body and not body.lstrip().startswith(("'", '"', "[")):
+                # A mapping item: re-read it as a mapping at the item's inner indent.
+                sub = [(indent + 2, body)]
+                j = i + 1
+                while j < len(lines) and lines[j][0] > indent:
+                    sub.append(lines[j])
+                    j += 1
+                value, _ = _block(sub, 0, indent + 2)
+                items.append(value)
+                i = j
+            else:
+                items.append(_inline(body))
+                i += 1
+        return items, i
+    mapping = {}
+    while i < len(lines) and lines[i][0] == indent:
+        text = lines[i][1]
+        if ":" not in text:
+            raise AuditError("unparsed workflow line %r" % text)
+        key, rest = text.split(":", 1)
+        key = _yaml_scalar(key)
+        i += 1
+        if rest.strip():
+            mapping[key] = _inline(rest)
+        elif i < len(lines) and lines[i][0] > indent:
+            mapping[key], i = _block(lines, i, lines[i][0])
+        else:
+            mapping[key] = None
+    return mapping, i
+
+
+def workflow_triggers(text):
+    """The `on:` value of a workflow file, as {event: config}. Stdlib only: a small reader of the
+    YAML subset triggers are written in, which fails closed (AuditError) on anything else."""
+    raw = text.splitlines()
+    for n, line in enumerate(raw):
+        m = re.match(r"""^(?:on|'on'|"on")\s*:(.*)$""", line)
+        if not m:
+            continue
+        rest = _strip_comment(m.group(1)).strip()
+        if rest:
+            value = _inline(rest)
+            if isinstance(value, list):
+                return dict.fromkeys(value)
+            if isinstance(value, str):
+                return {value: None}
+            raise AuditError("unparsed `on:` value %r" % rest)
+        block = []
+        for line2 in raw[n + 1:]:
+            stripped = _strip_comment(line2)
+            if not stripped.strip():
+                continue
+            ind = len(stripped) - len(stripped.lstrip(" "))
+            if ind == 0:
+                break
+            block.append((ind, stripped.strip()))
+        if not block:
+            raise AuditError("empty `on:` block")
+        value, end = _block(block, 0, block[0][0])
+        if end != len(block) or not isinstance(value, dict):
+            raise AuditError("unparsed `on:` block")
+        return value
+    raise AuditError("no `on:` key")
+
+
+def _as_list(value):
+    if value is None:
+        return []
+    return value if isinstance(value, list) else [value]
+
+
+def trigger_problems(name, triggers):
+    """The trigger-policy violations of one workflow (an empty list when it complies)."""
+    problems = []
+    for event, config in triggers.items():
+        if event not in ALLOWED_EVENTS:
+            problems.append("%s: event `%s` is not allowed (only %s)" % (name, event, ", ".join(ALLOWED_EVENTS)))
+            continue
+        if event not in ("push", "pull_request"):
+            continue
+        allowed = PUSH_BRANCHES if event == "push" else PR_BRANCHES
+        config = config if isinstance(config, dict) else {}
+        if "branches-ignore" in config:
+            problems.append("%s: `%s` uses branches-ignore (runs on every other branch)" % (name, event))
+        if event == "push" and ("tags" in config or "tags-ignore" in config):
+            problems.append("%s: `push` has a tags filter (kogany pushes no tag to build)" % name)
+        branches = _as_list(config.get("branches"))
+        if not branches:
+            problems.append("%s: `%s` has no branches filter (runs on every branch)" % (name, event))
+        for b in branches:
+            # A pattern of the policy itself, or a plain branch name one of them covers.
+            if not (b in allowed or (not set(b) & set("*?[]!+") and any(
+                    fnmatch.fnmatchcase(b, a.replace("**", "*")) for a in allowed))):
+                problems.append("%s: `%s` branch `%s` is not one of %s" % (name, event, b, ", ".join(allowed)))
+    return problems
+
 
 def read_manifest(repo):
     rows, errors = {}, []
@@ -346,22 +506,57 @@ def read_manifest(repo):
 
 def leg_workflows(repo, base, upstream, out, args):
     rows, errors = read_manifest(repo)
-    wf_dir = os.path.join(repo, ".github", "workflows")
-    present = sorted(f for f in os.listdir(wf_dir) if f.endswith((".yml", ".yaml")))
-    errors += ["%s: not classified in %s" % (f, WORKFLOW_MANIFEST) for f in present if f not in rows]
-    errors += ["%s: listed in %s but absent" % (f, WORKFLOW_MANIFEST) for f in rows if f not in present]
+    wf_dir, off_dir = os.path.join(repo, WORKFLOW_DIR), os.path.join(repo, WORKFLOW_OFF_DIR)
+
+    def listing(d):
+        return sorted(f for f in os.listdir(d) if f.endswith((".yml", ".yaml"))) if os.path.isdir(d) else []
+
+    present, moved = listing(wf_dir), listing(off_dir)
+    errors += ["%s/%s: not classified in %s" % (WORKFLOW_DIR, f, WORKFLOW_MANIFEST) for f in present if f not in rows]
+    errors += ["%s/%s: not classified in %s" % (WORKFLOW_OFF_DIR, f, WORKFLOW_MANIFEST) for f in moved if f not in rows]
+    for f, (state, _) in sorted(rows.items()):
+        home, other = (moved, present) if state == "off" else (present, moved)
+        home_dir = WORKFLOW_OFF_DIR if state == "off" else WORKFLOW_DIR
+        if f in other:
+            errors.append("%s: `%s` but in %s (an `off` workflow lives in %s/, every other in %s/)" % (
+                f, state, WORKFLOW_OFF_DIR if state != "off" else WORKFLOW_DIR, WORKFLOW_OFF_DIR, WORKFLOW_DIR))
+        elif f not in home:
+            errors.append("%s: listed `%s` in %s but absent from %s/" % (f, state, WORKFLOW_MANIFEST, home_dir))
+    # The trigger policy, on every file GitHub could run.
+    for f in present:
+        with open(os.path.join(wf_dir, f), encoding="utf-8") as fh:
+            text = fh.read()
+        try:
+            triggers = workflow_triggers(text)
+        except AuditError as e:
+            errors.append("%s: triggers unreadable (%s)" % (f, e))
+            continue
+        errors += trigger_problems(f, triggers)
+        if "workflow_call" in triggers and rows.get(f, ("",))[0] not in ("called", "kogany"):
+            errors.append("%s: `workflow_call` on a `%s` workflow" % (f, rows.get(f, ("unclassified",))[0]))
+    # Report-only: an `off` file should stay byte for byte upstream's, so a sync merges cleanly.
+    drift = []
+    for f in moved:
+        theirs = show(repo, upstream, "%s/%s" % (WORKFLOW_DIR, f))
+        with open(os.path.join(off_dir, f), encoding="utf-8") as fh:
+            if theirs and fh.read() != theirs:
+                drift.append(f)
     counts = {s: sum(1 for st, _ in rows.values() if st == s) for s in WORKFLOW_STATES}
-    lines = ["## workflow classification (blocking)", "",
-             "%d workflow file(s): %s." % (len(present), ", ".join("%d %s" % (counts[s], s) for s in WORKFLOW_STATES)), ""]
-    lines += ["%d problem(s):" % len(errors), ""] + ["- %s" % e for e in errors] if errors else ["Every workflow is classified."]
+    lines = ["## workflow classification and triggers (blocking)", "",
+             "%d workflow file(s) in %s/, %d in %s/: %s." % (
+                 len(present), WORKFLOW_DIR, len(moved), WORKFLOW_OFF_DIR,
+                 ", ".join("%d %s" % (counts[s], s) for s in WORKFLOW_STATES)),
+             "Trigger policy: push only to %s; pull requests only into %s; events only %s." % (
+                 ", ".join(PUSH_BRANCHES), ", ".join(PR_BRANCHES), ", ".join(ALLOWED_EVENTS)), ""]
+    lines += ["%d problem(s):" % len(errors), ""] + ["- %s" % e for e in errors] if errors else \
+        ["Every workflow is classified, in its place, and within the trigger policy."]
+    if drift:
+        lines += ["", "Report-only: %d `off` file(s) differ from `%s` (expected only between an upstream "
+                  "merge and the re-pin): %s" % (len(drift), upstream, ", ".join(drift))]
     report = "\n".join(lines) + "\n"
     write(out, "workflows.md", report)
     print(report)
     summary(report)
-    if args.print_disable:
-        for f, (state, _) in sorted(rows.items()):
-            if state == "off":
-                print("gh workflow disable %s --repo %s" % (f, args.github_repo))
     return 1 if errors else 0
 
 
@@ -383,9 +578,6 @@ def main(argv=None):
     ap.add_argument("--upstream", default=os.environ.get("KOGANY_AUDIT_UPSTREAM"),
                     help="the upstream pin (default: kogany-legacy)")
     ap.add_argument("--out", default="kogany-audit-out")
-    ap.add_argument("--print-disable", action="store_true",
-                    help="workflows: print `gh workflow disable` for every `off` entry")
-    ap.add_argument("--github-repo", default="boyfromcave/kogany")
     args = ap.parse_args(argv)
 
     repo = args.repo or os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

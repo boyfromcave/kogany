@@ -1,6 +1,6 @@
 //! kogany's own regtest tests (plan docs/plans/kogany/kogany-yellowback-plan.md W4-e; the
 //! `kogany-regtest` nextest profile in `.config/nextest.toml`, the `kogany-regtest` leg of
-//! `.github/workflows/kogany-yellowback.yml`).
+//! `.github/workflows/kogany-tests.yml`).
 //!
 //! Copyright (c) 2026 The Ycash developers. Distributed under the MIT software license.
 //!

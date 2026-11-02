@@ -37,7 +37,11 @@ ALERT_EXCEPTIONS = {
     "VCT handoff canary": "Has phase-aware alerts with persistent deduplication.",
     # kogany (2026-11-01): kogany's own workflows report through code scanning and the run
     # summary (.github/README-kogany.md); ci-alerts.yml is off on kogany (K-15).
-    "kogany-yellowback": "kogany audit and build legs; reported in the run summary.",
+    "kogany-audit": "kogany audit legs; reported in the run summary and artifacts.",
+    "kogany-build": "kogany build legs; reported in the run summary.",
+    "kogany-tests": "kogany test legs; reported in the run summary.",
+    "kogany-bin": "kogany's zakurad-bin producer; its consumers report a missing binary.",
+    "kogany-client-legs": "kogany client legs, report-only; reported in the run artifacts.",
     "semgrep": "kogany security CI; reports to code scanning.",
     "codeql": "kogany security CI; reports to code scanning.",
     "secops": "kogany security CI; reports to code scanning.",
