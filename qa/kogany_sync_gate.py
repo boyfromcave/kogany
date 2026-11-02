@@ -15,10 +15,11 @@ JSON-RPC and requires byte-identical answers for:
   * the block hash (`getblockhash`), hence the whole header and, through the merkle root, the body;
   * `getblock <h> 1`: `finalsaplingroot`, `chainSupply`, and each value pool's `chainValueZat`
     and `valueDeltaZat` (`valuePools`, by `id`, where ycash6 marks the pool `monitored`);
-  * from Heartwood (1,100,003 on mainnet) the ZIP-221 commitment: `blockcommitments` on both,
-    and, above it, ycash6's `chainhistoryroot` at h against the `blockcommitments` of h (ycashd
-    reports `hashChainHistoryRoot`, the history root through h-1 that header h commits to before
-    NU5);
+  * `blockcommitments` on both at every height (the reserved field below Sapling, the Sapling
+    root, then from Heartwood, 1,100,003 on mainnet, the ZIP-221 commitment) and, above
+    Heartwood, ycash6's `chainhistoryroot` at h against the `blockcommitments` of h (ycashd
+    reports `hashChainHistoryRoot`, the history root through h-1 that header h commits to
+    before NU5);
   * `z_gettreestate <h>` at sampled heights (every `--treestate-every`, every activation
     boundary, and the last height compared): each tree's `finalState` and `finalRoot` that both
     nodes report.
@@ -30,7 +31,9 @@ list ending (the router's fail-safe), not a rejected block, and is counted separ
 
 `--recheck` compares again, at their heights only, every mismatch the state file records and
 every tree-state sample that differed, keeps the differences that remain and exits: after a kogany
-RPC fix, the synced range need not be compared again.
+RPC fix, the synced range need not be compared again. With `--recompare` it also re-reads every
+block of `--from`..`--to` (default: everything compared), for a field added after the range was
+compared.
 
 Progress is kept in `--state` (JSON), so a rerun resumes after the last compared height; with
 `--follow` the driver keeps comparing as the tips advance, sleeping between rounds. Exit 0 when
@@ -129,7 +132,8 @@ def compare_blocks(height, k_block, y_block):
     for field in ("hash", "finalsaplingroot"):
         if k_block.get(field) != y_block.get(field):
             diffs.append((field, k_block.get(field), y_block.get(field)))
-    if height >= MAINNET_HEARTWOOD and "blockcommitments" in k_block and "blockcommitments" in y_block:
+    # At every height: the reserved field below Sapling, the Sapling root, then the history root.
+    if "blockcommitments" in k_block and "blockcommitments" in y_block:
         if k_block["blockcommitments"] != y_block["blockcommitments"]:
             diffs.append(("blockcommitments", k_block["blockcommitments"], y_block["blockcommitments"]))
     # ycashd's `chainhistoryroot` at h is `hashChainHistoryRoot`, the root of the history tree
@@ -260,7 +264,12 @@ def run_round(kogany, ycash, state, args):
 def recheck(kogany, ycash, state, args):
     """Compare again every recorded mismatch and every non-identical tree-state sample; keep
     only the differences that remain (after a kogany fix, without re-syncing the range)."""
-    blocks = sorted({m["height"] for m in state["mismatches"] if not m.get("rpc")})
+    blocks = {m["height"] for m in state["mismatches"] if not m.get("rpc")}
+    if args.recompare:
+        # Every block of --from..--to again (a field the driver did not compare before).
+        top = state["compared_through"] if args.to is None else min(args.to, state["compared_through"])
+        blocks |= set(range(args.start, top + 1))
+    blocks = sorted(blocks)
     trees = sorted({m["height"] for m in state["mismatches"] if m.get("rpc") == "z_gettreestate"}
                    | {t["height"] for t in state["treestate_samples"] if not t["identical"]})
     kept = [m for m in state["mismatches"] if m.get("rpc") not in (None, "z_gettreestate")]
@@ -273,6 +282,8 @@ def recheck(kogany, ycash, state, args):
             diffs = compare_blocks(height, k_block, y_block)
             if diffs:
                 kept.append({"height": height, "diffs": diffs})
+        if args.verbose:
+            print("rechecked through %d" % heights[-1], file=sys.stderr)
     by_height = {t["height"]: t for t in state["treestate_samples"]}
     for height in trees:
         shared, ts_diffs = compare_treestates(kogany.call("z_gettreestate", str(height)),
@@ -320,6 +331,8 @@ def main(argv=None):
     ap.add_argument("--fail-fast", action="store_true")
     ap.add_argument("--recheck", action="store_true",
                     help="compare again the recorded mismatches and differing tree states, then exit")
+    ap.add_argument("--recompare", action="store_true",
+                    help="with --recheck: also compare again every block of --from..--to (default: all compared)")
     ap.add_argument("--verbose", action="store_true")
     args = ap.parse_args(argv)
 

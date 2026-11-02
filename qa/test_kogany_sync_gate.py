@@ -39,9 +39,9 @@ class SyncGateTest(unittest.TestCase):
         y = block(valuePools=[dict(block()["valuePools"][0]), {"id": "sprout", "monitored": False, "chainValueZat": 9}])
         self.assertEqual(gate.compare_blocks(5, k, y), [])
 
-    def test_blockcommitments_only_from_heartwood(self):
+    def test_blockcommitments_at_every_height(self):
         k, y = block(blockcommitments="01"), block(blockcommitments="02")
-        self.assertEqual(gate.compare_blocks(gate.MAINNET_HEARTWOOD - 1, k, y), [])
+        self.assertEqual(len(gate.compare_blocks(5, k, y)), 1)
         self.assertEqual(len(gate.compare_blocks(gate.MAINNET_HEARTWOOD, k, y)), 1)
 
     def test_treestates_compare_the_shared_fields(self):
@@ -79,7 +79,7 @@ class SyncGateTest(unittest.TestCase):
                                 {"height": 9, "diffs": [["sapling.finalState", "0100", "01"]], "rpc": "z_gettreestate"}],
                  "treestate_samples": [{"height": 9, "fields": [], "identical": False},
                                        {"height": 10, "fields": [], "identical": False}]}
-        args = type("A", (), {"batch": 100, "state": None})()
+        args = type("A", (), {"batch": 100, "state": None, "recompare": False, "verbose": False})()
         gate.recheck(kogany, ycash, state, args)
         self.assertEqual([m["height"] for m in state["mismatches"]], [6, 10])
         self.assertEqual([t["identical"] for t in state["treestate_samples"]], [True, False])
