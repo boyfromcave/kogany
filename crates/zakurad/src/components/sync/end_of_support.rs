@@ -241,6 +241,9 @@ mod tests {
     }
 
     #[test]
+    // kogany: Zcash Mainnet schedules (NU6.3, the release's end-of-support heights); not run on
+    // Ycash.
+    #[cfg(not(feature = "ycash"))]
     fn mainnet_end_of_support_is_capped_at_the_release_deadline() {
         let _init_guard = zakura_test::init();
 

@@ -1,5 +1,6 @@
 //! Inbound service tests with a real peer set.
-
+// kogany: the Zcash-fixture tests are not built with `ycash`, leaving their helpers unused.
+#![cfg_attr(feature = "ycash", allow(unused_imports, dead_code))]
 #![allow(clippy::unwrap_in_result)]
 
 use std::{
@@ -501,6 +502,8 @@ async fn inbound_pruned_block_is_not_advertised_and_getdata_logs_error(
 ///
 /// Uses a real Zebra network stack, with an isolated Zebra inbound TCP connection.
 #[tokio::test]
+// kogany: Zcash MSG_WTX (V5) inventory, which Ycash does not use; not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn inbound_tx_empty_state_notfound() -> Result<(), crate::BoxError> {
     let (
         // real services
@@ -627,6 +630,8 @@ async fn inbound_tx_empty_state_notfound() -> Result<(), crate::BoxError> {
 /// Uses a Zebra network stack's peer set to query an isolated Zebra TCP connection,
 /// with an unrelated transaction test responder.
 #[tokio::test(flavor = "multi_thread")]
+// kogany: Zcash MSG_WTX (V5) inventory, which Ycash does not use; not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn outbound_tx_unrelated_response_notfound() -> Result<(), crate::BoxError> {
     // We respond with an unrelated transaction, so the peer gives up on the request.
     let unrelated_response: Transaction =

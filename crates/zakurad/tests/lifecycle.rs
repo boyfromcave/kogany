@@ -6,7 +6,8 @@
 //! their own without starting a node run through [`TestChild`]. Commands that start a
 //! node run through [`Node`], which reads both output streams while the node runs, so a
 //! test can wait for a log line or send a signal.
-
+// kogany: the Zcash-fixture tests are not built with `ycash`, leaving their helpers unused.
+#![cfg_attr(feature = "ycash", allow(unused_imports, dead_code))]
 #![allow(clippy::unwrap_in_result)]
 
 use std::{
@@ -399,6 +400,9 @@ fn occupied_port() -> (TcpListener, SocketAddr) {
 /// directory, and SIGTERM stops it cleanly after flushing its final log line.
 #[cfg(unix)]
 #[test]
+// kogany: written against Zakura's names (zakura.toml, the ZAKURA_ environment, Zakura log lines
+// and errors), which a ycash build renames for koganyd; not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn implicit_start_uses_preference_dir_config_and_stops_on_sigterm() {
     let scratch = Scratch::new();
     let config_path = scratch.write_config(scratch.preference_dir().join("zakura.toml"), &{
@@ -423,6 +427,9 @@ fn implicit_start_uses_preference_dir_config_and_stops_on_sigterm() {
 /// with a deprecation warning, and SIGINT stops the node cleanly.
 #[cfg(unix)]
 #[test]
+// kogany: written against Zakura's names (zakura.toml, the ZAKURA_ environment, Zakura log lines
+// and errors), which a ycash build renames for koganyd; not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn legacy_config_fallback_is_used_and_stops_on_sigint() {
     let scratch = Scratch::new();
     let config_path = scratch.write_config(scratch.preference_dir().join("zebrad.toml"), &{
@@ -446,6 +453,9 @@ fn legacy_config_fallback_is_used_and_stops_on_sigint() {
 /// Without any config file, `zakurad` uses defaults with environment overrides applied.
 #[cfg(unix)]
 #[test]
+// kogany: written against Zakura's names (zakura.toml, the ZAKURA_ environment, Zakura log lines
+// and errors), which a ycash build renames for koganyd; not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn start_without_config_file_uses_defaults_and_environment() {
     let scratch = Scratch::new();
 
@@ -472,6 +482,9 @@ fn start_without_config_file_uses_defaults_and_environment() {
 /// over the file, and command-line tracing filters win over the configured filter.
 #[cfg(unix)]
 #[test]
+// kogany: written against Zakura's names (zakura.toml, the ZAKURA_ environment, Zakura log lines
+// and errors), which a ycash build renames for koganyd; not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn explicit_config_environment_and_cli_overrides_take_precedence() {
     let scratch = Scratch::new();
     scratch.write_config(scratch.preference_dir().join("zakura.toml"), &{
@@ -508,6 +521,9 @@ fn explicit_config_environment_and_cli_overrides_take_precedence() {
 /// When both config files are in the preference directory, `zakura.toml` is used, and the
 /// legacy file is neither read nor mentioned.
 #[test]
+// kogany: written against Zakura's names (zakura.toml, the ZAKURA_ environment, Zakura log lines
+// and errors), which a ycash build renames for koganyd; not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn zakura_toml_wins_over_legacy_config() {
     let scratch = Scratch::new();
     let config_path = scratch.write_config(scratch.preference_dir().join("zakura.toml"), &{
@@ -570,6 +586,9 @@ fn config_sources_apply_in_precedence_order() {
 
 /// Tracing filters given before any subcommand apply to the implicit `start`.
 #[test]
+// kogany: written against Zakura's names (zakura.toml, the ZAKURA_ environment, Zakura log lines
+// and errors), which a ycash build renames for koganyd; not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn implicit_start_applies_top_level_filters() {
     let scratch = Scratch::new();
     let config_path = scratch.write_config(
@@ -607,6 +626,9 @@ fn verbose_start_uses_debug_filter() {
 
 /// A config file that is not valid TOML stops startup with the loader error.
 #[test]
+// kogany: written against Zakura's names (zakura.toml, the ZAKURA_ environment, Zakura log lines
+// and errors), which a ycash build renames for koganyd; not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn malformed_config_file_is_rejected() {
     let scratch = Scratch::new();
     let config = scratch.write_file("malformed.toml", "[network\nnetwork = \"Regtest\"\n");
@@ -628,6 +650,9 @@ fn malformed_config_file_is_rejected() {
 
 /// An unknown config field stops startup, including for utility commands.
 #[test]
+// kogany: written against Zakura's names (zakura.toml, the ZAKURA_ environment, Zakura log lines
+// and errors), which a ycash build renames for koganyd; not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn unknown_config_field_is_rejected() {
     let scratch = Scratch::new();
     let config = scratch.write_file(
@@ -651,6 +676,9 @@ fn unknown_config_field_is_rejected() {
 
 /// A missing explicit config file stops startup.
 #[test]
+// kogany: written against Zakura's names (zakura.toml, the ZAKURA_ environment, Zakura log lines
+// and errors), which a ycash build renames for koganyd; not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn missing_explicit_config_file_is_rejected() {
     let scratch = Scratch::new();
     let missing = scratch.path().join("missing.toml");
@@ -669,6 +697,9 @@ fn missing_explicit_config_file_is_rejected() {
 
 /// `generate` ignores config errors, so it can produce a replacement config.
 #[test]
+// kogany: written against Zakura's names (zakura.toml, the ZAKURA_ environment, Zakura log lines
+// and errors), which a ycash build renames for koganyd; not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn generate_ignores_config_errors() {
     let scratch = Scratch::new();
     let config = scratch.write_file("malformed.toml", "[network\n");
@@ -688,6 +719,9 @@ fn generate_ignores_config_errors() {
 /// Sensitive values can't be set through the environment, and the rejected value is
 /// never printed.
 #[test]
+// kogany: written against Zakura's names (zakura.toml, the ZAKURA_ environment, Zakura log lines
+// and errors), which a ycash build renames for koganyd; not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn sensitive_environment_override_is_rejected_without_printing_it() {
     let scratch = Scratch::new();
     let config = scratch.write_config("zakura.toml", &scratch.regtest_config());
@@ -709,6 +743,9 @@ fn sensitive_environment_override_is_rejected_without_printing_it() {
 
 /// A command-line flag that conflicts with the config stops startup before the node starts.
 #[test]
+// kogany: written against Zakura's names (zakura.toml, the ZAKURA_ environment, Zakura log lines
+// and errors), which a ycash build renames for koganyd; not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn conflicting_command_line_override_is_rejected() {
     let scratch = Scratch::new();
     let config = scratch.write_config("zakura.toml", &{
@@ -734,6 +771,9 @@ fn conflicting_command_line_override_is_rejected() {
 
 /// An invalid config combination stops startup before the node starts.
 #[test]
+// kogany: written against Zakura's names (zakura.toml, the ZAKURA_ environment, Zakura log lines
+// and errors), which a ycash build renames for koganyd; not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn invalid_config_combination_is_rejected() {
     let scratch = Scratch::new();
     let config = scratch.write_config("zakura.toml", &{
@@ -756,6 +796,9 @@ fn invalid_config_combination_is_rejected() {
 
 /// A log file that can't be opened stops startup before the node starts.
 #[test]
+// kogany: written against Zakura's names (zakura.toml, the ZAKURA_ environment, Zakura log lines
+// and errors), which a ycash build renames for koganyd; not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn tracing_setup_failure_is_reported() {
     let scratch = Scratch::new();
     let config = scratch.write_config("zakura.toml", &{
@@ -781,6 +824,9 @@ fn tracing_setup_failure_is_reported() {
 
 /// An error returned by the running node stops it with a failure status, after logging why.
 #[test]
+// kogany: written against Zakura's names (zakura.toml, the ZAKURA_ environment, Zakura log lines
+// and errors), which a ycash build renames for koganyd; not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn runtime_error_exits_with_failure() {
     let scratch = Scratch::new();
     let config = scratch.write_config("zakura.toml", &scratch.rejected_state_config());
@@ -800,6 +846,9 @@ fn runtime_error_exits_with_failure() {
 
 /// An occupied P2P listener port stops the node with a panic.
 #[test]
+// kogany: written against Zakura's names (zakura.toml, the ZAKURA_ environment, Zakura log lines
+// and errors), which a ycash build renames for koganyd; not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn occupied_p2p_listener_exits_with_failure() {
     let scratch = Scratch::new();
     let (_listener, addr) = occupied_port();
@@ -886,6 +935,9 @@ fn occupied_metrics_listener_panics_after_partial_startup() {
 /// A shutdown signal that arrives while the node is still starting stops it cleanly.
 #[cfg(unix)]
 #[test]
+// kogany: written against Zakura's names (zakura.toml, the ZAKURA_ environment, Zakura log lines
+// and errors), which a ycash build renames for koganyd; not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn shutdown_during_startup_exits_cleanly() {
     let scratch = Scratch::new();
     let config = scratch.write_config("zakura.toml", &scratch.regtest_config());
@@ -906,6 +958,9 @@ fn shutdown_during_startup_exits_cleanly() {
 /// Logs written to a file are flushed through the final shutdown line.
 #[cfg(unix)]
 #[test]
+// kogany: written against Zakura's names (zakura.toml, the ZAKURA_ environment, Zakura log lines
+// and errors), which a ycash build renames for koganyd; not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn log_file_is_flushed_on_shutdown() {
     let scratch = Scratch::new();
     let log_file = scratch.path().join("logs").join("zakurad.log");
@@ -1010,6 +1065,9 @@ fn utility_command_verbosity_flags() {
 /// `generate --output-file` writes the same config `generate` prints, and that config
 /// loads.
 #[test]
+// kogany: written against Zakura's names (zakura.toml, the ZAKURA_ environment, Zakura log lines
+// and errors), which a ycash build renames for koganyd; not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn generated_config_file_round_trips() {
     let scratch = Scratch::new();
     let generated = scratch.path().join("generated.toml");
@@ -1136,6 +1194,9 @@ fn command_line_parse_errors_use_parser_exit_status() {
 
 /// Help and version output exits successfully.
 #[test]
+// kogany: written against Zakura's names (zakura.toml, the ZAKURA_ environment, Zakura log lines
+// and errors), which a ycash build renames for koganyd; not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn help_and_version_are_printed() {
     let scratch = Scratch::new();
 

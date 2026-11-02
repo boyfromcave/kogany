@@ -1721,6 +1721,8 @@ mod tests {
     }
 
     #[test]
+    // kogany: the Zakura P2P v2 stack, which is off on Ycash (K-11); not run on Ycash.
+    #[cfg(not(feature = "ycash"))]
     fn zcashd_compat_config_rejects_disabled_legacy_p2p() {
         let cmd = StartCmd {
             filters: Vec::new(),
@@ -2009,6 +2011,8 @@ mod tests {
 }
 
 #[cfg(test)]
+// kogany: the Zcash-fixture tests are not built with `ycash`.
+#[cfg_attr(feature = "ycash", allow(unused_imports, dead_code))]
 mod zakura_header_sync_driver_tests {
     use super::*;
     use std::{
@@ -2845,6 +2849,8 @@ mod zakura_header_sync_driver_tests {
     }
 
     #[test]
+    // kogany: the Zakura P2P v2 stack, which is off on Ycash (K-11); not run on Ycash.
+    #[cfg(not(feature = "ycash"))]
     fn zakura_block_sync_replaces_chain_sync_when_v2_p2p_is_enabled() {
         let mut config = zakura_network::Config::for_test(P2pStack::Dual);
 
@@ -5613,6 +5619,9 @@ mod zakura_header_sync_driver_tests {
     /// parent commits. Legacy fallback is how a stalled native sync gets that parent, so the
     /// fallback handoff must transfer the waiting commit instead of draining it.
     #[tokio::test(flavor = "multi_thread")]
+    // kogany: Zcash Mainnet block and transaction vectors (NU5-and-later branch IDs, Zcash-only
+    // heights); not run on Ycash.
+    #[cfg(not(feature = "ycash"))]
     async fn legacy_fallback_transfers_full_commit_waiting_for_parent() {
         let network = zakura_chain::parameters::Network::Mainnet;
         let (write_state, read_state, latest_tip, _tip_change) =

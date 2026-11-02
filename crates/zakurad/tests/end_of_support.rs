@@ -1,5 +1,6 @@
 //! Testing the end of support feature.
-
+// kogany: the Zcash-fixture tests are not built with `ycash`, leaving their helpers unused.
+#![cfg_attr(feature = "ycash", allow(unused_imports, dead_code))]
 #![allow(clippy::unwrap_in_result)]
 
 use std::time::Duration;
@@ -43,6 +44,8 @@ fn end_of_support_panic() {
 
 /// Test that the `end_of_support` function is working as expected.
 #[test]
+// kogany: Zcash Mainnet's release and end-of-support heights (NU7 on Mainnet); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn end_of_support_function() {
     let (logs, dispatch) = log_capture::capture_logs();
     let _log_guard = tracing::dispatcher::set_default(&dispatch);
@@ -67,6 +70,8 @@ fn end_of_support_function() {
 
 /// Test that end of support is only reported and enforced on Mainnet.
 #[test]
+// kogany: Zcash Mainnet's release and end-of-support heights (NU7 on Mainnet); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn end_of_support_height_per_network() {
     let last_supported_height = last_supported_height();
     assert_eq!(
@@ -82,6 +87,8 @@ fn end_of_support_height_per_network() {
 
 /// Test the end of support values reported to the metrics endpoint.
 #[test]
+// kogany: Zcash Mainnet's release and end-of-support heights (NU7 on Mainnet); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn end_of_support_remaining_blocks() {
     let last_supported_height = last_supported_height();
     let warning_height = Height(last_supported_height.0 - 3 * EOS_BLOCKS_PER_DAY);
@@ -136,6 +143,8 @@ fn end_of_support_date() {
 
 /// Keep Mainnet EOS within one target-spaced block of December 5, 2026.
 #[test]
+// kogany: Zcash Mainnet's release and end-of-support heights (NU7 on Mainnet); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn mainnet_end_of_support_targets_december_5() {
     let network = Network::Mainnet;
     // Fixed projection anchor: Mainnet block 3,539,449, hash

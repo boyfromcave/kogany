@@ -1,5 +1,6 @@
 //! Fixed test vectors for the syncer.
-
+// kogany: the Zcash-fixture tests are not built with `ycash`, leaving their helpers unused.
+#![cfg_attr(feature = "ycash", allow(unused_imports, dead_code))]
 #![allow(clippy::unwrap_in_result)]
 
 use std::{
@@ -3734,6 +3735,9 @@ fn setup_downloads_with_parent_wait(
 /// canonical block hash, but must be rejected and attributed instead of silently dropped by the
 /// behind-tip height policy.
 #[tokio::test]
+// kogany: Zcash Mainnet block and transaction vectors (NU5-and-later branch IDs, Zcash-only
+// heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn tip_child_rejects_poisoned_coinbase_height() {
     let _init_guard = zakura_test::init();
 
@@ -3820,6 +3824,9 @@ async fn tip_child_rejects_poisoned_coinbase_height() {
 /// A forged *high* coinbase height on a tip child is rejected by the same check, before the
 /// lookahead policy drops it without knowing the real height.
 #[tokio::test]
+// kogany: Zcash Mainnet block and transaction vectors (NU5-and-later branch IDs, Zcash-only
+// heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn tip_child_rejects_forged_high_coinbase_height() {
     let _init_guard = zakura_test::init();
 
@@ -3895,6 +3902,9 @@ fn unconfirmed_verifier_error(parent: block::Hash) -> zn::BoxError {
 /// once more. If the parent never commits, the task returns the unconfirmed error without a
 /// second verification.
 #[tokio::test]
+// kogany: Zcash Mainnet block and transaction vectors (NU5-and-later branch IDs, Zcash-only
+// heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn unconfirmed_binding_reverifies_after_the_parent_commits() {
     let _init_guard = zakura_test::init();
 
@@ -3969,6 +3979,9 @@ async fn unconfirmed_binding_reverifies_after_the_parent_commits() {
 /// Cancelling the pipeline ends a download task that is waiting for the parent of an
 /// unconfirmed binding.
 #[tokio::test]
+// kogany: Zcash Mainnet block and transaction vectors (NU5-and-later branch IDs, Zcash-only
+// heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn cancel_all_ends_a_parent_wait() {
     let _init_guard = zakura_test::init();
 
@@ -4103,6 +4116,9 @@ async fn unconfirmed_binding_drops_block_without_restart_or_score() {
 /// The canonical tip child is unaffected: its coinbase height matches the tip, so it reaches
 /// the verifier as before.
 #[tokio::test]
+// kogany: Zcash Mainnet block and transaction vectors (NU5-and-later branch IDs, Zcash-only
+// heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn canonical_tip_child_reaches_the_verifier() {
     let _init_guard = zakura_test::init();
 
@@ -4204,6 +4220,9 @@ async fn non_tip_child_keeps_the_behind_tip_policy() {
 
 /// Weak-work blocks must fail admission without verification, scoring, or a restart.
 #[tokio::test]
+// kogany: Zcash Mainnet block and transaction vectors (NU5-and-later branch IDs, Zcash-only
+// heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn mainnet_work_floor_rejects_downloads_before_verification() {
     use zakura_chain::work::difficulty::ParameterDifficulty as _;
 

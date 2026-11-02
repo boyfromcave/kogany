@@ -91,6 +91,8 @@ async fn run_with_services_inner(
 }
 
 #[cfg(test)]
+// kogany: the Zcash-fixture tests are not built with `ycash`.
+#[cfg_attr(feature = "ycash", allow(unused_imports, dead_code))]
 mod tests {
     use std::{
         net::UdpSocket,
@@ -124,6 +126,8 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    // kogany: the Zakura P2P v2 stack, which is off on Ycash (K-11); not run on Ycash.
+    #[cfg(not(feature = "ycash"))]
     async fn embedded_node_registers_custom_service_and_shuts_down_on_drop() {
         let _guard = zakura_test::init();
         let native_socket = UdpSocket::bind("127.0.0.1:0").expect("test UDP port is available");
