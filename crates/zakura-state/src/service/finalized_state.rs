@@ -144,6 +144,8 @@ pub use zakura_db::commitment_roots_db::{CommitmentRootIndexIssue, COMMITMENT_RO
 #[allow(unused_imports)]
 pub use zakura_db::highest_completed_checkpoint::*;
 pub use zakura_db::ZakuraDb;
+// kogany (W4-c)
+pub use zakura_db::vault;
 
 #[cfg(any(test, feature = "proptest-impl"))]
 pub use disk_format::KV;
@@ -225,6 +227,11 @@ pub const STATE_COLUMN_FAMILIES_IN_CODE: &[&str] = &[
     PRUNING_METADATA,
     VCT_SYNC_METADATA,
     VCT_UPGRADE_METADATA,
+    // kogany (W4-c): the Vault upgrade's set state
+    zakura_db::vault::VAULT_SET,
+    zakura_db::vault::VAULT_MEMBER,
+    zakura_db::vault::VAULT_BOND,
+    zakura_db::vault::VAULT_TEMPLATE_OUT,
 ];
 
 /// Fork-aware header-chain node rows keyed by canonical hash.

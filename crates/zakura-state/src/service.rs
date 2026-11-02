@@ -88,7 +88,9 @@ pub(crate) mod non_finalized_state;
 mod pending_utxos;
 mod queued_blocks;
 pub(crate) mod read;
+// kogany (W4-c): the Vault upgrade's set state across finalized and non-finalized states.
 mod traits;
+pub mod vault;
 mod write;
 
 #[cfg(any(test, feature = "proptest-impl"))]
