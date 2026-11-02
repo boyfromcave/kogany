@@ -510,7 +510,11 @@ impl YedRpc for YedRpcImpl {
 
     async fn yed_verifyindex(&self) -> RpcResult<VerifyIndexJson> {
         let s = self.live().await?;
-        let a = s.index.verify();
+        let mut a = s.index.verify();
+        let (set_mismatches, sets) = self.state.set_audit().await;
+        a.ok = a.ok && set_mismatches.is_empty();
+        a.sets.extend(sets);
+        a.mismatches.extend(set_mismatches);
         let totals = |t: &super::state::Totals| TotalsJson {
             supply_cents: t.supply_cents,
             collateral_zat: t.collateral_zat,
@@ -922,7 +926,7 @@ impl YedRpc for YedRpcImpl {
         let s = self.live().await?;
         let id = hash_arg(&txid, "txid")?;
         healthy(&s)?;
-        let l = s.index.tx_info(&id).ok_or_else(|| {
+        let l = self.state.tx_info(&s, &id).await.ok_or_else(|| {
             invalid(format!(
                 "tx-not-found: {} is not in the Yellowback index",
                 display_hex(&id)
@@ -1062,8 +1066,9 @@ impl YedRpc for YedRpcImpl {
         Ok(CollateralJson {
             required_zat: e.required_zat,
             required_zat_floored: e.required_zat_floored,
-            protocol_fee_cents: e.protocol_fee_cents,
-            protocol_fee_zat: e.protocol_fee_zat,
+            // ycashd writes the fee fields only with a price (`yed_estimatecollateral`).
+            protocol_fee_cents: e.p_mint.map(|_| e.protocol_fee_cents),
+            protocol_fee_zat: e.p_mint.map(|_| e.protocol_fee_zat),
             term_class: class_letter(e.term_class),
             lock_height: e.lock_height,
             claim_height: e.claim_height,
@@ -1306,7 +1311,7 @@ impl YedRpc for YedRpcImpl {
         let id = hash_arg(&vault_txid, "vaultTxid")?;
         healthy(&s)?;
         let p = &s.params;
-        match s.index.notice(&id) {
+        match self.state.notice(&s, &id).await {
             NoticeLookup::VaultNotFound => Err(invalid(format!(
                 "vault-not-found: no vault at {}:0",
                 display_hex(&id)
@@ -1324,7 +1329,11 @@ impl YedRpc for YedRpcImpl {
             NoticeLookup::Standing(n) => Ok(NoticeJson {
                 found: true,
                 vault: Some(format!("{}:0", display_hex(&id))),
-                txid: Some(display_hex(&n.txid)),
+                txid: Some(if n.txid == Hash32::ZERO {
+                    String::new()
+                } else {
+                    display_hex(&n.txid)
+                }),
                 height: Some(n.height),
                 ref_height: Some(n.ref_height),
                 p_emerg: Some(n.p_emerg),

@@ -723,10 +723,12 @@ pub struct CollateralJson {
     pub required_zat: Option<i64>,
     /// What a mint locks.
     pub required_zat_floored: Option<i64>,
-    /// FEE-1′, cents.
-    pub protocol_fee_cents: i64,
-    /// FEE-1′, zat.
-    pub protocol_fee_zat: i64,
+    /// FEE-1′, cents (absent without a price, as ycashd).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub protocol_fee_cents: Option<i64>,
+    /// FEE-1′, zat (absent without a price, as ycashd).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub protocol_fee_zat: Option<i64>,
     /// The class.
     pub term_class: String,
     /// `lockHeight`.

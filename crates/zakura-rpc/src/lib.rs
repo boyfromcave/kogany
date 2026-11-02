@@ -34,3 +34,6 @@ pub use methods::types::{
 // kogany W8: the Ycash `getblocktemplate` hooks the node installs (`RpcImpl::with_ycash_mining`).
 #[cfg(feature = "ycash")]
 pub use methods::types::get_block_template::ycash as ycash_mining;
+// kogany W7-b: ycashd's `ScriptErrorString` text for `yed_validaterawtransaction`.
+#[cfg(feature = "ycash")]
+pub use methods::types::ycash_reject::script_error_string as ycash_script_error_string;

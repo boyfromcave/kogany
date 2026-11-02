@@ -20,6 +20,14 @@ provoked, and every OP_RETURN payload and raw transaction of the pinned golden c
 (`testdata/yellowback/yellowback_golden.json`) is decoded. The report ends with the contract
 cases that pass against the mock and those that need the real index (plan W5-e/W5-f).
 
+With `--live DIR --zakurad Z --ycashd Y` (plan W7-b's exit gate) it brings up a live regtest
+(`yed_live_rig.py`: kogany and a ycash6 sidecar on one chain, a real YED attestor set, three seated
+attestors, an ARMED layer, a quoting pool, an armed mint, a TX_PQPKH payment) and checks every
+node-context method on kogany against the contract AND against the sidecar's answer to the same
+call (results and refusals alike), provokes every node-side error identifier a synced node can
+reach, and checks the address index's plain post-quantum addresses (W9-c finding 3). It exits 1
+on any difference.
+
 With `--expect-not-live` (zakurad's default until W5-f) it checks the lightwalletd-dd probe
 semantics instead: every `yed_*` method answers `-32601` with ycashd's "Yellowback is not active"
 message, which `common/yellowback.go` `ProbeYellowback` reads as "no Yellowback".
@@ -34,6 +42,7 @@ import io
 import json
 import os
 import sys
+import urllib.error
 import urllib.parse
 import urllib.request
 
@@ -114,9 +123,13 @@ class Proxy:
         req = urllib.request.Request(self.url, body.encode(), {'Content-Type': 'application/json'})
         if self.auth:
             req.add_header('Authorization', self.auth)
-        with urllib.request.urlopen(req, timeout=30) as r:
-            assert r.headers.get_content_type() == 'application/json', r.headers
-            response = json.loads(r.read().decode('utf8'), parse_float=decimal.Decimal)
+        try:
+            with urllib.request.urlopen(req, timeout=120) as r:
+                assert r.headers.get_content_type() == 'application/json', r.headers
+                response = json.loads(r.read().decode('utf8'), parse_float=decimal.Decimal)
+        except urllib.error.HTTPError as e:
+            # ycashd answers a refusal with HTTP 500 and the JSON-RPC error body
+            response = json.loads(e.read().decode('utf8') or '{}', parse_float=decimal.Decimal)
         if response.get('error') is not None:
             raise self.error_class(response['error'])
         return response['result']
@@ -201,9 +214,226 @@ def not_live(n, checker, wallet):
     return 0
 
 
+# Live mode: errors only a node with a wallet, a fault injector or an unconnected stored block can
+# raise, and why a synced kogany (and the sidecar, its reference) cannot be made to.
+LIVE_UNREACHABLE = {
+    'attest-not-eligible': 'needs an EJECTED or WITHDRAWN attestor (an equivocation or a bond withdrawal)',
+    'no-payout-address': 'the live kogany has a miner address (the yed_setquote shape needs one)',
+    'yellowback-unhealthy': 'needs a storage fault in the index; the allow-list is a kogany-rpc unit test',
+    'vault-not-active': 'raised by the wallet commands only on a node-context call path',
+    'vault-not-owned': 'wallet ownership (yewd)',
+}
+# Live mode: results that need a stored block the index has not connected (none on a synced node:
+# both nodes refuse verdict-parent-not-tip for every stored block, which is compared instead).
+LIVE_REFUSAL_ONLY = {'yed_getblockverdict'}
+
+
+def b58(payload):
+    """Base58Check of `payload` (version bytes included)."""
+    return base58check(payload)
+
+
+class LiveRun:
+    """One call on kogany and the sidecar: the answers (or refusals) must be equal; kogany's result
+    is checked against the contract."""
+
+    def __init__(self, kogany, sidecar, checker, contract):
+        self.k, self.y, self.checker, self.c = kogany, sidecar, checker, contract
+        self.diffs, self.calls, self.provoked = [], 0, set()
+
+    def _answer(self, node, method, params):
+        try:
+            return ('ok', node.call(method, *params))
+        except self.checker.JSONRPCException as e:
+            return ('error', e.error['code'], e.error['message'])
+
+    def both(self, method, *params, check=True, same=True):
+        self.calls += 1
+        a, b = self._answer(self.y, method, params), self._answer(self.k, method, params)
+        if same and a != b:
+            self.diffs.append((method, params, a, b))
+            print('DIFF %s %s\n  ycash6: %s\n  kogany: %s' % (method, json.dumps(params, default=str),
+                  json.dumps(a, default=str)[:2000], json.dumps(b, default=str)[:2000]))
+        if b[0] == 'ok' and check:
+            self.c.check(method, b[1], ' %s' % json.dumps(params, default=str))
+        return b[1] if b[0] == 'ok' else None
+
+    def error(self, ident, code, method, *params):
+        """Both nodes refuse with `ident` (and the same message)."""
+        self.both(method, *params, check=False)
+        b = self._answer(self.k, method, params)
+        assert b[0] == 'error' and b[1] == code and (b[2].startswith(ident + ':') or b[2] == ident), (ident, method, b)
+        self.provoked.add(ident)
+
+
+def live(args, checker, contract, wallet):
+    sys.path.insert(0, HERE)
+    import yed_live_rig as lr
+    rig = lr.LiveRig(args.zakurad, args.ycashd, args.ycash6, args.live)
+    try:
+        rig.up()
+        info0 = rig.arm()
+        lock = info0['params']['classes'][0]['minBlocks']
+        rig.do_mint(lock)
+        print('live rig: kogany %s, sidecar %s, attestor set %s, mint %s at %d' % (
+            rig.kogany.url, rig.sidecar.url, rig.setid, rig.mint['txid'], rig.kogany.getblockcount()))
+        return live_checks(rig, checker, contract, wallet)
+    finally:
+        if not args.keep:
+            rig.down()
+
+
+def live_checks(rig, checker, contract, wallet):
+    k = Proxy(rig.kogany.url, checker.JSONRPCException)
+    y = Proxy('http://rig:rig@%s' % rig.sidecar.url.split('//', 1)[1], checker.JSONRPCException)
+    r = LiveRun(k, y, checker, contract)
+    mint = rig.mint['txid']
+
+    # A plain post-quantum payment (W9-c finding 3): YEC to the vault owner's rq... address.
+    vault = y.call('yed_getvault', mint)
+    pq_address = b58(bytes.fromhex('4c51') + bytes([vault['ownerScheme']]) + bytes.fromhex(vault['ownerHash']))
+    fresh_pq = b58(bytes.fromhex('4c51') + bytes([2]) + bytes(32))
+    for address in (pq_address, fresh_pq):
+        for method in ('getaddresstxids', 'getaddressutxos'):
+            r.both(method, {'addresses': [address]}, check=False)
+    pq_txid = y.call('sendtoaddress', pq_address, 1.25)
+    rig.mine(1)
+    rig.feed()
+    for method in ('getaddresstxids', 'getaddressutxos'):
+        r.both(method, {'addresses': [pq_address]}, check=False)
+    utxos = k.call('getaddressutxos', {'addresses': [pq_address]})
+    assert [u['txid'] for u in utxos] == [pq_txid], utxos
+    kb, yb = k.call('getaddressbalance', {'addresses': [pq_address]}), y.call('getaddressbalance', {'addresses': [pq_address]})
+    assert (kb['balance'], kb['received']) == (yb['balance'], yb['received']), (kb, yb)
+    print('getaddress* with the plain post-quantum %s: kogany = ycash6 (%d zat)' % (pq_address, kb['balance']))
+
+    info = r.both('yed_getinfo', same=False)
+    assert info['rpcversion'] == 8 and info['enabled'] is True, info
+    tip, ref = info['height'], info['height'] - info['params']['refLag']
+    r.both('yed_getstatehash')
+    r.both('yed_getstatehash', tip)
+    r.both('yed_verifyindex')
+    r.both('yed_getstats')
+    r.both('yed_getprice')
+    r.both('yed_getprice', tip - 1)
+    r.both('yed_getactivation')
+    r.both('yed_listminers')
+    r.both('yed_listminers', tip, 20)
+    r.both('yed_gettag', str(tip))
+    r.both('yed_gettag', info['blockhash'])
+    r.both('yed_setquote', 2000000, 3, same=False)
+    r.both('yed_setquote', 0, 0, same=False)
+    r.both('yed_getfeepayee', ref)
+    vaults = r.both('yed_listvaults')
+    assert [v['txid'] for v in vaults] == [mint], vaults
+    for status in ('ACTIVE', 'CLAIMING', ''):
+        r.both('yed_listvaults', status, 10, 0)
+    for v in vaults:
+        r.both('yed_getvault', v['txid'])
+        r.both('yed_getnotice', v['txid'])
+    r.both('yed_gettxinfo', mint)
+    r.both('yed_gettxinfo', rig.mint['carrierTxid'])
+    r.both('yed_listclaimable')
+    r.both('yed_listclaimable', 1, 1)
+    r.both('yed_listattestors')
+    r.both('yed_listattestors', tip - 1)
+    pool = r.both('yed_getattestations')
+    assert pool, 'the attestation pool is empty'
+    r.both('yed_addattestation', pool[-1]['hex'])
+    r.both('yed_buildbundle', ref, '')
+    r.both('yed_getselection', ref, '')
+    selector = bytes.fromhex(mint)[::-1].hex() + '00000000'
+    r.both('yed_getselection', ref, selector)
+    r.both('yed_buildbundle', tip, selector)
+    r.both('yed_estimatecollateral', 100000, 48)
+    r.both('yed_estimatecollateral', 100000, 100, 2000000)
+    r.both('yed_estimatefee', 100000)
+    r.both('yed_estimatefee', 100000, 400000)
+    r.both('yed_gethistory', tip - 10, tip)
+    raw_mint = y.call('getrawtransaction', mint)
+    # A raw transaction's decode carries opReturnIndex, which the contract does not document (ycash6
+    # answers it too): compared only; the OP_RETURN script's decode is the checked shape.
+    r.both('yed_decodepayload', raw_mint, check=False)
+    for out in y.call('decoderawtransaction', raw_mint)['vout']:
+        if out['scriptPubKey']['hex'].startswith('6a'):
+            r.both('yed_decodepayload', out['scriptPubKey']['hex'])
+    r.both('yed_validaterawtransaction', raw_mint)
+    r.both('yed_validaterawtransaction', y.call('getrawtransaction', pq_txid))
+    tokens = r.both('yed_listtokens', [t['address'] for t in y.call('yed_listunspent')])
+    assert tokens, 'the mint left no token'
+    for t in tokens:
+        r.both('yed_listtokens', [t['transparentAddress']])
+    r.both('yed_listtokens', [tokens[0]['address']], 0, 10, 0)
+
+    # Node-side error identifiers, on both nodes alike.
+    unknown = '00' * 32
+    r.error('verdict-parent-not-tip', -8, 'yed_getblockverdict', info['blockhash'])
+    r.error('vault-not-found', -8, 'yed_getvault', unknown)
+    r.error('vault-not-found', -8, 'yed_getnotice', unknown)
+    r.error('tx-not-found', -8, 'yed_gettxinfo', unknown)
+    r.error('too-many-addresses', -8, 'yed_listtokens', [])
+    r.error('too-many-addresses', -8, 'yed_listtokens', ['x'] * 101)
+    r.error('invalid-address', -5, 'yed_listtokens', ['nonsense'])
+    r.error('mint-bad-lock', -8, 'yed_estimatecollateral', 100000, 1)
+    r.error('mint-unsatisfiable', -26, 'yed_estimatecollateral', info['params']['maxMintCents'], 145, 100)
+    r.error('quote-out-of-range', -8, 'yed_setquote', 1, 0)
+    r.error('attest-malformed', -8, 'yed_addattestation', '00')
+    att = bytes.fromhex(pool[-1]['hex'])
+    r.error('attest-bad-sig', -26, 'yed_addattestation', (att[:-1] + bytes([att[-1] ^ 1])).hex())
+
+    def attestation(seq, price, cited):
+        return (seq.to_bytes(2, 'little') + price.to_bytes(4, 'little') + cited.to_bytes(4, 'little') + bytes(64)).hex()
+    r.error('attest-unknown-seq', -26, 'yed_addattestation', attestation(999, 1985000, ref))
+    r.error('attest-stale', -26, 'yed_addattestation', attestation(0, 1985000, tip - 20))
+    r.error('attest-range', -26, 'yed_addattestation', attestation(0, 1, ref))
+    r.error('bundle-insufficient', -26, 'yed_buildbundle', info['params']['startHeight'] + 1, '')
+    r.error('fee-no-eligible-payee', -26, 'yed_getfeepayee', info['params']['startHeight'] + 1)
+    # MINT-10: the pool's attestations at R twice the cross-section, then the true price again.
+    price = int(y.call('yed_getprice', ref)['pMint'])
+    _yu, ya = rig.framework()
+    blockhash = y.call('getblockhash', ref)
+    for rec in y.call('yed_listattestors'):
+        seq = int(rec['seq'])
+        bad = ya.sign_attestation(ya.hot_secret_for(rig.sidecar, seq), seq, price * 2, ref, blockhash).hex()
+        r.both('yed_addattestation', bad)
+    r.error('mint10-diverged', -26, 'yed_estimatecollateral', 100000, 48)
+    rig.feed(ref)
+    r.both('yed_estimatecollateral', 100000, 48)
+
+    for method in wallet:
+        try:
+            k.call(method)
+            raise AssertionError('%s (a wallet RPC) answered on kogany' % method)
+        except checker.JSONRPCException as e:
+            assert e.error['code'] == -32601, (method, e.error)
+    missing = sorted(set(NODE_METHODS) - contract.checked - LIVE_REFUSAL_ONLY)
+    node_errors = sorted(e for e, v in contract.doc['errors'].items()
+                         if any(m in NODE_METHODS for m in v['raisedBy']) or 'every gated command' in v['raisedBy'])
+    unprovoked = sorted(set(node_errors) - r.provoked - set(LIVE_UNREACHABLE))
+    print()
+    print('LIVE (kogany vs ycash6 on one chain): %d calls, %d differences' % (r.calls, len(r.diffs)))
+    print('  shapes (Contract.check): %d of %d node-context methods; %s refused on both nodes (no unconnected stored block)'
+          % (len(contract.checked & set(NODE_METHODS)), len(NODE_METHODS), ', '.join(sorted(LIVE_REFUSAL_ONLY))))
+    print('  error identifiers provoked on both: %s' % ', '.join(sorted(r.provoked)))
+    for ident in sorted(set(node_errors) & set(LIVE_UNREACHABLE)):
+        print('  not reachable live: %s (%s)' % (ident, LIVE_UNREACHABLE[ident]))
+    print('  wallet-context methods refused -32601: %d' % len(wallet))
+    ok = not r.diffs and not missing and not unprovoked
+    if missing:
+        print('FAIL: never checked: %s' % missing)
+    if unprovoked:
+        print('FAIL: node-side errors not provoked: %s' % unprovoked)
+    print('PASS' if ok else 'FAIL')
+    return 0 if ok else 1
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split('\n\n')[0])
-    ap.add_argument('--url', required=True, help='kogany JSON-RPC URL, with credentials if any')
+    ap.add_argument('--url', help='kogany JSON-RPC URL, with credentials if any (mock / not-live modes)')
+    ap.add_argument('--live', metavar='DIR', help='bring up the live regtest (yed_live_rig.py) in DIR and compare with ycash6')
+    ap.add_argument('--zakurad', help='--live: kogany zakurad (--features ycash)')
+    ap.add_argument('--ycashd', help='--live: ycash6 ycashd')
+    ap.add_argument('--keep', action='store_true', help='--live: leave the nodes running')
     ap.add_argument('--ycash6', required=True, help='a ycash6 tree (its contract and checker)')
     ap.add_argument('--expect-not-live', action='store_true',
                     help='the node serves UnavailableYedState: every yed_* method must answer -32601')
@@ -215,6 +445,10 @@ def main(argv=None):
     documented = sorted(k for k in contract.doc if k.startswith('yed_'))
     wallet = sorted(set(documented) - set(NODE_METHODS))
     assert len(NODE_METHODS) == 27 and len(wallet) == 25, (len(NODE_METHODS), len(wallet))
+    if args.live:
+        return live(args, checker, contract, wallet)
+    if not args.url:
+        ap.error('--url or --live is required')
     n = Proxy(args.url, checker.JSONRPCException)
 
     try:
