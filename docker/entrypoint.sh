@@ -22,8 +22,11 @@ done < <(compgen -e ZEBRA_)
 # Default cache directories for Zakura components.
 # These use the config-rs ZAKURA_SECTION__KEY format and will be picked up
 # by zakurad's configuration system automatically.
-: "${ZAKURA_STATE__CACHE_DIR:=${HOME}/.cache/zakura}"
-: "${ZAKURA_RPC__COOKIE_DIR:=${HOME}/.cache/zakura}"
+# kogany: koganyd's own default is ~/.cache/kogany (crates/zakurad, the `ycash` feature); these
+# variables override it and a config file's cache_dir alike, so a koganyd image defaults to that.
+if command -v koganyd >/dev/null 2>&1; then CACHE_NAME=kogany; else CACHE_NAME=zakura; fi
+: "${ZAKURA_STATE__CACHE_DIR:=${HOME}/.cache/${CACHE_NAME}}"
+: "${ZAKURA_RPC__COOKIE_DIR:=${HOME}/.cache/${CACHE_NAME}}"
 export ZAKURA_STATE__CACHE_DIR ZAKURA_RPC__COOKIE_DIR
 
 # Leave zcashd-compat disabled unless the container runtime explicitly opts in.

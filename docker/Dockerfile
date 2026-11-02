@@ -133,6 +133,9 @@ FROM deps AS release
 ARG SHORT_SHA
 ARG FEATURES
 ENV FEATURES=${FEATURES}
+# kogany: cap cargo's parallel jobs (default: one per CPU). A Docker Desktop VM of 8 GB runs out of
+# memory at ten rustc/cc1plus jobs (rocksdb, the LTO crates), so ycash-infra's image-koganyd passes it.
+ARG CARGO_BUILD_JOBS
 # Compress debug sections with zlib, roughly 275 MB -> 110 MB on disk.
 # Not zstd: std's backtrace symbolizer only reads zlib, and file:line would be lost.
 ENV RUSTFLAGS="-C link-arg=-Wl,--compress-debug-sections=zlib"
@@ -173,6 +176,7 @@ RUN --mount=type=bind,source=crates/xtask,target=crates/xtask \
     --mount=type=cache,target=${CARGO_TARGET_DIR} \
     --mount=type=cache,target=${CARGO_HOME} \
     [ -n "${SHORT_SHA}" ] && export SHORT_SHA="${SHORT_SHA}" || true; \
+    if [ -n "${CARGO_BUILD_JOBS}" ]; then export CARGO_BUILD_JOBS; else unset CARGO_BUILD_JOBS; fi; \
     case ",${FEATURES// /,}," in *,ycash,*) NODE_BIN=koganyd ;; *) NODE_BIN=zakurad ;; esac; \
     cargo build --locked --release --features "${FEATURES}" --package zakura --bin "${NODE_BIN}" --bin zakura-rollback-state --bin zakura-prune-state && \
     mkdir -p /opt/node-bin && \
