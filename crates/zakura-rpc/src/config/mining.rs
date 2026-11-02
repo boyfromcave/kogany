@@ -78,6 +78,14 @@ pub struct Config {
     #[cfg(feature = "ycash")]
     #[serde(skip_serializing_if = "is_true")]
     pub yellowback_payout_default: bool,
+
+    /// Ycash: the most unpaid ZIP-317 actions a block template carries, ycashd's
+    /// `-blockunpaidactionlimit`. `None` (the default) is no limit, ycashd's
+    /// `DEFAULT_BLOCK_UNPAID_ACTION_LIMIT` = `SIZE_MAX` (`ycash6 src/zip317.h:42`); `0` leaves out
+    /// every transaction that pays less than the conventional fee (Zakura's own rule).
+    #[cfg(feature = "ycash")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub block_unpaid_action_limit: Option<u32>,
 }
 
 #[cfg(feature = "ycash")]
@@ -137,6 +145,8 @@ impl Default for Config {
             optimistic_block_inventory: true,
             #[cfg(feature = "ycash")]
             yellowback_payout_default: true,
+            #[cfg(feature = "ycash")]
+            block_unpaid_action_limit: None,
         }
     }
 }

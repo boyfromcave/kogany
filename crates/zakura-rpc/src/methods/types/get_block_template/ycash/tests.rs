@@ -57,6 +57,7 @@ fn miner_params(data: Option<&[u8]>, yellowback: Option<YellowbackMiner>) -> Min
         }),
         memo: None,
         yellowback,
+        block_unpaid_action_limit: u32::MAX,
     }
 }
 

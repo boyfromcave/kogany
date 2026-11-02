@@ -103,6 +103,63 @@ fn selects_transaction_at_400_zatoshis_per_action() {
     assert_eq!(selected.len(), 1);
 }
 
+/// Ycash: a transaction short of the ZIP-317 conventional fee (a post-quantum owner spend at the
+/// size-based relay fee) is still selected, as ycashd's template has no unpaid-action limit
+/// (`DEFAULT_BLOCK_UNPAID_ACTION_LIMIT` = `SIZE_MAX`, ycash6 `src/zip317.h:42`).
+#[cfg(feature = "ycash")]
+#[test]
+fn ycash_selects_transaction_with_unpaid_actions() {
+    let network = Network::Mainnet;
+    let unmined_tx = network
+        .unmined_transactions_in_blocks(..)
+        .find(|tx| !tx.transaction.transaction().is_coinbase())
+        .expect("test network has an unmined transaction")
+        .transaction;
+    let relay_fee = transaction::ycash_relay::min_relay_fee(unmined_tx.size());
+    let miner_fee = Amount::try_from(i64::try_from(relay_fee).expect("fits")).expect("fee fits");
+    let verified_tx = transaction::VerifiedUnminedTx::new(
+        unmined_tx,
+        miner_fee,
+        0,
+        0,
+        std::sync::Arc::new(Vec::new()),
+    )
+    .expect("transaction pays the Ycash relay fee");
+    assert!(!verified_tx.pays_conventional_fee());
+    assert!(verified_tx.unpaid_actions > 0);
+
+    let miner_params = MinerParams::from(MinerAddress::from(TransparentAddress::PublicKeyHash(
+        [0x7e; 20],
+    )));
+    let selected = select_mempool_transactions(
+        &network,
+        Height(1_000_000),
+        &miner_params,
+        None,
+        vec![verified_tx.clone()],
+        TransactionDependencies::default(),
+    )
+    .expect("block template is valid");
+
+    assert_eq!(
+        selected.len(),
+        1,
+        "ycashd mines a transaction with unpaid actions"
+    );
+
+    // `mining.block_unpaid_action_limit = 0` (ycashd `-blockunpaidactionlimit=0`) leaves it out.
+    let selected = select_mempool_transactions(
+        &network,
+        Height(1_000_000),
+        &miner_params.with_block_unpaid_action_limit(0),
+        None,
+        vec![verified_tx],
+        TransactionDependencies::default(),
+    )
+    .expect("block template is valid");
+    assert!(selected.is_empty(), "the strict limit leaves it out");
+}
+
 #[test]
 fn reserves_serialized_block_and_pool_tag_overhead() {
     let network = Network::Mainnet;

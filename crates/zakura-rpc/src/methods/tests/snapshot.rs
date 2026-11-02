@@ -1056,6 +1056,8 @@ pub async fn test_mining_rpcs<State, ReadState>(
         optimistic_block_inventory: true,
         #[cfg(feature = "ycash")]
         yellowback_payout_default: true,
+        #[cfg(feature = "ycash")]
+        block_unpaid_action_limit: None,
     };
 
     // nu5 block height

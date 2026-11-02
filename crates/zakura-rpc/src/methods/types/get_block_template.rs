@@ -763,6 +763,11 @@ pub struct MinerParams {
     /// not live. Its tag is appended to the coinbase input script.
     #[cfg(feature = "ycash")]
     yellowback: Option<ycash::YellowbackMiner>,
+
+    /// Ycash: the most unpaid ZIP-317 actions a template carries (`mining.block_unpaid_action_limit`,
+    /// ycashd `-blockunpaidactionlimit`); no limit by default.
+    #[cfg(feature = "ycash")]
+    block_unpaid_action_limit: u32,
 }
 
 /// Builds the coinbase input data for a block Zakura constructs.
@@ -810,6 +815,8 @@ impl MinerParams {
             memo,
             #[cfg(feature = "ycash")]
             yellowback: None,
+            #[cfg(feature = "ycash")]
+            block_unpaid_action_limit: conf.block_unpaid_action_limit.unwrap_or(u32::MAX),
         })
     }
 
@@ -841,6 +848,19 @@ impl MinerParams {
         self
     }
 
+    /// Ycash: the most unpaid ZIP-317 actions a template carries.
+    #[cfg(feature = "ycash")]
+    pub fn block_unpaid_action_limit(&self) -> u32 {
+        self.block_unpaid_action_limit
+    }
+
+    /// Ycash: these parameters with another template unpaid-action limit.
+    #[cfg(feature = "ycash")]
+    pub fn with_block_unpaid_action_limit(mut self, limit: u32) -> Self {
+        self.block_unpaid_action_limit = limit;
+        self
+    }
+
     /// Randomizes the memo.
     pub fn randomize_memo(&mut self) {
         let mut random = [0u8; 512];
@@ -864,6 +884,8 @@ impl From<MinerAddress> for MinerParams {
             memo: None,
             #[cfg(feature = "ycash")]
             yellowback: None,
+            #[cfg(feature = "ycash")]
+            block_unpaid_action_limit: u32::MAX,
         }
     }
 }
