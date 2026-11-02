@@ -362,3 +362,83 @@ fn ycash_address_utxos_follow_ycashd_index_order() {
     assert_eq!(utxos[0].txid().0[0], 0x05);
     assert_eq!(utxos[0].address(), &second);
 }
+
+/// S5 parity (`vault_upgrade.py`): `getblock.chainhistoryroot` is the header's commitment from
+/// after the Heartwood activation block, null before and at it.
+#[test]
+fn ycash_chain_history_root_follows_heartwood() {
+    use zakura_chain::parameters::testnet::ConfiguredActivationHeights;
+    let network = Network::new_regtest(
+        ConfiguredActivationHeights {
+            overwinter: Some(1),
+            sapling: Some(1),
+            ycash: Some(1),
+            blossom: Some(1),
+            heartwood: Some(1),
+            canopy: Some(1),
+            vault: Some(105),
+            ..Default::default()
+        }
+        .into(),
+    );
+    let c = [7; 32];
+    assert_eq!(chain_history_root(&network, Height(0), c), [0; 32]);
+    assert_eq!(chain_history_root(&network, Height(1), c), [0; 32]);
+    assert_eq!(chain_history_root(&network, Height(2), c), c);
+    assert_eq!(chain_history_root(&network, Height(105), c), c);
+    assert_eq!(chain_history_root(&network, Height(106), c), c);
+}
+
+/// S5 parity (`wallet_pq_address`): an insight address parameter may be a YED form; `yr…` names
+/// the same post-quantum key as `rq…`, and `yr…` of a P2PKH key its `tm…` address.
+#[test]
+fn ycash_insight_address_takes_the_yed_forms() {
+    use kogany_vault::{Hash32, PqOwner};
+    use kogany_yellowback::codecs::address::{encode_address, encode_pq_address};
+    use zakura_chain::parameters::NetworkKind;
+    let p = kogany_yellowback::params::params_for_network("regtest").expect("regtest");
+    let rq = transparent::Address::PayToPqKeyHash {
+        network_kind: NetworkKind::Regtest,
+        scheme: 1,
+        key_hash: [3; 32],
+    };
+    let yr = encode_pq_address(
+        &PqOwner {
+            scheme: 1,
+            hash: Hash32([3; 32]),
+        },
+        &p,
+    )
+    .expect("a yr… address");
+    assert_eq!(insight_address(&rq.to_string()), Some(rq));
+    assert_eq!(insight_address(&yr), Some(rq));
+    let t = transparent::Address::from_pub_key_hash(NetworkKind::Testnet, [4; 20]);
+    assert_eq!(insight_address(&encode_address(&[4; 20], &p)), Some(t));
+    assert_eq!(insight_address("nope"), None);
+}
+
+/// S5 parity (`wallet_pq_address`): a `getaddressutxos` row names a post-quantum key with the
+/// caller's form, and any other address canonically, in zcashd's field set.
+#[test]
+fn ycash_utxo_address_is_the_callers_name() {
+    use crate::methods::Utxo;
+    use zakura_chain::{parameters::NetworkKind, transaction};
+    let t = transparent::Address::from_pub_key_hash(NetworkKind::Testnet, [4; 20]);
+    let mut utxo = Utxo::new(
+        t,
+        transaction::Hash([1; 32]),
+        transparent::OutputIndex::from_u64(0),
+        transparent::Script::new(&[0x51]),
+        5,
+        Height(3),
+    );
+    let json = serde_json::to_value(&utxo).expect("json");
+    assert_eq!(json["address"], t.to_string());
+    let keys: Vec<&String> = json.as_object().expect("object").keys().collect();
+    assert_eq!(
+        keys,
+        ["address", "txid", "outputIndex", "script", "satoshis", "height"]
+    );
+    utxo.set_address_name("yr2named".to_owned());
+    assert_eq!(serde_json::to_value(&utxo).expect("json")["address"], "yr2named");
+}

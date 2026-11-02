@@ -493,3 +493,11 @@ mod zip218_template_limits {
             .expect("the fake transaction pays the conventional fee")
     }
 }
+
+/// S5 parity: ycashd's block unpaid-action limit is `SIZE_MAX` (ycash6 `src/zip317.h`), so a
+/// Ycash template never leaves a transaction out for its unpaid actions.
+#[cfg(feature = "ycash")]
+#[test]
+fn ycash_templates_have_no_unpaid_action_limit() {
+    assert_eq!(super::BLOCK_UNPAID_ACTION_LIMIT_FOR_TEMPLATES, u32::MAX);
+}

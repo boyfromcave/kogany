@@ -790,12 +790,17 @@ impl YedRpc for YedRpcImpl {
         let s = self.live().await?;
         let id = hash_arg(&txid, "txid")?;
         healthy(&s)?;
-        let v = s.index.vault(&id).ok_or_else(|| {
+        let mut v = s.index.vault(&id).ok_or_else(|| {
             invalid(format!(
                 "vault-not-found: no vault at {}:0",
                 display_hex(&id)
             ))
         })?;
+        // PushSpendPending: the mempool's spender of the vault output (F-S5-5).
+        v.spend_txid = self
+            .state
+            .mempool_spender(&OutPoint { txid: id, n: 0 })
+            .await;
         Ok(vault_json(&v, &self.fmt(&s), true))
     }
 

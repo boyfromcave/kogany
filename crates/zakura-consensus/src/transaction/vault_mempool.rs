@@ -148,9 +148,10 @@ fn interpreter_error(error: &zakura_script::Error) -> Option<interpreter::Error>
     }
 }
 
-/// The text of a template input's script failure (ycashd `ScriptErrorString`).
+/// The text of a template input's script failure (ycashd `ScriptErrorString`, S5:
+/// `Script failed an OP_VERIFY operation`, not the interpreter's own `Display`).
 fn script_error_text(error: &zakura_script::Error) -> String {
-    interpreter_error(error).map_or_else(|| error.to_string(), |e| e.to_string())
+    zakura_script::script_error_string(error).to_owned()
 }
 
 /// The upgrade before the one current at `height` (ycashd `PrevEpochBranchId`), when it has a
@@ -255,8 +256,13 @@ pub fn check_template_input(
 /// ([`ScriptContext::with_mempool_mandatory_flags`]: no `CHECKLOCKTIMEVERIFY`); if it passes
 /// there, the failure is [`TransactionError::NonMandatoryScriptFlag`] (policy, DoS 0). `None`:
 /// the failure stays the verifier's consensus script error.
+///
+/// Before that, as ycashd's `ContextualCheckInputs` does (`main.cpp:3060-3075`), the failing
+/// input is retried under the previous epoch's consensus branch ID: if it passes there the
+/// failure is [`TransactionError::OldConsensusBranchId`] (S5 `vault_primitive`).
 pub fn non_mandatory_script_failure(
     network: &Network,
+    tx: &Arc<Transaction>,
     cached: &CachedFfiTransaction,
     height: Height,
     state: Option<VaultStateSnapshot>,
@@ -269,6 +275,21 @@ pub fn non_mandatory_script_failure(
             .err()
             .map(|error| (input_index, error))
     })?;
+    if let Some(previous) = previous_epoch(network, height) {
+        let passes_previous = CachedFfiTransaction::new(
+            tx.clone(),
+            Arc::new(cached.all_previous_outputs().clone()),
+            previous,
+        )
+        .is_ok_and(|old| old.is_valid_in(input_index, &consensus).is_ok());
+        if passes_previous {
+            let branch = |nu: NetworkUpgrade| nu.branch_id().map_or(0, u32::from);
+            return Some(TransactionError::OldConsensusBranchId {
+                expected: branch(NetworkUpgrade::current(network, height)),
+                found: branch(previous),
+            });
+        }
+    }
     cached
         .is_valid_in(input_index, &mandatory)
         .is_ok()

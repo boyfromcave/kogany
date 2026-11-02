@@ -2675,6 +2675,12 @@ where
                 block_commitments: Some(block_commitments),
                 final_sapling_root: Some(final_sapling_root),
                 final_orchard_root,
+                #[cfg(feature = "ycash")]
+                chain_history_root: Some(types::ycash::chain_history_root(
+                    &network,
+                    height,
+                    block_commitments,
+                )),
                 previous_block_hash: Some(previous_block_hash),
                 next_block_hash,
             })))
@@ -3424,6 +3430,8 @@ where
             );
 
             let entry = Utxo {
+                #[cfg(feature = "ycash")]
+                address_name: None,
                 address,
                 txid,
                 output_index,
@@ -3440,12 +3448,26 @@ where
         // lightwalletd compares byte for byte; Zakura's chain order stays feature-off.
         #[cfg(feature = "ycash")]
         {
-            let request_addresses: Vec<Address> = utxos_request
+            let named: Vec<(Address, &String)> = utxos_request
                 .addresses()
                 .iter()
-                .filter_map(|address| address.parse().ok())
+                .filter_map(|text| types::ycash::insight_address(text).map(|a| (a, text)))
                 .collect();
+            let request_addresses: Vec<Address> = named.iter().map(|(a, _)| *a).collect();
             types::ycash::order_address_utxos_as_ycashd(&mut response_utxos, &request_addresses);
+            // ycashd names a post-quantum key with the caller's form (`AddressNames`).
+            for utxo in &mut response_utxos {
+                let name = match utxo.address() {
+                    pq @ Address::PayToPqKeyHash { .. } => named
+                        .iter()
+                        .find(|(a, _)| a == pq)
+                        .map_or_else(|| pq.to_string(), |(_, text)| (*text).clone()),
+                    other => other.to_string(),
+                };
+                if name != utxo.address().to_string() {
+                    utxo.set_address_name(name);
+                }
+            }
         }
 
         if !utxos_request.chain_info {
@@ -4182,7 +4204,27 @@ where
     async fn get_peer_info(&self) -> Result<Vec<PeerInfo>> {
         let address_book = self.address_book.clone();
         if let Some(connected_peers) = address_book.connected_peers() {
-            return Ok(connected_peers.into_iter().map(PeerInfo::from).collect());
+            // Ycash (S5 parity): ycashd's `banscore`, the address book's misbehavior score.
+            #[cfg(feature = "ycash")]
+            let scores: std::collections::HashMap<_, _> = address_book
+                .recently_live_peers(chrono::Utc::now())
+                .into_iter()
+                .map(|meta| (meta.addr(), meta.misbehavior()))
+                .collect();
+            return Ok(connected_peers
+                .into_iter()
+                .map(|peer| {
+                    #[cfg(feature = "ycash")]
+                    let score = scores.get(&peer.addr).copied().unwrap_or(0);
+                    #[allow(unused_mut)]
+                    let mut info = PeerInfo::from(peer);
+                    #[cfg(feature = "ycash")]
+                    {
+                        info.banscore = score;
+                    }
+                    info
+                })
+                .collect());
         }
 
         Ok(address_book
@@ -4397,6 +4439,37 @@ where
             .parse()
             .map_error(server::error::LegacyCode::InvalidParameter)?;
 
+        // Ycash (S5 parity): ycashd's `reconsiderblock` clears the invalidity of a known block
+        // that has none as a no-op (`ReconsiderBlock`, `src/main.cpp`), and refuses only an
+        // unknown hash, `-5 "Block not found"`.
+        #[cfg(feature = "ycash")]
+        {
+            let result = self
+                .state
+                .clone()
+                .oneshot(zakura_state::Request::ReconsiderBlock(block_hash))
+                .await;
+            return match result {
+                Ok(zakura_state::Response::Reconsidered(block_hashes)) => Ok(block_hashes),
+                Ok(_) => unreachable!("unmatched response to a reconsider block request"),
+                // zakura-state's `ReconsiderError::MissingInvalidatedBlock` (not exported).
+                Err(error) if error.to_string().contains("was not previously invalidated") => {
+                    match call_service(
+                        self.state.clone(),
+                        zakura_state::Request::KnownBlock(block_hash),
+                    )
+                    .await?
+                    {
+                        zakura_state::Response::KnownBlock(Some(_)) => Ok(Vec::new()),
+                        _ => Err("Block not found")
+                            .map_error(server::error::LegacyCode::InvalidAddressOrKey),
+                    }
+                }
+                Err(error) => Err(error.to_string()).map_misc_error(),
+            };
+        }
+
+        #[allow(unreachable_code)]
         call_service(
             self.state.clone(),
             zakura_state::Request::ReconsiderBlock(block_hash),
@@ -5336,6 +5409,11 @@ pub trait ValidateAddresses {
             .addresses()
             .iter()
             .map(|address| {
+                // Ycash (S5 parity): a YED form (yb…/yt…/yr…) names its transparent key too.
+                #[cfg(feature = "ycash")]
+                if let Some(address) = types::ycash::insight_address(address) {
+                    return Ok(address);
+                }
                 address
                     .parse()
                     .map_error(server::error::LegacyCode::InvalidAddressOrKey)
@@ -5596,6 +5674,8 @@ impl Default for GetBlockResponse {
             block_commitments: None,
             final_sapling_root: None,
             final_orchard_root: None,
+            #[cfg(feature = "ycash")]
+            chain_history_root: None,
             nonce: None,
             bits: None,
             difficulty: None,
@@ -5668,6 +5748,18 @@ pub struct BlockObject {
 
     // `chainhistoryroot` would be here. Undocumented. TODO: decide if we want to support it
     //
+    /// Ycash (S5 parity): ycashd's `chainhistoryroot` (`types::ycash::chain_history_root`).
+    #[cfg(feature = "ycash")]
+    #[serde(
+        with = "opthex",
+        rename = "chainhistoryroot",
+        skip_serializing_if = "Option::is_none",
+        default
+    )]
+    #[getset(get_copy = "pub")]
+    #[new(default)]
+    chain_history_root: Option<[u8; 32]>,
+
     /// The number of transactions in this block.
     #[serde(rename = "nTx")]
     #[getset(get_copy = "pub")]
@@ -5984,10 +6076,19 @@ pub struct GetAddressUtxosResponseObject {
 #[derive(
     Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize, Getters, CopyGetters, new,
 )]
+#[cfg_attr(feature = "ycash", serde(into = "UtxoJson"))]
 pub struct Utxo {
     /// The transparent address, base58check encoded
     #[getset(get = "pub")]
     address: transparent::Address,
+
+    /// Ycash (S5 parity): the address as ycashd answers it, the form the caller named for a
+    /// post-quantum key (`AddressNames`: `rq…` or its `yr…` YED form); `None` is the canonical
+    /// form.
+    #[cfg(feature = "ycash")]
+    #[serde(skip)]
+    #[new(default)]
+    address_name: Option<String>,
 
     /// The output txid, in big-endian order, hex-encoded
     #[serde(with = "hex")]
@@ -6015,9 +6116,51 @@ pub struct Utxo {
     height: Height,
 }
 
+/// A [`Utxo`] as a Ycash build writes it (S5 parity): `address` is the caller's name of a
+/// post-quantum key, else the canonical address; the fields in zcashd's order.
+#[cfg(feature = "ycash")]
+#[derive(serde::Serialize)]
+struct UtxoJson {
+    address: String,
+    #[serde(with = "hex")]
+    txid: transaction::Hash,
+    #[serde(rename = "outputIndex")]
+    output_index: OutputIndex,
+    #[serde(with = "hex")]
+    script: transparent::Script,
+    satoshis: u64,
+    height: Height,
+}
+
+#[cfg(feature = "ycash")]
+impl From<Utxo> for UtxoJson {
+    fn from(utxo: Utxo) -> Self {
+        Self {
+            address: utxo
+                .address_name
+                .unwrap_or_else(|| utxo.address.to_string()),
+            txid: utxo.txid,
+            output_index: utxo.output_index,
+            script: utxo.script,
+            satoshis: utxo.satoshis,
+            height: utxo.height,
+        }
+    }
+}
+
+#[cfg(feature = "ycash")]
+impl Utxo {
+    /// Names the address as the caller did (a post-quantum key) or canonically.
+    pub(crate) fn set_address_name(&mut self, name: String) {
+        self.address_name = Some(name);
+    }
+}
+
 impl Default for Utxo {
     fn default() -> Self {
         Self {
+            #[cfg(feature = "ycash")]
+            address_name: None,
             address: transparent::Address::from_pub_key_hash(
                 zakura_chain::parameters::NetworkKind::default(),
                 [0u8; 20],

@@ -288,6 +288,14 @@ impl JsonRpcRequest {
             ) => JsonRpcVersion::TwoPointZero,
             (Some("1.0"), Some(_), Some(_)) => JsonRpcVersion::Lightwalletd,
             (None, Some(_), Some(_)) => JsonRpcVersion::Bitcoind,
+            // Ycash: ycashd takes a 1.0 request whose `params` is null or absent as `[]`
+            // (`JSONRequest::parse`, `src/rpc/server.cpp`); yindex sends `"params": null`. Both
+            // deserialize to `None` here and are forwarded without `params`, which the methods
+            // read as no arguments.
+            #[cfg(feature = "ycash")]
+            (Some("1.0"), None, Some(_)) => JsonRpcVersion::Lightwalletd,
+            #[cfg(feature = "ycash")]
+            (None, None, Some(_)) => JsonRpcVersion::Bitcoind,
             _ => JsonRpcVersion::Unknown,
         }
     }

@@ -869,16 +869,49 @@ impl YedIndexView for LiveIndex {
             .unwrap_or(i64::MAX)
     }
 
+    /// `yed_getstats`'s gate (ycash6 `src/rpc/yellowback.cpp`): `supplyCapCents` =
+    /// `SupplyCapCents(issuedZat, pMint, supplyCapBps)` at the tip snapshot, the cap reached when
+    /// the next minimum mint would exceed it (W20), MINT_REQUIRES_ARMED's halt while the tip is
+    /// not ARMED (H-1), and the classes a mint can use now (W16/W20, IT-5, H-5).
     fn mint_gate(&self) -> MintGate {
-        let halted = self
-            .tip()
-            .and_then(|t| self.stored_snapshot(t.height))
-            .is_some_and(|s| s.halt_mask != 0);
+        let p = &self.params;
+        let Some(s) = self.tip().and_then(|t| self.stored_snapshot(t.height)) else {
+            return MintGate {
+                supply_cap_cents: None,
+                supply_cap_reached: false,
+                minting_allowed: false,
+                mintable_classes: Vec::new(),
+            };
+        };
+        let cap = supply_cap_cents(s.issued_zat, s.pmint(), p.supply_cap_bps);
+        let supply = self.snap.totals().supply_cents;
+        let cap_reached = cap.is_some_and(|cap| supply.saturating_add(p.min_mint) > cap);
+        let armed = s.attest.status == RecordStatus::Armed;
+        let unarmed_halt = p.mint_requires_armed && !p.is_armed(armed);
+        let mut mintable_classes = Vec::new();
+        if s.halt_mask & !HALT_GLOBAL_RATIO == 0 && !unarmed_halt {
+            for (i, base) in p.base_ratio_bps.iter().enumerate() {
+                let Ok(class) = i64::try_from(i) else {
+                    continue;
+                };
+                if !p.is_class_enabled(class) {
+                    continue;
+                }
+                let at_floor = *base >= p.recap_ratio_bps;
+                if if cap_reached {
+                    at_floor
+                } else {
+                    s.halt_mask & HALT_GLOBAL_RATIO == 0 || at_floor
+                } {
+                    mintable_classes.push(u8::try_from(i).unwrap_or(u8::MAX));
+                }
+            }
+        }
         MintGate {
-            supply_cap_cents: None,
-            supply_cap_reached: false,
-            minting_allowed: !halted,
-            mintable_classes: if halted { Vec::new() } else { vec![0, 1, 2] },
+            supply_cap_cents: cap,
+            supply_cap_reached: cap_reached,
+            minting_allowed: s.halt_mask == 0 && !cap_reached && !unarmed_halt,
+            mintable_classes,
         }
     }
 

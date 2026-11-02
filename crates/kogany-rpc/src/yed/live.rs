@@ -12,9 +12,9 @@
 //! the transaction behind a TxLog row (`yed_gettxinfo`) and the notice transaction
 //! (`yed_getnotice`).
 //!
-//! Not read here (no mempool access in the RPC extension): `yed_getvault.spendPending` is
-//! always false, a mempool coin is an unknown input to the dry run's script check, and
-//! MINTPOL-1's pending mints count zero.
+//! The mempool (`crate::mempool`, F-S5-5) is read for `yed_getvault.spendPending` only: a
+//! mempool coin is still an unknown input to the dry run's script check, and MINTPOL-1's
+//! pending mints count zero.
 
 use std::sync::{Arc, Mutex};
 
@@ -77,6 +77,19 @@ pub fn set_payout_address(address: Option<&zcash_address::ZcashAddress>) {
 /// The miner's payout key, `None` without a P2PKH miner address.
 pub fn payout_key() -> Option<[u8; 20]> {
     PAYOUT_KEY.get().copied().flatten()
+}
+
+/// ycash6 `yed_setquote`'s refusal on a node without a payout key (`RPC_INVALID_PARAMETER`,
+/// `src/rpc/yellowback.cpp`); kogany's payout key is its P2PKH `mining.miner_address`.
+pub const NO_PAYOUT_ADDRESS: &str =
+    "set -yellowbackpayoutaddress (or a P2PKH -mineraddress) so the node can emit a tag";
+
+fn no_payout_address() -> YedError {
+    YedError::new(
+        YedErrorKind::InvalidParameter,
+        "no-payout-address",
+        NO_PAYOUT_ADDRESS,
+    )
 }
 
 /// The node-local miner state (`QuoteHolder`): the held quote and when it was set (seconds).
@@ -224,6 +237,9 @@ where
         price_micro_usd: i64,
         source_mask: u16,
     ) -> Result<QuoteAck, YedError> {
+        // ycash6 `yed_setquote` (`src/rpc/yellowback.cpp`): a node without a payout key cannot
+        // emit a tag, so it refuses to hold a quote (F-S5-3), after the argument checks.
+        let payout = payout_key().ok_or_else(no_payout_address)?;
         let now = now_seconds();
         *self
             .quote
@@ -234,20 +250,18 @@ where
                 source_mask,
                 received_at: now,
             });
-        let payout = payout_key();
         Ok(QuoteAck {
             received_at: now,
             // MINER-1..3: a quote tag iff a quote is held, the node has a payout key and the
             // index is healthy.
             next_kind: if price_micro_usd != 0
-                && payout.is_some()
                 && zakura_state::yed::yed_unhealthy_reason().is_none()
             {
                 "quote"
             } else {
                 "none"
             },
-            payout_key: payout,
+            payout_key: Some(payout),
         })
     }
 
@@ -561,6 +575,17 @@ where
             }
         }
         Ok(row)
+    }
+
+    /// The node's mempool (`crate::mempool`): its spender of `outpoint` (F-S5-5).
+    async fn mempool_spender(&self, outpoint: &OutPoint) -> Option<Hash32> {
+        let outpoint = zakura_chain::transparent::OutPoint {
+            hash: zakura_chain::transaction::Hash(outpoint.txid.0),
+            index: outpoint.n,
+        };
+        crate::mempool::spender_of(&outpoint)
+            .await
+            .map(|hash| Hash32(hash.0))
     }
 
     /// `AuditLockedValue` over the best chain's set state.
@@ -944,5 +969,34 @@ mod pruned_tests {
         }
         let regtest = Network::new_regtest(Default::default());
         assert!(min_pruning_retention(&regtest) > MAX_BLOCK_REORG_HEIGHT);
+    }
+}
+
+/// F-S5-3: without a payout key (`mining.miner_address` unset or not P2PKH; no test in this
+/// binary sets one) `yed_setquote` is ycashd's `no-payout-address` refusal and holds no quote.
+#[cfg(test)]
+mod payout_tests {
+    use super::*;
+    use zakura_chain::chain_tip::NoChainTip;
+
+    #[tokio::test]
+    async fn set_quote_without_a_payout_key_is_refused() {
+        let svc = tower::service_fn(|req: ReadRequest| async move {
+            panic!("unexpected request {req:?}");
+            #[allow(unreachable_code)]
+            Ok::<_, BoxError>(ReadResponse::VaultSnapshot(None))
+        });
+        let s = LiveYedState::new(NoChainTip, svc);
+        assert_eq!(payout_key(), None);
+        let e = s.set_quote(50_000_000, 1).await.expect_err("refused");
+        assert_eq!(e.kind, YedErrorKind::InvalidParameter);
+        assert_eq!(
+            e.message(),
+            "no-payout-address: set -yellowbackpayoutaddress (or a P2PKH -mineraddress) so the \
+             node can emit a tag"
+        );
+        let o = zakura_rpc::server::jsonrpc::ErrorObject::from(e);
+        assert_eq!(o.code(), -8);
+        assert!(s.held_quote().is_none());
     }
 }

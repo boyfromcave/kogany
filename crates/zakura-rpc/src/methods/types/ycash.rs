@@ -394,6 +394,51 @@ pub fn is_pre_nu5(network: &Network, height: Height) -> bool {
     NetworkUpgrade::current(network, height) < NetworkUpgrade::Nu5
 }
 
+/// An insight-explorer address parameter (`getAddressesFromParams`, ycash6 `src/rpc/misc.cpp`):
+/// a transparent or plain post-quantum address, or else a YED address (`yb…`/`yt…`/`yr…`, a
+/// P2PKH key or a post-quantum key, `yellowback::DecodeAddress`), which names the same index key
+/// as its transparent form (S5 `wallet_pq_address`). The YED prefixes differ per network, so
+/// each network's are tried.
+pub fn insight_address(text: &str) -> Option<transparent::Address> {
+    use kogany_yellowback::codecs::{address::decode_any_address, script::Holder};
+    use zakura_chain::parameters::NetworkKind;
+    if let Ok(address) = text.parse::<transparent::Address>() {
+        return Some(address);
+    }
+    [
+        ("main", NetworkKind::Mainnet, NetworkKind::Mainnet),
+        ("test", NetworkKind::Testnet, NetworkKind::Testnet),
+        ("regtest", NetworkKind::Testnet, NetworkKind::Regtest),
+    ]
+    .into_iter()
+    .find_map(|(id, t_kind, pq_kind)| {
+        let params = kogany_yellowback::params::params_for_network(id)?;
+        Some(match decode_any_address(text, &params)? {
+            Holder::KeyId(key_id) => transparent::Address::from_pub_key_hash(t_kind, key_id),
+            Holder::Pq(owner) => transparent::Address::PayToPqKeyHash {
+                network_kind: pq_kind,
+                scheme: owner.scheme,
+                key_hash: owner.hash.0,
+            },
+        })
+    })
+}
+
+/// `getblock`'s `chainhistoryroot` (ycash6 `blockToJSON`, `CBlockIndex::hashChainHistoryRoot`,
+/// display order; S5 `vault_upgrade.py`): from after the Heartwood activation block until NU5 the
+/// header's `blockcommitments` is that root (ZIP 221; `block_commitments` is already in display
+/// order), and it is null (zeros) before. Ycash has no NU5 height.
+pub fn chain_history_root(
+    network: &Network,
+    height: Height,
+    block_commitments: [u8; 32],
+) -> [u8; 32] {
+    match NetworkUpgrade::Heartwood.activation_height(network) {
+        Some(heartwood) if height > heartwood && is_pre_nu5(network, height) => block_commitments,
+        _ => [0; 32],
+    }
+}
+
 /// `z_gettreestate`'s `finalState` as ycashd writes it (kogany W9-c finding 4): the
 /// incremental-merkle-tree serialization (`Optional left`, `Optional right`, `CompactSize n`,
 /// `n x Optional parent`) without trailing empty parents. ycashd grows its tree append by append,

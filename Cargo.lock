@@ -1249,6 +1249,7 @@ name = "kogany-rpc"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "chrono",
  "hex",
  "kogany-vault",
  "kogany-yellowback",
@@ -1259,6 +1260,7 @@ dependencies = [
  "tracing",
  "zakura-address",
  "zakura-chain",
+ "zakura-node-services",
  "zakura-protocol",
  "zakura-rpc",
  "zakura-script",

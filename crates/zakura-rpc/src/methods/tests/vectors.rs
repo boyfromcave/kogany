@@ -683,6 +683,8 @@ async fn rpc_getblock() {
                 block_commitments: Some(expected_block_commitments),
                 final_sapling_root: Some(expected_final_sapling_root),
                 final_orchard_root: None,
+                #[cfg(feature = "ycash")]
+                chain_history_root: None,
                 nonce: Some(expected_nonce),
                 bits: Some(block.header.difficulty_threshold),
                 difficulty: Some(
@@ -741,6 +743,8 @@ async fn rpc_getblock() {
                 block_commitments: Some(expected_block_commitments),
                 final_sapling_root: Some(expected_final_sapling_root),
                 final_orchard_root: None,
+                #[cfg(feature = "ycash")]
+                chain_history_root: None,
                 nonce: Some(expected_nonce),
                 bits: Some(block.header.difficulty_threshold),
                 difficulty: Some(
@@ -794,6 +798,8 @@ async fn rpc_getblock() {
                 block_commitments,
                 final_sapling_root,
                 final_orchard_root,
+                #[cfg(feature = "ycash")]
+                    chain_history_root: _,
                 nonce,
                 bits,
                 difficulty,
@@ -893,6 +899,8 @@ async fn rpc_getblock() {
                 block_commitments,
                 final_sapling_root,
                 final_orchard_root,
+                #[cfg(feature = "ycash")]
+                    chain_history_root: _,
                 nonce,
                 bits,
                 difficulty,
@@ -996,6 +1004,8 @@ async fn rpc_getblock() {
                 block_commitments: Some(expected_block_commitments),
                 final_sapling_root: Some(expected_final_sapling_root),
                 final_orchard_root: None,
+                #[cfg(feature = "ycash")]
+                chain_history_root: None,
                 nonce: Some(expected_nonce),
                 bits: Some(block.header.difficulty_threshold),
                 difficulty: Some(
@@ -1053,6 +1063,8 @@ async fn rpc_getblock() {
                 block_commitments: Some(expected_block_commitments),
                 final_sapling_root: Some(expected_final_sapling_root),
                 final_orchard_root: None,
+                #[cfg(feature = "ycash")]
+                chain_history_root: None,
                 nonce: Some(expected_nonce),
                 bits: Some(block.header.difficulty_threshold),
                 difficulty: Some(
@@ -5154,6 +5166,8 @@ async fn rpc_addnode() {
             pingwait: None,
             subver: None,
             version: None,
+            #[cfg(feature = "ycash")]
+            banscore: 0,
         }]
     );
 

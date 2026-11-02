@@ -27,8 +27,11 @@ use zakura_state::{BoxError, ReadRequest, ReadResponse};
 
 mod macros;
 
+#[cfg(feature = "ycash")]
+pub mod insight;
 pub mod json;
 pub mod live;
+pub mod mempool;
 #[cfg(feature = "ycash")]
 pub mod mining;
 pub mod mock;
@@ -68,10 +71,11 @@ where
         + Send
         + Sync
         + 'static,
-    R::Future: Send,
+    R::Future: Send + 'static,
 {
     yed::live::set_network(network);
     let yed = yed_state(tip.clone(), read_state.clone());
+    let insight_read_state = read_state.clone();
     let state: Arc<dyn VaultReadState> =
         if std::env::var(mock::MOCK_ENV).is_ok_and(|value| value == "1") {
             tracing::warn!(
@@ -82,10 +86,23 @@ where
         } else {
             Arc::new(live::LiveVaultState::new(network.clone(), read_state))
         };
-    VaultRpcImpl::new(state, network.clone())
+    let extension = VaultRpcImpl::new(state, network.clone())
         .into_extension()
         .and(yed::extension(yed, network))
-        .and(regtest::RegtestRpcImpl::new(network.clone()).into_extension())
+        .and(regtest::RegtestRpcImpl::new(network.clone()).into_extension());
+    // S5 parity: ycashd's insight reads Zakura does not serve (getaddressmempool,
+    // getaddressdeltas).
+    #[cfg(feature = "ycash")]
+    let extension = extension.and(
+        insight::InsightRpcImpl::new(
+            network.clone(),
+            Some(tower::util::BoxCloneSyncService::new(insight_read_state)),
+        )
+        .into_extension(),
+    );
+    #[cfg(not(feature = "ycash"))]
+    drop(insight_read_state);
+    extension
 }
 
 /// The `getblocktemplate` hooks `zakurad` installs on a Ycash node (plan W8-b): over the same

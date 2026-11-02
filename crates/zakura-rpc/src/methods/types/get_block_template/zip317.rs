@@ -21,9 +21,7 @@ use zakura_chain::{
         SAPLING_BLOCK_IO_LIMIT, SPROUT_BLOCK_JOINSPLIT_LIMIT,
     },
     serialization::{CompactSizeMessage, TrustedPreallocate, ZcashSerialize},
-    transaction::{
-        self, zip317::BLOCK_UNPAID_ACTION_LIMIT, ShieldedActionCounts, VerifiedUnminedTx,
-    },
+    transaction::{self, ShieldedActionCounts, VerifiedUnminedTx},
     work::equihash::Solution,
 };
 use zakura_consensus::{error::TransactionError, MAX_BLOCK_SIGOPS};
@@ -398,7 +396,7 @@ impl BlockTemplateLimits {
             remaining_sigops: MAX_BLOCK_SIGOPS
                 .checked_sub(coinbase.sigops)
                 .expect("coinbase sigops fit within the block limit"),
-            remaining_unpaid_actions: BLOCK_UNPAID_ACTION_LIMIT,
+            remaining_unpaid_actions: BLOCK_UNPAID_ACTION_LIMIT_FOR_TEMPLATES,
             remaining_orchard_actions: shielded_limits.orchard_actions,
             remaining_ironwood_actions: shielded_limits.ironwood_actions,
             remaining_sapling_ios: shielded_limits.sapling_ios,
@@ -478,6 +476,13 @@ impl BlockTemplateLimits {
             || counts.sprout_joinsplits > self.remaining_sprout_joinsplits
             || cost > self.remaining_shielded_cost
         {
+            tracing::debug!(
+                txid = ?tx.transaction.id().mined_id(),
+                size = tx.transaction.size(),
+                tx_block_sigops,
+                unpaid_actions = tx.unpaid_actions,
+                "template: skipping a candidate over the block limits"
+            );
             return false;
         }
 
@@ -499,6 +504,16 @@ impl BlockTemplateLimits {
         true
     }
 }
+
+/// The template's unpaid-action budget. Ycash (S5 parity): ycashd's
+/// `DEFAULT_BLOCK_UNPAID_ACTION_LIMIT` is `SIZE_MAX` (ycash6 `src/zip317.h`, `-blockunpaidactionlimit`):
+/// its own fee rules replace ZIP-317's (W1-Y9), so a mempool transaction is never left out of a
+/// template for its unpaid actions (a raw MINT paying the Ycash floor has 15).
+#[cfg(feature = "ycash")]
+const BLOCK_UNPAID_ACTION_LIMIT_FOR_TEMPLATES: u32 = u32::MAX;
+/// The template's unpaid-action budget (ZIP-317's `block_unpaid_action_limit`).
+#[cfg(not(feature = "ycash"))]
+const BLOCK_UNPAID_ACTION_LIMIT_FOR_TEMPLATES: u32 = transaction::zip317::BLOCK_UNPAID_ACTION_LIMIT;
 
 /// ZIP 218 capacity remaining after the generated coinbase transaction.
 struct RemainingShieldedLimits {

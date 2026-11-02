@@ -797,6 +797,7 @@ where
                 if script_failure {
                     if let Some(error) = vault_mempool::non_mandatory_script_failure(
                         &network,
+                        &tx,
                         &cached_ffi_transaction,
                         req.height(),
                         mempool_vault_state.clone(),

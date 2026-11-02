@@ -621,6 +621,10 @@ impl TemplateFilter {
             VaultFilter::Inactive => None,
             VaultFilter::Unavailable => {
                 if touches_primitive(tx, None) {
+                    tracing::debug!(
+                        txid = ?tx.transaction.id().mined_id(),
+                        "template filter: skipping a vault candidate, the set state is unavailable"
+                    );
                     return false;
                 }
                 None
@@ -641,6 +645,11 @@ impl TemplateFilter {
                     // The spent outputs are not all known: a candidate the primitive cannot
                     // evaluate is left out; any other is a no-op for the primitive.
                     if touches_primitive(tx, Some(state)) {
+                        tracing::debug!(
+                            txid = ?tx.transaction.id().mined_id(),
+                            spent_outputs = tx.spent_outputs.len(),
+                            "template filter: skipping a vault candidate whose spent outputs are unknown"
+                        );
                         return false;
                     }
                     if self.yed.as_mut().is_some_and(|yed| !yed.keep(tx)) {
