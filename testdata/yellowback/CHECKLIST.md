@@ -324,29 +324,49 @@ Beyond the C++ list (`tests/yellowback_state_records_tests.rs`): `keys_order_is_
 `record_encodings_round_trip_with_the_cpp_sizes`, `golden_state_decodes_from_its_canonical_bytes`,
 `delta_applies_reverts_and_inverts`, `process_tx_returns_writes_and_leaves_the_base`.
 
-**W5-d2 (release, owner redeem and the early fee, SNAP's price/halt/sigma/tag rules, the supply cap, EQV-1 and
-the mirror through the state, PIN-1, dormancy, ARM, liveness, FEE-W, MempoolCheckReason):**
-`red_owner_redeem_passes_and_closes`, `red2_missing_and_short_burn`, `in3_burn_recorded_on_closed_vault`,
-`red3_fee_and_payee_edges`, `red1_structure_and_selectors`, `m3_vault_spend_with_mint_payload`,
-`red1_owner_path_ignores_bundle`, `in_term_owner_redeem_below_theta_before_any_claim`,
-`in_term_early_redeem_fee_per_class_and_boundary`, `not1_deleted_when_vault_closes`, `mint6_supply_cap`,
-`mint6_cap_is_soft_above_the_recap_floor`, `mint6_issued_seeded_with_the_circulating_supply`, `mint6b_vault_share`,
-`tag3_signal_only_registers_nobody`, `price1_half_fill_boundary_and_selectors`, `price1_mid_slow_need_two_thirds`,
-`halt2_halt3_clear_with_undefined_price`, `halt2_fires_at_exact_threshold`, `halt3_fires_on_mid_vs_slow`,
-`halt2_open_debt_totals_invariant_and_undo` (needs `OpenDebtInvariantViolation`), `sigma1_undefined_sample_gives_cap`,
-`sigma1_one_pool_cannot_inflate`, `reg4_judgement_lag_and_bands`, `fee2_eligible_set_window_edges`,
-`fee1_floor_dominates_small_vault`, `feew_accuracy_tilt_ratio`, `feew_penalised_skipped_and_fallback`,
-`feew_override_flags_change_pick` (FEE-W: `DefaultPayee`, `Penalized`, `AccuracyBps`, `Registered` are not yet
-ported), `tpl1_overlay_order_in_block_chaining`, `totality_every_lookup_misses`, `virtual_snapshot_below_start_height`,
-`snapshot_undefined_price_is_zero`, `snap_written_for_every_height_ge_start`, `params_selected_by_height`,
-`mempoolcheck_bench`, `p4b_register_and_revive_payloads_invalid`, `p4b_join_mirrors_member`,
-`p4b_rejoin_after_withdraw_new_seq`, `p4b_set_dormancy_and_heartbeat_revival`, `p4b_attestor_set_adopted_only_open_15`,
-`seat_eviction_mirror`, `liveness_needs_held_act_and_fresh_ref`, `attestor_seq_exhausted`, `arm1_triggers_at_exact_block`,
-`arm2_arms_after_delay`, `arm_never_reverses`, `eqv1_two_prices_one_hash_ejects`, `eqv1_fork_hashes_not_equivocation`,
-`dormancy_needs_selection_evidence`, `dormancy_unseated_never_dormant`, `dormancy_only_at_check_heights`,
-`pin1_arms_from_bundlelog`, `pin1_excludes_key_from_medians_and_E`, `pin_not_armed_without_bundles`,
-`pin1_ignores_undefined_amint`, `in2_bond_spend_withdraws`, `seated_since_tracks_seating`,
-`selection_ignores_owner_key`, `cache_hit_equals_cold`, `r12_failing_notice_leaves_no_bundle_row`.
+**W5-d2, ported (61; release, owner redeem and the early fee, SNAP's price/halt/sigma/tag rules, the supply cap,
+EQV-1 and the mirror through the state, PIN-1, dormancy, ARM, liveness, FEE-W, the mempool check):**
+- owner redeem, IT-9, NOT-1 on close, MINT-6/6b (`tests/yellowback_state_redeem_tests.rs`):
+  `red_owner_redeem_passes_and_closes`, `red2_missing_and_short_burn`, `in3_burn_recorded_on_closed_vault`,
+  `red3_fee_and_payee_edges`, `red1_structure_and_selectors`, `m3_vault_spend_with_mint_payload`,
+  `red1_owner_path_ignores_bundle`, `in_term_owner_redeem_below_theta_before_any_claim`,
+  `in_term_early_redeem_fee_per_class_and_boundary`, `not1_deleted_when_vault_closes`, `mint6_supply_cap`,
+  `mint6_cap_is_soft_above_the_recap_floor`, `mint6_issued_seeded_with_the_circulating_supply`, `mint6b_vault_share`;
+- SNAP, FEE-W, chaining, totality, HALT-2's invariant (`tests/yellowback_state_snap_tests.rs`):
+  `tag3_signal_only_registers_nobody`, `price1_half_fill_boundary_and_selectors`, `price1_mid_slow_need_two_thirds`,
+  `halt2_halt3_clear_with_undefined_price`, `halt2_fires_at_exact_threshold`, `halt3_fires_on_mid_vs_slow`,
+  `sigma1_undefined_sample_gives_cap`, `sigma1_one_pool_cannot_inflate`, `reg4_judgement_lag_and_bands`,
+  `fee2_eligible_set_window_edges`, `fee1_floor_dominates_small_vault`, `feew_accuracy_tilt_ratio`,
+  `feew_penalised_skipped_and_fallback`, `feew_override_flags_change_pick`, `tpl1_overlay_order_in_block_chaining`,
+  `totality_every_lookup_misses`, `virtual_snapshot_below_start_height`, `snapshot_undefined_price_is_zero`,
+  `snap_written_for_every_height_ge_start`, `params_selected_by_height`, `mempoolcheck_bench` (the EvaluateBlock half
+  at 200 ms, and 10,000 plain transactions through `mempool_check_reason` at 1 s; both budgets x10 in debug or by
+  `YELLOWBACK_BENCH_SCALE`, as `BenchBudgetScale`), `halt2_open_debt_totals_invariant_and_undo`;
+- the mirror and the attestor passes through the state (`tests/yellowback_state_mirror_tests.rs`):
+  `p4b_register_and_revive_payloads_invalid`, `p4b_join_mirrors_member`, `p4b_rejoin_after_withdraw_new_seq`,
+  `p4b_set_dormancy_and_heartbeat_revival`, `p4b_attestor_set_adopted_only_open_15`, `seat_eviction_mirror`,
+  `liveness_needs_held_act_and_fresh_ref`, `attestor_seq_exhausted`, `arm1_triggers_at_exact_block`,
+  `arm2_arms_after_delay`, `arm_never_reverses`, `eqv1_two_prices_one_hash_ejects`, `eqv1_fork_hashes_not_equivocation`,
+  `dormancy_needs_selection_evidence`, `dormancy_unseated_never_dormant`, `dormancy_only_at_check_heights`,
+  `pin1_arms_from_bundlelog`, `pin1_excludes_key_from_medians_and_E`, `pin_not_armed_without_bundles`,
+  `pin1_ignores_undefined_amint`, `in2_bond_spend_withdraws`, `seated_since_tracks_seating`,
+  `selection_ignores_owner_key`, `cache_hit_equals_cold`, `r12_failing_notice_leaves_no_bundle_row`.
+
+The functions these read (`src/state/policy.rs`, `src/state/mempool.rs`): `registered`, `penalized`, `accuracy_bps`,
+`PayeePolicy`, `default_payee` (REG-1..3, FEE-W), `open_debt_invariant_violation` (HALT-2), `halt_mask_names`, and
+`mempool_check_reason` (`index.cpp` `MempoolCheckInner`). Beyond the C++ state list
+(`tests/yellowback_state_mempool_tests.rs`): `mempool_check_reasons` (the reasons of `yellowback_index_tests.cpp`
+`mempoolcheck_bench` that need no index), `mempool_check_refuses_attestor_set_act`, `mempool_check_gates`.
+
+The count, by name against the C++ file at `65cb4ae0f`: 161 `BOOST_AUTO_TEST_CASE`s = 86 W5-d1 + 9 W5-c + 61 W5-d2 +
+the 5 W5-e cases below (the "159" and "84" above predate a recount). The other `src/test/yellowback_*_tests.cpp`
+files hold no further state-machine case for W5: their supply-cap and HALT-2 arithmetic is W5-a's
+(`math_unit.rs` `mint6_market_cap_and_supply_cap`, `halt2_global_ratio`; `params_tables.rs`
+`halt2_floor_below_every_enabled_class_ratio`), the `yellowback_pq_vectors.json` matcher is W5-b's
+(`script_tests.rs` `pqchannel_cross_implementation_vectors`, TOK-PQ in `holderkey_pq_holder_recognition`), and
+`yellowback_index_tests.cpp` (`invariant_audit_catches_a_corrupt_total`, the fee price, the storage faults, the
+sweep) and `yellowback_fuzz_tests.cpp` (`evaluate_corpus_replay`, `payee_corpus_replay`) run through the index or a
+serialised-block harness (W5-e / W6).
 
 **W5-e (the index as consensus state; their state-level halves may be ported by W5-d2 over `YedState`):**
 `apply_undo_identity_over_sequences`, `p_mint_persists_through_undo_and_reapply`, `overlay_view_equivalence`,
