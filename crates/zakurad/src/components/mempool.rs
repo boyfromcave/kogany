@@ -402,6 +402,9 @@ fn peer_action(error: &TransactionError) -> PeerAction {
         // can fail.
         TransparentInputNotFound | ValidateMempoolLockTimeError(_) => Ignore,
 
+        // kogany (W4-d): the vault rules depend on the tip's set state (ycash6 DoS 0).
+        VaultRejected { .. } => Ignore,
+
         // Policy rejections: blocks can contain these transactions.
         Zip317(_)
         | NonStandardScriptSigSize { .. }
