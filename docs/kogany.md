@@ -2,7 +2,8 @@
 
 The documents in this directory are upstream Zakura's: they describe Zakura, a Zcash full node,
 and they still describe kogany's architecture (the crates, state, sync, the P2P stack and the RPC
-server are Zakura's). kogany is the Ycash developers' fork of Zakura; its `ycash` build,
+server are Zakura's). Kogany (from the Japanese *kogane*, 黄金, "gold": the Ycash node with
+vaults) is the Ycash developers' fork of Zakura; its `ycash` build,
 `koganyd`, is a Ycash full node carrying the vault network upgrade and the Ycash Yellowback (YED)
 rule module.
 

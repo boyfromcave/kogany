@@ -1,15 +1,26 @@
-# kogany: the Ycash node in Rust (`koganyd`)
+<p align="center">
+  <img src="docs/images/kogany-logo-tag.jpeg" alt="Kogany: the Ycash full node with vaults" width="480">
+</p>
 
-kogany is the Ycash developers' fork of [Zakura](README-zakura.md), a consensus-compatible Zcash
-full node in Rust (Zebra lineage). Built with the `ycash` cargo feature, it is a **Ycash** full
-node, `koganyd`: it follows Ycash mainnet, the re-forked Ycash testnet and Ycash regtest, and it
-carries the vault network upgrade and the Ycash Yellowback (YED) rule module on top of it.
-Yellowback is a decentralized dollar on Ycash; YED is its unit.
+# Kogany: the Ycash node in Rust (`koganyd`)
+
+**Kogany** is the Ycash developers' Ycash full node in Rust. The name is a play on the Japanese
+word *kogane* (黄金, "gold"): the node carries the Ycash Yellowback (YED) upgrade with **vaults**,
+so the Ycash contributors called it Kogany. The codebase began as [Zakura](README-zakura.md), a
+consensus-compatible Zcash full node in Rust (Zebra lineage); on that baseline the Ycash
+contributors added the vault network upgrade and made the node compatible with the Ycash network.
+
+Built with the `ycash` cargo feature, the tree is **Kogany**, a Ycash full node, `koganyd`: it
+follows Ycash mainnet, the re-forked Ycash testnet and Ycash regtest, and it enforces the vault
+network upgrade and the Ycash Yellowback (YED) rule module on top of Ycash consensus. Yellowback
+is a decentralized dollar on Ycash; YED is its unit.
 
 Built without the feature, the tree is upstream Zakura, a Zcash node (`zakurad`), and runs
 Zakura's own tests unchanged. Upstream's README is kept as
 [README-zakura.md](README-zakura.md), and Zakura's design documents under [`docs/`](docs/) still
-describe the node's architecture; this file covers what is different on Ycash.
+describe the node's architecture; this file covers what is different on Ycash. In code and
+paths the name is lowercase: the repository and cargo package are `kogany`, the daemon is
+`koganyd`, the data directory is `~/.kogany`.
 
 - [The three Ycash node lines](#the-three-ycash-node-lines)
 - [Building](#building)
