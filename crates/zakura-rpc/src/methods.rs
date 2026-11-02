@@ -2675,6 +2675,12 @@ where
                 block_commitments: Some(block_commitments),
                 final_sapling_root: Some(final_sapling_root),
                 final_orchard_root,
+                #[cfg(feature = "ycash")]
+                chain_history_root: Some(types::ycash::chain_history_root(
+                    &network,
+                    height,
+                    block_commitments,
+                )),
                 previous_block_hash: Some(previous_block_hash),
                 next_block_hash,
             })))
@@ -5596,6 +5602,8 @@ impl Default for GetBlockResponse {
             block_commitments: None,
             final_sapling_root: None,
             final_orchard_root: None,
+            #[cfg(feature = "ycash")]
+            chain_history_root: None,
             nonce: None,
             bits: None,
             difficulty: None,
@@ -5668,6 +5676,18 @@ pub struct BlockObject {
 
     // `chainhistoryroot` would be here. Undocumented. TODO: decide if we want to support it
     //
+    /// Ycash (S5 parity): ycashd's `chainhistoryroot` (`types::ycash::chain_history_root`).
+    #[cfg(feature = "ycash")]
+    #[serde(
+        with = "opthex",
+        rename = "chainhistoryroot",
+        skip_serializing_if = "Option::is_none",
+        default
+    )]
+    #[getset(get_copy = "pub")]
+    #[new(default)]
+    chain_history_root: Option<[u8; 32]>,
+
     /// The number of transactions in this block.
     #[serde(rename = "nTx")]
     #[getset(get_copy = "pub")]

@@ -394,6 +394,17 @@ pub fn is_pre_nu5(network: &Network, height: Height) -> bool {
     NetworkUpgrade::current(network, height) < NetworkUpgrade::Nu5
 }
 
+/// `getblock`'s `chainhistoryroot` (ycash6 `blockToJSON`, `CBlockIndex::hashChainHistoryRoot`,
+/// display order; S5 `vault_upgrade.py`): from after the Heartwood activation block until NU5 the
+/// header's `blockcommitments` is that root (ZIP 221; `block_commitments` is already in display
+/// order), and it is null (zeros) before. Ycash has no NU5 height.
+pub fn chain_history_root(network: &Network, height: Height, block_commitments: [u8; 32]) -> [u8; 32] {
+    match NetworkUpgrade::Heartwood.activation_height(network) {
+        Some(heartwood) if height > heartwood && is_pre_nu5(network, height) => block_commitments,
+        _ => [0; 32],
+    }
+}
+
 /// `z_gettreestate`'s `finalState` as ycashd writes it (kogany W9-c finding 4): the
 /// incremental-merkle-tree serialization (`Optional left`, `Optional right`, `CompactSize n`,
 /// `n x Optional parent`) without trailing empty parents. ycashd grows its tree append by append,

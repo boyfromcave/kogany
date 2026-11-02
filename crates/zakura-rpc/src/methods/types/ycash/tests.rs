@@ -362,3 +362,29 @@ fn ycash_address_utxos_follow_ycashd_index_order() {
     assert_eq!(utxos[0].txid().0[0], 0x05);
     assert_eq!(utxos[0].address(), &second);
 }
+
+/// S5 parity (`vault_upgrade.py`): `getblock.chainhistoryroot` is the header's commitment from
+/// after the Heartwood activation block, null before and at it.
+#[test]
+fn ycash_chain_history_root_follows_heartwood() {
+    use zakura_chain::parameters::testnet::ConfiguredActivationHeights;
+    let network = Network::new_regtest(
+        ConfiguredActivationHeights {
+            overwinter: Some(1),
+            sapling: Some(1),
+            ycash: Some(1),
+            blossom: Some(1),
+            heartwood: Some(1),
+            canopy: Some(1),
+            vault: Some(105),
+            ..Default::default()
+        }
+        .into(),
+    );
+    let c = [7; 32];
+    assert_eq!(chain_history_root(&network, Height(0), c), [0; 32]);
+    assert_eq!(chain_history_root(&network, Height(1), c), [0; 32]);
+    assert_eq!(chain_history_root(&network, Height(2), c), c);
+    assert_eq!(chain_history_root(&network, Height(105), c), c);
+    assert_eq!(chain_history_root(&network, Height(106), c), c);
+}
