@@ -1532,6 +1532,12 @@ pub enum Request {
     /// Checks the expected work, body commitment, parent history, and selected tip.
     CheckPreparedMinedRelayEligibility(BlockCommitmentData),
 
+    /// Checks whether the block's header commits to the authorizing data in its body,
+    /// using the history tree of the block's parent.
+    ///
+    /// Returns [`Response::AuthDataCommitment`].
+    CheckAuthDataCommitment(BlockCommitmentData),
+
     /// Calculates the median-time-past for the *next* block on the best chain.
     ///
     /// Returns [`Response::BestChainNextMedianTimePast`] when successful.
@@ -1632,6 +1638,7 @@ impl Request {
             Request::CheckPreparedMinedRelayEligibility(_) => {
                 "check_prepared_mined_relay_eligibility"
             }
+            Request::CheckAuthDataCommitment(_) => "check_auth_data_commitment",
             Request::BestChainNextMedianTimePast => "best_chain_next_median_time_past",
             Request::BestChainBlockHash(_) => "best_chain_block_hash",
             Request::KnownBlock(_) => "known_block",
@@ -2154,6 +2161,12 @@ pub enum ReadRequest {
     /// Checks the expected work, body commitment, parent history, and selected tip.
     CheckPreparedMinedRelayEligibility(BlockCommitmentData),
 
+    /// Checks whether the block's header commits to the authorizing data in its body,
+    /// using the history tree of the block's parent.
+    ///
+    /// Returns [`ReadResponse::AuthDataCommitment`].
+    CheckAuthDataCommitment(BlockCommitmentData),
+
     /// Calculates the median-time-past for the *next* block on the best chain.
     ///
     /// Returns [`ReadResponse::BestChainNextMedianTimePast`] when successful.
@@ -2287,6 +2300,7 @@ impl ReadRequest {
             ReadRequest::CheckPreparedMinedRelayEligibility(_) => {
                 "check_prepared_mined_relay_eligibility"
             }
+            ReadRequest::CheckAuthDataCommitment(_) => "check_auth_data_commitment",
             ReadRequest::BestChainNextMedianTimePast => "best_chain_next_median_time_past",
             ReadRequest::BestChainBlockHash(_) => "best_chain_block_hash",
             #[cfg(feature = "indexer")]
@@ -2357,6 +2371,9 @@ impl TryFrom<Request> for ReadRequest {
             }
             Request::CheckPreparedMinedRelayEligibility(block) => {
                 Ok(ReadRequest::CheckPreparedMinedRelayEligibility(block))
+            }
+            Request::CheckAuthDataCommitment(block) => {
+                Ok(ReadRequest::CheckAuthDataCommitment(block))
             }
 
             Request::ApplyHeaderChainInsert { .. }

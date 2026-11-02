@@ -38,13 +38,13 @@ zakura-rpc = { path = "../zakura-rpc", version = "13.0.1-rc0", default-features 
 # W7-b: yed_validaterawtransaction's script check (VerifyAllInputs at tip + 1).
 zakura-script = { path = "../zakura-script", version = "5.0.1-rc0" }
 # W4-d: the live vault state is the read state service's best-chain vault snapshot.
-zakura-state = { path = "../zakura-state", version = "11.1.0-rc0" }
+zakura-state = { path = "../zakura-state", version = "12.0.0-rc0" }
 
 [dev-dependencies]
 hex = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 # W4-d: tests/live_state.rs commits the recorded chain to a test state service.
-zakura-state = { path = "../zakura-state", version = "11.1.0-rc0", features = ["proptest-impl"] }
+zakura-state = { path = "../zakura-state", version = "12.0.0-rc0", features = ["proptest-impl"] }
 
 [lints]
 workspace = true
