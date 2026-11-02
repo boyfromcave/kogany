@@ -188,13 +188,15 @@ pub fn vault_tx(tx: &Transaction, txid: &transaction::Hash) -> VaultTx {
                 prevout: vault_outpoint(outpoint),
                 script_sig: unlock_script.as_raw_bytes().to_vec(),
             },
-            // The C++ null prevout. The rules never read a coinbase input's script.
-            transparent::Input::Coinbase { .. } => VaultTxIn {
+            // The C++ null prevout. The vault rules never read a coinbase input's script; the
+            // YED module reads its coinbase tag there (TAG, W5-f), so it is the serialized
+            // scriptSig (the BIP34 height push, then the miner data).
+            coinbase @ transparent::Input::Coinbase { .. } => VaultTxIn {
                 prevout: OutPoint {
                     txid: Hash32::ZERO,
                     n: u32::MAX,
                 },
-                script_sig: Vec::new(),
+                script_sig: coinbase.coinbase_script().unwrap_or_default(),
             },
         })
         .collect();
