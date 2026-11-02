@@ -39,9 +39,9 @@ class SyncGateTest(unittest.TestCase):
         y = block(valuePools=[dict(block()["valuePools"][0]), {"id": "sprout", "monitored": False, "chainValueZat": 9}])
         self.assertEqual(gate.compare_blocks(5, k, y), [])
 
-    def test_blockcommitments_only_from_heartwood(self):
+    def test_blockcommitments_at_every_height(self):
         k, y = block(blockcommitments="01"), block(blockcommitments="02")
-        self.assertEqual(gate.compare_blocks(gate.MAINNET_HEARTWOOD - 1, k, y), [])
+        self.assertEqual(len(gate.compare_blocks(5, k, y)), 1)
         self.assertEqual(len(gate.compare_blocks(gate.MAINNET_HEARTWOOD, k, y)), 1)
 
     def test_treestates_compare_the_shared_fields(self):
@@ -49,6 +49,41 @@ class SyncGateTest(unittest.TestCase):
         y = {"sapling": {"commitments": {"finalState": "ab", "finalRoot": "cd"}},
              "sprout": {"commitments": {"finalState": "ef"}}}
         self.assertEqual(gate.compare_treestates(k, y), (["sapling.finalState"], []))
+
+    def test_chainhistoryroot_is_the_blocks_own_commitment(self):
+        h = gate.MAINNET_HEARTWOOD + 1
+        same = block(blockcommitments="84", chainhistoryroot="84")
+        self.assertEqual(gate.compare_blocks(h, block(blockcommitments="84"), same), [])
+        other = block(blockcommitments="84", chainhistoryroot="8d")
+        self.assertEqual([d[0] for d in gate.compare_blocks(h, block(blockcommitments="84"), other)],
+                         ["zip221 chainhistoryroot(h) vs blockcommitments(h)"])
+        self.assertEqual(gate.compare_blocks(gate.MAINNET_HEARTWOOD, block(blockcommitments="00"),
+                                             block(blockcommitments="00", chainhistoryroot="84")), [])
+
+    def test_recheck_keeps_only_the_differences_that_remain(self):
+        class Fake:
+            def __init__(self, blocks, trees):
+                self.blocks, self.trees = blocks, trees
+            def batch(self, calls):
+                return [(self.blocks[int(p[0])], None) for _, p in calls]
+            def call(self, method, height):
+                return self.trees[int(height)]
+        tree = lambda st: {"sapling": {"commitments": {"finalState": st, "finalRoot": "r"}}}
+        kogany = Fake({5: block(finalsaplingroot="3e"), 6: block(finalsaplingroot="00")},
+                      {9: tree("01"), 10: tree("02")})
+        ycash = Fake({5: block(finalsaplingroot="3e"), 6: block(finalsaplingroot="3e")},
+                     {9: tree("01"), 10: tree("03")})
+        state = {"compared_through": 10, "rounds": 1,
+                 "mismatches": [{"height": 5, "diffs": [["finalsaplingroot", "00", "3e"]]},
+                                {"height": 6, "diffs": [["finalsaplingroot", "00", "3e"]]},
+                                {"height": 9, "diffs": [["sapling.finalState", "0100", "01"]], "rpc": "z_gettreestate"}],
+                 "treestate_samples": [{"height": 9, "fields": [], "identical": False},
+                                       {"height": 10, "fields": [], "identical": False}]}
+        args = type("A", (), {"batch": 100, "state": None, "recompare": False, "verbose": False})()
+        gate.recheck(kogany, ycash, state, args)
+        self.assertEqual([m["height"] for m in state["mismatches"]], [6, 10])
+        self.assertEqual([t["identical"] for t in state["treestate_samples"]], [True, False])
+        self.assertEqual(state["rechecks"][-1]["mismatches_before"], 3)
 
     def test_log_scan_separates_the_list_end(self):
         with tempfile.NamedTemporaryFile("w", delete=False) as f:
