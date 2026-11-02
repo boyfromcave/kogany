@@ -11,13 +11,16 @@
 //! configured, the primitive's inert entry otherwise ([`registered_modules`]) — with the node's
 //! one [`LruSigCache`] and a block-hash provider over the chain being validated.
 
-use std::sync::OnceLock;
+use std::sync::{Mutex, OnceLock};
 
 use kogany_vault::{
     state::{registered_modules, BlockHashFn, ModuleEntry, Rules},
     Hash32,
 };
-use kogany_yellowback::module::{LruSigCache, YedModule};
+use kogany_yellowback::{
+    module::{LruSigCache, YedModule},
+    params::Params,
+};
 use zakura_chain::{block::Height, parameters::Network};
 
 use crate::service::{
@@ -88,4 +91,26 @@ pub fn chain_block_hash_at(chain: &Chain, db: &ZakuraDb, h: i64) -> Option<Hash3
         .hash_by_height(height)
         .or_else(|| db.hash(height))
         .map(|hash| Hash32(hash.0))
+}
+
+/// A `'static` module table for `params` (the mining template's rules outlive any one call):
+/// `YED\0` → the module configured with `params`, or the inert table where `params` is `None`
+/// or unconfigured. Each distinct parameter set is built once and kept for the life of the
+/// process (a node has one; tests a few).
+pub fn static_module_table(params: Option<Params>) -> &'static [ModuleEntry<'static>] {
+    type Table = &'static [ModuleEntry<'static>];
+    static TABLES: Mutex<Vec<(Params, Table)>> = Mutex::new(Vec::new());
+    let Some(module) = params.and_then(|p| YedModule::new(p, Some(node_yed_sig_cache()))) else {
+        return registered_modules();
+    };
+    let mut tables = TABLES
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    if let Some((_, table)) = tables.iter().find(|(p, _)| p == module.params()) {
+        return table;
+    }
+    let module: &'static YedModule<'static> = Box::leak(Box::new(module));
+    let table: Table = Box::leak(Box::new(module.table()));
+    tables.push((*module.params(), table));
+    table
 }

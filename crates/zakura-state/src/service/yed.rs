@@ -293,6 +293,9 @@ pub struct YedSnapshot {
     network: &'static str,
     patch: Arc<BTreeMap<YedKey, Option<YedRecord>>>,
     db: ZakuraDb,
+    /// The non-finalized chain holding `tip`, if any (the ancestor hashes above the finalized
+    /// tip, W5-f).
+    chain: Option<Arc<Chain>>,
 }
 
 /// Two snapshots are equal when they are after the same block, under the same parameters, with
@@ -338,6 +341,7 @@ impl YedSnapshot {
         db: &ZakuraDb,
         tip: Option<(Height, block::Hash)>,
         patch: BTreeMap<YedKey, Option<YedRecord>>,
+        chain: Option<Arc<Chain>>,
     ) -> YedSnapshot {
         let network = db.network();
         let params = yed_network_params(&network, &db.config().yellowback)
@@ -350,7 +354,31 @@ impl YedSnapshot {
             network: params.map_or(yed_network_name(&network), |p| p.network),
             patch: Arc::new(patch),
             db: db.clone(),
+            chain,
         }
+    }
+
+    /// The hash of the block at `h` on this snapshot's chain, for `h` at or below its tip (the
+    /// module hooks' `blockHashAt` for a block built on it: the template, W5-f), `None` above
+    /// the tip or when unknown.
+    pub fn block_hash_at(&self, h: i64) -> Option<Hash32> {
+        let (tip, _) = self.tip?;
+        let height = Height(u32::try_from(h).ok()?);
+        if height > tip {
+            return None;
+        }
+        self.chain
+            .as_ref()
+            .and_then(|chain| chain.hash_by_height(height))
+            .or_else(|| self.db.hash(height))
+            .map(|hash| Hash32(hash.0))
+    }
+
+    /// The vault primitive's module table for blocks built on this snapshot: `YED\0` registered
+    /// with this snapshot's parameters (a table kept for the life of the process, one per
+    /// parameter set), or the inert table where Yellowback is off.
+    pub fn module_table(&self) -> &'static [kogany_vault::state::ModuleEntry<'static>] {
+        module::static_module_table(self.params)
     }
 
     /// Yellowback is live on this node (the Vault height and the attestor set are known):
@@ -476,11 +504,20 @@ impl YedSnapshot {
 
 /// The YED state at the finalized tip.
 pub fn finalized_yed_snapshot(db: &ZakuraDb) -> YedSnapshot {
-    YedSnapshot::new(db, db.tip(), BTreeMap::new())
+    YedSnapshot::new(db, db.tip(), BTreeMap::new(), None)
 }
 
-/// The YED state at `chain`'s tip.
+/// The YED state at `chain`'s tip. Its [`YedSnapshot::block_hash_at`] knows the finalized
+/// chain only; [`tip_yed_snapshot`] keeps the chain's own hashes too.
 pub fn chain_tip_yed_snapshot(chain: &Chain, db: &ZakuraDb) -> YedSnapshot {
+    chain_tip_yed_snapshot_with(chain, db, None)
+}
+
+fn chain_tip_yed_snapshot_with(
+    chain: &Chain,
+    db: &ZakuraDb,
+    keep: Option<Arc<Chain>>,
+) -> YedSnapshot {
     let tip = chain
         .tip_block()
         .map(|b| (b.height, b.hash))
@@ -490,14 +527,14 @@ pub fn chain_tip_yed_snapshot(chain: &Chain, db: &ZakuraDb) -> YedSnapshot {
         .entries()
         .map(|(k, v)| (*k, v.cloned()))
         .collect();
-    YedSnapshot::new(db, tip, patch)
+    YedSnapshot::new(db, tip, patch, keep)
 }
 
 /// The YED state at the best chain's tip, or the finalized tip without one (the fee policy's
 /// read, W6-b: `tip_yed_snapshot(non_finalized.best_chain(), db).attested_fee_price()`).
 pub fn tip_yed_snapshot(best_chain: Option<&Arc<Chain>>, db: &ZakuraDb) -> YedSnapshot {
     match best_chain {
-        Some(chain) => chain_tip_yed_snapshot(chain, db),
+        Some(chain) => chain_tip_yed_snapshot_with(chain, db, Some(chain.clone())),
         None => finalized_yed_snapshot(db),
     }
 }
@@ -533,7 +570,12 @@ pub fn yed_snapshot_by_hash<'a>(
                 patch.insert(*k, change.before.clone());
             }
         }
-        return Some(YedSnapshot::new(db, Some((height, hash)), patch));
+        return Some(YedSnapshot::new(
+            db,
+            Some((height, hash)),
+            patch,
+            Some(chain.clone()),
+        ));
     }
     let tip = db.tip()?;
     if tip.1 == hash {
@@ -569,5 +611,5 @@ pub fn finalized_yed_snapshot_below(
         }
         h = h.previous().ok()?;
     }
-    Some(YedSnapshot::new(db, Some((target, target_hash)), patch))
+    Some(YedSnapshot::new(db, Some((target, target_hash)), patch, None))
 }
