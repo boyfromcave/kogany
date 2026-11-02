@@ -92,6 +92,8 @@ pub(crate) mod read;
 mod traits;
 pub mod vault;
 mod write;
+// kogany (W5-e): the Yellowback (YED) index across finalized and non-finalized states.
+pub mod yed;
 
 #[cfg(any(test, feature = "proptest-impl"))]
 pub mod arbitrary;
