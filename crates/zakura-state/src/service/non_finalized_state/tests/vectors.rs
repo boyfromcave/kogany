@@ -1682,7 +1682,8 @@ fn receipt_fallback_and_backup_restore_ignore_replay_order() {
 fn ycash_invalidations_at_one_height_are_kept_by_hash() -> Result<()> {
     let _init_guard = zakura_test::init();
 
-    for network in Network::iter() {
+    // Mainnet and a pre-Heartwood testnet: the vector blocks need no history tree there.
+    for network in [Network::Mainnet, crate::tests::testnet_with_zcash_heights()] {
         let block1: Arc<Block> = Arc::new(network.test_block(653599, 583999).unwrap());
         let first = block1.make_fake_child().set_work(10);
         let second = block1.make_fake_child().set_work(5);

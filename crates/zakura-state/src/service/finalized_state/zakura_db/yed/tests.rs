@@ -811,7 +811,7 @@ fn real_non_finalized_path_evaluates_forks_and_stops_on_failure() {
     let _init_guard = zakura_test::init();
     let fake_pool = ValueBalance::<NonNegative>::fake_populated_pool();
     let start = 583_999;
-    let network = Network::new_default_testnet();
+    let network = crate::tests::testnet_with_zcash_heights();
     register_yed_params_for_test(
         &network,
         regtest_params_with(start, 0, 0, [7u8; 32], 3, BundleCarrier::ScriptSig, false),
@@ -851,7 +851,7 @@ fn real_non_finalized_path_evaluates_forks_and_stops_on_failure() {
     );
 
     // Yellowback starting one block earlier: the empty index cannot evaluate block1.
-    let network = Network::new_default_testnet();
+    let network = crate::tests::testnet_with_zcash_heights();
     register_yed_params_for_test(
         &network,
         regtest_params_with(

@@ -82,6 +82,31 @@ impl FakeChainHelper for Arc<Block> {
     }
 }
 
+/// kogany: a configured Testnet with Zcash's testnet upgrade schedule (Heartwood at 903,800), for
+/// the non-finalized vector tests built on `BLOCK_TESTNET_583999` and its fake children.
+///
+/// On a `ycash` build the default Testnet is Ycash's (Heartwood at 510,252), where that Zcash
+/// block is past Heartwood, so its commitment is a chain history root and committing it needs
+/// the parent's history tree, which an empty finalized state does not have. Each call returns a
+/// new network instance, so YED test parameters can be registered on it.
+pub(crate) fn testnet_with_zcash_heights() -> zakura_chain::parameters::Network {
+    use zakura_chain::parameters::testnet::{ConfiguredActivationHeights, Parameters};
+
+    Parameters::build()
+        .with_activation_heights(ConfiguredActivationHeights {
+            before_overwinter: Some(1),
+            overwinter: Some(207_500),
+            sapling: Some(280_000),
+            blossom: Some(584_000),
+            heartwood: Some(903_800),
+            canopy: Some(1_028_500),
+            ..Default::default()
+        })
+        .expect("Zcash's testnet heights are in order")
+        .to_network()
+        .expect("the configured testnet is valid")
+}
+
 fn work_to_expanded(work: U256) -> ExpandedDifficulty {
     // Work is calculated from expanded difficulty with the equation `work = 2^256 / (expanded + 1)`
     // By balancing the equation we get `expanded = (2^256 / work) - 1`
