@@ -205,3 +205,52 @@ pub const DEFAULT_MAX_TRANSACTION_BYTES: u64 = zakura_chain::block::MAX_BLOCK_BY
 /// Equivalent to zcashd's `MAX_OP_RETURN_RELAY`:
 /// <https://github.com/zcash/zcash/blob/v6.10.0/src/script/standard.h#L22-L26>
 pub const DEFAULT_MAX_DATACARRIER_BYTES: u32 = 83;
+
+// kogany (W6-b): the network-fee keys.
+#[cfg(all(test, feature = "ycash"))]
+mod ycash_fee_tests {
+    use super::Config;
+
+    #[test]
+    fn the_fee_keys_parse_and_check_as_ycashd_init() {
+        let config: Config = toml::from_str(
+            "pq_fee_rate = 50000\n\
+             pq_fee_usd_per_kb_micro = 50000000\n\
+             yellowback_fee_usd_per_kb_micro = 100000\n\
+             yellowback_max_tx_fee_usd_micro = 20000000\n\
+             yellowback_max_tx_fee = 100000000000\n\
+             max_tx_fee = 2000000\n\
+             yellowback_fee = 20000\n\
+             yellowback_mint_lag = 36\n",
+        )
+        .expect("the W6-b keys are [mempool] keys");
+        let p = config.yed_node_policy().expect("valid values");
+        assert_eq!(p.fee.pq_fee_rate, 50_000);
+        assert_eq!(p.fee.attested.plain_usd_per_kb_micro, 50_000_000);
+        assert_eq!(p.fee.attested.yed_usd_per_kb_micro, 100_000);
+        assert_eq!(p.fee.attested.yed_max_tx_fee_usd_micro, 20_000_000);
+        assert_eq!(p.fee.attested.yed_max_tx_fee_zat, 100_000_000_000);
+        assert_eq!(p.fee.max_tx_fee, 2_000_000);
+        assert_eq!(p.fee.yellowback_fee, 20_000);
+        assert_eq!(p.fee.attested.min_cap_zat, 20_000); // max(-yellowbackfee, VAULT_RPC_FEE)
+        assert_eq!(p.ref_lag, 36);
+
+        // Unset keys are ycashd's defaults.
+        assert_eq!(
+            Config::default().yed_node_policy(),
+            Ok(kogany_rpc::yed::fees::NodeYedPolicy::default())
+        );
+
+        // ycashd's InitError cases.
+        for bad in [
+            "yellowback_mint_lag = 37\n",
+            "yellowback_fee = 999\n",
+            "pq_fee_rate = 0\n",
+            "yellowback_max_tx_fee = 99999\n",
+            "pq_fee_usd_per_kb_micro = -1\n",
+        ] {
+            let config: Config = toml::from_str(bad).expect("parses");
+            assert!(config.yed_node_policy().is_err(), "{bad} is refused");
+        }
+    }
+}
