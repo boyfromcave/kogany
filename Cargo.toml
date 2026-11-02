@@ -20,6 +20,7 @@ members = [
         "crates/xtask",
         "crates/zakura-jsonl-trace",
         "crates/kogany-pq",
+        "crates/kogany-vault",
 ]
 
 # The asset packaging crate publishes on the release-state cadence rather than with the
