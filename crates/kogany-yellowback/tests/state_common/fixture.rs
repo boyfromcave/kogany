@@ -1243,3 +1243,150 @@ pub fn none_skip() -> BTreeSet<u16> {
 pub fn attestors_of(s: &YedState) -> Vec<(u16, AttestorRecord)> {
     s.attestors()
 }
+
+impl Fixture {
+    /// `ReviveTx`: the retired ATTESTOR_REVIVE payload.
+    pub fn revive_tx(&mut self, a: &Attestation) -> MTx {
+        let mut m = MTx::default();
+        m.vin.push(txin(self.fake_input()));
+        m.vout.push(payload_out(&Payload::AttestorRevive(
+            kogany_yellowback::codecs::payload::AttestorRevive {
+                seq: a.seq,
+                price_micro_usd: a.price_micro_usd,
+                cited_height: a.cited_height,
+                sig: a.sig,
+            },
+        )));
+        m.vout.push(txout(1000, self.user_p2pkh()));
+        m
+    }
+
+    /// Writes a record straight into the state (the C++ `State(f.view).Put`).
+    pub fn put(
+        &mut self,
+        key: kogany_yellowback::state::YedKey,
+        rec: kogany_yellowback::state::YedRecord,
+    ) {
+        self.state.entries.insert(key, rec);
+    }
+}
+
+/// `VerdictOf`: mine `m` at the next height; its logged verdict or "none".
+pub fn verdict_of(f: &mut Fixture, m: &MTx) -> String {
+    let t = Fixture::quote(50000, (f.tip + 1) % 3);
+    f.mine(Some(t), vec![m.clone()]);
+    f.log(&m.txid()).map_or("none".to_owned(), |l| l.verdict)
+}
+
+/// The verdict of the first transaction log of a block evaluated (not mined) at the next height.
+pub fn dry_verdict(f: &Fixture, tag_price: MicroUsd, txs: &[MTx]) -> BlockEvaluation {
+    f.evaluate(Some(Fixture::quote(tag_price, 0)), txs, None)
+}
+
+/// An ARMED fixture whose vault `w` (6,000 YEC backing $100) is not underwater under pools at
+/// `pool_price` but is under attestors at `att_price` (RED-4 (b)).
+pub struct EmergencyFixture {
+    pub f: Fixture,
+    pub w: Hash32,
+    pub pool_price: MicroUsd,
+    pub att_price: MicroUsd,
+}
+
+impl EmergencyFixture {
+    /// The fixture vault's collateral: $100 at 300 % and $0.05.
+    pub const COLLATERAL: Amount = 600_000_000_000;
+
+    /// `settle` blocks at the pool price after the mint (64 refills the slow window past the
+    /// term; 35 leaves the claim in term).
+    pub fn new(settle: usize) -> EmergencyFixture {
+        let mut f = Fixture::new();
+        f.arm(4, 50000); // four seated, three drawn
+        let m = f.mint_v3(10000, 50000, MintOpts::default(), &none_skip(), 48);
+        assert_eq!(mv(&mut f, &m), "");
+        let w = m.txid();
+        let pool_price = 21000;
+        for _ in 0..settle {
+            let t = Fixture::quote(pool_price, (f.tip + 1) % 3);
+            f.mine(Some(t), Vec::new());
+        }
+        assert_eq!(f.snap(f.tip).pclaim(), Some(pool_price));
+        EmergencyFixture {
+            f,
+            w,
+            pool_price,
+            att_price: 17000,
+        }
+    }
+
+    pub fn selector(&self) -> Vec<u8> {
+        vault_selector(&self.w)
+    }
+
+    pub fn quote(&self) -> Option<CoinbaseTag> {
+        Some(Fixture::quote(self.pool_price, (self.f.tip + 1) % 3))
+    }
+
+    /// Mines a block at the pool price.
+    pub fn tick(&mut self) {
+        let t = self.quote();
+        self.f.mine(t, Vec::new());
+    }
+
+    /// Posts a notice at tip + 1 with refHeight = tip - 1; whether Notices[w] exists afterwards.
+    pub fn post_notice(&mut self, price: Option<MicroUsd>) -> bool {
+        let r = self.f.tip - 1;
+        let b = self
+            .f
+            .bundle_simple(r, &self.selector(), price.unwrap_or(self.att_price));
+        let w = self.w;
+        let n = self.f.notice_tx(&w, r, &b);
+        let t = self.quote();
+        self.f.mine(t, vec![n]);
+        self.f.notice(&self.w).is_some()
+    }
+
+    /// The emergency claim at tip + 1 with refHeight = tip - 1.
+    pub fn claim(&mut self, mut o: SpendOpts, price: Option<MicroUsd>) -> MTx {
+        let r = self.f.tip - 1;
+        o.owner_path = false;
+        o.bundle = Some(
+            self.f
+                .bundle_simple(r, &self.selector(), price.unwrap_or(self.att_price)),
+        );
+        if o.attest_payee == -1 {
+            o.attest_payee = i64::from(self.f.selected(r, &self.selector())[0]);
+        }
+        let w = self.w;
+        self.f.spend_tx(&w, &[op(w, 1)], r, o)
+    }
+
+    /// RED-5b: path (b) caps at pEmerg = min(xClaim, aClaim).
+    pub fn residual(&self, r: i64) -> Amount {
+        let p_emerg = self.f.snap(r).pclaim().unwrap().min(self.att_price);
+        kogany_yellowback::math::residual_zat(
+            EmergencyFixture::COLLATERAL,
+            kogany_yellowback::math::claimant_max_zat(10000, 10000, p_emerg),
+        )
+    }
+
+    pub fn mine(&mut self, tx: &MTx) -> RedResult {
+        let t = self.quote();
+        self.f.mine(t, vec![tx.clone()]);
+        let txid = tx.txid();
+        let log = self.f.log(&txid);
+        RedResult {
+            invalid: !self.f.refused_verdict(&txid).is_empty(),
+            vault: self.f.vault(&self.w).unwrap(),
+            verdict: log
+                .as_ref()
+                .map_or("none".to_owned(), |l| l.verdict.clone()),
+            log: log.unwrap_or_default(),
+        }
+    }
+
+    /// The first transaction log's verdict of a block with `txs` at the next height (not mined).
+    pub fn dry(&self, txs: &[MTx]) -> BlockEvaluation {
+        self.f
+            .evaluate(Some(Fixture::quote(self.pool_price, 0)), txs, None)
+    }
+}
