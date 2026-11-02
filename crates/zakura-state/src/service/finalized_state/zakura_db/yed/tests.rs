@@ -1597,3 +1597,78 @@ fn mempool_check_over_the_tip_snapshot() {
     assert_eq!(off_snapshot.mempool_check(&bad.input.txs[1], 0), None);
     assert_eq!(off_snapshot.attested_fee_price(), None);
 }
+
+/// W5-f exit gate (1): the golden chain through the registered module. Every one of the 462
+/// entries is evaluated over the parent chain's index state as contextual validation evaluates
+/// it, and judged by `check::yed::yed_verdict`, the rejection `validate_and_commit` applies: the
+/// 22 flagged entries are refused with `ValidateContextError::YedRejected`
+/// (`bad-yellowback-<verdict>`, the C++ verdicts in order, misbehaviour score 100) and never
+/// pushed; the 440 others are accepted and pushed. The tip's state hash and `Totals` equal the
+/// pinned `stateHash` and `totals`, and the state hash equals the in-memory replay at every
+/// height.
+#[test]
+fn golden_chain_through_the_registered_module_rejects_at_dos_100() {
+    use crate::{service::check::yed::yed_verdict, CommitBlockError, ValidateContextError};
+
+    let _init_guard = zakura_test::init();
+    let g = golden();
+    let r = reference(&g, 1_000);
+    let network = network_with(g.p);
+    let dir = TempDir::new().unwrap();
+    let db = open_db(&config_at(dir.path()), &network);
+    let valid = g.blocks.iter().filter(|b| !b.invalid).count();
+    let carriers = carriers(valid);
+
+    let mut chain = empty_chain();
+    let mut accepted = 0usize;
+    let mut rejected = Vec::new();
+    for b in &g.blocks {
+        let effect = chain_yed_effect(&g.p, &chain, &db, &b.input).expect("evaluates");
+        let cv = carrier_cv(&carriers[accepted.min(valid - 1)], effect.clone());
+        match yed_verdict(effect, &cv) {
+            Err(error) => {
+                assert!(b.invalid, "{:?} rejected: {error}", b.input.height);
+                let ValidateContextError::YedRejected { reason, .. } = &error else {
+                    panic!("a YED verdict is YedRejected: {error}");
+                };
+                rejected.push((b.input.height.0, reason.clone()));
+                let commit_error = CommitBlockError::from(Box::new(error));
+                assert_eq!(commit_error.misbehavior_score(), 100, "DoS 100");
+            }
+            Ok(effect) => {
+                assert!(!b.invalid, "{:?} accepted", b.input.height);
+                chain = chain
+                    .push(carrier_cv(&carriers[accepted], effect))
+                    .expect("the carrier block pushes");
+                assert_eq!(
+                    chain_tip_yed_snapshot(&chain, &db).state_hash(),
+                    r.hashes[accepted],
+                    "chain tip at {:?}",
+                    b.input.height
+                );
+                accepted += 1;
+            }
+        }
+    }
+    assert_eq!(accepted, 440);
+    let want: Vec<(u32, String)> = GOLDEN_INVALID
+        .iter()
+        .map(|(h, v)| (*h, format!("bad-yellowback-{v}")))
+        .collect();
+    assert_eq!(rejected, want);
+    let snapshot = chain_tip_yed_snapshot(&chain, &db);
+    assert_eq!(
+        hex32(snapshot.state_hash()),
+        g.doc["stateHash"].as_str().unwrap()
+    );
+    let t = snapshot.totals();
+    let want = &g.doc["totals"];
+    assert_eq!(t.supply_cents, want["supplyCents"].as_i64().unwrap());
+    assert_eq!(t.collateral_zat, want["collateralZat"].as_i64().unwrap());
+    assert_eq!(i64::from(t.active_vaults), want["activeVaults"].as_i64().unwrap());
+    assert_eq!(i64::from(t.void_vaults), want["voidVaults"].as_i64().unwrap());
+    assert_eq!(i64::from(t.closed_vaults), want["closedVaults"].as_i64().unwrap());
+    assert_eq!(i64::from(t.claimed_vaults), want["claimedVaults"].as_i64().unwrap());
+    assert_eq!(t.unbacked_cents, want["unbackedCents"].as_i64().unwrap());
+    assert_eq!(t.open_debt_cents, want["openDebtCents"].as_i64().unwrap());
+}
