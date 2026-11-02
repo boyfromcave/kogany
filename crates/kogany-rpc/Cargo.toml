@@ -12,6 +12,10 @@ publish = false
 # The integration hook crate (plan W7): it implements zakura-rpc's RpcMethods, so it depends on
 # zakura-rpc and zakura-chain; the vault parsing is kogany-vault's; the live vault state is
 # zakura-state's (W4-d).
+[features]
+# The Ycash network profile (tests/live_state.rs replays Ycash regtest blocks).
+ycash = ["zakura-chain/ycash"]
+
 [dependencies]
 async-trait = { workspace = true }
 hex = { workspace = true }
@@ -32,6 +36,8 @@ zakura-state = { path = "../zakura-state", version = "11.1.0-rc0" }
 [dev-dependencies]
 hex = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+# W4-d: tests/live_state.rs commits the recorded chain to a test state service.
+zakura-state = { path = "../zakura-state", version = "11.1.0-rc0", features = ["proptest-impl"] }
 
 [lints]
 workspace = true
