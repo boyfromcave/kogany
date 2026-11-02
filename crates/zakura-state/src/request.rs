@@ -484,6 +484,11 @@ pub struct ContextuallyVerifiedBlock {
     /// kogany (W4-c): the block's Vault set-state change set over its parent's state (empty
     /// before the Vault activation height). Pushed onto and reverted from the chain's overlay.
     pub(crate) vault_delta: Arc<crate::service::non_finalized_state::VaultDelta>,
+
+    /// kogany (W5-e): the block's Yellowback (YED) effect over its parent's index state: its
+    /// delta (pushed onto and reverted from the chain's overlay) and the module's verdict (not
+    /// yet a rejection: W5-f).
+    pub(crate) yed_effect: Arc<crate::service::yed::YedBlockEffect>,
 }
 
 /// Wraps note commitment trees and the history tree together.
@@ -685,6 +690,7 @@ impl ContextuallyVerifiedBlock {
             chain_value_pool_change,
             receipt_order,
             vault_delta: Default::default(),
+            yed_effect: Default::default(),
         })
     }
 }
@@ -1393,6 +1399,34 @@ pub enum Request {
     /// has committed, and [`Response::BlockInfo(None)`](Response::BlockInfo) otherwise.
     BlockInfo(block::Hash),
 
+    /// kogany (W4-d): the Vault set state after the block `parent_hash` (fork-aware: the
+    /// finalized tip or a block of any non-finalized chain), without waiting.
+    ///
+    /// Returns [`Response::VaultSnapshot(Some(snapshot))`](Response::VaultSnapshot) if the block
+    /// has committed and its state is known, and [`Response::VaultSnapshot(None)`](Response::VaultSnapshot)
+    /// otherwise (a finalized block below the finalized tip has no stored state, K-14).
+    VaultSnapshot {
+        /// The block the state is after: the parent of the block whose scripts read it.
+        parent_hash: block::Hash,
+    },
+
+    /// kogany (W4-d): [`Request::VaultSnapshot`], waiting until the block `parent_hash` commits,
+    /// as [`Request::AwaitBlockInfo`] does.
+    ///
+    /// Returns [`AwaitBlockInfoError`](crate::AwaitBlockInfoError) if the state rejects the
+    /// block or the block does not commit within the wait limit.
+    AwaitVaultSnapshot {
+        /// The block the state is after.
+        parent_hash: block::Hash,
+    },
+
+    /// kogany (W4-d): the Vault set state at the best chain tip (the mempool's and the vault
+    /// read RPCs' snapshot).
+    ///
+    /// Returns [`Response::VaultSnapshot(Some(snapshot))`](Response::VaultSnapshot), whose `tip`
+    /// is `None` before the state has a block.
+    BestChainVaultSnapshot,
+
     /// Looks up a block by hash in any current chain or by height in the current best chain.
     ///
     /// Returns
@@ -1576,6 +1610,9 @@ impl Request {
             Request::Block(_) => "block",
             Request::AwaitBlockInfo(_) => "await_block_info",
             Request::BlockInfo(_) => "block_info",
+            Request::VaultSnapshot { .. } => "vault_snapshot",
+            Request::AwaitVaultSnapshot { .. } => "await_vault_snapshot",
+            Request::BestChainVaultSnapshot => "best_chain_vault_snapshot",
             Request::AnyChainBlock(_) => "any_chain_block",
             Request::BlockHeader(_) => "block_header",
             Request::FindBlockHashes { .. } => "find_block_hashes",
@@ -1641,6 +1678,21 @@ pub enum ReadRequest {
     /// * [`ReadResponse::BlockInfo(Some(pool_values))`](ReadResponse::BlockInfo) if the block is found;
     /// * [`ReadResponse::BlockInfo(None)`](ReadResponse::BlockInfo) otherwise.
     BlockInfo(HashOrHeight),
+
+    /// kogany (W4-d): the Vault set state after the block `parent_hash`, fork-aware; see
+    /// [`Request::VaultSnapshot`].
+    ///
+    /// Returns [`ReadResponse::VaultSnapshot`].
+    VaultSnapshot {
+        /// The block the state is after.
+        parent_hash: block::Hash,
+    },
+
+    /// kogany (W4-d): the Vault set state at the best chain tip; see
+    /// [`Request::BestChainVaultSnapshot`].
+    ///
+    /// Returns [`ReadResponse::VaultSnapshot`].
+    BestChainVaultSnapshot,
 
     /// Computes the depth in the current best chain of the block identified by the given hash.
     ///
@@ -2154,6 +2206,8 @@ impl ReadRequest {
             ReadRequest::FinalizedTip => "finalized_tip",
             ReadRequest::TipPoolValues => "tip_pool_values",
             ReadRequest::BlockInfo(_) => "block_info",
+            ReadRequest::VaultSnapshot { .. } => "vault_snapshot",
+            ReadRequest::BestChainVaultSnapshot => "best_chain_vault_snapshot",
             ReadRequest::Depth(_) => "depth",
             ReadRequest::Block(_) => "block",
             ReadRequest::AnyChainBlock(_) => "any_chain_block",
@@ -2238,6 +2292,10 @@ impl TryFrom<Request> for ReadRequest {
 
             Request::Block(hash_or_height) => Ok(ReadRequest::Block(hash_or_height)),
             Request::BlockInfo(hash) => Ok(ReadRequest::BlockInfo(hash.into())),
+            Request::VaultSnapshot { parent_hash } => {
+                Ok(ReadRequest::VaultSnapshot { parent_hash })
+            }
+            Request::BestChainVaultSnapshot => Ok(ReadRequest::BestChainVaultSnapshot),
             Request::AnyChainBlock(hash_or_height) => {
                 Ok(ReadRequest::AnyChainBlock(hash_or_height))
             }
@@ -2281,7 +2339,9 @@ impl TryFrom<Request> for ReadRequest {
                      Manually convert the request to ReadRequest::AnyChainUtxo, \
                      and handle pending UTXOs"),
 
-            Request::AwaitBlockInfo(_) => Err("ReadService does not track pending block commits"),
+            Request::AwaitBlockInfo(_) | Request::AwaitVaultSnapshot { .. } => {
+                Err("ReadService does not track pending block commits")
+            }
 
             Request::KnownBlock(_) => Err("ReadService does not track queued blocks"),
 

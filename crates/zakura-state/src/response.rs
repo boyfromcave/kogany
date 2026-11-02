@@ -107,6 +107,10 @@ pub enum Response {
     /// specified block's chain value pools.
     BlockInfo(Option<BlockInfo>),
 
+    /// kogany (W4-d): response to [`Request::VaultSnapshot`], [`Request::AwaitVaultSnapshot`] and
+    /// [`Request::BestChainVaultSnapshot`] with the Vault set state after the block.
+    VaultSnapshot(Option<crate::service::vault::VaultSnapshot>),
+
     /// The response to a `BlockHeader` request.
     BlockHeader {
         /// The header of the requested block
@@ -483,6 +487,10 @@ pub enum ReadResponse {
     /// the block info after the specified block.
     BlockInfo(Option<BlockInfo>),
 
+    /// kogany (W4-d): response to [`ReadRequest::VaultSnapshot`] and
+    /// [`ReadRequest::BestChainVaultSnapshot`].
+    VaultSnapshot(Option<crate::service::vault::VaultSnapshot>),
+
     /// Response to [`ReadRequest::Depth`] with the depth of the specified block.
     Depth(Option<u32>),
 
@@ -765,6 +773,7 @@ impl TryFrom<ReadResponse> for Response {
             }
 
             ReadResponse::BlockInfo(block_info) => Ok(Response::BlockInfo(block_info)),
+            ReadResponse::VaultSnapshot(snapshot) => Ok(Response::VaultSnapshot(snapshot)),
 
             ReadResponse::Depth(_)
             | ReadResponse::Transaction(_)

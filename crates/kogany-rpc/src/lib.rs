@@ -10,7 +10,8 @@
 //! - [`yed`]: Ycash Yellowback (YED)'s node-context RPCs (`yed_*`, `ycash6/doc/yellowback-rpc.md`,
 //!   rpcversion 8) over a [`yed::YedReadState`] (plan W5-e/W5-f), and the wallet-context ones
 //!   refused (`-32601`; yewd serves them, K-3).
-//! - [`state`]: the read boundary plan W4-d implements; [`mock`]: the prototype's states.
+//! - [`state`]: the read boundary; [`live`]: its implementation over the node's set state
+//!   (plan W4-d); [`mock`]: the prototype's states.
 //! - [`node_extension`]: what `zakurad` passes to
 //!   `zakura_rpc::server::kogany_extension::start_node_server`.
 //!
@@ -22,10 +23,12 @@ use std::sync::Arc;
 
 use zakura_chain::{chain_tip::ChainTip, parameters::Network};
 use zakura_rpc::server::kogany_extension::RpcExtension;
+use zakura_state::{BoxError, ReadRequest, ReadResponse};
 
 mod macros;
 
 pub mod json;
+pub mod live;
 pub mod mock;
 pub mod state;
 pub mod types;
@@ -46,16 +49,23 @@ pub mod __private {
 pub use state::VaultReadState;
 pub use vault::{VaultRpc, VaultRpcDispatch, VaultRpcImpl};
 
-/// The extension `zakurad` serves on `network` at the chain tip `tip`.
+/// The extension `zakurad` serves on `network` at the chain tip `tip`, over the read state
+/// service `read_state`.
 ///
-/// Until plan W4-d wires the vault state, the vault reads answer from
-/// [`mock::UnavailableVaultState`], or from [`mock::MockVaultState`] when the environment
-/// variable [`mock::MOCK_ENV`] is `1`. Until plan W5-f registers the YED module, the `yed_*`
-/// methods answer from [`yed::mock::UnavailableYedState`] (`-32601`, Yellowback not live), or
-/// from [`yed::mock::MockYedState`] when [`yed::mock::MOCK_ENV`] is `1`.
-pub fn node_extension<T>(network: &Network, tip: T) -> RpcExtension
+/// The vault reads answer from the node's set state ([`live::LiveVaultState`]), or from
+/// [`mock::MockVaultState`] when the environment variable [`mock::MOCK_ENV`] is `1`. Until plan
+/// W5-f registers the YED module, the `yed_*` methods answer from
+/// [`yed::mock::UnavailableYedState`] (`-32601`, Yellowback not live), or from
+/// [`yed::mock::MockYedState`] when [`yed::mock::MOCK_ENV`] is `1`.
+pub fn node_extension<T, R>(network: &Network, tip: T, read_state: R) -> RpcExtension
 where
     T: ChainTip + Clone + Send + Sync + 'static,
+    R: tower::Service<ReadRequest, Response = ReadResponse, Error = BoxError>
+        + Clone
+        + Send
+        + Sync
+        + 'static,
+    R::Future: Send,
 {
     let yed = yed_state(tip.clone());
     let state: Arc<dyn VaultReadState> =
@@ -66,7 +76,7 @@ where
             );
             Arc::new(mock::MockVaultState::new(tip))
         } else {
-            Arc::new(mock::UnavailableVaultState::new(tip))
+            Arc::new(live::LiveVaultState::new(network.clone(), read_state))
         };
     VaultRpcImpl::new(state, network.clone())
         .into_extension()

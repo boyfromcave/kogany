@@ -747,7 +747,11 @@ impl StartCmd {
         let rpc_task_handle = if config.rpc.listen_addr.is_some() {
             zakura_rpc::server::kogany_extension::start_node_server(
                 &rpc_impl,
-                kogany_rpc::node_extension(&config.network.network, latest_chain_tip.clone()),
+                kogany_rpc::node_extension(
+                    &config.network.network,
+                    latest_chain_tip.clone(),
+                    read_only_state_service.clone(),
+                ),
                 config.rpc.clone(),
             )
             .await
@@ -760,7 +764,11 @@ impl StartCmd {
         let admin_rpc_task_handle = if config.rpc.admin_listen_addr.is_some() {
             zakura_rpc::server::kogany_extension::start_node_admin_server(
                 &rpc_impl,
-                kogany_rpc::node_extension(&config.network.network, latest_chain_tip.clone()),
+                kogany_rpc::node_extension(
+                    &config.network.network,
+                    latest_chain_tip.clone(),
+                    read_only_state_service.clone(),
+                ),
                 config.rpc.clone(),
             )
             .await

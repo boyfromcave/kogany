@@ -139,3 +139,140 @@ fn mainnet_getblocksubsidy_matches_ycashd() {
         );
     }
 }
+
+/// `getblockchaininfo.testnetprofile` (W7-c): `fast` on the default Ycash testnet, `slow` on the
+/// slow profile, absent on Mainnet and Regtest (`ycash6 src/rpc/blockchain.cpp:1688-1689`).
+#[test]
+fn testnet_profile_matches_ycashd() {
+    assert_eq!(testnet_profile(&Network::Mainnet), None);
+    assert_eq!(
+        testnet_profile(&Network::new_regtest(Default::default())),
+        None
+    );
+    assert_eq!(
+        testnet_profile(&Network::new_default_testnet()).as_deref(),
+        Some("fast")
+    );
+    assert_eq!(
+        testnet_profile(&Network::new_ycash_testnet_slow()).as_deref(),
+        Some("slow")
+    );
+}
+
+/// `Base58Check(version || payload)`, for building addresses in the tests below.
+fn base58check(version: &[u8], payload: &[u8]) -> String {
+    let data = [version, payload].concat();
+    kogany_yellowback::codecs::base58::encode_base58_check(&data)
+}
+
+/// `validateaddress` of a plain-YEC post-quantum address (W7-c, `ycash6 src/key_io.cpp:318-339`,
+/// `src/rpc/misc.cpp` `DescribeAddressVisitor`): this network's version and a registered scheme
+/// only; the script is the TX_PQPKH `<keyHash> OP_<scheme> OP_CHECKPQSIG`.
+#[test]
+fn pq_addresses_decode_as_ycashd() {
+    let regtest = Network::new_regtest(Default::default());
+    let key_hash: [u8; 32] =
+        hex::decode("73efa99cd22fe553222b1db6a6a021b3cba29dafd4fb4dfb50be69abcfcf9364")
+            .expect("hex")
+            .try_into()
+            .expect("32 bytes");
+
+    for scheme in [1u8, 2] {
+        let address = base58check(&[0x4C, 0x51], &[&[scheme][..], &key_hash].concat());
+        assert!(address.starts_with("rq"), "{address}");
+        assert_eq!(address.len(), 53);
+        let pq = decode_pq_address(&regtest, &address).expect("a registered scheme decodes");
+        assert_eq!(pq.address, address);
+        assert_eq!(pq.scheme, scheme);
+        assert_eq!(pq.key_hash, hex::encode(key_hash));
+        assert_eq!(
+            pq.script_pub_key,
+            format!("20{}{:02x}c2", hex::encode(key_hash), 0x50 + scheme)
+        );
+    }
+
+    // An unregistered scheme, another network's version, and the Yellowback forms are not
+    // destinations.
+    let unregistered = base58check(&[0x4C, 0x51], &[&[3u8][..], &key_hash].concat());
+    assert_eq!(decode_pq_address(&regtest, &unregistered), None);
+    let testnet_form = base58check(&[0x4F, 0x61], &[&[1u8][..], &key_hash].concat());
+    assert!(testnet_form.starts_with("tq"));
+    assert_eq!(decode_pq_address(&regtest, &testnet_form), None);
+    assert!(decode_pq_address(&Network::new_default_testnet(), &testnet_form).is_some());
+    let mainnet_form = base58check(&[0x4D, 0xD9], &[&[2u8][..], &key_hash].concat());
+    assert!(mainnet_form.starts_with("sq"));
+    assert!(decode_pq_address(&Network::Mainnet, &mainnet_form).is_some());
+    assert_eq!(decode_pq_address(&regtest, &mainnet_form), None);
+    let yed_pq = base58check(&[0x57, 0x10], &[&[1u8][..], &key_hash].concat());
+    assert!(yed_pq.starts_with("yr"));
+    assert_eq!(decode_pq_address(&regtest, &yed_pq), None);
+    let yed_key = base58check(&[0x20, 0x02], &key_hash[..20]);
+    assert!(yed_key.starts_with("yr"));
+    assert_eq!(decode_pq_address(&regtest, &yed_key), None);
+
+    let answer = super::super::validate_address::validate_address(regtest.clone(), yed_key)
+        .expect("validateaddress answers");
+    assert!(!answer.is_valid());
+    let address = base58check(&[0x4C, 0x51], &[&[2u8][..], &key_hash].concat());
+    let answer = super::super::validate_address::validate_address(regtest, address.clone())
+        .expect("validateaddress answers");
+    assert_eq!(
+        serde_json::to_value(answer).expect("serializes"),
+        serde_json::json!({
+            "isvalid": true,
+            "address": address,
+            "scriptPubKey": format!("20{}52c2", hex::encode(key_hash)),
+            "isscript": false,
+            "pqscheme": 2,
+            "pqkeyhash": hex::encode(key_hash),
+        })
+    );
+}
+
+/// The default miner addresses of a Ycash build are Ycash addresses (W7-c), and a Zcash one is
+/// refused with ycashd's message (`ycash6 src/init.cpp:1680-1683`).
+#[test]
+fn default_miner_addresses_are_ycash() {
+    use crate::config::mining::{default_miner_address, Config, MinerAddressType};
+    use zakura_chain::parameters::NetworkKind;
+
+    for kind in [
+        NetworkKind::Mainnet,
+        NetworkKind::Testnet,
+        NetworkKind::Regtest,
+    ] {
+        for addr_type in [
+            MinerAddressType::Transparent,
+            MinerAddressType::Sapling,
+            MinerAddressType::Unified,
+        ] {
+            let encoded = default_miner_address(kind, &addr_type);
+            let config: Config = toml::from_str(&format!("miner_address = {encoded:?}"))
+                .unwrap_or_else(|e| panic!("{encoded} parses: {e}"));
+            assert_eq!(
+                config.miner_address.expect("set").to_string(),
+                encoded,
+                "{kind:?}"
+            );
+        }
+    }
+
+    let regtest = Network::new_regtest(Default::default());
+    let transparent = default_miner_address(NetworkKind::Regtest, &MinerAddressType::Transparent);
+    assert!(
+        super::super::validate_address::validate_address(regtest, transparent.to_string())
+            .expect("validateaddress answers")
+            .is_valid()
+    );
+
+    let error = toml::from_str::<Config>("miner_address = 'tmJymvcUCn1ctbghvTJpXBwHiMEB8P6wxNV'")
+        .expect_err("a Zcash address is refused")
+        .to_string();
+    assert!(
+        error.contains(
+            "Invalid address for mining.miner_address: Unable to parse \
+             'tmJymvcUCn1ctbghvTJpXBwHiMEB8P6wxNV' as a Ycash address."
+        ),
+        "{error}"
+    );
+}
