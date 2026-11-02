@@ -844,6 +844,16 @@ pub enum ValidateContextError {
         hash: block::Hash,
     },
 
+    // kogany (W5-f): the YED module's block verdict (ycash6 DoS 100, `bad-yellowback-<verdict>`).
+    #[error("YED rule violation in block {hash} at {height:?}: {reason} ({detail})")]
+    #[non_exhaustive]
+    YedRejected {
+        reason: String,
+        detail: String,
+        height: block::Height,
+        hash: block::Hash,
+    },
+
     #[error("sprout double-spend: duplicate nullifier: {nullifier:?}, in finalized state: {in_finalized_state:?}")]
     #[non_exhaustive]
     DuplicateSproutNullifier {
@@ -1105,6 +1115,7 @@ impl ValidateContextError {
             Self::VaultTimeLock { .. } => consensus("context.vault_timelock"),
             Self::UnsatisfiedSequenceLock { .. } => consensus("context.unsatisfied_sequence_lock"),
             Self::VaultRejected { .. } => consensus("context.vault_rejected"),
+            Self::YedRejected { .. } => consensus("context.yed_rejected"),
             Self::DuplicateSproutNullifier { .. } => {
                 consensus("context.duplicate_sprout_nullifier")
             }
@@ -1156,6 +1167,7 @@ impl ValidateContextError {
             | ValidateContextError::VaultTimeLock { .. }
             | ValidateContextError::UnsatisfiedSequenceLock { .. }
             | ValidateContextError::VaultRejected { .. }
+            | ValidateContextError::YedRejected { .. }
             | ValidateContextError::DuplicateSproutNullifier { .. }
             | ValidateContextError::DuplicateSaplingNullifier { .. }
             | ValidateContextError::DuplicateOrchardNullifier { .. }
@@ -1594,6 +1606,12 @@ mod tests {
             },
             ValidateContextError::VaultRejected {
                 reason: "bad-vault-act-sigs".to_owned(),
+                height,
+                hash: block::Hash([0; 32]),
+            },
+            ValidateContextError::YedRejected {
+                reason: "bad-yellowback-bad-mint-amount".to_owned(),
+                detail: "bad-mint-amount:00".to_owned(),
                 height,
                 hash: block::Hash([0; 32]),
             },

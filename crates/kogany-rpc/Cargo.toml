@@ -30,6 +30,9 @@ tracing = { workspace = true }
 
 kogany-vault = { path = "../kogany-vault" }
 kogany-yellowback = { path = "../kogany-yellowback" }
+# The miner address's P2PKH key hash: the YED payout key (W5-f, ycashd -yellowbackpayoutaddress).
+zcash_address = { workspace = true }
+zcash_protocol = { workspace = true }
 zakura-chain = { path = "../zakura-chain", version = "11.0.0-rc0" }
 zakura-rpc = { path = "../zakura-rpc", version = "13.0.1-rc0", default-features = false }
 # W4-d: the live vault state is the read state service's best-chain vault snapshot.

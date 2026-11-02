@@ -1198,7 +1198,9 @@ dependencies = [
  "tokio",
  "tower",
  "tracing",
+ "zakura-address",
  "zakura-chain",
+ "zakura-protocol",
  "zakura-rpc",
  "zakura-state",
 ]

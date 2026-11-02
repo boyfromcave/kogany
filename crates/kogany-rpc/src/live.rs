@@ -60,14 +60,28 @@ where
         let ReadResponse::VaultSnapshot(Some(snapshot)) = response else {
             return Err("the vault database is not available".to_owned());
         };
-        Ok(snapshot_at(&self.network, snapshot))
+        // The YED module governs the attestor set where Yellowback is configured (W5-f).
+        let attestor_set_id = match self
+            .read_state
+            .clone()
+            .oneshot(ReadRequest::BestChainYedSnapshot)
+            .await
+        {
+            Ok(ReadResponse::YedSnapshot(Some(yed))) => yed
+                .params
+                .map(|p| Hash32(p.attestor_set_id))
+                .filter(|id| *id != Hash32::ZERO),
+            _ => None,
+        };
+        Ok(snapshot_at(&self.network, snapshot, attestor_set_id))
     }
 }
 
-/// The RPC view of one state snapshot on `network`.
+/// The RPC view of one state snapshot on `network`, with the YED module's attestor set.
 pub fn snapshot_at(
     network: &Network,
     snapshot: zakura_state::vault::VaultSnapshot,
+    attestor_set_id: Option<SetId>,
 ) -> VaultSnapshot {
     // A height fits in an i64; -1 before genesis, as ycashd's `chainActive.Height()`.
     let tip_height = snapshot.tip.map_or(-1, |(height, _)| i64::from(height.0));
@@ -80,8 +94,8 @@ pub fn snapshot_at(
             .vault_activation_height()
             .map(|height| i64::from(height.0)),
         active_at_next: next.is_some_and(|height| network.is_vault_active(height)),
-        // No module governs a set until plan W5-f registers YED.
-        attestor_set_id: None,
+        // The set the registered YED module governs (W5-f), `None` where Yellowback is off.
+        attestor_set_id,
     };
     // ycash6 writes the vault database's tip marker in the blocks it connects from activation
     // (and wipes it when the activation block is disconnected).

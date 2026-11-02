@@ -662,13 +662,15 @@ where
             tracing::trace!(?tx_id, "got state UTXOs");
 
             // kogany (W4-d): the set state the scripts read.
-            let vault_state = Self::vault_script_state(&req, &network, state.clone()).await?;
+            let (vault_state, vault_yed_params) =
+                Self::vault_script_state(&req, &network, state.clone()).await?;
             // kogany (W4-d): the mempool's vault rules at the next height over the tip's set state
             // (ycash6 `vault::CheckTx`, unscored); a block's run in contextual validation.
             if let (true, Some(tip_state)) = (req.is_mempool(), vault_state.as_ref()) {
                 zakura_state::vault::mempool_vault_check(
                     &network,
                     tip_state.as_ref(),
+                    vault_yed_params,
                     &tx,
                     &req.tx_mined_id(),
                     req.height(),
@@ -1439,10 +1441,16 @@ where
         request: &Request,
         network: &Network,
         state: Timeout<ZS>,
-    ) -> Result<Option<VaultStateSnapshot>, TransactionError> {
+    ) -> Result<
+        (
+            Option<VaultStateSnapshot>,
+            Option<zakura_state::vault::YedModuleParams>,
+        ),
+        TransactionError,
+    > {
         let height = request.height();
         if !network.is_vault_active(height) {
-            return Ok(None);
+            return Ok((None, None));
         }
         let snapshot = match request {
             Request::Block { vault_snapshot, .. } => vault_snapshot.clone(),
@@ -1468,7 +1476,11 @@ where
                 snapshot
             }
         };
-        Ok(snapshot.map(|s| s.state as VaultStateSnapshot))
+        // kogany (W5-f): with the YED parameters its module table is built from.
+        Ok(match snapshot {
+            Some(s) => (Some(s.state as VaultStateSnapshot), s.yed_params),
+            None => (None, None),
+        })
     }
 
     /// Verifies a transaction's Sprout shielded join split data.

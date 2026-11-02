@@ -24,6 +24,7 @@ mod format;
 mod params;
 
 pub mod fees;
+pub mod live;
 pub mod mock;
 pub mod rpc;
 pub mod state;

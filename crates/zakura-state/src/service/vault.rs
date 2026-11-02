@@ -10,7 +10,7 @@
 use std::{collections::HashMap, ops::Bound, sync::Arc};
 
 use kogany_vault::{
-    state::{check_tx, SetState, StateRead},
+    state::{check_tx, Rules, SetState, StateRead},
     Hash32,
 };
 use zakura_chain::{
@@ -29,6 +29,10 @@ use crate::{
             ZakuraDb,
         },
         non_finalized_state::Chain,
+        yed::{
+            module::{chain_block_hash_at, static_module_table},
+            yed_params_for_db,
+        },
     },
     ContextuallyVerifiedBlock,
 };
@@ -55,16 +59,22 @@ pub fn block_vault_delta_for_chain(
         return VaultDelta::default();
     }
     let txs = vault_txs(&block.block, &block.transaction_hashes);
+    let block_hash_at = |h: i64| chain_block_hash_at(parent_chain, db, h);
     let (delta, skipped) = block_vault_delta_total(
         network,
+        &db.config().yellowback,
         &parent_chain.vault_view(db),
         &txs,
         block.height,
         &OrderedUtxoCoins(&block.spent_outputs),
+        Some(&block_hash_at),
     );
     report_skipped("non-finalized push", block.height, block.hash, &skipped);
     delta
 }
+
+/// The YED parameters a [`VaultSnapshot`] carries (W5-f).
+pub type YedModuleParams = kogany_yellowback::params::Params;
 
 /// The set state after one block: what scripts spending in its child, the child's vault
 /// transition, and the vault read RPCs read (ycash6 `SetSnapshot`).
@@ -74,6 +84,9 @@ pub struct VaultSnapshot {
     pub tip: Option<(Height, block::Hash)>,
     /// The whole set state after `tip`, in memory.
     pub state: Arc<SetState>,
+    /// kogany (W5-f): the node's YED parameters (`None` where Yellowback is off): the module
+    /// table a transaction checked over this state is judged with ([`mempool_vault_check`]).
+    pub yed_params: Option<kogany_yellowback::params::Params>,
 }
 
 impl VaultSnapshot {
@@ -88,6 +101,7 @@ pub fn finalized_vault_snapshot(db: &ZakuraDb) -> VaultSnapshot {
     VaultSnapshot {
         tip: db.tip(),
         state: Arc::new(db.vault_set_state()),
+        yed_params: yed_params_for_db(db).ok().flatten(),
     }
 }
 
@@ -100,6 +114,7 @@ pub fn chain_tip_vault_snapshot(chain: &Chain, db: &ZakuraDb) -> VaultSnapshot {
     VaultSnapshot {
         tip,
         state: Arc::new(chain.vault_view(db).set_state()),
+        yed_params: yed_params_for_db(db).ok().flatten(),
     }
 }
 
@@ -127,6 +142,7 @@ pub fn vault_snapshot_by_hash<'a>(
         return Some(VaultSnapshot {
             tip: Some((height, hash)),
             state: Arc::new(state),
+            yed_params: yed_params_for_db(db).ok().flatten(),
         });
     }
     let tip = db.tip()?;
@@ -139,9 +155,14 @@ pub fn vault_snapshot_by_hash<'a>(
 ///
 /// `Ok` where the Vault upgrade is not active at `height`. `Err` is the C++ reject reason; the
 /// mempool does not score it (ycash6 DoS 0: it depends on the tip).
+///
+/// The module table is the node's: `YED\0` registered with `yed_params` (the snapshot's
+/// [`VaultSnapshot::yed_params`]) where Yellowback is configured (W5-f). The mempool passes no
+/// ancestor hashes: the hooks that read them (ejection, liveness) never reject.
 pub fn mempool_vault_check(
     network: &Network,
     tip_state: &dyn StateRead,
+    yed_params: Option<kogany_yellowback::params::Params>,
     tx: &Transaction,
     txid: &transaction::Hash,
     height: Height,
@@ -155,7 +176,10 @@ pub fn mempool_vault_check(
         &vault_tx(tx, txid),
         i64::from(height.0),
         &UtxoCoins(spent_utxos),
-        &params.rules(),
+        &Rules {
+            modules: static_module_table(yed_params),
+            ..params.rules()
+        },
     )
     .map(|_| ())
     .map_err(|reject| reject.reason().to_owned())

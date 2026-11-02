@@ -33,8 +33,8 @@ use async_trait::async_trait;
 use kogany_vault::{
     act::is_act_output,
     state::{
-        check_tx, CoinAccessor, Rules, SetState, SpentCoin, StateRead, VaultTx, VaultTxIn,
-        VaultTxOut,
+        check_tx, CoinAccessor, ModuleEntry, Rules, SetState, SpentCoin, StateRead, VaultTx,
+        VaultTxIn, VaultTxOut,
     },
     template::{match_intent, match_vault, parse_intent, parse_vault, Shape},
     Hash32, OutPoint,
@@ -87,13 +87,35 @@ pub trait YcashMining: Send + Sync + 'static {
         None
     }
 
-    /// The YED half of the template filter for a template at `height` (ycash6
+    /// The YED half of the template filter for a template at `height` on `parent` (ycash6
     /// `yellowback::policy::FilterTemplate` over a `TemplateView`), `None` = keep every
-    /// candidate. Plan W5-f implements it once the YED index is registered.
-    fn yed_template_filter(&self, height: Height) -> Option<Box<dyn YedTemplateFilter>> {
-        let _ = height;
+    /// candidate. kogany-rpc serves it over the registered index (plan W5-f).
+    async fn yed_template_filter(
+        &self,
+        height: Height,
+        parent: block::Hash,
+    ) -> Option<Box<dyn YedTemplateFilter>> {
+        let _ = (height, parent);
         None
     }
+
+    /// The vault rules' module table and ancestor hashes for a template on `parent` (ycash6
+    /// `TemplateRun`: the registered modules, `SetBlockHashes(AncestorHashes(tip))`,
+    /// `src/vault/node.cpp:322`; plan W5-f). `None`: the primitive's own table, no hashes.
+    async fn vault_modules(&self, parent: block::Hash) -> Option<VaultModules> {
+        let _ = parent;
+        None
+    }
+}
+
+/// The module context of the template's vault rules (plan W5-f): `YED\0` registered where
+/// Yellowback is configured, and the hashes of the template's ancestors for the module hooks.
+#[derive(Clone)]
+pub struct VaultModules {
+    /// The module table (`vault::Modules()`).
+    pub table: &'static [ModuleEntry<'static>],
+    /// The hash of the ancestor at a height below the template's (`blockHashAt`).
+    pub block_hash_at: Arc<dyn Fn(i64) -> Option<Hash32> + Send + Sync>,
 }
 
 impl<Mempool, State, ReadState, Tip, AddressBook, BlockVerifierRouter, SyncStatus>
@@ -486,6 +508,8 @@ enum VaultFilter {
     Running {
         state: Box<SetState>,
         rules: Rules<'static>,
+        /// kogany (W5-f): the registered module table's ancestor hashes, if known.
+        block_hash_at: Option<Arc<dyn Fn(i64) -> Option<Hash32> + Send + Sync>>,
     },
 }
 
@@ -519,10 +543,18 @@ impl TemplateFilter {
                 zakura_state::vault::vault_network_params(network),
                 hooks.vault_state(parent).await,
             ) {
-                (Some(params), Some(state)) => VaultFilter::Running {
-                    state: Box::new(Arc::unwrap_or_clone(state)),
-                    rules: params.rules(),
-                },
+                (Some(params), Some(state)) => {
+                    let mut rules = params.rules();
+                    let modules = hooks.vault_modules(parent).await;
+                    if let Some(m) = &modules {
+                        rules.modules = m.table;
+                    }
+                    VaultFilter::Running {
+                        state: Box::new(Arc::unwrap_or_clone(state)),
+                        rules,
+                        block_hash_at: modules.map(|m| m.block_hash_at),
+                    }
+                }
                 _ => {
                     tracing::debug!(
                         ?height,
@@ -536,7 +568,7 @@ impl TemplateFilter {
         Self {
             height,
             vault,
-            yed: hooks.yed_template_filter(height),
+            yed: hooks.yed_template_filter(height, parent).await,
         }
     }
 
@@ -554,6 +586,7 @@ impl TemplateFilter {
                 Some((state, rules)) => VaultFilter::Running {
                     state: Box::new(state),
                     rules,
+                    block_hash_at: None,
                 },
                 None => VaultFilter::Inactive,
             },
@@ -592,7 +625,17 @@ impl TemplateFilter {
                 }
                 None
             }
-            VaultFilter::Running { state, rules } => {
+            VaultFilter::Running {
+                state,
+                rules,
+                block_hash_at,
+            } => {
+                let hashes = block_hash_at.clone();
+                let hash_at = move |h: i64| hashes.as_ref().and_then(|f| f(h));
+                let rules = &Rules {
+                    block_hashes: block_hash_at.is_some().then_some(&hash_at as _),
+                    ..*rules
+                };
                 let Some(coins) = TemplateCoins::new(tx, state, height, rules.activation_height)
                 else {
                     // The spent outputs are not all known: a candidate the primitive cannot

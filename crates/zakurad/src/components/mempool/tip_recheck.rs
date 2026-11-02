@@ -359,6 +359,7 @@ mod tests {
         zs::ReadResponse::VaultSnapshot(Some(zs::vault::VaultSnapshot {
             tip: Some(tip),
             state: Arc::new(Default::default()),
+            yed_params: None,
         }))
     }
 

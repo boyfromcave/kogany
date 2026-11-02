@@ -501,6 +501,10 @@ pub enum ReadResponse {
     /// [`ReadRequest::BestChainVaultSnapshot`].
     VaultSnapshot(Option<crate::service::vault::VaultSnapshot>),
 
+    /// kogany (W5-f): response to [`ReadRequest::BestChainYedSnapshot`] and
+    /// [`ReadRequest::YedSnapshot`].
+    YedSnapshot(Option<crate::service::yed::YedSnapshot>),
+
     /// kogany (W6-c): response to [`ReadRequest::BestChainYedMempoolCheck`]; see
     /// [`Response::YedMempoolCheck`].
     YedMempoolCheck {
@@ -793,6 +797,9 @@ impl TryFrom<ReadResponse> for Response {
 
             ReadResponse::BlockInfo(block_info) => Ok(Response::BlockInfo(block_info)),
             ReadResponse::VaultSnapshot(snapshot) => Ok(Response::VaultSnapshot(snapshot)),
+            ReadResponse::YedSnapshot(_) => {
+                Err("there is no corresponding Response for this ReadResponse")
+            }
             ReadResponse::YedMempoolCheck { tip, reasons } => {
                 Ok(Response::YedMempoolCheck { tip, reasons })
             }

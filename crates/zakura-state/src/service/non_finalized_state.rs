@@ -900,14 +900,15 @@ impl NonFinalizedState {
             &contextual,
         )?);
 
-        // kogany (W5-e): the block's YED effect over the parent fork's index state, pushed onto
-        // the chain's overlay with the block; stops the node when it cannot be evaluated (U-21).
-        contextual.yed_effect = Arc::new(crate::service::yed::block_yed_effect_for_chain(
+        // kogany (W5-e, W5-f): the block's YED effect over the parent fork's index state, pushed
+        // onto the chain's overlay with the block; stops the node when it cannot be evaluated,
+        // and a module verdict rejects the block (U-21).
+        contextual.yed_effect = Arc::new(check::yed::block_yed_effect(
             &self.network,
             &new_chain,
             finalized_state,
             &contextual,
-        ));
+        )?);
 
         let parallel_update_start = Instant::now();
         let result = Self::validate_and_update_parallel(

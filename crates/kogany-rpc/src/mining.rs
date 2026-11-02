@@ -12,9 +12,13 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use kogany_vault::state::SetState;
+use kogany_yellowback::{
+    params::Params,
+    state::{process_tx, Table, Writes, YedKey, YedRead, YedRecord},
+};
 use tower::{Service, ServiceExt};
-use zakura_chain::block;
-use zakura_rpc::ycash_mining::{YcashMining, YedTemplateFilter, YellowbackMiner};
+use zakura_chain::{block, transaction::VerifiedUnminedTx};
+use zakura_rpc::ycash_mining::{VaultModules, YcashMining, YedTemplateFilter, YellowbackMiner};
 use zakura_state::{BoxError, ReadRequest, ReadResponse};
 
 use crate::yed::YedReadState;
@@ -96,14 +100,169 @@ where
         }
     }
 
-    fn yed_template_filter(
+    /// ycash6 `FilterTemplate` over a `TemplateView` of the index after `parent` (plan W5-f):
+    /// `None` (keep every candidate) where Yellowback is off or `height` is below the start
+    /// height; a filter that keeps nothing when the index state after `parent` is unknown.
+    async fn yed_template_filter(
         &self,
-        height: zakura_chain::block::Height,
+        height: block::Height,
+        parent: block::Hash,
     ) -> Option<Box<dyn YedTemplateFilter>> {
-        // Plan W5-f: the registered index's `TemplateView` (ycash6 `FilterTemplate`), built
-        // here at `height` once the index exists.
-        let _ = height;
-        None
+        let Some(snapshot) = self
+            .yed_snapshot(ReadRequest::YedSnapshot { hash: parent })
+            .await
+        else {
+            // The index state after the parent is unknown: where the node runs Yellowback and
+            // the template is in the YED epoch, keep nothing (fail closed).
+            let params = self
+                .yed_snapshot(ReadRequest::BestChainYedSnapshot)
+                .await
+                .and_then(|s| s.params)?;
+            return (i64::from(height.0) >= i64::from(params.start_height))
+                .then(|| Box::new(KeepNothing) as Box<dyn YedTemplateFilter>);
+        };
+        let params = snapshot.params?;
+        if i64::from(height.0) < i64::from(params.start_height) {
+            return None;
+        }
+        Some(Box::new(YedTemplateRun {
+            base: snapshot,
+            writes: Writes::new(),
+            params,
+            height: i64::from(height.0),
+        }))
+    }
+
+    /// The registered module table and the ancestor hashes after `parent` (ycash6
+    /// `TemplateRun`'s modules and `SetBlockHashes(AncestorHashes(tip))`).
+    async fn vault_modules(&self, parent: block::Hash) -> Option<VaultModules> {
+        let snapshot = self
+            .yed_snapshot(ReadRequest::YedSnapshot { hash: parent })
+            .await?;
+        let table = snapshot.module_table();
+        Some(VaultModules {
+            table,
+            block_hash_at: Arc::new(move |h| snapshot.block_hash_at(h)),
+        })
+    }
+}
+
+impl<R> YedMining<R>
+where
+    R: Service<ReadRequest, Response = ReadResponse, Error = BoxError>
+        + Clone
+        + Send
+        + Sync
+        + 'static,
+    R::Future: Send,
+{
+    /// The YED index state `request` reads (`ReadRequest::YedSnapshot` or
+    /// `BestChainYedSnapshot`), `None` when the state service does not know it.
+    async fn yed_snapshot(&self, request: ReadRequest) -> Option<zakura_state::yed::YedSnapshot> {
+        match self.read_state.clone().oneshot(request).await {
+            Ok(ReadResponse::YedSnapshot(snapshot)) => snapshot,
+            Ok(_) => None,
+            Err(error) => {
+                tracing::warn!(%error, "the template's YED state could not be read");
+                None
+            }
+        }
+    }
+}
+
+/// The template's YED filter when the index state after its parent is unknown: it cannot tell
+/// which candidates touch the module, so it keeps none (fail closed; the template still mines).
+struct KeepNothing;
+
+impl YedTemplateFilter for KeepNothing {
+    fn keep(&mut self, _tx: &VerifiedUnminedTx) -> bool {
+        false
+    }
+}
+
+/// ycash6 `TemplateView` + `FilterTemplate`: the index after the template's parent, the
+/// template's own overlay of the candidates it kept, and the parameters in force.
+struct YedTemplateRun {
+    base: zakura_state::yed::YedSnapshot,
+    writes: Writes,
+    params: Params,
+    height: i64,
+}
+
+/// The template overlay over the index (the C++ `TemplateView::Overlay()`).
+struct TemplateOverlay<'a> {
+    base: &'a dyn YedRead,
+    writes: &'a Writes,
+}
+
+impl YedRead for TemplateOverlay<'_> {
+    fn get(&self, key: &YedKey) -> Option<YedRecord> {
+        match self.writes.get(key) {
+            Some(v) => v.clone(),
+            None => self.base.get(key),
+        }
+    }
+
+    fn scan(&self, table: Table) -> Vec<(YedKey, YedRecord)> {
+        let base = self.base.scan(table);
+        let (lo, hi) = table.bounds();
+        let mut merged: std::collections::BTreeMap<YedKey, YedRecord> = base.into_iter().collect();
+        for (k, v) in self.writes.range(lo..=hi) {
+            match v {
+                Some(v) => merged.insert(*k, v.clone()),
+                None => merged.remove(k),
+            };
+        }
+        merged.into_iter().collect()
+    }
+}
+
+impl YedTemplateFilter for YedTemplateRun {
+    fn keep(&mut self, tx: &VerifiedUnminedTx) -> bool {
+        // The module cannot be evaluated: skip every candidate (the next block stops the node).
+        if zakura_state::yed::yed_unhealthy_reason().is_some() {
+            return false;
+        }
+        let transaction = tx.transaction.transaction();
+        if transaction.is_coinbase() {
+            return true;
+        }
+        let vtx = zakura_state::vault::vault_tx(transaction, &tx.transaction.id().mined_id());
+        let overlay = TemplateOverlay {
+            base: &self.base,
+            writes: &self.writes,
+        };
+        // The storage boundary (audit A-3): a storage failure skips the candidate and marks the
+        // index unhealthy instead of unwinding the template.
+        let effect = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            process_tx(
+                &overlay,
+                &self.params,
+                &vtx,
+                self.height,
+                Some(zakura_state::yed::module::node_yed_sig_cache()),
+            )
+        }));
+        let effect = match effect {
+            Ok(effect) => effect,
+            Err(_) => {
+                zakura_state::yed::mark_yed_unhealthy(
+                    "storage failure in FilterTemplate".to_owned(),
+                );
+                return false;
+            }
+        };
+        if effect.outcome.invalid {
+            tracing::debug!(
+                txid = ?tx.transaction.id().mined_id(),
+                height = self.height,
+                verdict = %effect.outcome.log.verdict,
+                "FilterTemplate: skipping a candidate the YED module refuses"
+            );
+            return false;
+        }
+        self.writes.extend(effect.writes);
+        true
     }
 }
 
@@ -178,6 +337,7 @@ mod tests {
                     || zakura_state::vault::VaultSnapshot {
                         tip: None,
                         state: served,
+                        yed_params: None,
                     },
                 )))
             }

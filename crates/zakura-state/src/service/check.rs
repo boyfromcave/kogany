@@ -37,6 +37,8 @@ pub mod sequence_locks;
 pub(crate) mod utxo;
 // kogany (W4-d): the Vault upgrade's sequential act and template rules.
 pub mod vault;
+// kogany (W5-f): the YED module's block verdict.
+pub mod yed;
 
 #[cfg(feature = "internal-bench")]
 #[doc(hidden)]

@@ -56,10 +56,10 @@ pub use vault::{VaultRpc, VaultRpcDispatch, VaultRpcImpl};
 /// service `read_state`.
 ///
 /// The vault reads answer from the node's set state ([`live::LiveVaultState`]), or from
-/// [`mock::MockVaultState`] when the environment variable [`mock::MOCK_ENV`] is `1`. Until plan
-/// W5-f registers the YED module, the `yed_*` methods answer from
-/// [`yed::mock::UnavailableYedState`] (`-32601`, Yellowback not live), or from
-/// [`yed::mock::MockYedState`] when [`yed::mock::MOCK_ENV`] is `1`.
+/// [`mock::MockVaultState`] when the environment variable [`mock::MOCK_ENV`] is `1`. The `yed_*`
+/// methods answer from the registered index ([`yed::live::LiveYedState`], plan W5-f; `-32601`
+/// where Yellowback is off), or from [`yed::mock::MockYedState`] when [`yed::mock::MOCK_ENV`]
+/// is `1`.
 pub fn node_extension<T, R>(network: &Network, tip: T, read_state: R) -> RpcExtension
 where
     T: ChainTip + Clone + Send + Sync + 'static,
@@ -70,7 +70,7 @@ where
         + 'static,
     R::Future: Send,
 {
-    let yed = yed_state(tip.clone());
+    let yed = yed_state(tip.clone(), read_state.clone());
     let state: Arc<dyn VaultReadState> =
         if std::env::var(mock::MOCK_ENV).is_ok_and(|value| value == "1") {
             tracing::warn!(
@@ -102,22 +102,41 @@ where
         + 'static,
     R::Future: Send,
 {
-    Arc::new(mining::YedMining::new(yed_state(tip), read_state))
+    Arc::new(mining::YedMining::new(
+        yed_state(tip, read_state.clone()),
+        read_state,
+    ))
 }
 
-/// The YED state `zakurad` serves until plan W5-f registers the module: one per process, so
-/// every listener and the template read one quote (ycash6's `g_yellowback`).
-fn yed_state<T>(tip: T) -> Arc<dyn yed::YedReadState>
+/// The YED state `zakurad` serves: one per process, so every listener and the template read one
+/// quote (ycash6's `g_yellowback`). The registered index ([`yed::live::LiveYedState`], plan
+/// W5-f), which answers "not live" (`-32601`) where Yellowback is off; or
+/// [`yed::mock::MockYedState`] when [`yed::mock::MOCK_ENV`] is `1`.
+fn yed_state<T, R>(tip: T, read_state: R) -> Arc<dyn yed::YedReadState>
 where
     T: ChainTip + Clone + Send + Sync + 'static,
+    R: tower::Service<ReadRequest, Response = ReadResponse, Error = BoxError>
+        + Clone
+        + Send
+        + Sync
+        + 'static,
+    R::Future: Send,
 {
     static YED_STATE: std::sync::OnceLock<Arc<dyn yed::YedReadState>> = std::sync::OnceLock::new();
-    YED_STATE.get_or_init(|| new_yed_state(tip)).clone()
+    YED_STATE
+        .get_or_init(|| new_yed_state(tip, read_state))
+        .clone()
 }
 
-fn new_yed_state<T>(tip: T) -> Arc<dyn yed::YedReadState>
+fn new_yed_state<T, R>(tip: T, read_state: R) -> Arc<dyn yed::YedReadState>
 where
     T: ChainTip + Clone + Send + Sync + 'static,
+    R: tower::Service<ReadRequest, Response = ReadResponse, Error = BoxError>
+        + Clone
+        + Send
+        + Sync
+        + 'static,
+    R::Future: Send,
 {
     if std::env::var(yed::mock::MOCK_ENV).is_ok_and(|value| value == "1") {
         tracing::warn!(
@@ -126,6 +145,6 @@ where
         );
         Arc::new(yed::mock::MockYedState::new(tip))
     } else {
-        Arc::new(yed::mock::UnavailableYedState)
+        Arc::new(yed::live::LiveYedState::new(tip, read_state))
     }
 }

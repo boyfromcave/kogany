@@ -485,7 +485,8 @@ pub fn evaluate_yed_block(
         i64::from(input.height.0),
         &Hash32(input.hash.0),
         input.subsidy_zat,
-        None,
+        // kogany (W5-f): the node's signature cache (BUNDLE-1; a hit and a cold check agree).
+        Some(crate::service::yed::module::node_yed_sig_cache()),
     );
     Ok(if ev.block_invalid {
         YedBlockEffect {
