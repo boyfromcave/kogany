@@ -357,7 +357,8 @@ impl Output {
         #[cfg(feature = "ycash")]
         if let Some(id) = self.lock_script.pq_key_id() {
             return Some(Address::PayToPqKeyHash {
-                network_kind: net.t_addr_kind(),
+                // the plain post-quantum versions differ on Regtest (`rq…`), unlike t-addresses
+                network_kind: net.kind(),
                 scheme: id.scheme,
                 key_hash: id.key_hash,
             });

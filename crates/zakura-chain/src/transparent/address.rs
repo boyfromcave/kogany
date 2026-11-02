@@ -546,6 +546,15 @@ mod tests {
         data.extend_from_slice(&key_hash);
         let unknown = bs58::encode(data).with_check().into_string();
         assert!(unknown.parse::<Address>().is_err());
+        // a TX_PQPKH output names it, as the address index reads it
+        let output = crate::transparent::Output {
+            value: crate::amount::Amount::try_from(1).unwrap(),
+            lock_script: Script::new(&script),
+        };
+        assert_eq!(
+            output.address(&crate::parameters::Network::new_regtest(Default::default())),
+            Some(address)
+        );
     }
 
     #[test]
