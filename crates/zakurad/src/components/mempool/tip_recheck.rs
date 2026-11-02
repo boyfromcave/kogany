@@ -284,6 +284,293 @@ where
 mod tests {
     use super::*;
 
+    use zakura_chain::{
+        amount::Amount,
+        transaction::{LockTime, Transaction, UnminedTx},
+        transparent,
+    };
+    use zakura_test::mock_service::MockService;
+
+    const TIP: Height = Height(200);
+
+    fn tip_hash() -> block::Hash {
+        block::Hash([7; 32])
+    }
+
+    /// A v4 transaction spending `prevout` into one output with `lock_script`, expiring at
+    /// `expiry` (0 = none).
+    fn verified_tx(prevout: u8, lock_script: Vec<u8>, expiry: u32) -> VerifiedUnminedTx {
+        verified_spend(transaction::Hash([prevout; 32]), lock_script, expiry)
+    }
+
+    /// [`verified_tx`] spending output 0 of `parent`.
+    fn verified_spend(
+        parent: transaction::Hash,
+        lock_script: Vec<u8>,
+        expiry: u32,
+    ) -> VerifiedUnminedTx {
+        let transaction = Transaction::V4 {
+            inputs: vec![transparent::Input::PrevOut {
+                outpoint: transparent::OutPoint {
+                    hash: parent,
+                    index: 0,
+                },
+                unlock_script: transparent::Script::new(&[0x51]),
+                sequence: u32::MAX,
+            }],
+            outputs: vec![transparent::Output {
+                value: Amount::try_from(1_000).expect("a valid amount"),
+                lock_script: transparent::Script::new(&lock_script),
+            }],
+            lock_time: LockTime::unlocked(),
+            expiry_height: Height(expiry),
+            joinsplit_data: None,
+            sapling_shielded_data: None,
+        };
+        let spent = transparent::Output {
+            value: Amount::try_from(200_000).expect("a valid amount"),
+            lock_script: transparent::Script::new(&[0x75, 0x51]),
+        };
+        VerifiedUnminedTx::new(
+            UnminedTx::from(transaction),
+            Amount::try_from(199_000).expect("a valid amount"),
+            0,
+            0,
+            Arc::new(vec![spent]),
+        )
+        .expect("the test transaction pays a high fee")
+    }
+
+    /// An act-shaped output script (`OP_RETURN OP_PUSHDATA1 <n> "YV" ...`): vault-relevant.
+    fn act_script() -> Vec<u8> {
+        let mut spk = vec![0x6a, 0x4c, 20, b'Y', b'V'];
+        spk.resize(23, 0);
+        spk
+    }
+
+    fn snapshot_at(tip: (Height, block::Hash)) -> zs::ReadResponse {
+        zs::ReadResponse::VaultSnapshot(Some(zs::vault::VaultSnapshot {
+            tip: Some(tip),
+            state: Arc::new(Default::default()),
+        }))
+    }
+
+    #[tokio::test]
+    async fn the_recheck_evicts_vault_failures_and_yed_refusals() {
+        let _init_guard = zakura_test::init();
+        let mut verifier = MockService::build().for_unit_tests::<tx::Request, tx::Response, BoxError>();
+        let mut read_state =
+            MockService::build().for_unit_tests::<zs::ReadRequest, zs::ReadResponse, BoxError>();
+        let act = verified_tx(1, act_script(), 0);
+        let plain = verified_tx(2, vec![0x51], 0);
+        let kept = verified_tx(3, vec![0x52], 0);
+        let tip = (TIP, tip_hash());
+
+        let run = tokio::spawn(recheck(
+            tip,
+            Height(TIP.0 + 1),
+            vec![act.clone(), plain.clone(), kept.clone()],
+            verifier.clone(),
+            read_state.clone(),
+        ));
+
+        read_state
+            .expect_request(zs::ReadRequest::BestChainVaultSnapshot)
+            .await
+            .respond(snapshot_at(tip));
+        // Only the vault-relevant transaction goes back through the verifier, at tip + 1.
+        let act_id = act.transaction.id();
+        verifier
+            .expect_request_that(|request| {
+                request.tx_id() == act_id && request.height() == Height(TIP.0 + 1)
+            })
+            .await
+            .respond(Err::<tx::Response, BoxError>(
+                TransactionError::VaultRejected {
+                    reason: "bad-txns-vault-release".into(),
+                    byte_level: false,
+                }
+                .into(),
+            ));
+        // The YED module's sweep covers the rest.
+        read_state
+            .expect_request_that(|request| {
+                matches!(request, zs::ReadRequest::BestChainYedMempoolCheck(txs) if txs.len() == 2)
+            })
+            .await
+            .respond(zs::ReadResponse::YedMempoolCheck {
+                tip: Some(tip),
+                reasons: vec![Some("mempool-expiry".into()), None],
+            });
+        verifier.expect_no_requests().await;
+
+        let outcome = run.await.expect("the re-check does not panic");
+        assert_eq!(outcome.tip_hash, Some(tip_hash()));
+        let evicted: Vec<_> = outcome
+            .evictions
+            .iter()
+            .map(|e| (e.mined_id, e.error.clone()))
+            .collect();
+        assert_eq!(
+            evicted,
+            vec![
+                (
+                    act_id.mined_id(),
+                    TransactionError::VaultRejected {
+                        reason: "bad-txns-vault-release".into(),
+                        byte_level: false
+                    }
+                ),
+                (
+                    plain.transaction.id().mined_id(),
+                    TransactionError::YellowbackRejected {
+                        reason: "mempool-expiry".into()
+                    }
+                ),
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn a_retryable_failure_keeps_the_transaction() {
+        let _init_guard = zakura_test::init();
+        let mut verifier = MockService::build().for_unit_tests::<tx::Request, tx::Response, BoxError>();
+        let mut read_state =
+            MockService::build().for_unit_tests::<zs::ReadRequest, zs::ReadResponse, BoxError>();
+        let act = verified_tx(1, act_script(), 0);
+        let tip = (TIP, tip_hash());
+        let run = tokio::spawn(recheck(
+            tip,
+            Height(TIP.0 + 1),
+            vec![act],
+            verifier.clone(),
+            read_state.clone(),
+        ));
+        read_state
+            .expect_request(zs::ReadRequest::BestChainVaultSnapshot)
+            .await
+            .respond(snapshot_at(tip));
+        verifier
+            .expect_request_that(|_| true)
+            .await
+            .respond(Err::<tx::Response, BoxError>(
+                TransactionError::Other("the chain tip moved, retry".into()).into(),
+            ));
+        read_state
+            .expect_request_that(|_| true)
+            .await
+            .respond(zs::ReadResponse::YedMempoolCheck {
+                tip: Some(tip),
+                reasons: vec![None],
+            });
+        let outcome = run.await.expect("the re-check does not panic");
+        assert_eq!(outcome.tip_hash, Some(tip_hash()));
+        assert!(outcome.evictions.is_empty());
+    }
+
+    #[tokio::test]
+    async fn a_moved_tip_drops_the_recheck() {
+        let _init_guard = zakura_test::init();
+        let mut verifier = MockService::build().for_unit_tests::<tx::Request, tx::Response, BoxError>();
+        let mut read_state =
+            MockService::build().for_unit_tests::<zs::ReadRequest, zs::ReadResponse, BoxError>();
+        let run = tokio::spawn(recheck(
+            (TIP, tip_hash()),
+            Height(TIP.0 + 1),
+            vec![verified_tx(1, act_script(), 0)],
+            verifier.clone(),
+            read_state.clone(),
+        ));
+        read_state
+            .expect_request(zs::ReadRequest::BestChainVaultSnapshot)
+            .await
+            .respond(snapshot_at((Height(TIP.0 + 1), block::Hash([8; 32]))));
+        verifier.expect_no_requests().await;
+        let outcome = run.await.expect("the re-check does not panic");
+        assert_eq!(outcome.tip_hash, None);
+        assert!(outcome.evictions.is_empty());
+    }
+
+    fn regtest_storage() -> super::super::Storage {
+        super::super::Storage::new_for_network(
+            &super::super::Config::default(),
+            &Network::new_regtest(Default::default()),
+        )
+    }
+
+    #[test]
+    fn eviction_takes_the_descendants_and_rejects_until_the_next_tip() {
+        let _init_guard = zakura_test::init();
+        let mut storage = regtest_storage();
+        let parent = verified_tx(1, vec![0x75, 0x51], 0);
+        let parent_id = parent.transaction.id();
+        let child = verified_spend(parent_id.mined_id(), vec![0x75, 0x51], 0);
+        let child_id = child.transaction.id();
+        let other = verified_tx(9, vec![0x75, 0x51], 0);
+        let tip = Some(Height(50));
+        storage
+            .insert_with_evicted_ids(parent, Vec::new(), tip)
+            .0
+            .expect("the parent is stored");
+        storage
+            .insert_with_evicted_ids(
+                child,
+                vec![transparent::OutPoint {
+                    hash: parent_id.mined_id(),
+                    index: 0,
+                }],
+                tip,
+            )
+            .0
+            .expect("the child is stored");
+        storage
+            .insert_with_evicted_ids(other, Vec::new(), tip)
+            .0
+            .expect("the other transaction is stored");
+
+        let error = TransactionError::VaultTemplateSetState {
+            input_index: 0,
+            script_error: "OP_CHECKSETSIG or OP_CHECKSETDORMANT failed".into(),
+        };
+        let removed = storage.evict_after_tip_recheck(vec![Eviction {
+            mined_id: parent_id.mined_id(),
+            error,
+        }]);
+        assert_eq!(removed, [parent_id, child_id].into_iter().collect());
+        assert_eq!(storage.transaction_count(), 1);
+        assert!(storage.contains_rejected(&parent_id));
+        storage.clear_tip_rejections();
+        assert!(!storage.contains_rejected(&parent_id));
+    }
+
+    #[test]
+    fn a_transaction_expiring_at_the_tip_stays_one_more_block() {
+        let _init_guard = zakura_test::init();
+        let mut storage = regtest_storage();
+        let tx = verified_tx(1, vec![0x75, 0x51], 100);
+        let id = tx.transaction.id();
+        storage
+            .insert_with_evicted_ids(tx, Vec::new(), Some(Height(90)))
+            .0
+            .expect("the transaction is stored");
+        // ycashd `removeExpired(100)` keeps it (100 > 100 is false); Zakura's rule dropped it.
+        assert!(storage.remove_expired_transactions(Height(100)).is_empty());
+        assert_eq!(storage.transaction_count(), 1);
+        assert_eq!(
+            storage.remove_expired_transactions(Height(101)),
+            [id].into_iter().collect()
+        );
+    }
+
+    #[test]
+    fn expiry_at_the_next_height_is_ycashd_s() {
+        // ycashd `IsExpiredTx(tx, h)`: expired when h > nExpiryHeight; 0 never expires.
+        let tx = verified_tx(1, vec![0x51], 100);
+        assert!(!is_expired_at(&tx, Height(100)));
+        assert!(is_expired_at(&tx, Height(101)));
+        assert!(!is_expired_at(&verified_tx(1, vec![0x51], 0), Height(5_000_000)));
+    }
+
     #[test]
     fn only_tip_dependent_failures_evict() {
         for error in [
