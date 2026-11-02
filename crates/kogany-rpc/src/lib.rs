@@ -27,6 +27,7 @@ use zakura_state::{BoxError, ReadRequest, ReadResponse};
 
 mod macros;
 
+pub mod insight;
 pub mod json;
 pub mod live;
 pub mod mempool;
@@ -87,6 +88,7 @@ where
         .into_extension()
         .and(yed::extension(yed, network))
         .and(regtest::RegtestRpcImpl::new(network.clone()).into_extension())
+        .and(insight::InsightRpcImpl::new(network.clone()).into_extension())
 }
 
 /// The `getblocktemplate` hooks `zakurad` installs on a Ycash node (plan W8-b): over the same

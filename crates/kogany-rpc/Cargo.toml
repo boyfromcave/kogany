@@ -43,6 +43,8 @@ zakura-script = { path = "../zakura-script", version = "5.0.1-rc0" }
 zakura-state = { path = "../zakura-state", version = "12.0.0-rc0" }
 
 [dev-dependencies]
+# insight.rs's test sets a mempool entry's time.
+chrono = { workspace = true }
 hex = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 # W4-d: tests/live_state.rs commits the recorded chain to a test state service.
