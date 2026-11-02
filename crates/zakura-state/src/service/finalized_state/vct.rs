@@ -648,7 +648,10 @@ pub(super) fn embedded_final_frontiers(network: &Network) -> Option<FinalFrontie
 /// historical derivation stays idle (decision K-12; vault and YED state are never imported from
 /// an artefact, M24-13).
 pub(super) fn is_ycash_network(network: &Network) -> bool {
-    NetworkUpgrade::Ycash.activation_height(network).is_some()
+    // `Ycash` is never scheduled in a Zcash build (`is_kogany_upgrade_scheduled`, kogany plan
+    // §2.3): the inert row would otherwise answer the fallback height on Zcash mainnet and switch
+    // the embedded Zcash artefacts off there.
+    cfg!(feature = "ycash") && NetworkUpgrade::Ycash.activation_height(network).is_some()
 }
 
 /// Returns the verified Sapling, Orchard, and Ironwood leaf counts at `last_checkpoint`, when the
