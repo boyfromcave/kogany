@@ -54,6 +54,9 @@ fn nsm_fee_claims_at_activation_and_reissuance() {
 }
 
 #[tokio::test]
+// kogany: Zcash coinbases and subsidies on Zcash schedules (no Ycash YDF output, funding streams,
+// ZIP 234); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn nsm_fee_semantic_verification_rounds_the_block_total() {
     use zakura_chain::{
         block_info::BlockInfo,
@@ -159,6 +162,9 @@ proptest::proptest! {
     #![proptest_config(proptest::test_runner::Config::with_cases(32))]
 
     #[test]
+    // kogany: Zcash coinbases and subsidies on Zcash schedules (no Ycash YDF output, funding
+    // streams, ZIP 234); not run on Ycash.
+    #[cfg(not(feature = "ycash"))]
     fn max_money_aggregate_fees_enforce_bound_before_recycling(
         first in 1_000i64..zakura_chain::amount::MAX_MONEY,
         excess in 1i64..=1_000,

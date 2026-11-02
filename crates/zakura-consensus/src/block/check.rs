@@ -631,6 +631,8 @@ pub fn merkle_root_validity(
 }
 
 #[cfg(test)]
+// kogany: the Zcash-fixture tests are not built with `ycash`.
+#[cfg_attr(feature = "ycash", allow(unused_imports, dead_code))]
 mod tests {
     use zakura_chain::{
         amount::{Amount, NonNegative},
@@ -662,6 +664,9 @@ mod tests {
     }
 
     #[test]
+    // kogany: Zcash coinbases and subsidies on Zcash schedules (no Ycash YDF output, funding
+    // streams, ZIP 234); not run on Ycash.
+    #[cfg(not(feature = "ycash"))]
     fn coinbase_payment_matches_configured_address_and_amount() {
         let nu7_fpf_address: Address = "t1MkHnkxVjNpNbCrSs3AJ8J7ZSp6NTYiUcG"
             .parse()

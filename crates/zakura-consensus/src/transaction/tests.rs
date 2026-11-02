@@ -1,5 +1,6 @@
 //! Tests for Zcash transaction consensus checks.
-
+// kogany: the Zcash-fixture tests are not built with `ycash`, leaving their helpers unused.
+#![cfg_attr(feature = "ycash", allow(unused_imports, dead_code))]
 #![allow(clippy::unwrap_in_result)]
 
 //
@@ -594,6 +595,9 @@ async fn block_utxo_lookup_timing() {
 }
 
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn v5_transactions_basic_check() -> Result<(), Report> {
     let _init_guard = zakura_test::init();
 
@@ -614,6 +618,9 @@ fn v5_transactions_basic_check() -> Result<(), Report> {
 }
 
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn shielded_proof_sizes_are_enforced_for_in_memory_transactions() {
     let _init_guard = zakura_test::init();
 
@@ -678,6 +685,9 @@ fn shielded_proof_sizes_are_enforced_for_in_memory_transactions() {
 /// its own nullifier set. `spend_conflicts` must only reject duplicates
 /// *within* a pool.
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn matching_orchard_and_ironwood_nullifiers_are_not_conflicts() {
     let _init_guard = zakura_test::init();
 
@@ -705,6 +715,9 @@ fn matching_orchard_and_ironwood_nullifiers_are_not_conflicts() {
 }
 
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn v5_transaction_with_orchard_actions_has_inputs_and_outputs() {
     for net in Network::iter() {
         let mut tx = v5_transactions(net.block_iter())
@@ -818,6 +831,9 @@ fn empty_utxos() -> HashMap<transparent::OutPoint, transparent::Utxo> {
 }
 
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn orchard_rejects_net_deposits_after_nu6_3() {
     let (network, height) = nu6_3_test_network_and_height();
 
@@ -869,6 +885,9 @@ fn orchard_rejects_net_deposits_after_nu6_3() {
 }
 
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn coinbase_rejects_orchard_shielded_data_after_nu6_3() {
     let (network, height) = nu6_3_test_network_and_height();
 
@@ -926,6 +945,9 @@ fn coinbase_rejects_orchard_shielded_data_after_nu6_3() {
 }
 
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn orchard_cross_address_flag_is_disabled_after_nu6_3() {
     let orchard_cross_address = v6_pool_flow_transaction(
         Some(orchard_shielded_data(
@@ -959,6 +981,9 @@ fn orchard_cross_address_flag_is_disabled_after_nu6_3() {
 }
 
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn ironwood_cross_address_flag_is_optional_after_nu6_3() {
     // After NU6.3 the cross-address bit is OPTIONAL for Ironwood shielded data: a bundle
     // is accepted whether or not it sets ENABLE_CROSS_ADDRESS. (Orchard bundles still MUST
@@ -1006,6 +1031,9 @@ fn ironwood_cross_address_flag_is_optional_after_nu6_3() {
 }
 
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn ironwood_cross_address_only_is_not_a_spend_or_output_flag() {
     let tx = v6_pool_flow_transaction(
         None,
@@ -1029,6 +1057,9 @@ fn ironwood_cross_address_only_is_not_a_spend_or_output_flag() {
 }
 
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn orchard_to_ironwood_migration_balances() {
     let (network, height) = nu6_3_test_network_and_height();
     let tx = v6_pool_flow_transaction(
@@ -1062,6 +1093,9 @@ fn orchard_to_ironwood_migration_balances() {
 }
 
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn ironwood_withdraw_balances() {
     let tx = v6_pool_flow_transaction(
         None,
@@ -1090,6 +1124,9 @@ fn ironwood_withdraw_balances() {
 }
 
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn v5_transaction_with_orchard_actions_has_flags() {
     for net in Network::iter() {
         let mut tx = v5_transactions(net.block_iter())
@@ -1130,6 +1167,9 @@ fn v5_transaction_with_orchard_actions_has_flags() {
 }
 
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn v5_transaction_with_no_inputs_fails_verification() {
     let (_, output, _) = mock_transparent_transfer(
         Height(1),
@@ -1157,6 +1197,9 @@ fn v5_transaction_with_no_inputs_fails_verification() {
 }
 
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn v5_transaction_with_no_outputs_fails_verification() {
     let (input, _, _) = mock_transparent_transfer(
         Height(1),
@@ -1627,6 +1670,9 @@ async fn mempool_request_with_unmined_output_spends_is_accepted() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+// kogany: Zcash upgrade schedules (NU5 to NU7 heights; a Ycash network rejects NU5 with Vault); not
+// run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn dont_skip_verification_of_block_transactions_in_mempool() {
     let mut state: MockService<_, _, _, _> = MockService::build().for_prop_tests();
     let mempool: MockService<_, _, _, _> = MockService::build().for_prop_tests();
@@ -2109,6 +2155,9 @@ async fn state_error_converted_correctly() {
 }
 
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn v5_coinbase_transaction_without_enable_spends_flag_passes_validation() {
     for net in Network::iter() {
         let mut tx = v5_transactions(net.block_iter())
@@ -2124,6 +2173,9 @@ fn v5_coinbase_transaction_without_enable_spends_flag_passes_validation() {
 }
 
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn v5_coinbase_transaction_with_enable_spends_flag_fails_validation() {
     for net in Network::iter() {
         let mut tx = v5_transactions(net.block_iter())
@@ -2144,6 +2196,9 @@ fn v5_coinbase_transaction_with_enable_spends_flag_fails_validation() {
 }
 
 #[tokio::test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn v5_transaction_is_rejected_before_nu5_activation() {
     let sapling = NetworkUpgrade::Sapling;
 
@@ -2173,6 +2228,9 @@ async fn v5_transaction_is_rejected_before_nu5_activation() {
 }
 
 #[tokio::test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn v5_transaction_is_accepted_after_nu5_activation() {
     let _init_guard = zakura_test::init();
 
@@ -2463,6 +2521,9 @@ async fn v4_transaction_with_exceeding_expiry_height() {
 /// Tests if a coinbase V4 transaction with an expiry height exceeding the
 /// maximum is rejected.
 #[tokio::test]
+// kogany: Zcash upgrade schedules (NU5 to NU7 heights; a Ycash network rejects NU5 with Vault); not
+// run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn v4_coinbase_transaction_with_exceeding_expiry_height() {
     let state_service =
         service_fn(|_| async { unreachable!("State service should not be called") });
@@ -2832,6 +2893,9 @@ fn v4_transaction_with_conflicting_sprout_nullifier_across_joinsplits_is_rejecte
 
 /// Test if V5 transaction with transparent funds is accepted.
 #[tokio::test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn v5_transaction_with_transparent_transfer_is_accepted() {
     let network = Network::new_default_testnet();
     let network_upgrade = NetworkUpgrade::Nu5;
@@ -2892,6 +2956,9 @@ async fn v5_transaction_with_transparent_transfer_is_accepted() {
 /// Tests if a non-coinbase V5 transaction with the last valid expiry height is
 /// accepted.
 #[tokio::test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn v5_transaction_with_last_valid_expiry_height() {
     let network = Network::new_default_testnet();
     let state_service =
@@ -3088,6 +3155,9 @@ async fn v5_coinbase_transaction_expiry_height() {
 
 /// Tests if an expired non-coinbase V5 transaction is rejected.
 #[tokio::test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn v5_transaction_with_too_low_expiry_height() {
     let network = Network::new_default_testnet();
 
@@ -3199,6 +3269,9 @@ async fn v5_transaction_with_exceeding_expiry_height() {
 
 /// Test if V5 coinbase transaction is accepted.
 #[tokio::test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn v5_coinbase_transaction_is_accepted() {
     let network = Network::new_default_testnet();
     let network_upgrade = NetworkUpgrade::Nu5;
@@ -3254,6 +3327,9 @@ async fn v5_coinbase_transaction_is_accepted() {
 /// This test simulates the case where the script verifier rejects the transaction because the
 /// script prevents spending the source UTXO.
 #[tokio::test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn v5_transaction_with_transparent_transfer_is_rejected_by_the_script() {
     let network = Network::new_default_testnet();
     let network_upgrade = NetworkUpgrade::Nu5;
@@ -3366,6 +3442,9 @@ async fn v5_transaction_with_conflicting_transparent_spend_is_rejected() {
 ///
 /// This test verifies if the transaction verifier correctly accepts a signed transaction.
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn v4_with_signed_sprout_transfer_is_accepted() {
     let _init_guard = zakura_test::init();
     zakura_test::MULTI_THREADED_RUNTIME.block_on(async {
@@ -3411,6 +3490,9 @@ fn v4_with_signed_sprout_transfer_is_accepted() {
 /// This test verifies if the transaction verifier correctly rejects the transaction because of the
 /// invalid JoinSplit.
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn v4_with_modified_joinsplit_is_rejected() {
     let _init_guard = zakura_test::init();
     zakura_test::MULTI_THREADED_RUNTIME.block_on(async {
@@ -3507,6 +3589,9 @@ async fn v4_with_joinsplit_is_rejected_for_modification(
 /// Keeping both versions in one test amortizes Sapling verifying-key
 /// initialization under nextest's process-per-test execution model.
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn v4_and_v5_with_sapling_spends() {
     let _init_guard = zakura_test::init();
     zakura_test::MULTI_THREADED_RUNTIME.block_on(async {
@@ -3594,6 +3679,9 @@ fn v4_and_v5_with_sapling_spends() {
 /// An invalid Sapling proof is reported as a typed verification error by both
 /// the batch verifier and its single-verification fallback.
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn v4_with_invalid_sapling_proof_returns_typed_error() {
     let _init_guard = zakura_test::init();
     zakura_test::MULTI_THREADED_RUNTIME.block_on(async {
@@ -3792,6 +3880,9 @@ fn v4_with_invalid_sapling_proof_returns_typed_error() {
 /// A malformed Sapling proof is reported as a typed verification error before
 /// it is queued for batch validation.
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn v4_with_malformed_sapling_proof_returns_typed_error() {
     let _init_guard = zakura_test::init();
     zakura_test::MULTI_THREADED_RUNTIME.block_on(async {
@@ -3851,6 +3942,9 @@ fn assert_sapling_verification_error(error: crate::BoxError) {
 
 /// Test if a V4 transaction with a duplicate Sapling spend is rejected by the verifier.
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn v4_with_duplicate_sapling_spends() {
     let _init_guard = zakura_test::init();
     zakura_test::MULTI_THREADED_RUNTIME.block_on(async {
@@ -3898,6 +3992,9 @@ fn v4_with_duplicate_sapling_spends() {
 
 /// Test if a V4 transaction with Sapling outputs but no spends is accepted by the verifier.
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn v4_with_sapling_outputs_and_no_spends() {
     let _init_guard = zakura_test::init();
     zakura_test::MULTI_THREADED_RUNTIME.block_on(async {
@@ -3951,6 +4048,9 @@ fn v4_with_sapling_outputs_and_no_spends() {
 /// any state lookup. It mirrors `v4_with_sapling_outputs_and_no_spends` (which
 /// accepts this shape) with only the ephemeral key corrupted.
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn sapling_output_with_invalid_ephemeral_key_is_rejected() {
     let _init_guard = zakura_test::init();
     zakura_test::MULTI_THREADED_RUNTIME.block_on(async {
@@ -4006,6 +4106,9 @@ fn sapling_output_with_invalid_ephemeral_key_is_rejected() {
 /// output path: the parser preserves the raw `cv` bytes, and the early
 /// semantic check rejects them before any state lookup.
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn sapling_v4_output_with_invalid_value_commitment_is_rejected_after_roundtrip() {
     let _init_guard = zakura_test::init();
     zakura_test::MULTI_THREADED_RUNTIME.block_on(async {
@@ -4133,6 +4236,9 @@ fn sapling_coinbase_output_with_invalid_value_commitment_is_rejected() {
 /// preserves the raw bytes and the early semantic check rejects them before
 /// any state lookup.
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn sapling_spends_with_invalid_value_commitments_are_rejected_after_roundtrip() {
     let _init_guard = zakura_test::init();
     zakura_test::MULTI_THREADED_RUNTIME.block_on(async {
@@ -4386,6 +4492,9 @@ fn modify_first_sapling_spend_proof_in_transfers<A: sapling::AnchorVariant + Clo
 
 /// Test if a V5 transaction with a duplicate Sapling spend is rejected by the verifier.
 #[tokio::test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn v5_with_duplicate_sapling_spends() {
     let _init_guard = zakura_test::init();
 
@@ -4426,6 +4535,9 @@ async fn v5_with_duplicate_sapling_spends() {
 
 /// Test if a V5 transaction with a duplicate Orchard action is rejected by the verifier.
 #[tokio::test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn v5_with_duplicate_orchard_action() {
     let _init_guard = zakura_test::init();
 
@@ -4569,6 +4681,9 @@ async fn mempool_applies_the_zip218_limits_to_ironwood_actions() {
 /// Checks that ZIP 2003 accepts V4 transactions below NU7 and rejects them
 /// from NU7.
 #[test]
+// kogany: Zcash upgrade schedules (NU5 to NU7 heights; a Ycash network rejects NU5 with Vault); not
+// run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn v4_deprecation_boundary() {
     let _init_guard = zakura_test::init();
 
@@ -4678,6 +4793,9 @@ fn verify_v4_at(
 /// it is inactive below the configured height and active at and above it, can be
 /// disabled entirely, and Mainnet uses its fixed activation height.
 #[test]
+// kogany: Zcash upgrade schedules (NU5 to NU7 heights; a Ycash network rejects NU5 with Vault); not
+// run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn orchard_disabling_soft_fork_activation_boundary() {
     let _init_guard = zakura_test::init();
 
@@ -4728,6 +4846,9 @@ fn orchard_disabling_soft_fork_activation_boundary() {
 /// contain Orchard actions once it is active, in both block and mempool
 /// verification contexts.
 #[tokio::test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn orchard_disabling_soft_fork_rejects_orchard_actions_in_blocks_and_mempool() {
     let _init_guard = zakura_test::init();
 
@@ -4911,6 +5032,9 @@ async fn orchard_disabling_soft_fork_accepts_non_orchard_transactions() {
 /// takes that worker down when the test ends, and every later test reaching the same global then
 /// sees the cancelled worker as a verification error rather than a verdict.
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn orchard_disabling_soft_fork_accepts_orchard_actions_below_activation_height() {
     let _init_guard = zakura_test::init();
     zakura_test::MULTI_THREADED_RUNTIME.block_on(async {
@@ -5019,6 +5143,9 @@ fn orchard_disabling_soft_fork_accepts_orchard_actions_below_activation_height()
 
 /// Checks that public-network branch-ID admission switches exactly at NU6.3 activation.
 #[test]
+// kogany: Zcash upgrade schedules (NU5 to NU7 heights; a Ycash network rejects NU5 with Vault); not
+// run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn public_nu6_3_consensus_branch_id_boundary() {
     let mut tx = Transaction::V5 {
         inputs: Vec::new(),
@@ -5624,6 +5751,9 @@ fn add_to_sprout_pool_after_nu() {
 }
 
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn add_to_orchard_pool_after_nu6_3() {
     let _init_guard = zakura_test::init();
 
@@ -5694,6 +5824,9 @@ fn add_to_orchard_pool_after_nu6_3() {
 }
 
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn coinbase_orchard_bundle_after_nu6_3() {
     let _init_guard = zakura_test::init();
 
@@ -5753,6 +5886,9 @@ fn coinbase_orchard_bundle_after_nu6_3() {
 /// Orchard )’ does not return ⊥, using a sequence of 32 zero bytes as the outgoing viewing key. We
 /// will refer to such a sequence as the _zero key_.
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn coinbase_outputs_are_decryptable() -> Result<(), Report> {
     let _init_guard = zakura_test::init();
 
@@ -5867,6 +6003,9 @@ fn fill_action_with_note_encryption_test_vector(
 
 /// Test if shielded coinbase outputs are decryptable with an all-zero outgoing viewing key.
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn coinbase_outputs_are_decryptable_for_fake_v5_blocks() {
     for v in zakura_test::vectors::ORCHARD_NOTE_ENCRYPTION_ZERO_VECTOR.iter() {
         for net in Network::iter() {
@@ -5900,6 +6039,9 @@ fn coinbase_outputs_are_decryptable_for_fake_v5_blocks() {
 
 /// Test if random shielded outputs are NOT decryptable with an all-zero outgoing viewing key.
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn shielded_outputs_are_not_decryptable_for_fake_v5_blocks() {
     for v in zakura_test::vectors::ORCHARD_NOTE_ENCRYPTION_VECTOR.iter() {
         for net in Network::iter() {
@@ -5995,6 +6137,9 @@ async fn mempool_zip317_error() {
 }
 
 #[tokio::test]
+// kogany: Zcash upgrade schedules (NU5 to NU7 heights; a Ycash network rejects NU5 with Vault); not
+// run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn mempool_zip317_ok() {
     let mut state: MockService<_, _, _, _> = MockService::build().for_prop_tests();
     let verifier = Verifier::new_for_tests(&Network::Mainnet, state.clone());
@@ -6065,6 +6210,9 @@ async fn mempool_zip317_ok() {
 }
 
 #[tokio::test]
+// kogany: Zcash upgrade schedules (NU5 to NU7 heights; a Ycash network rejects NU5 with Vault); not
+// run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn mempool_transaction_with_sufficient_fee_is_rejected_by_script() {
     let mut state: MockService<_, _, _, _> = MockService::build().for_prop_tests();
     let verifier = Verifier::new_for_tests(&Network::Mainnet, state.clone());
@@ -6145,6 +6293,9 @@ async fn mempool_transaction_with_sufficient_fee_is_rejected_by_script() {
 /// This does not populate or exercise the Halo2 proof cache. See
 /// [`the_halo2_cache_is_reused_only_for_the_transaction_that_earned_it`] for that coverage.
 #[tokio::test(flavor = "multi_thread")]
+// kogany: Zcash upgrade schedules (NU5 to NU7 heights; a Ycash network rejects NU5 with Vault); not
+// run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn block_with_garbage_orchard_proofs_is_rejected() {
     use zakura_chain::{primitives::Halo2Proof, transaction::VerifiedUnminedTx};
 
@@ -6844,6 +6995,9 @@ fn orchard_shielded_data_for_mutation(tx: &mut Transaction) -> &mut orchard::Shi
 ///      on a transaction;
 ///   3. a transaction with any verification input mutated never inherits the record.
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn the_halo2_cache_is_reused_only_for_the_transaction_that_earned_it() {
     let _init_guard = zakura_test::init();
 
@@ -7142,6 +7296,9 @@ const SAPLING_CACHE_KEY_MUTATIONS: &[(&str, fn(&mut Transaction))] = &[
 ///      height past its expiry is still rejected;
 ///   3. a transaction with any verification input mutated never inherits the record.
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn the_sapling_cache_is_reused_only_for_the_transaction_that_earned_it() {
     let _init_guard = zakura_test::init();
 
@@ -7258,6 +7415,9 @@ fn the_sapling_cache_is_reused_only_for_the_transaction_that_earned_it() {
 /// so the mempool would reject this one on ZIP-317 policy before ever reaching verification. The
 /// mempool-to-block path is covered by the V4 test; what is specific here is the key.
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn the_sapling_cache_distinguishes_a_v5_transaction_from_its_corrupted_twin() {
     let _init_guard = zakura_test::init();
 

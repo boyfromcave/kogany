@@ -486,6 +486,9 @@ async fn verify_fail_add_block_checkpoint() -> Result<(), Report> {
 /// A semantic child must not end checkpoint sync before the configured boundary,
 /// even when its parent is the last durably committed checkpoint.
 #[tokio::test(flavor = "multi_thread")]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn semantic_child_cannot_end_checkpoint_sync_early() {
     use zakura_chain::{
         local_genesis::{generate_local_testnet_with_funded_keys, LocalTestnetGenesisOptions},
@@ -680,6 +683,9 @@ fn regtest_checkpoint_boundaries_cover_mandatory_height() {
 
 /// A forged lookahead height cannot route a block into a finished checkpoint verifier.
 #[tokio::test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn forged_lookahead_height_is_rejected_before_checkpoint_routing() {
     use tower::service_fn;
     use zakura_chain::transparent;
@@ -773,6 +779,9 @@ async fn forged_lookahead_height_is_rejected_before_checkpoint_routing() {
 /// The verifiers must report the payload mismatch, because v2 block sync records a
 /// consensus-invalid body as permanent evidence against the requested hash.
 #[tokio::test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn forged_expiry_with_authentic_height_is_a_payload_mismatch() {
     use tower::service_fn;
     use zakura_chain::parameters::NetworkUpgrade;
@@ -884,6 +893,9 @@ async fn forged_expiry_with_authentic_height_is_a_payload_mismatch() {
 /// A forged height across a network upgrade must fail the Merkle root check before the
 /// network upgrade check. The syncer requeues a payload mismatch instead of restarting.
 #[tokio::test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn forged_height_across_upgrade_is_a_payload_mismatch() {
     use tower::service_fn;
     use zakura_chain::transparent;

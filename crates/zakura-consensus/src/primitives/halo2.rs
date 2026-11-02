@@ -464,6 +464,8 @@ pub fn verifier_for(network_upgrade: NetworkUpgrade) -> &'static VerifierService
 
 /// Returns how many times `item` has reached its era's inner Halo2 verifier.
 #[cfg(test)]
+// kogany: used only by the Zcash-fixture tests, which are not built with `ycash`.
+#[cfg_attr(feature = "ycash", allow(dead_code))]
 pub(crate) fn inner_calls_for(network_upgrade: NetworkUpgrade, item: &Item) -> usize {
     verifier_for(network_upgrade).inner_calls_for(item)
 }

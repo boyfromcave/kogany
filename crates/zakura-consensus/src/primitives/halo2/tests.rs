@@ -12,6 +12,8 @@
 //!   * [`verifier_for`] routes each network upgrade to the service holding the
 //!     matching circuit era's key (pre-NU6.2 insecure, NU6.2-until-NU6.3 fixed, or
 //!     NU6.3-onward).
+// kogany: the Zcash-fixture tests are not built with `ycash`, leaving their helpers unused.
+#![cfg_attr(feature = "ycash", allow(unused_imports, dead_code))]
 
 use std::{
     future,
@@ -173,6 +175,9 @@ async fn assert_explicit_flush_matches_single(vk: &'static ItemVerifyingKey, ite
 /// "fails open" (e.g. validates everything against a single key, like the rejected zcashd WIP
 /// shortcut), the wrong-key assertion below would fail.
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn pre_nu6_2_proof_only_verifies_under_pre_nu6_2_key() {
     let (bundle, sighash) = pre_nu6_2_bundle_and_sighash();
 
@@ -243,6 +248,9 @@ fn verifier_routes_each_network_upgrade_to_the_correct_key() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn explicit_flush_fallback_matches_single_for_mixed_pre_nu6_2_proofs() {
     let _init_guard = zakura_test::init();
     let (bundle, sighash) = pre_nu6_2_bundle_and_sighash();
@@ -265,6 +273,9 @@ async fn explicit_flush_fallback_matches_single_for_mixed_pre_nu6_2_proofs() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn explicit_flush_rejects_single_proof_under_each_wrong_era_key() {
     let _init_guard = zakura_test::init();
     let (bundle, sighash) = pre_nu6_2_bundle_and_sighash();
@@ -339,6 +350,9 @@ fn mutated_transaction(
 }
 
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn cache_key_is_deterministic() {
     let (bundle, sighash) = pre_nu6_2_bundle_and_sighash();
     let wtx_id = test_wtx_id(1);
@@ -351,6 +365,9 @@ fn cache_key_is_deterministic() {
 }
 
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn cache_key_commits_to_the_txid_and_authorizing_data() {
     let (bundle, sighash) = pre_nu6_2_bundle_and_sighash();
     let original_wtx_id = test_wtx_id(1);
@@ -374,6 +391,9 @@ fn cache_key_commits_to_the_txid_and_authorizing_data() {
 }
 
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn cache_key_commits_to_the_sighash() {
     let (bundle, sighash) = pre_nu6_2_bundle_and_sighash();
     let wtx_id = test_wtx_id(1);
@@ -392,6 +412,9 @@ fn cache_key_commits_to_the_sighash() {
 /// Every piece of authorizing data verified in the Halo2 batch changes the
 /// witnessed transaction ID, and therefore the cache key.
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn cache_key_changes_with_every_piece_of_authorizing_data() {
     let tx = pre_nu6_2_transactions()
         .into_iter()
@@ -455,6 +478,9 @@ fn rebuilt_as(
 /// their flag bytes are identical too, so their consensus encodings are byte-for-byte the same.
 /// Only the pool tag tells them apart.
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn cache_key_distinguishes_the_orchard_and_ironwood_pools() {
     let (bundle, sighash) = pre_nu6_2_bundle_and_sighash();
     let wtx_id = test_wtx_id(1);
@@ -527,6 +553,9 @@ impl Service<Item> for CountingVerifier {
 }
 
 #[tokio::test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn cache_skips_the_inner_service_for_an_already_verified_item() {
     let (bundle, sighash) = pre_nu6_2_bundle_and_sighash();
     let inner = CountingVerifier::new(true);
@@ -550,6 +579,9 @@ async fn cache_skips_the_inner_service_for_an_already_verified_item() {
 }
 
 #[tokio::test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn items_without_a_wtxid_are_not_cached() {
     let (bundle, sighash) = pre_nu6_2_bundle_and_sighash();
     let inner = CountingVerifier::new(true);
@@ -573,6 +605,9 @@ async fn items_without_a_wtxid_are_not_cached() {
 }
 
 #[tokio::test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn cache_does_not_reuse_a_result_across_items() {
     let (bundle, sighash) = pre_nu6_2_bundle_and_sighash();
 
@@ -602,6 +637,9 @@ async fn cache_does_not_reuse_a_result_across_items() {
 /// and an error can report that the batch worker shut down rather than that a proof is invalid.
 /// Remembering either as "invalid" would make the node reject valid blocks.
 #[tokio::test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn cache_does_not_remember_failures() {
     let (bundle, sighash) = pre_nu6_2_bundle_and_sighash();
     let inner = CountingVerifier::new(false);
@@ -640,6 +678,9 @@ where
 }
 
 #[tokio::test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn cache_evicts_in_insertion_order_and_stays_correct_when_full() {
     let (bundle, sighash) = pre_nu6_2_bundle_and_sighash();
     let inner = CountingVerifier::new(true);
@@ -676,6 +717,9 @@ async fn cache_evicts_in_insertion_order_and_stays_correct_when_full() {
 /// under the pre-NU6.2 insecure key can never be answered from that entry when it is later
 /// routed to a different era's verifier.
 #[tokio::test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn a_result_cached_under_one_era_is_not_visible_to_another() {
     let (bundle, sighash) = pre_nu6_2_bundle_and_sighash();
     let item = cacheable_item(&bundle, sighash, test_wtx_id(9));
@@ -702,6 +746,9 @@ async fn a_result_cached_under_one_era_is_not_visible_to_another() {
 /// in the handle rather than behind the shared `Arc` would be empty for every request, so this
 /// pins the sharing that makes the cache reachable at all.
 #[tokio::test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn cache_is_shared_between_clones() {
     let (bundle, sighash) = pre_nu6_2_bundle_and_sighash();
     let item = cacheable_item(&bundle, sighash, test_wtx_id(1));
@@ -762,6 +809,9 @@ impl Service<Item> for PendingVerifier {
 /// callers drop these futures routinely, because a block or mempool verification abandons its
 /// remaining checks as soon as one of them fails.
 #[tokio::test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn cancelling_a_verification_does_not_populate_the_cache() {
     let (bundle, sighash) = pre_nu6_2_bundle_and_sighash();
     let item = cacheable_item(&bundle, sighash, test_wtx_id(1));
@@ -839,6 +889,9 @@ impl Service<Item> for UnreadyVerifier {
 /// cache already holds — reporting a verified proof as a verification failure, and rejecting a
 /// valid block. That is the "an error need not be a verdict" case the module docs are about.
 #[tokio::test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn cache_hit_survives_an_inner_service_that_never_becomes_ready() {
     let (bundle, sighash) = pre_nu6_2_bundle_and_sighash();
     let item = cacheable_item(&bundle, sighash, test_wtx_id(1));
@@ -874,6 +927,9 @@ async fn cache_hit_survives_an_inner_service_that_never_becomes_ready() {
 /// the cache has to reach the inner service, and if that service cannot become ready the request
 /// must fail rather than be reported as verified.
 #[tokio::test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn cache_miss_propagates_an_inner_readiness_failure() {
     let (bundle, sighash) = pre_nu6_2_bundle_and_sighash();
     let dead = UnreadyVerifier::new();
@@ -958,6 +1014,9 @@ fn prove_shielding_bundle(pk: &ProvingKey) -> (Bundle<Authorized, ZatBalance>, S
 /// harmless; in a build with the feature on, the same assertions compare the
 /// prepared and unprepared paths for real.
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn prepared_msm_arming_does_not_change_proving_or_verification() {
     let _init_guard = zakura_test::init();
 

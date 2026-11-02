@@ -1,5 +1,6 @@
 //! Tests for block verification
-
+// kogany: the Zcash-fixture tests are not built with `ycash`, leaving their helpers unused.
+#![cfg_attr(feature = "ycash", allow(unused_imports, dead_code))]
 #![allow(clippy::unwrap_in_result)]
 
 use chrono::DateTime;
@@ -302,6 +303,9 @@ async fn nu5_semantic_failures_defer_to_the_auth_data_commitment() {
 /// Duplicate spends and nullifiers are part of the transaction ID, so a semantic duplicate stays
 /// the block's own failure without asking state for the authorizing data binding.
 #[tokio::test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn txid_committed_semantic_failures_skip_the_binding_check() {
     use zakura_header_chain::BodyVerificationClass;
 
@@ -594,6 +598,9 @@ async fn prepared_mined_commit_rechecks_difficulty() {
 }
 
 #[tokio::test]
+// kogany: Zcash coinbases and subsidies on Zcash schedules (no Ycash YDF output, funding streams,
+// ZIP 234); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn prepared_mined_commit_rechecks_header_time() {
     let _init_guard = zakura_test::init();
     let network = librustzcash_conversion_test_network(NetworkUpgrade::Nu5);
@@ -613,6 +620,9 @@ async fn prepared_mined_commit_rechecks_header_time() {
 }
 
 #[tokio::test]
+// kogany: Zcash coinbases and subsidies on Zcash schedules (no Ycash YDF output, funding streams,
+// ZIP 234); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn prepared_mined_commit_rechecks_transaction_lock_time() {
     let _init_guard = zakura_test::init();
     let network = librustzcash_conversion_test_network(NetworkUpgrade::Nu5);
@@ -738,6 +748,9 @@ async fn preparation_rejects_invalid_merkle_content_before_caching() {
 }
 
 #[tokio::test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn failed_preparation_does_not_populate_the_cache() {
     use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -1019,6 +1032,9 @@ async fn cache_eviction_between_resolution_and_commit_uses_full_verification() {
 }
 
 #[tokio::test]
+// kogany: Zcash coinbases and subsidies on Zcash schedules (no Ycash YDF output, funding streams,
+// ZIP 234); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn proposal_validation_succeeds_when_cache_insertion_conflicts() {
     use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -1184,6 +1200,9 @@ async fn prepared_and_full_commits_produce_the_same_state_input() {
 }
 
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn coinbase_is_first_for_historical_blocks() -> Result<(), Report> {
     let _init_guard = zakura_test::init();
 
@@ -1202,6 +1221,9 @@ fn coinbase_is_first_for_historical_blocks() -> Result<(), Report> {
 }
 
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn difficulty_is_valid_for_historical_blocks() -> Result<(), Report> {
     let _init_guard = zakura_test::init();
     for network in Network::iter() {
@@ -1288,6 +1310,9 @@ fn difficulty_validation_failure() -> Result<(), Report> {
 }
 
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn equihash_is_valid_for_historical_blocks() -> Result<(), Report> {
     let _init_guard = zakura_test::init();
 
@@ -1309,6 +1334,9 @@ fn equihash_is_valid_for_historical_blocks() -> Result<(), Report> {
 }
 
 #[test]
+// kogany: Zcash coinbases and subsidies on Zcash schedules (no Ycash YDF output, funding streams,
+// ZIP 234); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn subsidy_is_valid_for_historical_blocks() -> Result<(), Report> {
     let _init_guard = zakura_test::init();
     for network in Network::iter() {
@@ -1354,6 +1382,9 @@ fn subsidy_is_valid_for_network(network: Network) -> Result<(), Report> {
 /// for this, so a coinbase that pays that marker must pass with no deferred
 /// pool change.
 #[test]
+// kogany: Zcash coinbases and subsidies on Zcash schedules (no Ycash YDF output, funding streams,
+// ZIP 234); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn local_genesis_nu6_3_activation_has_satisfiable_lockbox_rule() -> Result<(), Report> {
     let generated = generate_local_testnet_with_funded_keys(
         vec!["alice".to_string(), "bob".to_string()],
@@ -1408,6 +1439,9 @@ fn local_genesis_nu6_3_activation_has_satisfiable_lockbox_rule() -> Result<(), R
 }
 
 #[test]
+// kogany: Zcash coinbases and subsidies on Zcash schedules (no Ycash YDF output, funding streams,
+// ZIP 234); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn coinbase_validation_failure() -> Result<(), Report> {
     let _init_guard = zakura_test::init();
     let network = Network::Mainnet;
@@ -1503,6 +1537,9 @@ fn coinbase_validation_failure() -> Result<(), Report> {
 }
 
 #[test]
+// kogany: Zcash coinbases and subsidies on Zcash schedules (no Ycash YDF output, funding streams,
+// ZIP 234); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn funding_stream_validation() -> Result<(), Report> {
     let _init_guard = zakura_test::init();
     for network in Network::iter() {
@@ -1538,6 +1575,9 @@ fn funding_stream_validation_for_network(network: Network) -> Result<(), Report>
 }
 
 #[test]
+// kogany: Zcash coinbases and subsidies on Zcash schedules (no Ycash YDF output, funding streams,
+// ZIP 234); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn funding_stream_validation_failure() -> Result<(), Report> {
     let _init_guard = zakura_test::init();
     let network = Network::Mainnet;
@@ -1592,6 +1632,9 @@ fn funding_stream_validation_failure() -> Result<(), Report> {
 }
 
 #[test]
+// kogany: Zcash coinbases and subsidies on Zcash schedules (no Ycash YDF output, funding streams,
+// ZIP 234); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn miner_fees_validation_success() -> Result<(), Report> {
     let _init_guard = zakura_test::init();
     for network in Network::iter() {
@@ -1680,6 +1723,9 @@ struct LibrustzcashConversionFailure {
 /// Every consensus branch ID in Zakura's table is known to librustzcash, so the
 /// conversion can only fail on malformed Orchard data.
 #[tokio::test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn block_rejects_transactions_failing_librustzcash_conversion() {
     let _init_guard = zakura_test::init();
 
@@ -1876,6 +1922,9 @@ fn orchard_fixture() -> orchard::ShieldedData {
 }
 
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn miner_fees_validation_includes_ironwood_balance() {
     let _init_guard = zakura_test::init();
 
@@ -1945,6 +1994,9 @@ fn ironwood_shielded_data(value_balance: i64) -> ironwood::ShieldedData {
 }
 
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn time_is_valid_for_historical_blocks() -> Result<(), Report> {
     let _init_guard = zakura_test::init();
 
@@ -1974,6 +2026,9 @@ fn time_is_valid_for_historical_blocks() -> Result<(), Report> {
 }
 
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn merkle_root_is_valid() -> Result<(), Report> {
     let _init_guard = zakura_test::init();
 
@@ -2124,6 +2179,9 @@ fn legacy_sigops_count_for_large_generated_blocks() {
 }
 
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn legacy_sigops_count_for_historic_blocks() {
     let _init_guard = zakura_test::init();
 
@@ -2145,6 +2203,9 @@ fn legacy_sigops_count_for_historic_blocks() {
 }
 
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn transaction_expiration_height_validation() -> Result<(), Report> {
     let _init_guard = zakura_test::init();
 
@@ -2316,6 +2377,9 @@ fn zip234_parent_pools(
 /// Semantic verification checks the coinbase against the ZIP 234 subsidy, which depends on
 /// the parent's chain value pools.
 #[tokio::test]
+// kogany: Zcash coinbases and subsidies on Zcash schedules (no Ycash YDF output, funding streams,
+// ZIP 234); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn zip234_block_verification_checks_the_reissuance_bonus() {
     use zakura_chain::{block_info::BlockInfo, parameters::subsidy::halving_block_subsidy};
 
@@ -2542,6 +2606,9 @@ async fn derived_nsm_crossing_gates_block_verification() {
 
 /// A proposal uses its committed parent's balance and rejects an excessive bonus.
 #[tokio::test]
+// kogany: Zcash coinbases and subsidies on Zcash schedules (no Ycash YDF output, funding streams,
+// ZIP 234); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn zip234_proposal_with_committed_parent_checks_the_bonus_without_waiting() {
     use zakura_chain::{block_info::BlockInfo, parameters::subsidy::halving_block_subsidy};
 
@@ -2714,6 +2781,9 @@ fn zip234_test_block(
 /// they dispatched, so the RPC would release its one speculative worker while compute continues
 /// and let the next preparation overlap it.
 #[tokio::test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn a_server_template_error_waits_for_the_checks_it_dispatched() {
     use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -2925,6 +2995,9 @@ mod zip218_shielded_action_limits {
     /// Mainnet. A block with no shielded data also satisfies them once NU7 is
     /// active.
     #[test]
+    // kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+    // Mainnet heights, Equihash (200, 9)); not run on Ycash.
+    #[cfg(not(feature = "ycash"))]
     fn historical_blocks_satisfy_the_limits() {
         let _init_guard = zakura_test::init();
 
@@ -3340,6 +3413,9 @@ async fn malformed_headers_do_not_stop_buffered_verification() {
 }
 
 #[tokio::test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn receipt_order_precedes_polling_and_cached_mining_uses_solved_submission() {
     use std::sync::{
         atomic::{AtomicUsize, Ordering},
@@ -3426,6 +3502,9 @@ async fn receipt_order_precedes_polling_and_cached_mining_uses_solved_submission
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+// kogany: Zcash coinbases and subsidies on Zcash schedules (no Ycash YDF output, funding streams,
+// ZIP 234); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn duplicate_receipt_keeps_first_priority_through_real_state_deduplication() {
     use zakura_chain::chain_tip::ChainTip;
 

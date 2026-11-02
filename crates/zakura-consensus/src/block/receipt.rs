@@ -149,6 +149,9 @@ mod tests {
     }
 
     #[test]
+    // kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+    // Mainnet heights, Equihash (200, 9)); not run on Ycash.
+    #[cfg(not(feature = "ycash"))]
     fn authorizing_variants_share_a_header_but_not_a_receipt() {
         let registry = ReceiptRegistry::default();
         let block: Arc<Block> = zakura_test::vectors::BLOCK_MAINNET_1687107_BYTES
