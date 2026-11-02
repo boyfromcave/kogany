@@ -3436,6 +3436,18 @@ where
             last_output_location = output_location;
         }
 
+        // kogany: ycashd's order (its address-unspent index order, then by height), which
+        // lightwalletd compares byte for byte; Zakura's chain order stays feature-off.
+        #[cfg(feature = "ycash")]
+        {
+            let request_addresses: Vec<Address> = utxos_request
+                .addresses()
+                .iter()
+                .filter_map(|address| address.parse().ok())
+                .collect();
+            types::ycash::order_address_utxos_as_ycashd(&mut response_utxos, &request_addresses);
+        }
+
         if !utxos_request.chain_info {
             Ok(GetAddressUtxosResponse::Utxos(response_utxos))
         } else {

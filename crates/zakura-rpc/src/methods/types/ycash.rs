@@ -435,5 +435,36 @@ pub fn trim_tree_parents(bytes: Vec<u8>) -> Vec<u8> {
     parse().unwrap_or(bytes)
 }
 
+/// Puts `getaddressutxos` results in ycashd's order. Zakura returns them in chain order (height,
+/// transaction index, output index); ycashd reads each requested address's entries from its
+/// address-unspent index in key order, `(type, hashBytes, txhash, index)` with `txhash` in its
+/// internal byte order and `index` little-endian (`ycash6 src/addressindex.h`,
+/// `CAddressUnspentKey::Serialize`), concatenates the addresses in request order, then sorts by
+/// block height (`ycash6 src/rpc/misc.cpp`, `getaddressutxos`). That sort is `std::sort`, so the
+/// order inside one height is the index order only as far as the sort keeps it; this applies the
+/// stable form of it, which is what ycashd returns for the small sets a wallet asks for.
+///
+/// `request_addresses` is the request's address list, in order; an address listed twice ranks at
+/// its first position (Zakura answers it once, ycashd twice).
+pub fn order_address_utxos_as_ycashd(
+    utxos: &mut [crate::methods::Utxo],
+    request_addresses: &[transparent::Address],
+) {
+    let rank = |address: &transparent::Address| {
+        request_addresses
+            .iter()
+            .position(|requested| requested == address)
+            .unwrap_or(request_addresses.len())
+    };
+    utxos.sort_by_cached_key(|utxo| {
+        (
+            utxo.height(),
+            rank(utxo.address()),
+            utxo.txid().0,
+            utxo.output_index().index().to_le_bytes(),
+        )
+    });
+}
+
 #[cfg(test)]
 mod tests;

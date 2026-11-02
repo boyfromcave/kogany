@@ -295,3 +295,70 @@ fn tree_parents_are_trimmed_as_ycashd() {
     let junk = vec![7u8, 1, 2];
     assert_eq!(super::trim_tree_parents(junk.clone()), junk);
 }
+
+/// Three UTXOs of one address whose chain order differs from ycashd's index order, plus a second
+/// address and a later height: ycashd orders by height, then request address, then the txid's
+/// internal bytes, then the output index's little-endian bytes (`ycash6 src/rpc/misc.cpp`,
+/// `getaddressutxos`; `src/addressindex.h`, `CAddressUnspentKey`).
+#[test]
+fn ycash_address_utxos_follow_ycashd_index_order() {
+    use crate::methods::Utxo;
+    use zakura_chain::{parameters::NetworkKind, transaction};
+
+    let first = transparent::Address::from_pub_key_hash(NetworkKind::Regtest, [0x22; 20]);
+    let second = transparent::Address::from_pub_key_hash(NetworkKind::Regtest, [0x11; 20]);
+    let txid = |lead: u8| {
+        let mut bytes = [0u8; 32];
+        bytes[0] = lead;
+        transaction::Hash(bytes)
+    };
+    let utxo = |address: &transparent::Address, lead: u8, index: u64, height: u32| {
+        Utxo::new(
+            *address,
+            txid(lead),
+            transparent::OutputIndex::from_u64(index),
+            transparent::Script::new(&[0x51]),
+            1,
+            Height(height),
+        )
+    };
+
+    // Chain order, as Zakura's state returns it: height 5 holds txids 0x30, 0x10 and 0x20 in
+    // that block order (0x10 with outputs 1 and 256), the second address's 0x05 comes later in
+    // the same block, and height 7 holds 0x01.
+    let mut utxos = vec![
+        utxo(&first, 0x30, 0, 5),
+        utxo(&first, 0x10, 1, 5),
+        utxo(&first, 0x10, 256, 5),
+        utxo(&first, 0x20, 0, 5),
+        utxo(&second, 0x05, 0, 5),
+        utxo(&first, 0x01, 0, 7),
+    ];
+
+    order_address_utxos_as_ycashd(&mut utxos, &[first, second]);
+
+    let order: Vec<(u8, u32, u32)> = utxos
+        .iter()
+        .map(|u| (u.txid().0[0], u.output_index().index(), u.height().0))
+        .collect();
+    assert_eq!(
+        order,
+        vec![
+            // height 5, the first requested address: txid bytes, then index little-endian
+            // (256 = 00 01 00 00 sorts before 1 = 01 00 00 00)
+            (0x10, 256, 5),
+            (0x10, 1, 5),
+            (0x20, 0, 5),
+            (0x30, 0, 5),
+            // height 5, the second requested address
+            (0x05, 0, 5),
+            // height 7
+            (0x01, 0, 7),
+        ]
+    );
+
+    // The request order decides between addresses at one height, not the address bytes.
+    order_address_utxos_as_ycashd(&mut utxos, &[second, first]);
+    assert_eq!(utxos[0].txid().0[0], 0x05);
+    assert_eq!(utxos[0].address(), &second);
+}
