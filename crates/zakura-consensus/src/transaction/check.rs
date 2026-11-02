@@ -717,6 +717,56 @@ pub fn standard_script_kind(lock_script: &transparent::Script) -> Option<solver:
     solver::standard(&component)
 }
 
+/// Ycash (kogany): a standard script kind, the `zcash_script` solver's or a TX_PQPKH (ycash6
+/// `Solver`'s `TX_PQPKH`, quantum spec §2.1).
+///
+/// `solver::ScriptKind` is the forked `zcash_script` crate's, so the TX_PQPKH kind wraps it here
+/// rather than adding a variant there. TX_VAULT, TX_VAULT_INTENT and TX_PQCHANNEL are matched by
+/// the vault primitive's and the Yellowback module's own parsers; input standardness of a
+/// TX_PQPKH spend (ycash6 `AreInputsStandard`, `s + p + 2` pushes) is relay policy (W6-a), so
+/// [`are_inputs_standard`] still refuses it.
+#[cfg(feature = "ycash")]
+pub enum YcashScriptKind {
+    /// A kind the `zcash_script` solver recognises.
+    Solver(solver::ScriptKind),
+    /// A TX_PQPKH `0x20 <keyHash:32> OP_1|OP_2 OP_CHECKPQSIG`.
+    PqPubKeyHash(transparent::PqKeyId),
+}
+
+#[cfg(feature = "ycash")]
+impl YcashScriptKind {
+    /// ycash6's `GetTxnOutputType` name.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            YcashScriptKind::Solver(kind) => kind.as_str(),
+            YcashScriptKind::PqPubKeyHash(_) => "pqpubkeyhash",
+        }
+    }
+}
+
+/// Ycash (kogany): ycash6 `Solver`'s standard kinds: [`standard_script_kind`], with the TX_PQPKH
+/// recognised first (the shapes are disjoint, so the order does not matter), and a P2PK only
+/// when its key's header byte implies the pushed length (`MatchPayToPubkey`'s
+/// `CPubKey::ValidSize`; the `zcash_script` solver checks the length alone).
+#[cfg(feature = "ycash")]
+pub fn ycash_standard_script_kind(lock_script: &transparent::Script) -> Option<YcashScriptKind> {
+    if let Some(id) = lock_script.pq_key_id() {
+        return Some(YcashScriptKind::PqPubKeyHash(id));
+    }
+    match standard_script_kind(lock_script)? {
+        solver::ScriptKind::PubKey { data } => {
+            let key = data.as_slice();
+            let valid = match key.first() {
+                Some(2 | 3) => key.len() == 33,
+                Some(4 | 6 | 7) => key.len() == 65,
+                _ => false,
+            };
+            valid.then_some(YcashScriptKind::Solver(solver::ScriptKind::PubKey { data }))
+        }
+        kind => Some(YcashScriptKind::Solver(kind)),
+    }
+}
+
 /// Returns the expected number of scriptSig arguments for a given script kind.
 ///
 /// Mirrors zcashd's `ScriptSigArgsExpected()`:
