@@ -302,6 +302,7 @@ fn vct_test_network() -> Network {
         .with_activation_heights(ConfiguredActivationHeights {
             ycash: None,
             vault: None,
+            pq_falcon: None,
             before_overwinter: Some(1),
             overwinter: Some(10),
             sapling: Some(15),
@@ -424,6 +425,7 @@ fn all_upgrades_and_wrong_commitments_with_fake_activation_heights() -> Result<(
         .with_activation_heights(ConfiguredActivationHeights {
             ycash: None,
             vault: None,
+            pq_falcon: None,
             // These fixture values place NU5 within the generated chains.
             // The test fails if a generated chain does not cross NU5.
             before_overwinter: Some(1),

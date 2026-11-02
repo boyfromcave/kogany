@@ -4576,6 +4576,7 @@ fn configured_network_with_nu7(nu7: Option<Height>) -> Network {
         .with_activation_heights(ConfiguredActivationHeights {
             ycash: None,
             vault: None,
+            pq_falcon: None,
             before_overwinter: Some(1),
             overwinter: Some(2),
             sapling: Some(3),

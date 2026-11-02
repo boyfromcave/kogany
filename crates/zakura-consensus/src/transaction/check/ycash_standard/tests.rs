@@ -44,7 +44,7 @@ fn regtest_vault() -> Network {
 }
 
 /// A configured testnet with Vault at height 10: Falcon follows Vault there (`pqFalconHeight`
-/// 0), the kogany stand-in for the C++ `-pqfalcon=1` regtest.
+/// 0), as on the C++ `-pqfalcon=1` regtest.
 fn testnet_vault_falcon() -> Network {
     testnet::Parameters::build()
         .with_activation_heights(ConfiguredActivationHeights {
@@ -360,15 +360,22 @@ fn pqpkh_standard_from_activation_and_falcon_gate() {
         let t = tx_out(vec![(100_000, spk.clone())]);
         assert_eq!(reason(std_tx(&t, &network, 10)), "scriptpubkey");
     }
-    // -pqfalcon=1: kogany has no regtest Falcon parameter (W3-c finding F-1); a configured
-    // testnet, where Falcon follows Vault, stands in.
-    let falcon = testnet_vault_falcon();
-    assert!(zakura_script::is_pq_falcon_active(&falcon, Height(10)));
-    for spk in [&fal, &fv, &fi] {
-        let t = tx_out(vec![(100_000, spk.clone())]);
-        assert_eq!(reason(std_tx(&t, &falcon, 10)), "");
+    // -pqfalcon=1: the regtest Falcon height (`activation_heights.pq_falcon_height = 0`, W3-c
+    // finding F-1), and a configured testnet, where Falcon follows Vault.
+    let regtest_falcon =
+        Network::new_regtest(RegtestParameters::from(ConfiguredActivationHeights {
+            vault: Some(VAULT),
+            pq_falcon: Some(0),
+            ..Default::default()
+        }));
+    for falcon in [regtest_falcon, testnet_vault_falcon()] {
+        assert!(zakura_script::is_pq_falcon_active(&falcon, Height(10)));
+        for spk in [&fal, &fv, &fi] {
+            let t = tx_out(vec![(100_000, spk.clone())]);
+            assert_eq!(reason(std_tx(&t, &falcon, 10)), "");
+        }
+        assert!(!zakura_script::is_pq_falcon_active(&falcon, Height(9)));
     }
-    assert!(!zakura_script::is_pq_falcon_active(&falcon, Height(9)));
 }
 
 #[test]

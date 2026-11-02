@@ -1180,7 +1180,20 @@ impl From<Arc<testnet::Parameters>> for DTestnetParameters {
             disable_pow: Some(params.disable_pow()),
             max_block_time_start_height: Some(params.max_block_time_start_height().0),
             genesis_hash: Some(params.genesis_hash().to_string()),
-            activation_heights: Some(params.activation_heights().into()),
+            activation_heights: Some({
+                let mut heights: ConfiguredActivationHeights = params.activation_heights().into();
+                // kogany: the Falcon height, written only where it differs from the network's
+                // default (none on Regtest, 0 on a Ycash testnet).
+                let default_falcon = if params.is_regtest() {
+                    None
+                } else {
+                    testnet::Parameters::default().pq_falcon_height()
+                };
+                if params.pq_falcon_height() != default_falcon {
+                    heights.pq_falcon = params.pq_falcon_height().map(|h| h.0);
+                }
+                heights
+            }),
             inherit_activation_heights: None,
             pre_nu6_funding_streams: None,
             post_nu6_funding_streams: None,

@@ -365,6 +365,7 @@ fn build_regtest() -> Result<Network, String> {
         sapling: one,
         ycash: None,
         vault: None,
+        pq_falcon: None,
         blossom: one,
         heartwood: one,
         canopy: one,

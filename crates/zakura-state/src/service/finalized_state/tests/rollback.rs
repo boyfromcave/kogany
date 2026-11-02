@@ -958,6 +958,7 @@ fn modern_rollback_network() -> Network {
         .with_activation_heights(ConfiguredActivationHeights {
             ycash: None,
             vault: None,
+            pq_falcon: None,
             before_overwinter: Some(1),
             overwinter: Some(2),
             sapling: Some(3),

@@ -404,6 +404,66 @@ fn configured_vault_height_round_trips() {
     assert!(!json.contains("Vault"), "{json}");
 }
 
+/// kogany (W3-c finding F-1): the Falcon height is `pq_falcon_height` in the activation heights,
+/// not a network upgrade: it takes 0, never enters the activation list, and is unset by default.
+#[test]
+fn configured_pq_falcon_height() {
+    let heights: ConfiguredActivationHeights =
+        serde_json::from_str(r#"{"Canopy": 1, "Vault": 7, "pq_falcon_height": 0}"#)
+            .expect("pq_falcon_height is a configured key");
+    assert_eq!(heights.pq_falcon, Some(0));
+    let json = serde_json::to_string(&ConfiguredActivationHeights::default()).expect("serializes");
+    assert!(!json.contains("pq_falcon"), "{json}");
+
+    let regtest = Network::new_regtest(RegtestParameters::default());
+    assert_eq!(
+        regtest.pq_falcon_height(),
+        None,
+        "Regtest has none by default"
+    );
+
+    #[cfg(feature = "ycash")]
+    {
+        let network = Network::new_regtest(RegtestParameters::from(heights));
+        assert!(network.is_regtest());
+        assert_eq!(network.pq_falcon_height(), Some(Height(0)));
+        assert_eq!(
+            network.activation_list().len(),
+            regtest_with_vault(7).activation_list().len(),
+            "the Falcon height is not an activation"
+        );
+        let later = Network::new_regtest(RegtestParameters::from(ConfiguredActivationHeights {
+            vault: Some(7),
+            pq_falcon: Some(12),
+            ..Default::default()
+        }));
+        assert_eq!(later.pq_falcon_height(), Some(Height(12)));
+        // Mainnet and the testnets: 0 (quantum plan D-Q-2), unless a configured testnet sets it.
+        assert_eq!(Network::Mainnet.pq_falcon_height(), Some(Height(0)));
+        assert_eq!(
+            Network::new_default_testnet().pq_falcon_height(),
+            Some(Height(0))
+        );
+        let configured = testnet::Parameters::build()
+            .with_activation_height_overlay(ConfiguredActivationHeights {
+                pq_falcon: Some(20),
+                ..Default::default()
+            })
+            .expect("a Falcon height alone is valid")
+            .to_network()
+            .expect("valid parameters");
+        assert_eq!(configured.pq_falcon_height(), Some(Height(20)));
+    }
+
+    // A Zcash build has no Falcon height anywhere and refuses one.
+    #[cfg(not(feature = "ycash"))]
+    {
+        assert_eq!(Network::Mainnet.pq_falcon_height(), None);
+        assert_eq!(Network::new_default_testnet().pq_falcon_height(), None);
+        assert!(testnet::Parameters::new_regtest(RegtestParameters::from(heights)).is_err());
+    }
+}
+
 /// The Canopy behaviour of every exhaustive match (kogany plan §2.1), and the `_ =>` audit:
 /// one assertion per arm a Vault height can reach.
 #[test]
