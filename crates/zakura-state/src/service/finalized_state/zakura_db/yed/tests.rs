@@ -369,13 +369,18 @@ fn golden_finalized_path_equals_pinned_across_restart() {
 
     // A snapshot of the tip and of every height below it through the undo records.
     let snapshot = finalized_yed_snapshot(&db);
-    assert_eq!(hex32(snapshot.state_hash()), g.doc["stateHash"].as_str().unwrap());
+    assert_eq!(
+        hex32(snapshot.state_hash()),
+        g.doc["stateHash"].as_str().unwrap()
+    );
     let top = Height(u32::try_from(tip.height).unwrap());
     for (h, (hash, want)) in &by_height {
         let s = finalized_yed_snapshot_below(&db, top, *h, *hash).expect("within UNDO_KEEP");
         assert_eq!(s.state_hash(), *want, "undo-record snapshot at {h:?}");
     }
-    assert!(finalized_yed_snapshot_below(&db, top, Height(top.0 + 1), block::Hash([0; 32])).is_none());
+    assert!(
+        finalized_yed_snapshot_below(&db, top, Height(top.0 + 1), block::Hash([0; 32])).is_none()
+    );
 
     // Restart at the tip (a snapshot holds a database handle).
     drop(snapshot);
@@ -486,7 +491,11 @@ fn golden_chain_reorg_finalization_and_checkpoint_path() {
         for cv in &pushed[n - depth..] {
             forked = forked.push(cv.clone()).unwrap();
         }
-        assert_eq!(forked.yed_overlay(), chain.yed_overlay(), "re-pushed {depth}");
+        assert_eq!(
+            forked.yed_overlay(),
+            chain.yed_overlay(),
+            "re-pushed {depth}"
+        );
     }
 
     // Finalization: pop every root and commit it through the finalized path, which evaluates
@@ -543,7 +552,9 @@ fn overlay_memory_at_the_reorg_window() {
             .delta
             .canonical_entries()
             .iter()
-            .map(|(k, (b, a))| k.len() + b.as_ref().map_or(0, Vec::len) + a.as_ref().map_or(0, Vec::len))
+            .map(|(k, (b, a))| {
+                k.len() + b.as_ref().map_or(0, Vec::len) + a.as_ref().map_or(0, Vec::len)
+            })
             .sum();
         max_delta = max_delta.max(bytes);
         state.apply(&effect.delta);
@@ -650,10 +661,10 @@ fn cannot_evaluate_is_a_failure_not_a_skip() {
     // Another rules stamp.
     let write_raw = |cf: &str, key: Vec<u8>, value: Vec<u8>| {
         let mut batch = DiskWriteBatch::new();
-        let _ = db
-            .yed_cf(cf)
-            .with_batch_for_writing(&mut batch)
-            .zs_insert(&RawBytes::new_raw_bytes(key), &RawBytes::new_raw_bytes(value));
+        let _ = db.yed_cf(cf).with_batch_for_writing(&mut batch).zs_insert(
+            &RawBytes::new_raw_bytes(key),
+            &RawBytes::new_raw_bytes(value),
+        );
         db.write_batch(batch).unwrap();
     };
     write_raw(YED_RULES, RULES_KEY.to_vec(), 2u32.to_le_bytes().to_vec());
@@ -661,7 +672,11 @@ fn cannot_evaluate_is_a_failure_not_a_skip() {
         finalized_yed_effect(&db, Some(&g.p), next),
         Err(YedEvaluationFailed::RulesVersion { stored: 2, code: 1 })
     );
-    write_raw(YED_RULES, RULES_KEY.to_vec(), RULES_VERSION.to_le_bytes().to_vec());
+    write_raw(
+        YED_RULES,
+        RULES_KEY.to_vec(),
+        RULES_VERSION.to_le_bytes().to_vec(),
+    );
 
     // A tip written under another schema or network.
     let tip = db.yed_tip().unwrap();
@@ -700,7 +715,10 @@ fn cannot_evaluate_is_a_failure_not_a_skip() {
     let failure = finalized_yed_effect(&db, Some(&g.p), next).unwrap_err();
     let panic = catch_unwind(|| failure.stop_the_node("test")).unwrap_err();
     let message = panic.downcast_ref::<String>().unwrap();
-    assert!(message.starts_with("Yellowback index failure (test): "), "{message}");
+    assert!(
+        message.starts_with("Yellowback index failure (test): "),
+        "{message}"
+    );
 }
 
 /// The real finalized write path: `commit_finalized_direct` of the testnet vector blocks with
@@ -827,13 +845,24 @@ fn real_non_finalized_path_evaluates_forks_and_stops_on_failure() {
     let chain_block = best.blocks.values().next().unwrap();
     assert!(chain_block.yed_effect.evaluated);
     assert!(chain_block.yed_effect.invalid.is_none());
-    assert!(best.yed_overlay().len() >= 4, "params, totals, seq, snapshot, tip");
+    assert!(
+        best.yed_overlay().len() >= 4,
+        "params, totals, seq, snapshot, tip"
+    );
 
     // Yellowback starting one block earlier: the empty index cannot evaluate block1.
     let network = Network::new_default_testnet();
     register_yed_params_for_test(
         &network,
-        regtest_params_with(start - 1, 0, 0, [7u8; 32], 3, BundleCarrier::ScriptSig, false),
+        regtest_params_with(
+            start - 1,
+            0,
+            0,
+            [7u8; 32],
+            3,
+            BundleCarrier::ScriptSig,
+            false,
+        ),
     );
     let mut state = NonFinalizedState::new(&network);
     let finalized_state = FinalizedState::new(&Config::ephemeral(), &network).unwrap();
@@ -904,7 +933,10 @@ fn config_maps_to_params_as_params_from_args() {
         Ok(None)
     );
     assert_eq!(
-        yed_network_params(&Network::new_default_testnet(), &YellowbackConfig::default()),
+        yed_network_params(
+            &Network::new_default_testnet(),
+            &YellowbackConfig::default()
+        ),
         Ok(None)
     );
 
@@ -977,7 +1009,10 @@ fn format_upgrade_refuses_a_yed_epoch_without_its_index() {
         &network,
         regtest_params_with(2, 0, 0, [7u8; 32], 3, BundleCarrier::ScriptSig, false),
     );
-    assert!(missing_yed_epoch(tip, &state.db).is_some(), "a YED epoch without its index");
+    assert!(
+        missing_yed_epoch(tip, &state.db).is_some(),
+        "a YED epoch without its index"
+    );
 }
 
 /// The undo record's serialisation round-trips, and an undo record restores the state before
@@ -1007,12 +1042,9 @@ fn undo_record_round_trips() {
 // ---- the C++ undo cases over the store ------------------------------------------------------
 
 use fixture::{
-    mv, op, spend, EmergencyFixture, Fixture, MintOpts, SpendOpts, fake_hash, none_skip,
+    fake_hash, mv, none_skip, op, spend, EmergencyFixture, Fixture, MintOpts, SpendOpts,
 };
-use kogany_yellowback::{
-    attest::registry::AttestorStatus,
-    codecs::payload::Assignment,
-};
+use kogany_yellowback::{attest::registry::AttestorStatus, codecs::payload::Assignment};
 
 /// The fixture's chain mirrored into the store: every applied block's delta committed to a
 /// RocksDB finalized state (with its undo record) and pushed onto a `Chain` over an empty one.
@@ -1078,7 +1110,8 @@ impl Mirror {
     /// exactly the fixture's state.
     fn assert_matches(&self, f: &Fixture) {
         let want = f.state.canonical_entries();
-        let view = kogany_yellowback::state::canonical_entries_of(&self.chain.yed_view(&self.nf_db));
+        let view =
+            kogany_yellowback::state::canonical_entries_of(&self.chain.yed_view(&self.nf_db));
         assert_eq!(view, want, "chain view at {}", f.tip);
         let below = finalized_yed_snapshot_below(
             &self.fin,
@@ -1087,7 +1120,12 @@ impl Mirror {
             block::Hash(fake_hash(f.tip).0),
         )
         .unwrap();
-        assert_eq!(below.canonical_entries(), want, "undo-record snapshot at {}", f.tip);
+        assert_eq!(
+            below.canonical_entries(),
+            want,
+            "undo-record snapshot at {}",
+            f.tip
+        );
     }
 }
 
@@ -1119,7 +1157,12 @@ fn apply_undo_identity_over_sequences() {
     let bad = f.mint_tx(5000, 48, f.tip - 1, MintOpts::default());
     f.mine(Some(Fixture::quote(50000, 2)), vec![bad]);
     hashes.push(hash_of(&f.state));
-    let s = f.spend_tx(&w, &[op(t.txid(), 0), op(w, 1)], f.tip, SpendOpts::default());
+    let s = f.spend_tx(
+        &w,
+        &[op(t.txid(), 0), op(w, 1)],
+        f.tip,
+        SpendOpts::default(),
+    );
     let r = spend(&mut f, &w, &s);
     assert_eq!(r.verdict, kogany_yellowback::state::verdict::OK);
     hashes.push(hash_of(&f.state));
@@ -1157,7 +1200,12 @@ fn apply_undo_identity_over_sequences() {
     let v2 = g2.mint_active10k();
     assert_eq!(v2, v);
     for (h, d) in &g2.deltas {
-        assert_eq!(Some(d), all.iter().find(|(x, _)| x == h).map(|(_, cv)| &cv.yed_effect.delta));
+        assert_eq!(
+            Some(d),
+            all.iter()
+                .find(|(x, _)| x == h)
+                .map(|(_, cv)| &cv.yed_effect.delta)
+        );
     }
 }
 
@@ -1200,7 +1248,10 @@ fn p_mint_persists_through_undo_and_reapply() {
     // the finalized store: commit, then the undo record restores the state before it
     commit(&m.fin, input.height, input.hash, &e1);
     let undo = m.fin.yed_undo(input.height).unwrap();
-    assert_eq!(undo.encode(), YedUndoRecord::of(input.height, input.hash, &e1.delta).encode());
+    assert_eq!(
+        undo.encode(),
+        YedUndoRecord::of(input.height, input.hash, &e1.delta).encode()
+    );
     let restored = finalized_yed_snapshot_below(
         &m.fin,
         input.height,
@@ -1237,7 +1288,15 @@ fn overlay_view_equivalence() {
     let outer = YedOverlay::new(&view);
     let inner = YedOverlay::new(&outer);
     let a = evaluate_block(&inner, &f.p, &txs, h, &fake_hash(h), fixture::SUBSIDY, None);
-    let b = evaluate_block(&f.state, &f.p, &txs, h, &fake_hash(h), fixture::SUBSIDY, None);
+    let b = evaluate_block(
+        &f.state,
+        &f.p,
+        &txs,
+        h,
+        &fake_hash(h),
+        fixture::SUBSIDY,
+        None,
+    );
     assert!(!a.block_invalid);
     assert_eq!(a.delta, b.delta);
     assert_eq!(a.snapshot, b.snapshot);
@@ -1290,9 +1349,15 @@ fn undo_identity_v3() {
     {
         let cited = g.f.tip;
         g.tick();
-        let (a, b) = (g.f.att(0, 11500, cited, None), g.f.att(0, 11600, cited, None));
+        let (a, b) = (
+            g.f.att(0, 11500, cited, None),
+            g.f.att(0, 11600, cited, None),
+        );
         let e = g.f.equivocation_tx(&a, &b);
-        assert_eq!(fixture::verdict_of(&mut g.f, &e), kogany_yellowback::state::verdict::OK);
+        assert_eq!(
+            fixture::verdict_of(&mut g.f, &e),
+            kogany_yellowback::state::verdict::OK
+        );
     }
     for _ in 0..g.f.p.dormancy_blocks {
         g.tick();
@@ -1347,7 +1412,10 @@ fn undo_identity_v3() {
         kogany_yellowback::state::verdict::ATTESTOR_REVIVE_RETIRED
     );
     let hb = f.heartbeat_tx(usize::from(l));
-    assert_eq!(fixture::verdict_of(f, &hb), kogany_yellowback::state::verdict::OK);
+    assert_eq!(
+        fixture::verdict_of(f, &hb),
+        kogany_yellowback::state::verdict::OK
+    );
     assert_eq!(f.attestor(l).unwrap().status, AttestorStatus::Eligible);
     hashes.push(hash_of(&f.state));
     while f.tip < i64::from(f.attestor(2).unwrap().bond_locktime) {
@@ -1355,9 +1423,15 @@ fn undo_identity_v3() {
         f.mine(t, Vec::new());
     }
     let s2 = f.bond_spend_tx(2);
-    assert_eq!(fixture::verdict_of(f, &s2), kogany_yellowback::state::verdict::OK);
+    assert_eq!(
+        fixture::verdict_of(f, &s2),
+        kogany_yellowback::state::verdict::OK
+    );
     let s0 = f.bond_spend_tx(0);
-    assert_eq!(fixture::verdict_of(f, &s0), kogany_yellowback::state::verdict::OK);
+    assert_eq!(
+        fixture::verdict_of(f, &s0),
+        kogany_yellowback::state::verdict::OK
+    );
     hashes.push(hash_of(&f.state));
     assert_eq!(hashes.len(), 4);
 
@@ -1388,7 +1462,8 @@ fn overlay_equivalence_v3() {
     let residual = g.residual(g.f.tip - 1);
     let cited = g.f.tip - 1;
     let h = g.f.tip + 1;
-    let reg = g.f.register_tx(5, 10 * kogany_yellowback::params::COIN, -1, None);
+    let reg =
+        g.f.register_tx(5, 10 * kogany_yellowback::params::COIN, -1, None);
     let claim = g.claim(
         SpendOpts {
             residual_value: Some(residual),
@@ -1396,7 +1471,10 @@ fn overlay_equivalence_v3() {
         },
         None,
     );
-    let (a1, a2) = (g.f.att(1, 11500, cited, None), g.f.att(1, 11600, cited, None));
+    let (a1, a2) = (
+        g.f.att(1, 11500, cited, None),
+        g.f.att(1, 11600, cited, None),
+    );
     let eqv = g.f.equivocation_tx(&a1, &a2);
     let mint = g.f.mint_v3(
         10000,
@@ -1416,8 +1494,24 @@ fn overlay_equivalence_v3() {
     let view = m.chain.yed_view(&m.nf_db);
     let outer = YedOverlay::new(&view);
     let inner = YedOverlay::new(&outer);
-    let a = evaluate_block(&inner, &g.f.p, &txs, h, &fake_hash(h), fixture::SUBSIDY, None);
-    let b = evaluate_block(&g.f.state, &g.f.p, &txs, h, &fake_hash(h), fixture::SUBSIDY, None);
+    let a = evaluate_block(
+        &inner,
+        &g.f.p,
+        &txs,
+        h,
+        &fake_hash(h),
+        fixture::SUBSIDY,
+        None,
+    );
+    let b = evaluate_block(
+        &g.f.state,
+        &g.f.p,
+        &txs,
+        h,
+        &fake_hash(h),
+        fixture::SUBSIDY,
+        None,
+    );
     assert!(!a.block_invalid, "{}", a.reason);
     assert_eq!(a.txlogs.len(), 4);
     assert_eq!(a.txlogs[1].1.verdict, kogany_yellowback::state::verdict::OK);
@@ -1437,11 +1531,11 @@ fn overlay_equivalence_v3() {
     let parent_hash = m.pushed.last().unwrap().1.hash;
     let chain = m.chain.clone().push(cv).unwrap();
     let after = chain.yed_view(&m.nf_db);
-    assert!(after.get(&YedKey::Attestor(4)).is_some(), "the fifth registration takes seq 4");
-    assert_eq!(
-        kogany_yellowback::state::view::next_seq_of(&after),
-        5
+    assert!(
+        after.get(&YedKey::Attestor(4)).is_some(),
+        "the fifth registration takes seq 4"
     );
+    assert_eq!(kogany_yellowback::state::view::next_seq_of(&after), 5);
     assert!(matches!(
         after.get(&YedKey::Attestor(1)),
         Some(YedRecord::Attestor(r)) if r.status == AttestorStatus::Ejected
@@ -1485,8 +1579,15 @@ fn mempool_check_over_the_tip_snapshot() {
         assert_eq!(snapshot.mempool_check(tx, 0), None);
     }
     assert_eq!(snapshot.attested_fee_price(), {
-        let s = snapshot.snapshot_at(i64::from(snapshot.index_tip().unwrap().height)).unwrap();
-        kogany_yellowback::attest::price::attested_fee_price(s.pfast(), s.pmid(), s.pslow(), s.halt_mask)
+        let s = snapshot
+            .snapshot_at(i64::from(snapshot.index_tip().unwrap().height))
+            .unwrap();
+        kogany_yellowback::attest::price::attested_fee_price(
+            s.pfast(),
+            s.pmid(),
+            s.pslow(),
+            s.halt_mask,
+        )
     });
     let off = Network::new_regtest(ConfiguredActivationHeights::default().into());
     let off_dir = TempDir::new().unwrap();

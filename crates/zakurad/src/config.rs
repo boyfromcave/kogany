@@ -173,3 +173,26 @@ impl With<MinerAddressType> for ZakuradConfig {
         self
     }
 }
+
+// kogany (W5-e): the `[yellowback]` section.
+#[cfg(test)]
+mod yellowback_section_tests {
+    use super::ZakuradConfig;
+
+    #[test]
+    fn yellowback_section_parses_and_reaches_the_state_config() {
+        let config: ZakuradConfig = toml::from_str(
+            "[yellowback]\n\
+             attestor_set = \"0eeebe67c4bc64cf5deb624972629c92b09e3362e126a3702443b192dca80f4a\"\n\
+             sigma_ref = 250\nsupply_cap_bps = 100\nattest_arm_min = 2\n\
+             bundle_carrier = \"either\"\nmint_requires_armed = true\n",
+        )
+        .expect("the section parses");
+        assert_eq!(config.yellowback.sigma_ref, 250);
+        assert_eq!(config.mirrored_state_config().yellowback, config.yellowback);
+        assert!(toml::from_str::<ZakuradConfig>("[yellowback]\nunknown = 1\n").is_err());
+        // Omitted from a generated default config.
+        let generated = toml::to_string(&ZakuradConfig::default()).unwrap();
+        assert!(!generated.contains("[yellowback]"));
+    }
+}

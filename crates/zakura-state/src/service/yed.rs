@@ -508,7 +508,10 @@ pub fn yed_snapshot_by_hash<'a>(
             .collect();
         // Undo the blocks above `hash`, newest first: the last value written is the `before` of
         // the lowest such block, the value after `hash`.
-        let above = (std::ops::Bound::Excluded(height), std::ops::Bound::Unbounded);
+        let above = (
+            std::ops::Bound::Excluded(height),
+            std::ops::Bound::Unbounded,
+        );
         for (_, block) in chain.blocks.range(above).rev() {
             for (k, change) in &block.yed_effect.delta.changes {
                 patch.insert(*k, change.before.clone());

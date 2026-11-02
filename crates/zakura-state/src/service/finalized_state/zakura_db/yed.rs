@@ -132,7 +132,7 @@ pub const RULES_VERSION: u32 = 1;
 pub const UNDO_KEEP: u32 = 4_096;
 
 /// The key of the rules stamp in [`YED_RULES`].
-const RULES_KEY: [u8; 1] = [b'R'];
+const RULES_KEY: [u8; 1] = *b"R";
 
 /// The column family of a table.
 pub fn cf_for_table(table: Table) -> &'static str {
@@ -811,20 +811,26 @@ impl DiskWriteBatch {
                 None => cf.with_batch_for_writing(self).zs_delete(&raw_key),
             };
         }
-        let _ = zakura_db.yed_cf(YED_UNDO).with_batch_for_writing(self).zs_insert(
-            &RawBytes::new_raw_bytes(height.0.to_be_bytes().to_vec()),
-            &RawBytes::new_raw_bytes(YedUndoRecord::of(height, hash, &effect.delta).encode()),
-        );
+        let _ = zakura_db
+            .yed_cf(YED_UNDO)
+            .with_batch_for_writing(self)
+            .zs_insert(
+                &RawBytes::new_raw_bytes(height.0.to_be_bytes().to_vec()),
+                &RawBytes::new_raw_bytes(YedUndoRecord::of(height, hash, &effect.delta).encode()),
+            );
         if let Some(old) = height.0.checked_sub(UNDO_KEEP) {
             let _ = zakura_db
                 .yed_cf(YED_UNDO)
                 .with_batch_for_writing(self)
                 .zs_delete(&RawBytes::new_raw_bytes(old.to_be_bytes().to_vec()));
         }
-        let _ = zakura_db.yed_cf(YED_RULES).with_batch_for_writing(self).zs_insert(
-            &RawBytes::new_raw_bytes(RULES_KEY.to_vec()),
-            &RawBytes::new_raw_bytes(RULES_VERSION.to_le_bytes().to_vec()),
-        );
+        let _ = zakura_db
+            .yed_cf(YED_RULES)
+            .with_batch_for_writing(self)
+            .zs_insert(
+                &RawBytes::new_raw_bytes(RULES_KEY.to_vec()),
+                &RawBytes::new_raw_bytes(RULES_VERSION.to_le_bytes().to_vec()),
+            );
     }
 }
 
