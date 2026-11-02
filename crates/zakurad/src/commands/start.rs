@@ -1021,7 +1021,7 @@ impl StartCmd {
             spawn_erased(std::future::pending().in_current_span());
         node_tasks.track(&miner_task_handle);
 
-        info!("spawned initial Zakura tasks");
+        info!("spawned initial {PRODUCT_NAME} tasks");
 
         let (zcashd_compat_shutdown_tx, zcashd_compat_shutdown_rx) = watch::channel(false);
         let mut zcashd_compat_task_handle =
