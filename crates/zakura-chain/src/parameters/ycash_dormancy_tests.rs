@@ -56,8 +56,7 @@ fn a_zcash_build_refuses_a_ycash_height() {
     };
     let error = testnet::Parameters::build()
         .with_activation_heights(heights)
-        .err()
-        .expect("a Zcash build refuses a Ycash activation height");
+        .expect_err("a Zcash build refuses a Ycash activation height");
     assert!(error.to_string().contains("`ycash` build"), "{error}");
     assert!(testnet::Parameters::new_regtest(RegtestParameters::from(heights)).is_err());
 }

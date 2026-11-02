@@ -1002,6 +1002,11 @@ pub fn miner_subsidy(
 ) -> Result<Amount<NonNegative>, amount::Error> {
     let founders_reward = founders_reward(network, height);
 
+    // Ycash pays the YDF out of the block subsidy instead (W1-Y3).
+    #[cfg(feature = "ycash")]
+    let founders_reward =
+        (founders_reward + crate::parameters::ycash::ydf::ydf_reward(network, height))?;
+
     let funding_streams_sum = funding_stream_values(height, network, expected_block_subsidy)?
         .values()
         .sum::<Result<Amount<NonNegative>, _>>()?;
@@ -1056,6 +1061,13 @@ pub fn founders_reward(net: &Network, height: Height) -> Amount<NonNegative> {
     // On custom testnets, the first halving can occur later than Canopy, which causes an
     // inconsistency in the definition of the founders reward, which should occur only before
     // Canopy, so we check if Canopy is active as well.
+    // On Ycash the founders' reward ends at the Ycash upgrade, where the YDF replaces it
+    // (`ycash6 src/main.cpp:6248-6286`).
+    #[cfg(feature = "ycash")]
+    if crate::parameters::ycash::ydf::is_ycash_active(net, height) {
+        return Amount::zero();
+    }
+
     if halving(height, net) < 1 && NetworkUpgrade::current(net, height) < NetworkUpgrade::Canopy {
         // The founders reward ends at the first halving, which is long before ZIP 234
         // starts, so the halving schedule is the whole subsidy here.

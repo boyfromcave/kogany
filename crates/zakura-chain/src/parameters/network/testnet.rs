@@ -6,6 +6,8 @@ use std::{
     sync::{Arc, OnceLock},
 };
 
+// kogany: the `ycash` profile reads neither the Zcash mainnet funding streams nor its founders.
+#[cfg_attr(feature = "ycash", allow(unused_imports))]
 use crate::{
     amount::{Amount, NonNegative, MAX_MONEY},
     block::{self, Height, HeightDiff},
@@ -1865,7 +1867,15 @@ impl Network {
     /// Returns the list of founders' reward addresses for this network.
     pub fn founder_address_list(&self) -> &[&str] {
         match self {
+            // The same founders' scripts, encoded under the Ycash prefixes the `ycash` profile
+            // parses (`KeyIO::ZecToYec`, `ycash6 src/chainparams.cpp:1009-1024`).
+            #[cfg(feature = "ycash")]
+            Network::Mainnet => &crate::parameters::ycash::ydf::MAINNET_FOUNDER_ADDRESSES,
+            #[cfg(feature = "ycash")]
+            Network::Testnet(_) => &crate::parameters::ycash::ydf::TESTNET_FOUNDER_ADDRESSES,
+            #[cfg(not(feature = "ycash"))]
             Network::Mainnet => &mainnet::FOUNDER_ADDRESS_LIST,
+            #[cfg(not(feature = "ycash"))]
             Network::Testnet(_) => &testnet::FOUNDER_ADDRESS_LIST,
         }
     }
