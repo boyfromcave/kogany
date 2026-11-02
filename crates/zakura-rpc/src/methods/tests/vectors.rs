@@ -799,7 +799,7 @@ async fn rpc_getblock() {
                 final_sapling_root,
                 final_orchard_root,
                 #[cfg(feature = "ycash")]
-                chain_history_root: _,
+                    chain_history_root: _,
                 nonce,
                 bits,
                 difficulty,
@@ -900,7 +900,7 @@ async fn rpc_getblock() {
                 final_sapling_root,
                 final_orchard_root,
                 #[cfg(feature = "ycash")]
-                chain_history_root: _,
+                    chain_history_root: _,
                 nonce,
                 bits,
                 difficulty,

@@ -891,7 +891,9 @@ impl YedIndexView for LiveIndex {
         let mut mintable_classes = Vec::new();
         if s.halt_mask & !HALT_GLOBAL_RATIO == 0 && !unarmed_halt {
             for (i, base) in p.base_ratio_bps.iter().enumerate() {
-                let Ok(class) = i64::try_from(i) else { continue };
+                let Ok(class) = i64::try_from(i) else {
+                    continue;
+                };
                 if !p.is_class_enabled(class) {
                     continue;
                 }

@@ -123,9 +123,9 @@ pub fn height_range(params: &Value, tip: i64) -> RpcResult<(i64, i64)> {
         match params.get(name) {
             None | Some(Value::Null) => Ok(0),
             Some(v) => {
-                let n = v
-                    .as_i64()
-                    .ok_or_else(|| ErrorObject::new(-1, "JSON value is not an integer as expected"))?;
+                let n = v.as_i64().ok_or_else(|| {
+                    ErrorObject::new(-1, "JSON value is not an integer as expected")
+                })?;
                 if n < 0 {
                     Err(invalid_range(negative))
                 } else {
@@ -277,8 +277,8 @@ impl InsightRpc for InsightRpcImpl {
             if !seen.insert(*address) || tip < 0 {
                 continue;
             }
-            let range = Height(u32::try_from(start).unwrap_or(0))
-                ..=Height(u32::try_from(end).unwrap_or(0));
+            let range =
+                Height(u32::try_from(start).unwrap_or(0))..=Height(u32::try_from(end).unwrap_or(0));
             let ReadResponse::AddressesTransactionIds(txids) = self
                 .read(ReadRequest::TransactionIdsByAddresses {
                     addresses: HashSet::from([*address]),
@@ -286,7 +286,10 @@ impl InsightRpc for InsightRpcImpl {
                 })
                 .await?
             else {
-                return Err(ErrorObject::new(-32603, "unexpected address index response"));
+                return Err(ErrorObject::new(
+                    -32603,
+                    "unexpected address index response",
+                ));
             };
             // (height, blockindex, txid, index, spending, delta)
             let mut rows: Vec<(u32, u16, [u8; 32], u32, bool, Value)> = Vec::new();
@@ -490,8 +493,14 @@ mod tests {
     fn height_range_is_ycashds() {
         assert_eq!(height_range(&json!("addr"), 50).expect("ok"), (0, 50));
         assert_eq!(height_range(&json!({}), 50).expect("ok"), (0, 50));
-        assert_eq!(height_range(&json!({"start": 10, "end": 20}), 50).expect("ok"), (10, 20));
-        assert_eq!(height_range(&json!({"start": 60}), 50).expect("ok"), (50, 50));
+        assert_eq!(
+            height_range(&json!({"start": 10, "end": 20}), 50).expect("ok"),
+            (10, 20)
+        );
+        assert_eq!(
+            height_range(&json!({"start": 60}), 50).expect("ok"),
+            (50, 50)
+        );
         assert_eq!(height_range(&json!({"end": 99}), 50).expect("ok"), (0, 50));
         for (bad, text) in [
             (json!({"start": -1}), "Start height must be nonnegative"),

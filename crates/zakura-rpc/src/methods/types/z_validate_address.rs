@@ -215,6 +215,9 @@ mod ycash_tests {
             z["diversifiedtransmissionkey"].as_str().map(str::len),
             Some(64)
         );
-        assert_eq!(json("not-an-address"), serde_json::json!({ "isvalid": false }));
+        assert_eq!(
+            json("not-an-address"),
+            serde_json::json!({ "isvalid": false })
+        );
     }
 }

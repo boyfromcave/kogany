@@ -112,11 +112,16 @@ impl Service<HttpRequest> for ParsingRpcService {
             let body = match crate::server::jsonrpc::Body::parse(&bytes, true, 10) {
                 crate::server::jsonrpc::Body::Call(request)
                     if request.method_name() == "getblockcount"
-                        && matches!(request.params().sequence().optional_next::<u32>(), Ok(None)) =>
+                        && matches!(
+                            request.params().sequence().optional_next::<u32>(),
+                            Ok(None)
+                        ) =>
                 {
                     r#"{"jsonrpc":"2.0","id":"yindex","result":"ok"}"#
                 }
-                _ => r#"{"jsonrpc":"2.0","id":"yindex","error":{"code":-32600,"message":"Invalid request"}}"#,
+                _ => {
+                    r#"{"jsonrpc":"2.0","id":"yindex","error":{"code":-32600,"message":"Invalid request"}}"#
+                }
             };
             Ok(HttpResponse::new(HttpBody::from(body.to_string())))
         })

@@ -748,8 +748,7 @@ fn ycash_template_has_no_maxtime_or_workid() {
     object.remove("workid");
     let back: crate::methods::types::get_block_template::GetBlockTemplateResponse =
         serde_json::from_value(without).expect("ycashd's key set parses");
-    let crate::methods::types::get_block_template::GetBlockTemplateResponse::TemplateMode(t) =
-        back
+    let crate::methods::types::get_block_template::GetBlockTemplateResponse::TemplateMode(t) = back
     else {
         panic!("a template");
     };

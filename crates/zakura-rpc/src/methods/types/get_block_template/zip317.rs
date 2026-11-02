@@ -513,8 +513,7 @@ impl BlockTemplateLimits {
 const BLOCK_UNPAID_ACTION_LIMIT_FOR_TEMPLATES: u32 = u32::MAX;
 /// The template's unpaid-action budget (ZIP-317's `block_unpaid_action_limit`).
 #[cfg(not(feature = "ycash"))]
-const BLOCK_UNPAID_ACTION_LIMIT_FOR_TEMPLATES: u32 =
-    transaction::zip317::BLOCK_UNPAID_ACTION_LIMIT;
+const BLOCK_UNPAID_ACTION_LIMIT_FOR_TEMPLATES: u32 = transaction::zip317::BLOCK_UNPAID_ACTION_LIMIT;
 
 /// ZIP 218 capacity remaining after the generated coinbase transaction.
 struct RemainingShieldedLimits {
