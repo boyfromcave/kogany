@@ -315,7 +315,15 @@ pub fn transaction_reject(error: &TransactionError, context: Context) -> CxxReje
         E::NoInputs { .. } => CxxReject::invalid("bad-txns-no-source-of-funds"),
         E::NoOutputs { .. } => CxxReject::invalid("bad-txns-no-sink-of-funds"),
         E::BadBalance { .. } => CxxReject::invalid("bad-txns-valuebalance-nonzero"),
-        E::Script(script) => script_reject(script),
+        // A block's scripts are checked in parallel, whose failure carries no reason
+        // (main.cpp:4337-4338, `state.DoS(100, false)`): BIP 22 "rejected".
+        E::Script(script) => {
+            if mempool {
+                script_reject(script)
+            } else {
+                CxxReject::Unmapped(error.to_string())
+            }
+        }
         // main.cpp:2295-2298, 1481, 1509.
         E::SaplingVerificationFailed { .. }
         | E::Groth16 { .. }
@@ -601,8 +609,9 @@ pub fn mempool_reject(error: &(dyn StdError + 'static)) -> CxxReject {
 pub const STORAGE_TEXTS: &[(&str, u16, &str)] = &[
     // MempoolError::InMempool: answered with the txid (`InMempool` below).
     ("transaction already exists in mempool", 0, ""),
-    // TransactionDownloadVerifyError::InState.
+    // TransactionDownloadVerifyError::InState, SameEffectsChainRejectionError::Mined.
     ("transaction is already in state", 0, ""),
+    ("transaction was committed to the best chain", 0, ""),
     // SameEffectsTipRejectionError::SpendConflict: main.cpp:2006.
     (
         "another transaction in the mempool has already spent some of",
@@ -703,7 +712,10 @@ fn storage_text_reject(text: &str) -> Option<CxxReject> {
     STORAGE_TEXTS.iter().find_map(|(needle, code, reason)| {
         text.contains(needle).then(|| match (*needle, *code) {
             ("transaction already exists in mempool", _) => CxxReject::InMempool,
-            ("transaction is already in state", _) => CxxReject::AlreadyInChain,
+            (
+                "transaction is already in state" | "transaction was committed to the best chain",
+                _,
+            ) => CxxReject::AlreadyInChain,
             (_, 0) => CxxReject::MissingInputs,
             _ => CxxReject::reject(*code, *reason),
         })

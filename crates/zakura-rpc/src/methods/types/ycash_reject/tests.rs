@@ -715,6 +715,14 @@ fn block_reasons_are_bip22_strings() {
         CxxReject::Unmapped("x".to_owned()).block_reason(),
         "rejected"
     );
+    // ycashd checks a block's scripts in parallel: a failure has no reason.
+    assert_eq!(
+        block(TransactionError::Script(script(
+            InterpreterError::SetSig,
+            None
+        ))),
+        "rejected"
+    );
 }
 
 #[test]
