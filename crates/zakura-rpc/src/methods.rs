@@ -108,6 +108,11 @@ pub(crate) mod hex_data;
 pub(crate) mod trees;
 pub(crate) mod types;
 
+/// Ycash (kogany W7-e): ycashd's reject codes and texts; `zakurad`'s mempool builds
+/// [`ycash_reject::MempoolRejection`] for `sendrawtransaction`.
+#[cfg(feature = "ycash")]
+pub use types::ycash_reject;
+
 use hex_data::HexData;
 use trees::{GetSubtreesByIndexResponse, GetTreestateResponse, SubtreeRpcData};
 use types::get_block_template::prepared_candidates::ResolvePreparedCandidateError;
@@ -1961,6 +1966,12 @@ where
             // Checking the download queues and BlockVerifierRouter buffer for duplicates
             // might require architectural changes to Zebra, so we should only do it
             // if mining pools really need it.
+            // Ycash (W7-e): ycashd's BIP 22 reason for the first failing rule.
+            #[cfg(feature = "ycash")]
+            Ok(verify_chain_error) => SubmitBlockErrorResponse::Invalid(
+                types::ycash_reject::block_reject(&verify_chain_error),
+            ),
+            #[cfg(not(feature = "ycash"))]
             Ok(_verify_chain_error) => SubmitBlockErrorResponse::Rejected,
 
             // This match arm is currently unreachable, but if future changes add extra error types,
@@ -2310,6 +2321,8 @@ where
         raw_transaction_hex: String,
         _allow_high_fees: Option<bool>,
     ) -> Result<SendRawTransactionResponse> {
+        #[cfg(feature = "ycash")]
+        let allow_high_fees = _allow_high_fees.unwrap_or(false);
         let mempool = self.mempool.clone();
         let queue_sender = self.queue_sender.clone();
 
@@ -2321,6 +2334,17 @@ where
             .map_error(server::error::LegacyCode::Deserialization)?;
 
         let transaction_hash = raw_transaction.hash();
+
+        // Ycash (W7-e): ycashd's refusals before AcceptToMemoryPool (expiring soon, absurd fee).
+        #[cfg(feature = "ycash")]
+        types::ycash_reject::send_raw_transaction_prechecks(
+            self.read_state.clone(),
+            &self.network,
+            self.latest_chain_tip.best_tip_height(),
+            &raw_transaction,
+            allow_high_fees,
+        )
+        .await?;
 
         // send transaction to the rpc queue, ignore any error.
         let unmined_transaction = UnminedTx::from(raw_transaction.clone());
@@ -2345,12 +2369,30 @@ where
         let queue_result = queue_results
             .pop()
             .expect("there should be exactly one item in Vec")
-            .inspect_err(|err| tracing::debug!("sent transaction to mempool: {:?}", &err))
-            .map_misc_error()?
-            .await
-            .map_misc_error()?;
+            .inspect_err(|err| tracing::debug!("sent transaction to mempool: {:?}", &err));
+        // Ycash (W7-e): ycashd's code and text for the rejection, or the txid for a
+        // transaction the mempool already holds.
+        #[cfg(feature = "ycash")]
+        let queue_result = match queue_result {
+            Err(error) => {
+                return match types::ycash_reject::send_raw_transaction_error(error.as_ref()) {
+                    Some(error) => Err(error),
+                    None => Ok(SendRawTransactionResponse(transaction_hash)),
+                }
+            }
+            ok => ok,
+        };
+        let queue_result = queue_result.map_misc_error()?.await.map_misc_error()?;
 
         tracing::debug!("sent transaction to mempool: {:?}", &queue_result);
+
+        #[cfg(feature = "ycash")]
+        if let Err(error) = &queue_result {
+            return match types::ycash_reject::send_raw_transaction_error(error.as_ref()) {
+                Some(error) => Err(error),
+                None => Ok(SendRawTransactionResponse(transaction_hash)),
+            };
+        }
 
         queue_result
             .map(|_| SendRawTransactionResponse(transaction_hash))
@@ -3820,6 +3862,10 @@ where
                     "submit block failed: block bytes could not be deserialized into a structurally valid block"
                 );
 
+                // Ycash (W7-e): ycashd throws -22 "Block decode failed".
+                #[cfg(feature = "ycash")]
+                return Err(types::ycash_reject::block_decode_failed());
+                #[cfg(not(feature = "ycash"))]
                 return Ok(SubmitBlockErrorResponse::Rejected.into());
             }
         };

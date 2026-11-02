@@ -27,6 +27,7 @@ mod macros;
 
 pub mod json;
 pub mod mock;
+pub mod regtest;
 pub mod state;
 pub mod types;
 pub mod vault;
@@ -71,6 +72,7 @@ where
     VaultRpcImpl::new(state, network.clone())
         .into_extension()
         .and(yed::extension(yed, network))
+        .and(regtest::RegtestRpcImpl::new(network.clone()).into_extension())
 }
 
 /// The YED state `zakurad` serves until plan W5-f registers the module.
