@@ -1020,6 +1020,15 @@ impl Storage {
         None
     }
 
+    /// kogany (W9-a/F-6): forgets the exact-tip rejection of `txid`, which is about to be verified
+    /// again ([`super::state_retry`]).
+    #[cfg(feature = "ycash")]
+    pub fn forget_tip_rejection(&mut self, txid: &UnminedTxId) {
+        if self.tip_rejected_exact.remove(txid).is_some() {
+            self.update_rejected_metrics();
+        }
+    }
+
     /// Returns the set of [`UnminedTxId`]s matching `tx_ids` in the rejected list.
     ///
     /// This matches transactions based on each rejection list's matching rule.

@@ -3911,3 +3911,160 @@ async fn cancel_handles_drained_after_verification_timeout() {
         "regression GHSA-65jj-fmw8-468q: cancel_handles must be drained after timeout"
     );
 }
+
+/// kogany (W9-a/F-6): lets the mempool pick up finished verifications.
+#[cfg(feature = "ycash")]
+async fn drain_results(mempool: &mut Mempool) {
+    for _ in 0..3 {
+        mempool.dummy_call().await;
+        time::sleep(Duration::from_millis(100)).await;
+    }
+}
+
+/// kogany (W9-a/F-6): the vectors' non-coinbase transactions.
+#[cfg(feature = "ycash")]
+fn non_coinbase_transactions(
+    network: &Network,
+) -> impl Iterator<Item = zakura_chain::transaction::UnminedTx> {
+    network
+        .unmined_transactions_in_blocks(..)
+        .map(|tx| tx.transaction)
+        .filter(|tx| !tx.transaction().is_coinbase())
+}
+
+/// kogany (W9-a/F-6): answers the next mock verification, which must be of `txid`, with `error`.
+#[cfg(feature = "ycash")]
+async fn fail_next_verification(
+    tx_verifier: &mut MockTxVerifier,
+    txid: UnminedTxId,
+    error: TransactionError,
+) {
+    let responder = tx_verifier.expect_request_that(|_| true).await;
+    assert_eq!(
+        responder
+            .request()
+            .clone()
+            .mempool_transaction()
+            .expect("a mempool request")
+            .id(),
+        txid
+    );
+    responder.respond(Err(error));
+}
+
+/// kogany (W9-a/F-6): a missing-input failure verified at an old tip (the parent's block arrived
+/// while the verification waited) is not cached for the new tip: the mempool verifies the
+/// transaction again at once. A failure that does not depend on the tip is cached as upstream.
+#[cfg(feature = "ycash")]
+#[tokio::test(flavor = "multi_thread")]
+async fn stale_state_failure_is_verified_again_not_cached() -> Result<(), Report> {
+    let block1: Arc<Block> = zakura_test::vectors::BLOCK_MAINNET_1_BYTES
+        .zcash_deserialize_into()
+        .unwrap();
+    let network = Network::Mainnet;
+    let (
+        mut mempool,
+        _peer_set,
+        mut state_service,
+        mut chain_tip_change,
+        mut tx_verifier,
+        mut recent_syncs,
+        _mempool_transaction_receiver,
+    ) = setup(&network, u64::MAX, true).await;
+    mempool.enable(&mut recent_syncs).await;
+
+    let tx = non_coinbase_transactions(&network)
+        .next()
+        .expect("a transaction");
+    let txid = tx.id();
+    mempool
+        .ready()
+        .await
+        .unwrap()
+        .call(Request::Queue(vec![tx.into()]))
+        .await
+        .unwrap();
+
+    // The verification runs at the genesis tip and waits; block 1 arrives meanwhile.
+    let pending = tx_verifier.expect_request_that(|_| true).await;
+    commit_block_and_wait_for_tip_change(&mut state_service, &mut chain_tip_change, block1).await;
+    mempool.dummy_call().await;
+    pending.respond(Err(TransactionError::TransparentInputNotFound));
+    drain_results(&mut mempool).await;
+
+    // Not cached as "did not pass consensus" for the new tip: verified again, at height 1.
+    assert_eq!(mempool.storage().rejection_error(&txid), None);
+    assert_eq!(mempool.tx_downloads().in_flight(), 1);
+    assert_eq!(mempool.state_retries.orphan_count(), 0);
+
+    // At the current tip, a failure of the transaction itself is cached.
+    fail_next_verification(&mut tx_verifier, txid, TransactionError::BadBalance).await;
+    drain_results(&mut mempool).await;
+    assert!(matches!(
+        mempool.storage().rejection_error(&txid),
+        Some(MempoolError::StorageExactTip(
+            ExactTipRejectionError::FailedVerification(TransactionError::BadBalance)
+        ))
+    ));
+    assert_eq!(mempool.tx_downloads().in_flight(), 0);
+
+    Ok(())
+}
+
+/// kogany (W9-a/F-6): a missing-input failure at the current tip is cached for that tip and the
+/// transaction is kept, as ycashd's orphan pool keeps it; when the tip grows it is verified again
+/// (the parent's block may be the one that arrived).
+#[cfg(feature = "ycash")]
+#[tokio::test(flavor = "multi_thread")]
+async fn orphan_is_verified_again_when_the_tip_grows() -> Result<(), Report> {
+    let block1: Arc<Block> = zakura_test::vectors::BLOCK_MAINNET_1_BYTES
+        .zcash_deserialize_into()
+        .unwrap();
+    let network = Network::Mainnet;
+    let (
+        mut mempool,
+        _peer_set,
+        mut state_service,
+        mut chain_tip_change,
+        mut tx_verifier,
+        mut recent_syncs,
+        _mempool_transaction_receiver,
+    ) = setup(&network, u64::MAX, true).await;
+    mempool.enable(&mut recent_syncs).await;
+
+    let tx = non_coinbase_transactions(&network)
+        .next()
+        .expect("a transaction");
+    let txid = tx.id();
+    mempool
+        .ready()
+        .await
+        .unwrap()
+        .call(Request::Queue(vec![tx.into()]))
+        .await
+        .unwrap();
+    fail_next_verification(
+        &mut tx_verifier,
+        txid,
+        TransactionError::TransparentInputNotFound,
+    )
+    .await;
+    drain_results(&mut mempool).await;
+
+    // At this tip the failure is cached (a peer's re-announcement is not downloaded again), and
+    // the transaction is kept.
+    assert!(mempool.storage().rejection_error(&txid).is_some());
+    assert_eq!(mempool.state_retries.orphan_count(), 1);
+    assert_eq!(mempool.tx_downloads().in_flight(), 0);
+
+    // The tip grows: the orphan is verified again at the new tip.
+    commit_block_and_wait_for_tip_change(&mut state_service, &mut chain_tip_change, block1).await;
+    mempool.dummy_call().await;
+    assert_eq!(mempool.state_retries.orphan_count(), 0);
+    assert_eq!(mempool.tx_downloads().in_flight(), 1);
+    fail_next_verification(&mut tx_verifier, txid, TransactionError::BadBalance).await;
+    drain_results(&mut mempool).await;
+    assert_eq!(mempool.state_retries.orphan_count(), 0);
+
+    Ok(())
+}

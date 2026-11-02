@@ -64,6 +64,9 @@ mod storage;
 // kogany (W6-c): the Ycash re-check after the tip grows.
 #[cfg(feature = "ycash")]
 mod tip_recheck;
+// kogany (W9-a/F-6): failures on the tip's state are verified again, not cached.
+#[cfg(feature = "ycash")]
+mod state_retry;
 
 /// Supplies named, timed storage operations to a benchmark harness.
 #[cfg(feature = "mempool-bench")]
@@ -646,6 +649,11 @@ pub struct Mempool {
     /// Ycash: the running re-check of the stored transactions at the new tip (kogany W6-c).
     #[cfg(feature = "ycash")]
     tip_recheck: tip_recheck::TipRecheck,
+
+    /// Ycash: the transactions kept for another verification after a failure on the tip's state
+    /// (kogany W9-a/F-6). Kept across mempool resets.
+    #[cfg(feature = "ycash")]
+    state_retries: state_retry::StateRetries,
 }
 
 impl Mempool {
@@ -689,6 +697,8 @@ impl Mempool {
             verification_finished: Arc::new(Notify::new()),
             #[cfg(feature = "ycash")]
             tip_recheck: Default::default(),
+            #[cfg(feature = "ycash")]
+            state_retries: Default::default(),
         };
 
         // Make sure `is_enabled` is accurate.
@@ -939,6 +949,14 @@ impl Service<Request> for Mempool {
                     // transaction requests fails.
                     let _result = tx_downloads.retry_after_tip_reset(tx, source);
                 }
+
+                // Ycash: the kept orphans too, at the new tip (kogany W9-a/F-6).
+                #[cfg(feature = "ycash")]
+                for (tx, source) in self.state_retries.take_orphans() {
+                    if self.state_retries.count_attempt(tx.id()) {
+                        let _result = tx_downloads.retry_after_tip_reset(Gossip::Tx(tx), source);
+                    }
+                }
             }
 
             return Poll::Ready(Ok(()));
@@ -957,6 +975,9 @@ impl Service<Request> for Mempool {
             let mut send_to_peers_ids = HashSet::<_>::new();
             let mut invalidated_ids = HashSet::<_>::new();
             let mut mined_mempool_ids = HashSet::<_>::new();
+            // Ycash: the transactions inserted in this pass, whose kept orphans are verified again.
+            #[cfg(feature = "ycash")]
+            let mut inserted_parents = HashSet::new();
 
             let best_tip_height = self.latest_chain_tip.best_tip_height();
             let next_height = best_tip_height
@@ -993,6 +1014,11 @@ impl Service<Request> for Mempool {
                             if let Ok(inserted_id) = insert_result {
                                 // Save transaction ids that we will send to peers
                                 send_to_peers_ids.insert(inserted_id);
+                                #[cfg(feature = "ycash")]
+                                {
+                                    self.state_retries.accepted(&inserted_id);
+                                    inserted_parents.insert(inserted_id.mined_id());
+                                }
                             } else {
                                 invalidated_ids.insert(tx_id);
                             }
@@ -1099,6 +1125,46 @@ impl Service<Request> for Mempool {
                             .increment(1),
                         }
 
+                        // Ycash: a failure on the tip's state is verified again (kogany W9-a/F-6):
+                        // at once if this node's tip moved during the verification, and, for a
+                        // missing input, when a parent arrives or the tip changes.
+                        #[cfg(feature = "ycash")]
+                        {
+                            self.state_retries
+                                .record_failed(tx_downloads.take_state_failures());
+                            if let TransactionDownloadVerifyError::Invalid {
+                                error: tx_error,
+                                tip_height,
+                                ..
+                            } = &error
+                            {
+                                if let Some((tx, source)) =
+                                    state_retry::is_tip_state_dependent(tx_error)
+                                        .then(|| self.state_retries.take_failed(&tx_id))
+                                        .flatten()
+                                {
+                                    if state_retry::is_stale(tx_error, *tip_height, best_tip_height)
+                                    {
+                                        tracing::debug!(
+                                            ?tx_id,
+                                            ?tip_height,
+                                            ?best_tip_height,
+                                            "the tip moved during verification: verifying again"
+                                        );
+                                        storage.forget_tip_rejection(&tx_id);
+                                        if self.state_retries.count_attempt(tx_id) {
+                                            let _ = tx_downloads
+                                                .retry_after_tip_reset(Gossip::Tx(tx), source);
+                                        }
+                                        continue;
+                                    }
+                                    if state_retry::is_missing_input(tx_error) {
+                                        self.state_retries.keep_orphan((tx, source));
+                                    }
+                                }
+                            }
+                        }
+
                         invalidated_ids.insert(tx_id);
                         storage.reject_if_needed(tx_id, error);
                     }
@@ -1115,6 +1181,16 @@ impl Service<Request> for Mempool {
                 };
             }
 
+            // Ycash: the kept orphans that spend from a transaction inserted above (ycashd's orphan
+            // processing after `AcceptToMemoryPool`, kogany W9-a/F-6).
+            #[cfg(feature = "ycash")]
+            for (tx, source) in self.state_retries.take_children_of(&inserted_parents) {
+                storage.forget_tip_rejection(&tx.id());
+                if self.state_retries.count_attempt(tx.id()) {
+                    let _ = tx_downloads.retry_after_tip_reset(Gossip::Tx(tx), source);
+                }
+            }
+
             // Handle best chain tip changes
             if let Some(TipAction::Grow { block }) = tip_action {
                 tracing::trace!(block_height = ?block.height, "handling blocks added to tip");
@@ -1126,12 +1202,34 @@ impl Service<Request> for Mempool {
                 tx_downloads.cancel(&mined_ids);
                 storage.clear_mined_dependencies(&mined_ids);
 
+                // Ycash (kogany W9-a/F-6): a verification waiting for an output this block created
+                // gets it now rather than at its timeout. Its result is from the old tip, so the
+                // mempool verifies the transaction again at this one.
+                #[cfg(feature = "ycash")]
+                for tx in &block.transactions {
+                    let hash = tx.hash();
+                    for (index, output) in tx.outputs().iter().enumerate() {
+                        storage.pending_outputs.respond(
+                            &zakura_chain::transparent::OutPoint::from_usize(hash, index),
+                            output.clone(),
+                        );
+                    }
+                }
+
                 let storage::RemovedTransactionIds { mined, invalidated } =
                     storage.reject_and_remove_same_effects(&mined_ids, block.transactions);
 
                 // Clear any transaction rejections if they might have become valid after
                 // the new block was added to the tip.
                 storage.clear_tip_rejections();
+
+                // Ycash: the kept orphans are verified at this tip (kogany W9-a/F-6).
+                #[cfg(feature = "ycash")]
+                for (tx, source) in self.state_retries.take_orphans() {
+                    if self.state_retries.count_attempt(tx.id()) {
+                        let _ = tx_downloads.retry_after_tip_reset(Gossip::Tx(tx), source);
+                    }
+                }
 
                 mined_mempool_ids.extend(mined);
                 invalidated_ids.extend(invalidated);

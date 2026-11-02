@@ -281,6 +281,16 @@ where
     /// has it as the third tuple element. Enforces
     /// [`MAX_INBOUND_CONCURRENCY_PER_PEER`]. See `GHSA-4fc2-h7jh-287c`.
     pending_per_peer: HashMap<QueueSource, usize>,
+
+    /// kogany (W9-a/F-6): each task whose verification fails on the tip's state sends the
+    /// transaction here before its result, so the mempool can verify it again
+    /// ([`super::state_retry`]). Replaced by [`Self::cancel_all`], like [`Self::results_tx`].
+    #[cfg(feature = "ycash")]
+    state_failures_tx: mpsc::UnboundedSender<super::state_retry::Retry>,
+
+    /// Receives [`Self::state_failures_tx`]'s transactions.
+    #[cfg(feature = "ycash")]
+    state_failures: mpsc::UnboundedReceiver<super::state_retry::Retry>,
 }
 
 impl<ZN, ZV, ZS> Stream for Downloads<ZN, ZV, ZS>
@@ -411,6 +421,8 @@ where
         verification_finished: Arc<Notify>,
     ) -> Self {
         let (results_tx, results) = mpsc::unbounded_channel();
+        #[cfg(feature = "ycash")]
+        let (state_failures_tx, state_failures) = mpsc::unbounded_channel();
         Self {
             network,
             verifier,
@@ -425,6 +437,10 @@ where
             in_flight: 0,
             cancel_handles: HashMap::new(),
             pending_per_peer: HashMap::new(),
+            #[cfg(feature = "ycash")]
+            state_failures_tx,
+            #[cfg(feature = "ycash")]
+            state_failures,
         }
     }
 
@@ -528,6 +544,8 @@ where
         let peer_cooldowns = self.peer_cooldowns.clone();
 
         let gossiped_tx_req = gossiped_tx.clone();
+        #[cfg(feature = "ycash")]
+        let (state_failures_tx, retry_source) = (self.state_failures_tx.clone(), source.clone());
 
         let fut = async move {
             if let Gossip::Tx(tx) = &gossiped_tx {
@@ -641,14 +659,24 @@ where
             // Hide the transaction data to avoid filling the logs
             trace!(?txid, result = ?result.as_ref().map(|_tx| ()), "verified transaction for the mempool");
 
-            result.map_err(|e| TransactionDownloadVerifyError::Invalid {
+            let result = result.map_err(|e| TransactionDownloadVerifyError::Invalid {
                 error: e.into(),
                 advertiser_addr,
                 tip_height,
                 transaction_version,
                 transaction_network_upgrade,
                 retried_after_tip_reset,
-            })
+            });
+
+            // kogany (W9-a/F-6): keep the bytes of a failure on the tip's state for another try.
+            #[cfg(feature = "ycash")]
+            if let Err(TransactionDownloadVerifyError::Invalid { error, .. }) = &result {
+                if super::state_retry::is_tip_state_dependent(error) {
+                    let _ = state_failures_tx.send((tx, retry_source));
+                }
+            }
+
+            result
         }
         .map_ok(|(tx, spent_mempool_outpoints, tip_height)| {
             metrics::counter!(
@@ -782,6 +810,10 @@ where
         // queued results.
         let _ = std::mem::take(&mut self.pending);
         (self.results_tx, self.results) = mpsc::unbounded_channel();
+        #[cfg(feature = "ycash")]
+        {
+            (self.state_failures_tx, self.state_failures) = mpsc::unbounded_channel();
+        }
         self.in_flight = 0;
         // Signal cancellation to all running tasks.
         // Since we already replaced the result channel above, their results
@@ -804,6 +836,17 @@ where
                 pending_per_peer.remove(&source);
             }
         }
+    }
+
+    /// kogany (W9-a/F-6): the transactions whose verification failed on the tip's state since the
+    /// last call (each is sent before its task's result).
+    #[cfg(feature = "ycash")]
+    pub fn take_state_failures(&mut self) -> Vec<super::state_retry::Retry> {
+        let mut failures = Vec::new();
+        while let Ok(failure) = self.state_failures.try_recv() {
+            failures.push(failure);
+        }
+        failures
     }
 
     /// Get the number of currently in-flight download tasks.

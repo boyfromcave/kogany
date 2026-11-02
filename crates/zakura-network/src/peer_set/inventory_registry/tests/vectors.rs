@@ -324,3 +324,51 @@ fn multi_change_caps_before_collecting() {
         assert!(kept.as_vec().capacity() <= 2 * MAX_INV_PER_MAP);
     }
 }
+
+/// kogany (W9-a/F-6): a peer that answered `notfound` for a transaction and then announces it
+/// again can be asked for it: the advertisement replaces the marker. A block keeps upstream's
+/// rule (missing wins), and so does an advertisement that comes before the `notfound`.
+#[cfg(feature = "ycash")]
+#[tokio::test]
+async fn inv_registry_readvertised_transaction_is_available() {
+    let test_peer: PeerSocketAddr = "1.1.1.1:1"
+        .parse()
+        .expect("unexpected invalid peer address");
+    let tx_hash = InventoryHash::Tx(transaction::Hash([1; 32]));
+    let block_hash = InventoryHash::Block(block::Hash([2; 32]));
+
+    for (hash, missing_first, readvertised) in [
+        (tx_hash, true, true),
+        (tx_hash, false, false),
+        (block_hash, true, false),
+    ] {
+        let (mut inv_registry, inv_stream_tx) = new_inv_registry();
+        let missing = InventoryStatus::new_missing(hash, test_peer);
+        let advertised = InventoryStatus::new_available(hash, test_peer);
+        let changes = if missing_first {
+            [missing, advertised]
+        } else {
+            [advertised, missing]
+        };
+        for change in changes {
+            inv_stream_tx
+                .send(change)
+                .expect("unexpected failed inventory status send");
+        }
+        inv_registry
+            .update()
+            .await
+            .expect("unexpected dropped registry sender channel");
+
+        assert_eq!(
+            inv_registry.advertising_peers(hash).count(),
+            usize::from(readvertised),
+            "{hash:?} missing first: {missing_first}"
+        );
+        assert_eq!(
+            inv_registry.missing_peers(hash).count(),
+            usize::from(!readvertised),
+            "{hash:?} missing first: {missing_first}"
+        );
+    }
+}
