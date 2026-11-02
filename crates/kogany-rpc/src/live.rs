@@ -65,7 +65,10 @@ where
 }
 
 /// The RPC view of one state snapshot on `network`.
-pub fn snapshot_at(network: &Network, snapshot: zakura_state::vault::VaultSnapshot) -> VaultSnapshot {
+pub fn snapshot_at(
+    network: &Network,
+    snapshot: zakura_state::vault::VaultSnapshot,
+) -> VaultSnapshot {
     // A height fits in an i64; -1 before genesis, as ycashd's `chainActive.Height()`.
     let tip_height = snapshot.tip.map_or(-1, |(height, _)| i64::from(height.0));
     let next = snapshot
