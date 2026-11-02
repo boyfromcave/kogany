@@ -485,6 +485,19 @@ def wait_until(predicate, what, timeout=60):
         time.sleep(0.5)
 
 
+def wallet_send(y, address, amount, timeout=60):
+    """`sendtoaddress`, retried while ycashd's wallet has not yet seen the last block's spends
+    (it then picks a coin a mined transaction spent: bad-txns-inputs-spent)."""
+    deadline = time.time() + timeout
+    while True:
+        txid, error = y.call('sendtoaddress', address, amount)
+        if error is None:
+            return txid
+        if 'bad-txns-inputs-spent' not in str(error) or time.time() > deadline:
+            raise base.RpcError('ycash6: sendtoaddress(%r, %r): %r' % (address, amount, error))
+        time.sleep(0.5)
+
+
 def wait_operation(y, opid, timeout=300):
     deadline = time.time() + timeout
     while time.time() < deadline:
@@ -511,7 +524,7 @@ def cases_common(chain, v, mode):
 
     if not zip317:
         # The wallet's default-fee spend (244 zatoshis at 1,000/kB): kogany's ZIP-317 mempool refused it.
-        txid = chain.y.ok('sendtoaddress', chain.y.ok('getnewaddress'), 1.5)
+        txid = wallet_send(chain.y, chain.y.ok('getnewaddress'), 1.5)
         raw = chain.y.ok('getrawtransaction', txid, 0)
         for vin in chain.y.ok('getrawtransaction', txid, 1)['vin']:
             chain.used.add((vin['txid'], vin['vout']))
@@ -588,7 +601,7 @@ def cases_sapling(chain, v):
     y, z = chain.y, chain.z
     taddr = y.ok('getnewaddress')
     zaddr = y.ok('z_getnewaddress', 'sapling')
-    txid = y.ok('sendtoaddress', taddr, 5)
+    txid = wallet_send(y, taddr, 5)
     for vin in y.ok('getrawtransaction', txid, 1)['vin']:
         chain.used.add((vin['txid'], vin['vout']))
     z.call('sendrawtransaction', y.ok('getrawtransaction', txid, 0))
