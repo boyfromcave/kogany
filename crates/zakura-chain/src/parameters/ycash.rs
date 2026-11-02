@@ -149,7 +149,9 @@ pub mod ports {
         pub const TESTNET_FAST: u16 = 18832;
         /// Ycash testnet, `slow` profile.
         pub const TESTNET_SLOW: u16 = 18932;
-        /// Ycash regtest.
+        /// Ycash regtest: the same as the `fast` testnet's, as in ycashd
+        /// (`ycash6 src/chainparamsbase.cpp:62,73`; `ref/ycash src/chainparamsbase.cpp:48,62`).
+        /// Two such nodes on one host need an explicit `rpc.listen_addr`, as two ycashd do.
         pub const REGTEST: u16 = 18832;
     }
 }
@@ -172,6 +174,25 @@ pub mod seeds {
 pub mod names {
     /// The `slow` Ycash testnet profile.
     pub const TESTNET_SLOW: &str = "TestnetSlow";
+}
+
+/// kogany's default file-system names (the identity table: `parameters/ycash/identity_tests.rs`).
+///
+/// A `ycash` build never uses Zakura's: a kogany node and a Zcash `zakurad` on one host would
+/// otherwise share the state database, the peer cache (`network/mainnet.peers`, which would mix
+/// Zcash and Ycash peers), the RPC cookie and the config file. ycashd itself uses `~/.ycash`
+/// (`Ycash` on macOS and Windows) and `ycash.conf` (`ycash6 src/util/system.cpp:83,234-257`);
+/// kogany's state is a different database, so it takes names of its own rather than ycashd's.
+pub mod dirs {
+    /// The node's directory in the platform cache directory (`~/.cache/kogany` on Linux,
+    /// `~/Library/Caches/kogany` on macOS): state, peer cache and RPC cookie.
+    pub const CACHE_DIR_NAME: &str = "kogany";
+    /// The config file in the platform preference directory (`~/.config/kogany.toml` on Linux,
+    /// `~/Library/Preferences/kogany.toml` on macOS).
+    pub const CONFIG_FILE: &str = "kogany.toml";
+    /// The directory, relative to the home directory, of the long-term network identity secrets
+    /// (the Zakura P2P v2 key; v2 is off on Ycash, decision K-11, but the path stays separate).
+    pub const NETWORK_IDENTITY_DIR: &str = ".kogany";
 }
 
 /// The default P2P port of a Ycash testnet or regtest network: Regtest's, then the `slow`
@@ -211,5 +232,7 @@ impl super::Network {
 
 pub mod ydf;
 
+#[cfg(test)]
+mod identity_tests;
 #[cfg(test)]
 mod tests;

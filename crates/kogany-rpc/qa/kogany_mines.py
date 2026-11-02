@@ -5,7 +5,7 @@
 
 """kogany mines: kogany templates solved by the Python (48,5) solver, relayed to ycashd (W8-c).
 
-    python crates/kogany-rpc/qa/kogany_mines.py --zakurad <zakurad built with --features ycash> \\
+    python crates/kogany-rpc/qa/kogany_mines.py --koganyd <koganyd, the --features ycash build> \\
         [--ycash6-bin $WS/wt/.bin/ycash6-65cb4ae0f] [--solver-dir $WS/ycash6/qa/rpc-tests] \\
         [--rounds 20] [--premine 101] [--vault-height H] [--no-yed-mock] [--workdir DIR] [--keep]
 
@@ -392,7 +392,8 @@ def run(args, solver):
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
-    ap.add_argument('--zakurad', default=os.getenv('KOGANY_BIN'), help='zakurad built with --features ycash')
+    ap.add_argument('--koganyd', '--zakurad', dest='zakurad', default=os.getenv('KOGANY_BIN'),
+                    help='koganyd (the --features ycash build; --zakurad is its old name)')
     ap.add_argument('--ycash6-bin', default=find_up('wt', '.bin', 'ycash6-65cb4ae0f'),
                     help='directory holding ycashd')
     ap.add_argument('--solver-dir', default=find_up('ycash6', 'qa', 'rpc-tests'),
@@ -411,7 +412,7 @@ def main(argv=None):
     ap.add_argument('--port-base', type=int, default=29700)
     args = ap.parse_args(argv)
     if not args.zakurad:
-        ap.error('--zakurad (or KOGANY_BIN) is required')
+        ap.error('--koganyd (or KOGANY_BIN) is required')
     if not args.ycash6_bin or not os.path.exists(os.path.join(args.ycash6_bin, 'ycashd')):
         ap.error('--ycash6-bin: no ycashd in %r' % args.ycash6_bin)
     if not args.solver_dir or not os.path.exists(

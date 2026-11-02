@@ -5,8 +5,8 @@
 name: kogany-client-legs
 
 # The client legs (plan §5, W7-d, W8-c; .github/README-kogany.md): each client, unmodified at its
-# pinned commit, against a regtest zakurad built once per run (`zakurad`, kogany-bin.yml). One job
-# per client: a failed client re-runs alone and reuses this run's zakurad-bin artifact. All three
+# pinned commit, against a regtest koganyd built once per run (`koganyd`, kogany-bin.yml). One job
+# per client: a failed client re-runs alone and reuses this run's koganyd-bin artifact. All three
 # are report-only (continue-on-error) until the lead architect flips one: drop its
 # continue-on-error and add `--strict` (lightwalletd-dd, chain-viz) then.
 on:
@@ -30,14 +30,14 @@ env:
   MINER_ADDRESS: smD3WkZZgTMcQJSER9RsPkrDoKguaqPTbQt
 
 jobs:
-  zakurad:
+  koganyd:
     uses: ./.github/workflows/kogany-bin.yml
     permissions:
       contents: read
 
   lightwalletd-dd:
     name: lightwalletd-dd (report-only)
-    needs: zakurad
+    needs: koganyd
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     continue-on-error: true
@@ -53,10 +53,10 @@ jobs:
       - uses: ./.github/actions/setup-zakura-build
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
-          name: zakurad-bin
+          name: koganyd-bin
           path: ${{ runner.temp }}
-      - name: Unpack zakurad
-        run: mkdir -p "$RUNNER_TEMP/zk" && tar xzf "$RUNNER_TEMP/zakurad-bin.tgz" -C "$RUNNER_TEMP/zk" && "$RUNNER_TEMP/zk/zakurad" --version
+      - name: Unpack koganyd
+        run: mkdir -p "$RUNNER_TEMP/zk" && tar xzf "$RUNNER_TEMP/koganyd-bin.tgz" -C "$RUNNER_TEMP/zk" && "$RUNNER_TEMP/zk/koganyd" --version
       - name: Fetch lightwalletd-dd at its pin
         run: |
           git init -q "$RUNNER_TEMP/lightwalletd"
@@ -75,7 +75,7 @@ jobs:
           go build -mod=vendor -o "$RUNNER_TEMP/bin/lwdinfo" ./testtools/lwdinfo
       - name: lightwalletd-dd leg (report-only)
         run: |
-          python3 crates/kogany-rpc/qa/kogany_client_legs.py --zakurad "$RUNNER_TEMP/zk/zakurad" \
+          python3 crates/kogany-rpc/qa/kogany_client_legs.py --koganyd "$RUNNER_TEMP/zk/koganyd" \
             --lightwalletd "$RUNNER_TEMP/bin/lightwalletd" --lwdinfo "$RUNNER_TEMP/bin/lwdinfo" \
             --miner-address "$MINER_ADDRESS" --out kogany-client-legs
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -88,7 +88,7 @@ jobs:
 
   chain-viz:
     name: chain-viz (report-only)
-    needs: zakurad
+    needs: koganyd
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     continue-on-error: true
@@ -104,10 +104,10 @@ jobs:
       - uses: ./.github/actions/setup-zakura-build
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
-          name: zakurad-bin
+          name: koganyd-bin
           path: ${{ runner.temp }}
-      - name: Unpack zakurad
-        run: mkdir -p "$RUNNER_TEMP/zk" && tar xzf "$RUNNER_TEMP/zakurad-bin.tgz" -C "$RUNNER_TEMP/zk" && "$RUNNER_TEMP/zk/zakurad" --version
+      - name: Unpack koganyd
+        run: mkdir -p "$RUNNER_TEMP/zk" && tar xzf "$RUNNER_TEMP/koganyd-bin.tgz" -C "$RUNNER_TEMP/zk" && "$RUNNER_TEMP/zk/koganyd" --version
       - name: Fetch chain-viz at its pin
         run: |
           git init -q "$RUNNER_TEMP/chain-viz"
@@ -124,7 +124,7 @@ jobs:
           mkdir -p "$RUNNER_TEMP/bin" && cp target/release/chain-viz "$RUNNER_TEMP/bin/chain-viz"
       - name: chain-viz leg (report-only)
         run: |
-          python3 crates/kogany-rpc/qa/kogany_client_legs.py --zakurad "$RUNNER_TEMP/zk/zakurad" \
+          python3 crates/kogany-rpc/qa/kogany_client_legs.py --koganyd "$RUNNER_TEMP/zk/koganyd" \
             --chain-viz "$RUNNER_TEMP/bin/chain-viz" \
             --miner-address "$MINER_ADDRESS" --out kogany-client-legs
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -141,7 +141,7 @@ jobs:
     # node-bin (the cross-line contract, README-kogany.md): the newest push, schedule or dispatch run
     # of its yellowback-tests.yml on YCASH6_BRANCH.
     name: yolo (report-only)
-    needs: zakurad
+    needs: koganyd
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     continue-on-error: true
@@ -167,14 +167,14 @@ jobs:
           sparse-checkout: |
             contrib/yellowback/devnet
             zcutil
-      - name: zakurad (this run's zakurad-bin) and librocksdb
+      - name: koganyd (this run's koganyd-bin) and librocksdb
         run: sudo apt-get update -q && sudo apt-get install -y -q librocksdb-dev
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
-          name: zakurad-bin
+          name: koganyd-bin
           path: ${{ runner.temp }}
-      - name: Unpack zakurad
-        run: mkdir -p "$RUNNER_TEMP/zk" && tar xzf "$RUNNER_TEMP/zakurad-bin.tgz" -C "$RUNNER_TEMP/zk" && "$RUNNER_TEMP/zk/zakurad" --version
+      - name: Unpack koganyd
+        run: mkdir -p "$RUNNER_TEMP/zk" && tar xzf "$RUNNER_TEMP/koganyd-bin.tgz" -C "$RUNNER_TEMP/zk" && "$RUNNER_TEMP/zk/koganyd" --version
       - name: ycashd from ycash6's node-bin
         env:
           GH_TOKEN: ${{ secrets.YCASH6_ARTIFACT_TOKEN || github.token }}
@@ -203,5 +203,5 @@ jobs:
           export YCASHD="$RUNNER_TEMP/node/src/ycashd" PYTHON=python3
           export STRATUM_MINER="$GITHUB_WORKSPACE/node/contrib/yellowback/devnet/stratum-miner"
           export YOLO_REGTEST_SCRATCH="$RUNNER_TEMP/yolo-regtest"
-          export YOLO_REGTEST_VAULT=110 YOLO_REGTEST_KOGANY="$RUNNER_TEMP/zk/zakurad"
+          export YOLO_REGTEST_VAULT=110 YOLO_REGTEST_KOGANY="$RUNNER_TEMP/zk/koganyd"
           cargo test --locked --features regtest --test regtest -- --nocapture

@@ -1,0 +1,159 @@
+# Default configuration for koganyd, the kogany Ycash full node.
+#
+# This file can be used as a skeleton for custom configs: `koganyd generate -o kogany.toml`.
+#
+# Unspecified fields use default values. Optional fields are Some(field) if the
+# field is present and None if it is absent.
+#
+# This file is generated as an example using koganyd's current defaults, for
+# Ycash mainnet. You should set only the config options you want to keep, and
+# delete the rest. Only a subset of fields are present in the skeleton, since
+# optional values whose default is None are omitted.
+#
+# kogany is the Ycash developers' fork of Zakura; the config format is Zakura's
+# (`ZakuradConfig`, crates/zakurad/src/config.rs) and kogany's README.md lists
+# what differs on Ycash.
+#
+# Networks: network = "Mainnet" (Ycash mainnet, P2P 8833, RPC 8832),
+# "Testnet" (the re-forked Ycash testnet, fast profile, P2P 18833, RPC 18832)
+# or "Regtest" (P2P 18344, RPC 18832). The RPC server is off until
+# rpc.listen_addr is set, for example listen_addr = "127.0.0.1:8832".
+#
+# CONFIGURATION SOURCES (in order of precedence, highest to lowest):
+#
+# 1. Environment variables with ZAKURA_ prefix (highest precedence)
+#    - Format: ZAKURA_SECTION__KEY (double underscore for nested keys)
+#    - Examples:
+#      - ZAKURA_NETWORK__NETWORK=Testnet
+#      - ZAKURA_RPC__LISTEN_ADDR=127.0.0.1:8832
+#      - ZAKURA_STATE__CACHE_DIR=/path/to/cache
+#      - ZAKURA_TRACING__FILTER=debug
+#
+# 2. Environment variables with deprecated ZEBRA_ prefix
+#
+# 3. Configuration file (TOML format)
+#    - At the path specified via -c flag, e.g. `koganyd -c myconfig.toml start`, or
+#    - At the default path in the user's preference directory (platform-dependent, see below)
+#
+# 4. Hard-coded defaults (lowest precedence)
+#
+# The user's preference directory and the default path to the `koganyd` config
+# are platform dependent. koganyd reads only kogany.toml there, never a Zcash
+# node's zakura.toml or zebrad.toml:
+#
+# | Platform | Value                                 | Example                                        |
+# | -------- | ------------------------------------- | ---------------------------------------------- |
+# | Linux    | `$XDG_CONFIG_HOME` or `$HOME/.config` | `/home/alice/.config/kogany.toml`              |
+# | macOS    | `$HOME/Library/Preferences`           | `/Users/Alice/Library/Preferences/kogany.toml` |
+# | Windows  | `{FOLDERID_LocalAppData}`             | `C:\Users\Alice\AppData\Local\kogany.toml`     |
+
+[consensus]
+checkpoint_sync = true
+
+[health]
+enforce_on_test_networks = false
+min_connected_peers = 1
+ready_max_blocks_behind = 2
+ready_max_tip_age = "5m"
+
+[mempool]
+eviction_memory_time = "1h"
+max_datacarrier_bytes = 83
+max_transaction_bytes = 2000000
+tx_cost_limit = 80000000
+
+[metrics]
+
+[mining]
+internal_miner = false
+optimistic_block_inventory = true
+
+[network]
+cache_dir = true
+crawl_new_peer_interval = "1m 1s"
+expose_peer_addresses = false
+identity_dir = "@NETWORK_IDENTITY_DIR@"
+initial_mainnet_peers = ["seed.ycash.xyz:8833"]
+# The re-forked Ycash testnet has fixed seeds only, published with its rc1.
+initial_testnet_peers = []
+listen_addr = "[::]:8833"
+max_connections_per_ip = 1
+network = "Mainnet"
+# The peer-to-peer stack: on Ycash only the legacy TCP stack runs. "zakura"
+# and "dual" are refused: the Zakura P2P v2 overlay identifies a chain by its
+# genesis hash, which Ycash shares with Zcash (decision K-11).
+p2p_stack = "default"
+peerset_initial_target_size = 100
+
+[network.zakura]
+# The v2 overlay is off on Ycash; it has no bootstrap peers.
+bootstrap_peers = []
+listen_addr = "0.0.0.0:8234"
+max_connections = 92
+max_connections_per_ip = 16
+max_pending_handshakes = 32
+message_rate_per_second = 2048
+nat_traversal = false
+peer_memory_budget_bytes = 8589934592
+stream_open_rate_per_second = 32
+
+[network.zakura.quic]
+ack_frequency = false
+congestion_controller = "cubic"
+dial_stagger_ms = 250
+gso = true
+handshake_timeout_secs = 10
+idle_timeout_secs = 150
+incoming_buffer_bytes = 10485760
+incoming_buffer_total_bytes = 104857600
+initial_mtu = 1200
+keep_alive_interval_secs = 10
+kernel_drop_poll_secs = 10
+max_incoming = 65536
+mtu_discovery = true
+receive_window_bytes = 33554432
+recv_buffer_bytes = 7340032
+retry_threshold = 8
+send_buffer_bytes = 7340032
+send_window_bytes = 33554432
+stream_receive_window_bytes = 16777216
+
+[rpc]
+cookie_dir = "@RPC_COOKIE_DIR@"
+cookie_file_name = ".cookie"
+debug_force_finished_sync = false
+enable_cookie_auth = true
+max_response_body_size = 52428800
+parallel_cpu_threads = 0
+
+[state]
+cache_dir = "@STATE_CACHE_DIR@"
+debug_skip_non_finalized_state_backup_task = false
+delete_old_database = true
+ephemeral = false
+should_backup_non_finalized_state = true
+storage_mode = "archive"
+
+[sync]
+checkpoint_verify_concurrency_limit = 1000
+download_concurrency_limit = 100
+full_verify_concurrency_limit = 20
+parallel_cpu_threads = 0
+zakura_block_apply_concurrency_limit = 32
+
+[tracing]
+buffer_limit = 128000
+force_use_color = false
+use_color = true
+
+[zcashd_compat]
+block_gossip_peer_ips = []
+enabled = false
+manage_zcashd = false
+restart_backoff = "2s"
+restart_backoff_max = "5m"
+restart_reset_after = "1h"
+shutdown_grace_period = "5m"
+startup_delay = "1s"
+zcashd_extra_args = []
+zcashd_source = "path"

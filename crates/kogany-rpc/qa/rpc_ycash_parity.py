@@ -5,7 +5,7 @@
 
 """kogany's stock RPC answers against ycash6's, field by field, on one Ycash regtest chain (W1-Y6).
 
-    python crates/kogany-rpc/qa/rpc_ycash_parity.py --zakurad <zakurad built with --features ycash> \\
+    python crates/kogany-rpc/qa/rpc_ycash_parity.py --koganyd <koganyd, the --features ycash build> \\
         [--ycash6-bin $WS/wt/.bin/ycash6-65cb4ae0f] [--workdir DIR] [--keep]
 
 It starts a ycashd and a zakurad on Ycash regtest with every upgrade through Canopy at height 1
@@ -737,7 +737,8 @@ def run(args):
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
-    ap.add_argument('--zakurad', default=os.getenv('KOGANY_BIN'), help='zakurad built with --features ycash')
+    ap.add_argument('--koganyd', '--zakurad', dest='zakurad', default=os.getenv('KOGANY_BIN'),
+                    help='koganyd (the --features ycash build; --zakurad is its old name)')
     ap.add_argument('--ycash6-bin', default=DEFAULT_YCASH6_BIN, help='directory holding ycashd')
     ap.add_argument('--workdir', help='keep the datadirs here (default: a temporary directory)')
     ap.add_argument('--keep', action='store_true', help='keep the temporary directory')
@@ -747,7 +748,7 @@ def main(argv=None):
                     help='the pruned pair: ycashd -prune=550, zakurad Pruned mode (KP-1)')
     args = ap.parse_args(argv)
     if not args.zakurad:
-        ap.error('--zakurad (or KOGANY_BIN) is required')
+        ap.error('--koganyd (or KOGANY_BIN) is required')
     try:
         report, workdir = run(args)
     except RpcError as e:

@@ -5,7 +5,7 @@
 
 """The stock-RPC contract cases of plan W7-c, checked against kogany and, with --ycash6-bin, against ycashd.
 
-    python crates/kogany-rpc/qa/rpc_stock_contract.py --zakurad <zakurad built with --features ycash> \\
+    python crates/kogany-rpc/qa/rpc_stock_contract.py --koganyd <koganyd, the --features ycash build> \\
         [--ycash6-bin $WS/wt/.bin/ycash6-65cb4ae0f] [--blocks 12] [--workdir DIR]
 
 The cases are the ycashd shapes of `doc/yellowback-rpc.md` and `src/rpc/{rawtransaction,misc,
@@ -353,14 +353,15 @@ def testnet_cases(args, cases, procs):
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
-    ap.add_argument('--zakurad', default=os.getenv('KOGANY_BIN'), help='zakurad built with --features ycash')
+    ap.add_argument('--koganyd', '--zakurad', dest='zakurad', default=os.getenv('KOGANY_BIN'),
+                    help='koganyd (the --features ycash build; --zakurad is its old name)')
     ap.add_argument('--ycash6-bin', help='directory holding ycashd: compare with it (e.g. %s)' % DEFAULT_YCASH6_BIN)
     ap.add_argument('--blocks', type=int, default=12)
     ap.add_argument('--workdir', help='keep the datadirs here (default: a temporary directory)')
     ap.add_argument('--no-testnet', action='store_true', help='skip the testnet cases (they need --ycash6-bin)')
     args = ap.parse_args(argv)
     if not args.zakurad:
-        ap.error('--zakurad (or KOGANY_BIN) is required')
+        ap.error('--koganyd (or KOGANY_BIN) is required')
     temp = not args.workdir
     args.workdir = os.path.abspath(args.workdir or tempfile.mkdtemp(prefix='rpc-stock-contract-'))
     cases, procs = Cases(), []

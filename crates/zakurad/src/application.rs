@@ -181,7 +181,7 @@ pub fn release_version() -> Version {
 #[cfg_attr(feature = "ycash", allow(unreachable_code))]
 pub fn user_agent() -> String {
     let release_version = release_version();
-    // kogany: `/kogany:<version>/` on Ycash (`zakura_network::ycash::user_agent`).
+    // kogany: `/koganyd:<version>/` on Ycash (`zakura_network::ycash::user_agent`).
     #[cfg(feature = "ycash")]
     return zakura_network::ycash::user_agent(release_version);
 

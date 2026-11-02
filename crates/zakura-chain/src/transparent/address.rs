@@ -74,7 +74,7 @@ pub enum Address {
 /// Ycash (kogany): `PlainPQAddressVersion` (ycash6 `src/key_io.cpp:25-31`): `sq…` on Mainnet,
 /// `tq…` on the testnets, `rq…` on Regtest.
 #[cfg(feature = "ycash")]
-fn plain_pq_address_version(network_kind: NetworkKind) -> [u8; 2] {
+pub(crate) fn plain_pq_address_version(network_kind: NetworkKind) -> [u8; 2] {
     match network_kind {
         NetworkKind::Mainnet => [0x4D, 0xD9],
         NetworkKind::Testnet => [0x4F, 0x61],

@@ -9,6 +9,33 @@ release-policy exceptions for backwards-compatible additions. These exceptions
 do not apply to published library crates, whose API versions are evaluated
 independently.
 
+## kogany (Ycash) - unreleased
+
+kogany is the Ycash developers' fork of Zakura: built with the `ycash` cargo feature it is
+`koganyd`, a Ycash full node carrying the vault network upgrade and the Ycash Yellowback (YED)
+rule module, the third Ycash node line beside ycashd 4.5.0 (`ycash-dd`) and ycashd 6.20
+(`ycash6`). [README.md](README.md) describes it; the entries below this section are upstream
+Zakura's, which kogany follows.
+
+### Added
+
+- The Ycash networks: mainnet, the re-forked testnet's `fast` and `slow` profiles and regtest,
+  with ycashd's upgrades and branch IDs, Equihash (192,7) from the Ycash fork, the development
+  fund (YDF), checkpoints, address prefixes and HRPs, ports, magics and P2P versions.
+- The vault primitive (`set_*`, `vault_*` RPCs), post-quantum owners and the Yellowback module
+  (`yed_*` RPCs), `rpcversion` 8, as on ycash6 and ycash-dd.
+
+### Changed
+
+- The `ycash` build's binary is `koganyd`, its user agent `/koganyd:<version>/`; its `zakurad`
+  binary refuses to run. The CI artifact other repositories download is `koganyd-bin`
+  (`koganyd-bin.tgz` with `koganyd` and `koganyd-bin.json`; it was `zakurad-bin`).
+- A `ycash` build never uses Zakura's file-system names: the config file is `kogany.toml`, the
+  cache directory (state, peer cache, RPC cookie) is `kogany`, the network identity directory is
+  `~/.kogany`, and each test network's default RPC cookie is in its own subdirectory. The
+  generated config names Ycash's seeds and ports only, and the Zakura P2P v2 overlay has no
+  bootstrap peers. Peers on Zcash's ports or on another Ycash network's port are refused.
+
 ## [Unreleased]
 
 ## [1.8.0-rc0] - 2026-11-01

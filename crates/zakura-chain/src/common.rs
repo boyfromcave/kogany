@@ -14,11 +14,23 @@ use directories::cache_dir;
 pub use directories::{home_dir, preference_dir};
 pub use temp::{TempDir, TempFile};
 
+/// The name of the node's directory in the platform cache directory: `zakura`.
+#[cfg(not(feature = "ycash"))]
+pub const CACHE_DIR_NAME: &str = "zakura";
+
+/// The name of the node's directory in the platform cache directory: kogany's own, so a kogany
+/// node and a Zcash `zakurad` on one host never share a state database, a peer cache or an RPC
+/// cookie ([`crate::parameters::ycash::dirs`]).
+#[cfg(feature = "ycash")]
+pub const CACHE_DIR_NAME: &str = crate::parameters::ycash::dirs::CACHE_DIR_NAME;
+
 /// Returns Zakura's default cache directory path.
+///
+/// kogany: `<platform cache directory>/kogany` in a `ycash` build ([`CACHE_DIR_NAME`]).
 pub fn default_cache_dir() -> PathBuf {
     cache_dir()
         .unwrap_or_else(|| std::env::current_dir().unwrap().join("cache"))
-        .join("zakura")
+        .join(CACHE_DIR_NAME)
 }
 
 /// Accepts a target file path and a byte-slice.

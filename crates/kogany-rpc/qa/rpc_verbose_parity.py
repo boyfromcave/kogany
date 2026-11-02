@@ -5,7 +5,7 @@
 
 """kogany's verbose transaction shapes against ycash6's on the scripts' fields (W7-e).
 
-    python crates/kogany-rpc/qa/rpc_verbose_parity.py --zakurad <zakurad built with --features ycash> \\
+    python crates/kogany-rpc/qa/rpc_verbose_parity.py --koganyd <koganyd, the --features ycash build> \\
         [--ycash6-bin $WS/wt/.bin/ycash6-65cb4ae0f] [--workdir DIR] [--keep] [--json FILE]
 
 It starts a ycashd and a zakurad on one Ycash regtest chain as `rpc_ycash_parity.py` does, mines
@@ -185,7 +185,8 @@ def _with_script_sigs(tx, script_sigs):
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
-    ap.add_argument('--zakurad', default=os.getenv('KOGANY_BIN'), help='zakurad built with --features ycash')
+    ap.add_argument('--koganyd', '--zakurad', dest='zakurad', default=os.getenv('KOGANY_BIN'),
+                    help='koganyd (the --features ycash build; --zakurad is its old name)')
     ap.add_argument('--ycash6-bin', default=base.DEFAULT_YCASH6_BIN, help='directory holding ycashd')
     ap.add_argument('--workdir', help='keep the datadirs here (default: a temporary directory)')
     ap.add_argument('--keep', action='store_true', help='keep the temporary directory')
@@ -193,7 +194,7 @@ def main(argv=None):
     ap.add_argument('--json', help='write the difference table here')
     args = ap.parse_args(argv)
     if not args.zakurad:
-        ap.error('--zakurad (or KOGANY_BIN) is required')
+        ap.error('--koganyd (or KOGANY_BIN) is required')
     try:
         report = run(args)
     except base.RpcError as e:

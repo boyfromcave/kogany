@@ -12,17 +12,40 @@ use super::ZakuradCmd;
 ///
 /// Handles obtaining toplevel help as well as verbosity settings.
 #[derive(Debug, clap::Parser)]
-#[clap(
-    name = "zakurad",
-    version = crate::application::clap_build_version(),
-    author = "Valar Group",
-    help_template = "\
+#[cfg_attr(not(feature = "ycash"), clap(name = "zakurad", author = "Valar Group"))]
+// kogany: the Ycash node's name and description in `--help` and `--version`.
+#[cfg_attr(
+    feature = "ycash",
+    clap(
+        name = "koganyd",
+        author = "The Ycash developers (kogany: a fork of Zakura by Valar Group)",
+        about = "koganyd, the kogany Ycash full node: Ycash mainnet, the fast and slow testnets \
+                 and regtest, with the vault network upgrade and the Ycash Yellowback (YED) rule \
+                 module. Default config: kogany.toml in the preference directory; default \
+                 state, peer cache and RPC cookie: the kogany directory in the cache directory.",
+        long_about = None
+    )
+)]
+#[cfg_attr(
+    not(feature = "ycash"),
+    clap(help_template = "\
 {name} {version}\n
 {author}\n
 {usage-heading} {usage}\n
 {all-args}\
-"
+")
 )]
+#[cfg_attr(
+    feature = "ycash",
+    clap(help_template = "\
+{name} {version}\n
+{author}\n
+{about}\n
+{usage-heading} {usage}\n
+{all-args}\
+")
+)]
+#[clap(version = crate::application::clap_build_version())]
 pub struct EntryPoint {
     /// Subcommand to execute.
     ///

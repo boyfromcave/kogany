@@ -109,8 +109,13 @@ impl Scratch {
         S: AsRef<OsStr>,
     {
         // Archived test runs set the binary's location at runtime.
+        #[cfg(not(feature = "ycash"))]
         let zakurad = env::var_os("CARGO_BIN_EXE_zakurad")
             .unwrap_or_else(|| env!("CARGO_BIN_EXE_zakurad").into());
+        // kogany: a `ycash` build's node is `koganyd`.
+        #[cfg(feature = "ycash")]
+        let zakurad = env::var_os("CARGO_BIN_EXE_koganyd")
+            .unwrap_or_else(|| env!("CARGO_BIN_EXE_koganyd").into());
         let mut command = Command::new(zakurad);
         command
             .args(args)
