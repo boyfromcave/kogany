@@ -107,7 +107,16 @@ fn emit_git_rerun_triggers() -> Result<(), String> {
     emit_rerun_if_exists(&git_dir.join("HEAD"));
 
     if let Ok(reference) = git(&["symbolic-ref", "HEAD"]) {
-        emit_rerun_if_exists(&git_dir.join(reference));
+        emit_rerun_if_exists(&git_dir.join(&reference));
+
+        // kogany: in a linked worktree the branch ref (and `packed-refs`) live in the common
+        // git dir, not in `--git-dir`, so a new commit would not rerun this script and the
+        // version would name the old commit. `--git-path` resolves both layouts.
+        for path in [reference.as_str(), "packed-refs"] {
+            if let Ok(resolved) = git(&["rev-parse", "--git-path", path]) {
+                emit_rerun_if_exists(Path::new(&resolved));
+            }
+        }
     }
 
     Ok(())
