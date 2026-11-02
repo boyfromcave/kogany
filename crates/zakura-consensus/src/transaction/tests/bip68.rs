@@ -116,6 +116,14 @@ async fn mempool_verify(
             .await
             .expect("the verifier asks the state")
             .respond(zakura_state::Response::ValidBestChainTipNullifiersAndAnchors);
+        // kogany (W6-b): from Vault the verifier asks the YED module last.
+        if vault_active {
+            state
+                .expect_request_that(|req| matches!(req, zakura_state::Request::YedMempoolCheck(_)))
+                .await
+                .expect("the verifier asks the state")
+                .respond(zakura_state::Response::YedMempoolCheck(None));
+        }
     });
 
     verifier

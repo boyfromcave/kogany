@@ -70,6 +70,78 @@ pub struct Config {
     /// 500-zatoshi marginal fee. (kogany W1-Y9)
     #[cfg(feature = "ycash")]
     pub tx_unpaid_action_limit: Option<u32>,
+
+    /// Ycash: ycashd's network-fee policy and Yellowback wallet options (kogany W6-b), each in
+    /// the option's integer unit (zatoshis, micro-USD, blocks): `-pqfeeusdperkb=0.05` is
+    /// `pq_fee_usd_per_kb_micro = 50000`, `-maxtxfee=0.02` is `max_tx_fee = 2000000`.
+    ///
+    /// **Not relay rules.** ycashd reads them in its wallet, its YED and vault builders and
+    /// `yed_getinfo` (`params.fees.network`, `params.feeZat`, `params.refLag`); its mempool keeps
+    /// the minimum relay fee and the per-Sapling-output floor whatever they say, and so does
+    /// kogany's. Unset keys take ycashd's defaults; [`Config::yed_node_policy`] checks them.
+    ///
+    /// `-pqfeerate`, zatoshis per 1,000 bytes (default 100, the relay floor): the post-quantum
+    /// rate without an attested price, and a floor under the dollar rate with one.
+    #[cfg(feature = "ycash")]
+    pub pq_fee_rate: Option<i64>,
+    /// Ycash: `-pqfeeusdperkb`, micro-USD per KB (default 20,000 = $0.02; 0 = off). (W6-b)
+    #[cfg(feature = "ycash")]
+    pub pq_fee_usd_per_kb_micro: Option<i64>,
+    /// Ycash: `-yellowbackfeeusdperkb`, micro-USD per KB (default 50,000 = $0.05; 0 = off). (W6-b)
+    #[cfg(feature = "ycash")]
+    pub yellowback_fee_usd_per_kb_micro: Option<i64>,
+    /// Ycash: `-yellowbackmaxtxfeeusd`, micro-USD (default 2,000,000 = $2). (W6-b)
+    #[cfg(feature = "ycash")]
+    pub yellowback_max_tx_fee_usd_micro: Option<i64>,
+    /// Ycash: `-yellowbackmaxtxfee`, zatoshis (default 10 YEC; at least 100,000). (W6-b)
+    #[cfg(feature = "ycash")]
+    pub yellowback_max_tx_fee: Option<i64>,
+    /// Ycash: `-maxtxfee`, zatoshis (default 0.1 YEC). (W6-b)
+    #[cfg(feature = "ycash")]
+    pub max_tx_fee: Option<i64>,
+    /// Ycash: `-yellowbackfee`, zatoshis (default and minimum 1,000): the flat Yellowback fee. (W6-b)
+    #[cfg(feature = "ycash")]
+    pub yellowback_fee: Option<i64>,
+    /// Ycash: `-yellowbackmintlag`, the blocks below the index tip a mint cites (default 2, at
+    /// most 36). (W6-b)
+    #[cfg(feature = "ycash")]
+    pub yellowback_mint_lag: Option<i32>,
+}
+
+#[cfg(feature = "ycash")]
+impl Config {
+    /// The node policy the W6-b keys configure, checked as ycashd's `init.cpp` checks the options.
+    pub fn yed_node_policy(&self) -> Result<kogany_rpc::yed::fees::NodeYedPolicy, String> {
+        let mut p = kogany_rpc::yed::fees::NodeYedPolicy::default();
+        let fee = &mut p.fee;
+        if let Some(v) = self.pq_fee_rate {
+            fee.pq_fee_rate = v;
+        }
+        if let Some(v) = self.pq_fee_usd_per_kb_micro {
+            fee.attested.plain_usd_per_kb_micro = v;
+        }
+        if let Some(v) = self.yellowback_fee_usd_per_kb_micro {
+            fee.attested.yed_usd_per_kb_micro = v;
+        }
+        if let Some(v) = self.yellowback_max_tx_fee_usd_micro {
+            fee.attested.yed_max_tx_fee_usd_micro = v;
+        }
+        if let Some(v) = self.yellowback_max_tx_fee {
+            fee.attested.yed_max_tx_fee_zat = v;
+        }
+        if let Some(v) = self.max_tx_fee {
+            fee.max_tx_fee = v;
+        }
+        if let Some(v) = self.yellowback_fee {
+            fee.yellowback_fee = v;
+        }
+        p.fee = p.fee.with_min_cap();
+        if let Some(v) = self.yellowback_mint_lag {
+            p.ref_lag = v;
+        }
+        p.validate().map_err(|e| format!("[mempool]: {e}"))?;
+        Ok(p)
+    }
 }
 
 impl Default for Config {
@@ -96,6 +168,22 @@ impl Default for Config {
             accept_non_standard: None,
             #[cfg(feature = "ycash")]
             tx_unpaid_action_limit: None,
+            #[cfg(feature = "ycash")]
+            pq_fee_rate: None,
+            #[cfg(feature = "ycash")]
+            pq_fee_usd_per_kb_micro: None,
+            #[cfg(feature = "ycash")]
+            yellowback_fee_usd_per_kb_micro: None,
+            #[cfg(feature = "ycash")]
+            yellowback_max_tx_fee_usd_micro: None,
+            #[cfg(feature = "ycash")]
+            yellowback_max_tx_fee: None,
+            #[cfg(feature = "ycash")]
+            max_tx_fee: None,
+            #[cfg(feature = "ycash")]
+            yellowback_fee: None,
+            #[cfg(feature = "ycash")]
+            yellowback_mint_lag: None,
         }
     }
 }

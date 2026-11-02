@@ -2260,6 +2260,7 @@ impl Service<Request> for StateService {
             | Request::BlockInfo(_)
             | Request::VaultSnapshot { .. }
             | Request::BestChainVaultSnapshot
+            | Request::YedMempoolCheck(_)
             | Request::AnyChainBlock(_)
             | Request::BlockHeader(_)
             | Request::FindBlockHashes { .. }
@@ -3024,6 +3025,20 @@ impl Service<ReadRequest> for ReadStateService {
                     None => vault::finalized_vault_snapshot(&state.db),
                 },
             ))),
+
+            // kogany (W6-b): the YED module's admission check and the network-fee price, at
+            // the best chain tip.
+            ReadRequest::YedMempoolCheck(transaction) => {
+                let snapshot = yed::tip_yed_snapshot(state.latest_best_chain().as_ref(), &state.db);
+                Ok(ReadResponse::YedMempoolCheck(yed::yed_mempool_check(
+                    &snapshot,
+                    &transaction,
+                )))
+            }
+            ReadRequest::YedFeePrice => Ok(ReadResponse::YedFeePrice(
+                yed::tip_yed_snapshot(state.latest_best_chain().as_ref(), &state.db)
+                    .attested_fee_price(),
+            )),
 
             // Used by the StateService.
             ReadRequest::Depth(hash) => Ok(ReadResponse::Depth(read::depth(

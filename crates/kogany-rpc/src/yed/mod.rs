@@ -7,6 +7,7 @@
 //! - [`wallet`]: the 25 wallet-context `yed_*` methods, each answered `-32601` (kogany has no
 //!   wallet, plan K-3; yewd serves them, K-20).
 //! - [`state`]: the read boundary plan W5-e/W5-f implement; [`mock`]: the prototype's states.
+//! - [`fees`]: the node's network-fee policy behind `params.fees.network` (W6-b).
 //! - [`extension`]: both method sets as one server extension.
 //!
 //! Without Yellowback live (the default until W5-f registers the module) every `yed_*` method
@@ -22,6 +23,7 @@ use zakura_rpc::server::kogany_extension::RpcExtension;
 mod format;
 mod params;
 
+pub mod fees;
 pub mod mock;
 pub mod rpc;
 pub mod state;

@@ -261,6 +261,15 @@ pub enum TransactionError {
     #[error("mempool transaction has non-standard transparent inputs")]
     NonStandardInputs,
 
+    /// kogany (W6-b): the Yellowback (YED) module refuses the mempool transaction at the best
+    /// chain tip (ycash6 `AcceptToMemoryPool`: `bad-yellowback-<reason>`, DoS 0, because the
+    /// module's state moves with the tip, which the relaying peer need not share).
+    #[error(
+        "mempool transaction is refused by the Yellowback module at the tip: bad-yellowback-{0}"
+    )]
+    #[cfg_attr(any(test, feature = "proptest-impl"), proptest(skip))]
+    YedMempoolRejected(String),
+
     #[error("transaction uses an incorrect consensus branch id")]
     WrongConsensusBranchId,
 
@@ -494,6 +503,7 @@ impl TransactionError {
             | Self::NonStandardScriptSigSize { .. }
             | Self::NonStandardScriptSigNotPushOnly { .. }
             | Self::NonStandardInputs
+            | Self::YedMempoolRejected(_)
             | Self::WrongConsensusBranchIdNu6_3GracePeriod => {
                 BodyVerificationClass::Retryable(TransientBodyFailureKind::VerifierUnavailable)
             }

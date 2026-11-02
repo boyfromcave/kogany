@@ -111,6 +111,10 @@ pub enum Response {
     /// [`Request::BestChainVaultSnapshot`] with the Vault set state after the block.
     VaultSnapshot(Option<crate::service::vault::VaultSnapshot>),
 
+    /// kogany (W6-b): response to [`Request::YedMempoolCheck`]: `None` = admitted, else the YED
+    /// module's reason.
+    YedMempoolCheck(Option<String>),
+
     /// The response to a `BlockHeader` request.
     BlockHeader {
         /// The header of the requested block
@@ -491,6 +495,12 @@ pub enum ReadResponse {
     /// [`ReadRequest::BestChainVaultSnapshot`].
     VaultSnapshot(Option<crate::service::vault::VaultSnapshot>),
 
+    /// kogany (W6-b): response to [`ReadRequest::YedMempoolCheck`].
+    YedMempoolCheck(Option<String>),
+
+    /// kogany (W6-b): response to [`ReadRequest::YedFeePrice`], micro-USD per YEC.
+    YedFeePrice(Option<i64>),
+
     /// Response to [`ReadRequest::Depth`] with the depth of the specified block.
     Depth(Option<u32>),
 
@@ -774,8 +784,10 @@ impl TryFrom<ReadResponse> for Response {
 
             ReadResponse::BlockInfo(block_info) => Ok(Response::BlockInfo(block_info)),
             ReadResponse::VaultSnapshot(snapshot) => Ok(Response::VaultSnapshot(snapshot)),
+            ReadResponse::YedMempoolCheck(reason) => Ok(Response::YedMempoolCheck(reason)),
 
             ReadResponse::Depth(_)
+            | ReadResponse::YedFeePrice(_)
             | ReadResponse::Transaction(_)
             | ReadResponse::UsageInfo(_)
             | ReadResponse::PruningInfo { .. }

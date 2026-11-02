@@ -408,6 +408,10 @@ fn peer_action(error: &TransactionError) -> PeerAction {
         | NonStandardScriptSigNotPushOnly { .. }
         | NonStandardInputs => Ignore,
 
+        // kogany (W6-b): the Yellowback module's verdict at this node's tip, which the relaying
+        // peer need not share (ycashd scores it 0).
+        YedMempoolRejected(_) => Ignore,
+
         // Only block verification returns these. The mempool rejects coinbase
         // transactions before their coinbase checks.
         CoinbasePosition

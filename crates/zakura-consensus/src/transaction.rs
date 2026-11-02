@@ -721,6 +721,12 @@ where
 
             tracing::trace!(?tx_id, "finished async checks");
 
+            // kogany (W6-b): the Yellowback module's admission check, after the scripts, as
+            // ycashd's `AcceptToMemoryPool` runs it where Vault is active at the next block.
+            if req.is_mempool() && network.is_vault_active(req.height()) {
+                Self::yed_mempool_check(tx.clone(), state.clone()).await?;
+            }
+
             // Mempool fees were calculated before the expensive async checks.
             // Calculate the fee here only for non-coinbase block transactions.
             if miner_fee.is_none() && !tx.is_coinbase() {
@@ -1377,6 +1383,27 @@ where
             }
         };
         Ok(snapshot.map(|s| s.state as VaultStateSnapshot))
+    }
+
+    /// kogany (W6-b): the Yellowback (YED) module's check of a mempool transaction at the best
+    /// chain tip (ycash6 `YellowbackIndex::MempoolCheckReason`): a refusal is
+    /// [`TransactionError::YedMempoolRejected`], scored 0 (the module's state moves with the tip).
+    /// A no-op where Yellowback is not live on this node.
+    async fn yed_mempool_check(
+        tx: Arc<Transaction>,
+        state: Timeout<ZS>,
+    ) -> Result<(), TransactionError> {
+        let zs::Response::YedMempoolCheck(reason) = state
+            .oneshot(zs::Request::YedMempoolCheck(tx))
+            .await
+            .map_err(|e| TransactionError::Other(e.to_string()))?
+        else {
+            unreachable!("Request::YedMempoolCheck always responds with YedMempoolCheck")
+        };
+        match reason {
+            None => Ok(()),
+            Some(reason) => Err(TransactionError::YedMempoolRejected(reason)),
+        }
     }
 
     /// Verifies a transaction's Sprout shielded join split data.

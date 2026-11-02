@@ -1427,6 +1427,14 @@ pub enum Request {
     /// is `None` before the state has a block.
     BestChainVaultSnapshot,
 
+    /// kogany (W6-b): the Yellowback (YED) module's mempool check of the transaction at the best
+    /// chain tip, for the next block (ycash6 `YellowbackIndex::MempoolCheckReason`, called by
+    /// `AcceptToMemoryPool` after the scripts).
+    ///
+    /// Returns [`Response::YedMempoolCheck`]: `None` = admitted (also where Yellowback is not
+    /// live), else the module's reason.
+    YedMempoolCheck(Arc<zakura_chain::transaction::Transaction>),
+
     /// Looks up a block by hash in any current chain or by height in the current best chain.
     ///
     /// Returns
@@ -1613,6 +1621,7 @@ impl Request {
             Request::VaultSnapshot { .. } => "vault_snapshot",
             Request::AwaitVaultSnapshot { .. } => "await_vault_snapshot",
             Request::BestChainVaultSnapshot => "best_chain_vault_snapshot",
+            Request::YedMempoolCheck(_) => "yed_mempool_check",
             Request::AnyChainBlock(_) => "any_chain_block",
             Request::BlockHeader(_) => "block_header",
             Request::FindBlockHashes { .. } => "find_block_hashes",
@@ -1693,6 +1702,18 @@ pub enum ReadRequest {
     ///
     /// Returns [`ReadResponse::VaultSnapshot`].
     BestChainVaultSnapshot,
+
+    /// kogany (W6-b): see [`Request::YedMempoolCheck`].
+    ///
+    /// Returns [`ReadResponse::YedMempoolCheck`].
+    YedMempoolCheck(Arc<zakura_chain::transaction::Transaction>),
+
+    /// kogany (W6-b): the network-fee price the YED index publishes at the best chain tip
+    /// (ycash6 `AttestedFeePrice()`: the highest window median while the price is trusted), the
+    /// price `yed_getinfo.params.fees.network` converts at.
+    ///
+    /// Returns [`ReadResponse::YedFeePrice`]: `None` is the `-pqfeerate` fallback.
+    YedFeePrice,
 
     /// Computes the depth in the current best chain of the block identified by the given hash.
     ///
@@ -2208,6 +2229,8 @@ impl ReadRequest {
             ReadRequest::BlockInfo(_) => "block_info",
             ReadRequest::VaultSnapshot { .. } => "vault_snapshot",
             ReadRequest::BestChainVaultSnapshot => "best_chain_vault_snapshot",
+            ReadRequest::YedMempoolCheck(_) => "yed_mempool_check",
+            ReadRequest::YedFeePrice => "yed_fee_price",
             ReadRequest::Depth(_) => "depth",
             ReadRequest::Block(_) => "block",
             ReadRequest::AnyChainBlock(_) => "any_chain_block",
@@ -2296,6 +2319,7 @@ impl TryFrom<Request> for ReadRequest {
                 Ok(ReadRequest::VaultSnapshot { parent_hash })
             }
             Request::BestChainVaultSnapshot => Ok(ReadRequest::BestChainVaultSnapshot),
+            Request::YedMempoolCheck(tx) => Ok(ReadRequest::YedMempoolCheck(tx)),
             Request::AnyChainBlock(hash_or_height) => {
                 Ok(ReadRequest::AnyChainBlock(hash_or_height))
             }
