@@ -1061,6 +1061,10 @@ impl SubtreeArtifact {
 pub(crate) fn embedded_historical_frontier_artifact(
     network: &Network,
 ) -> Option<Arc<FrontierArtifact>> {
+    // kogany: no Zcash-mainnet artefact on a Ycash network (K-12).
+    if super::vct::is_ycash_network(network) {
+        return None;
+    }
     match network {
         Network::Mainnet => {
             static MAINNET_ARTIFACT: OnceLock<Arc<FrontierArtifact>> = OnceLock::new();
@@ -1090,6 +1094,10 @@ pub(crate) fn embedded_historical_frontier_artifact(
 /// Mainnet verifies its embedded artifact once per process before any read service can use it.
 /// Other networks do not use the Mainnet artifact.
 pub(crate) fn embedded_historical_subtrees(network: &Network) -> Option<SubtreeArtifact> {
+    // kogany: no Zcash-mainnet artefact on a Ycash network (K-12).
+    if super::vct::is_ycash_network(network) {
+        return None;
+    }
     match network {
         Network::Mainnet => {
             static VERIFIED_MAINNET_SUBTREES: OnceLock<SubtreeArtifact> = OnceLock::new();

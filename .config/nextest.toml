@@ -140,6 +140,15 @@ slow-timeout = { period = "1500m", terminate-after = 1 }
 success-output = "immediate"
 default-filter = 'package(zakura) and test(=sync_full_testnet)'
 
+# kogany W1-Y8: the Ycash network-sync gate. Run with `--features ycash`, where `Mainnet` is Ycash
+# mainnet and the default testnet the re-forked Ycash testnet, and with
+# SYNC_FULL_{MAINNET,TESTNET}_TIMEOUT_MINUTES set. The cross-line comparison against a ycash6 node
+# (hash, value pools, ZIP-221, z_gettreestate) is `qa/kogany_sync_gate.py`, run beside it.
+[profile.ycash-sync]
+slow-timeout = { period = "30000m", terminate-after = 1 }
+success-output = "immediate"
+default-filter = 'package(zakura) and (test(=sync_full_mainnet) or test(=sync_full_testnet))'
+
 [profile.sync-to-mandatory-checkpoint-mainnet]
 slow-timeout = { period = "1500m", terminate-after = 1 }
 success-output = "immediate"

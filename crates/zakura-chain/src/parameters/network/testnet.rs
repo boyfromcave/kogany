@@ -1464,7 +1464,13 @@ fn check_checkpoint_coverage(network: &Network) -> Result<(), ParametersBuilderE
     if checkpoints.hash(Height(0)) != Some(network.genesis_hash()) {
         return Err(ParametersBuilderError::CheckpointGenesisMismatch);
     }
-    if checkpoints.max_height() < network.mandatory_checkpoint_height() {
+    // kogany: a `# PARTIAL` hard-coded Ycash list may stop short; the verifier rejects the
+    // uncovered pre-Canopy blocks instead (W1-Y4, `checkpoint/list.rs`).
+    #[cfg(feature = "ycash")]
+    let partial = network.ycash_checkpoint_list_is_partial();
+    #[cfg(not(feature = "ycash"))]
+    let partial = false;
+    if checkpoints.max_height() < network.mandatory_checkpoint_height() && !partial {
         return Err(ParametersBuilderError::InsufficientCheckpointCoverage);
     }
     Ok(())
