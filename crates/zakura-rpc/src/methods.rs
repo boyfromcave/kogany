@@ -2260,6 +2260,8 @@ where
             chain: network.bip70_network_name(),
             #[cfg(feature = "ycash")]
             chain: types::ycash::chain_name(network),
+            #[cfg(feature = "ycash")]
+            testnet_profile: types::ycash::testnet_profile(network),
             blocks: tip_height,
             best_block_hash: tip_hash,
             estimated_height,
@@ -2273,6 +2275,14 @@ where
             verification_progress,
             // TODO: store work in the finalized state for each height (#7109)
             chain_work: 0,
+            #[cfg(feature = "ycash")]
+            chain_work_hex: types::ycash::chain_work(
+                self.read_state.clone(),
+                network,
+                tip_height,
+                tip_hash,
+            )
+            .await,
             pruned: is_pruned,
             prune_height,
             size_on_disk,
@@ -4752,6 +4762,15 @@ pub struct GetBlockchainInfoResponse {
     #[getset(get = "pub")]
     chain: String,
 
+    /// Ycash (W7-c): the testnet profile, `fast` or `slow`, on the Ycash testnets only.
+    #[cfg(feature = "ycash")]
+    #[serde(
+        default,
+        rename = "testnetprofile",
+        skip_serializing_if = "Option::is_none"
+    )]
+    testnet_profile: Option<String>,
+
     /// The current number of blocks processed in the server, numeric
     #[getset(get_copy = "pub")]
     blocks: Height,
@@ -4771,9 +4790,21 @@ pub struct GetBlockchainInfoResponse {
     verification_progress: f64,
 
     /// The total amount of work in the best chain, hex-encoded.
-    #[serde(rename = "chainwork")]
+    #[cfg_attr(not(feature = "ycash"), serde(rename = "chainwork"))]
+    // Ycash (W7-c): `chainwork` is ycashd's hex string, `chain_work_hex`.
+    #[cfg_attr(feature = "ycash", serde(skip))]
     #[getset(get_copy = "pub")]
     chain_work: u64,
+
+    /// Ycash (W7-c): the total work of the best chain through the tip, as ycashd's 64-digit hex
+    /// string; omitted while kogany is still summing it (`types::ycash::chain_work`).
+    #[cfg(feature = "ycash")]
+    #[serde(
+        default,
+        rename = "chainwork",
+        skip_serializing_if = "Option::is_none"
+    )]
+    chain_work_hex: Option<String>,
 
     /// Whether this node's blocks are subject to pruning, that is, whether it
     /// runs in pruned storage mode or has already pruned historical data.
@@ -5024,6 +5055,10 @@ impl Default for GetBlockchainInfoResponse {
             difficulty: 0.0,
             verification_progress: 0.0,
             chain_work: 0,
+            #[cfg(feature = "ycash")]
+            chain_work_hex: None,
+            #[cfg(feature = "ycash")]
+            testnet_profile: None,
             pruned: false,
             prune_height: None,
             size_on_disk: 0,
@@ -5072,6 +5107,10 @@ impl GetBlockchainInfoResponse {
             difficulty,
             verification_progress,
             chain_work,
+            #[cfg(feature = "ycash")]
+            chain_work_hex: None,
+            #[cfg(feature = "ycash")]
+            testnet_profile: None,
             pruned,
             prune_height,
             size_on_disk,

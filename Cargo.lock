@@ -3343,6 +3343,8 @@ dependencies = [
  "hyper-util",
  "indexmap",
  "insta",
+ "kogany-vault",
+ "kogany-yellowback",
  "libc",
  "metrics",
  "proptest",
