@@ -149,3 +149,49 @@ the test's comment), and `vault::StateHash` (`src/vault/node.cpp:505`).
 | `yellowback_pq_vectors.json` `chain.stateHash` | not consumed here: YED, as above |
 | vault `statehash` (`vault_getinfo`) | `crates/kogany-vault/tests/ycash6_statehash.rs` (`statehash_equals_ycash6_vault_rpc`, `statehash_equals_ycash6_vault_slashing`): every block of two regtest chains recorded once from ycashd 6.22.0-rc1 at `65cb4ae0f` running `qa/rpc-tests/vault_rpc.py` and `vault_slashing.py` unmodified (`crates/kogany-vault/tests/data/ycash6_statehash_*.json`, recorder `tests/data/record_statehash.py`; outside the nine-file PIN); the statehash after each of 52 / 53 heights from activation equals ycashd's, then every delta reverts to the empty state |
 | `statehash` preimage | `vault_state.rs` `state_hash_preimage` (CompactSize ‖ key ‖ CompactSize ‖ value, key byte order, SHA256d; the empty state) |
+
+## yellowback_pq_vectors.json
+
+Consumer: `crates/kogany-yellowback` (W5-b codecs: `scripts` and the codec layer of `chain`; the
+`chain` state replay is W5-d2). C++: ycash6 `src/test/pq_channel_tests.cpp`
+(`pqchannel_cross_implementation_vectors`) for `scripts`; `src/test/yellowback_state_tests.cpp` for
+`chain`. Loaded through `tests/common/mod.rs` `load_pinned` (SHA-256 against `PIN`).
+
+| key | Rust test (`crates/kogany-yellowback/tests/…`) |
+|---|---|
+| `description` | not consumed (prose) |
+| `scripts` (count 364) | `script_tests.rs` `pqchannel_cross_implementation_vectors` (count asserted, > 50 channels) |
+| `scripts[].hex`, `.type` | `pqchannel_cross_implementation_vectors` (`match_pq_channel` → `pqchannel`, the TX_PQPKH `holder_key` → `pqpubkeyhash`, else `other`) |
+| `scripts[].holder` | `pqchannel_cross_implementation_vectors` (`holder_key`'s PQ key as `scheme ‖ hash`, `""` for none or a P2PKH) |
+| `scripts[].name` | `pqchannel_cross_implementation_vectors` (failure message) |
+| `chain.params.*` | `golden_codecs.rs` `pq_chain_codecs` (the regtest column; `attestorSetId` in `uint256` display order) |
+| `chain.blocks[].height`, `.txs` | `pq_chain_codecs` (every coinbase through `find_tag`, every tx through `find_payload` / `find_carrier_input`, re-encoded byte for byte; each MINT's V equals `yed_vault_script`; the census of kinds asserted) |
+| `chain.blocks[].hash`, `.subsidyZat`, `chain.invalid[]`, `chain.stateHash`, `chain.tip`, `chain.totals` | **not yet**: the state machine and the state hash (W5-d2, W5-e/f) |
+
+## yellowback_golden.json
+
+Consumer: `crates/kogany-yellowback` (W5-b: the codec layer; the replay to `stateHash` / `totals`
+is W5-f). C++: ycash6 `src/test/yellowback_state_tests.cpp`.
+
+| key | Rust test (`crates/kogany-yellowback/tests/golden_codecs.rs`) |
+|---|---|
+| `description` | not consumed (prose) |
+| `params.*` | `golden_chain_codecs` (the regtest column, as `pq_chain_codecs`) |
+| `blocks[].height`, `.txs` | `golden_chain_codecs` (as `pq_chain_codecs`; the census asserted: 460 tags of 461 patterns — height 13's tag sets a reserved flag bit —, 11 MINT, 4 TRANSFER, 17 REDEEM, 1 REGISTER, 3 NOTICE, 2 EQUIVOCATION, 7 CANCEL_COSIGN, 25 carriers whose bundle hashes match) |
+| `blocks[].hash`, `.subsidyZat`, `stateHash`, `tip`, `totals` | **not yet**: the golden replay (W5-f) |
+
+## pq_wallet_vectors.json
+
+Consumer: `crates/kogany-yellowback` (W5-b: the owners' addresses). C++: none on the node side
+(the HKDF derivation is the wallets', quantum spec A-12).
+
+| key | Rust test (`crates/kogany-yellowback/tests/address_tests.rs`) |
+|---|---|
+| `format` | `pq_wallet_vectors_owner_addresses` (equals `ycash-pq-wallet-vectors-1`) |
+| `hdSeed.slh.pk`, `.keyhash`, `mnemonic.slh.pk`, `.keyhash` | `pq_wallet_vectors_owner_addresses` (`kogany_pq::key_hash(1, pk) == keyhash`; the owner's 53-character address round-trips on main, test and regtest); `slh.index` asserted 0 |
+| `_comment`, `info`, `hdSeed.ikm`, `hdSeed.derive[]`, `mnemonic.entropy`, `.phrase`, `.ikm`, `.derive[]` | **not consumed here**: HKDF-SHA256 key derivation and BIP39 are wallet code (the `yewd` sidecar, S-track), not the node |
+
+Also from ycash6, not a schema key: the payload, script, address and tag cases of
+`src/test/yellowback_{payload,script,address,tag}_tests.cpp` (`tests/{payload,script,address,tag}_tests.rs`,
+the C++ test names kept), and PQ-address known answers computed with ycash6's
+`qa/rpc-tests/test_framework/yellowback_model.py` (`pq_addresses_53_characters_known_answers`).
