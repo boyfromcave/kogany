@@ -6,12 +6,14 @@
 
 #[cfg(test)]
 mod encoding_tests;
+mod script_error_text;
 #[cfg(test)]
 mod tests;
 mod ycash;
 #[cfg(all(test, feature = "ycash"))]
 mod ycash_tests;
 
+pub use script_error_text::script_error_string;
 pub use ycash::{
     is_pq_falcon_active, pq_falcon_height, script_flags, standard_script_flags, ScriptContext,
     VaultStateSnapshot, YcashSignatureChecker, STANDARD_NOT_MANDATORY_FLAGS,

@@ -148,9 +148,10 @@ fn interpreter_error(error: &zakura_script::Error) -> Option<interpreter::Error>
     }
 }
 
-/// The text of a template input's script failure (ycashd `ScriptErrorString`).
+/// The text of a template input's script failure (ycashd `ScriptErrorString`, S5:
+/// `Script failed an OP_VERIFY operation`, not the interpreter's own `Display`).
 fn script_error_text(error: &zakura_script::Error) -> String {
-    interpreter_error(error).map_or_else(|| error.to_string(), |e| e.to_string())
+    zakura_script::script_error_string(error).to_owned()
 }
 
 /// The upgrade before the one current at `height` (ycashd `PrevEpochBranchId`), when it has a
