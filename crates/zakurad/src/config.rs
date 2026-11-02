@@ -91,6 +91,12 @@ pub struct ZakuradConfig {
 
     /// zcashd-compat mode configuration.
     pub zcashd_compat: crate::components::zcashd_compat::Config,
+
+    /// kogany (W5-e): Ycash Yellowback (YED) configuration, ycashd's regtest-only
+    /// `-yellowback*` flags (`attestor_set`, `sigma_ref`, `supply_cap_bps`, `attest_arm_min`,
+    /// `bundle_carrier`, `mint_requires_armed`). Omitted from generated configs at its defaults.
+    #[serde(skip_serializing_if = "zakura_state::yed::YellowbackConfig::is_default")]
+    pub yellowback: zakura_state::yed::YellowbackConfig,
 }
 
 impl ZakuradConfig {
@@ -104,6 +110,8 @@ impl ZakuradConfig {
         state_config.enable_zakura_header_seed_from_committed_blocks = self.network.v2_p2p();
         state_config.checkpoint_sync = self.consensus.checkpoint_sync;
         state_config.vct_fast_sync = self.consensus.vct_fast_sync_enabled();
+        // kogany (W5-e)
+        state_config.yellowback = self.yellowback.clone();
         state_config
     }
 

@@ -69,6 +69,8 @@ zakura-chain = { path = "../zakura-chain", version = "11.0.0-rc0", features = ["
 zakura-header-chain = { path = "../zakura-header-chain", version = "5.0.1-rc0" }
 # kogany (W4-c): the Vault upgrade's set state machine
 kogany-vault = { path = "../kogany-vault" }
+# kogany (W5-e): the Yellowback (YED) rule module's state machine
+kogany-yellowback = { path = "../kogany-yellowback" }
 
 
 # test feature proptest-impl
@@ -103,6 +105,8 @@ tokio = { workspace = true, features = ["fs", "io-std", "io-util", "macros", "ne
 
 zakura-chain = { path = "../zakura-chain", version = "11.0.0-rc0", features = ["proptest-impl"] }
 zakura-test = { path = "../zakura-test/", version = "4.0.0-rc0" }
+# kogany (W5-e): the YED state-test fixture's signatures (kogany-yellowback/tests/state_common)
+secp256k1 = { workspace = true }
 
 [lints]
 workspace = true
