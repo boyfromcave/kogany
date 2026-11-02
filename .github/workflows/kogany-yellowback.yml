@@ -89,3 +89,74 @@ jobs:
           features=()
           if [ "$YCASH" = true ]; then features=(--features ycash); fi
           cargo check --locked -p zakura "${features[@]}"
+
+  client-legs:
+    # Plan W7-d, report-only (plan §5): lightwalletd-dd and chain-viz (polling, K-17), unmodified at
+    # the pinned commits, against a regtest zakurad with the vault and yed_* fixtures on and off.
+    # The checks are crates/kogany-rpc/qa/kogany_client_legs.py; it exits 0 whatever they say, and
+    # the report is the step summary and the `kogany-client-legs` artifact.
+    name: client legs (lightwalletd-dd, chain-viz; report-only)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    continue-on-error: true
+    permissions:
+      contents: read
+    env:
+      LWD_REPO: https://github.com/boyfromcave/lightwalletd.git
+      LWD_REV: a1d141e37776dcfb0e4be023661d59508ab5b616        # lightwalletd-dd vaults/kogany-compat
+      CHAINVIZ_REPO: https://github.com/boyfromcave/chain-viz.git
+      CHAINVIZ_REV: 0165934bd65b87fa880c1263536718c525d33dd9   # chain-viz vaults/kogany-compat
+      # A Ycash regtest transparent address (prefix 0x1C95). Mining is refused until plan W8 builds
+      # Ycash coinbases; the script then records that and runs the legs at genesis.
+      MINER_ADDRESS: smD3WkZZgTMcQJSER9RsPkrDoKguaqPTbQt
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f #v2.0.0 # zizmor: ignore[cache-poisoning] -- test-only build of the node, nothing published or released
+        with:
+          toolchain: stable
+          cache-key: kogany-client-legs
+          cache-on-failure: true
+          cache-save-if: ${{ github.ref == 'refs/heads/vaults/kogany-compat' || github.ref == 'refs/heads/upgrade/vault' }}
+      - uses: ./.github/actions/setup-zakura-build
+      - name: Build zakurad (ycash feature)
+        run: cargo build --locked -p zakura --bin zakurad --features ycash
+      - name: Fetch the clients at their pins
+        run: |
+          for spec in "lightwalletd:$LWD_REPO:$LWD_REV" "chain-viz:$CHAINVIZ_REPO:$CHAINVIZ_REV"; do
+            dir="${spec%%:*}"; rest="${spec#*:}"; rev="${rest##*:}"; url="${rest%:*}"
+            git init -q "$RUNNER_TEMP/$dir"
+            git -C "$RUNNER_TEMP/$dir" fetch -q --depth 1 "$url" "$rev"
+            git -C "$RUNNER_TEMP/$dir" checkout -q FETCH_HEAD
+          done
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        with:
+          go-version-file: ${{ runner.temp }}/lightwalletd/go.mod
+          cache: false
+      - name: Build lightwalletd-dd and its probe tool
+        working-directory: ${{ runner.temp }}/lightwalletd
+        env:
+          CGO_ENABLED: '0'
+        run: |
+          go build -mod=vendor -o "$RUNNER_TEMP/bin/lightwalletd" .
+          go build -mod=vendor -o "$RUNNER_TEMP/bin/lwdinfo" ./testtools/lwdinfo
+      - name: Build chain-viz
+        working-directory: ${{ runner.temp }}/chain-viz
+        run: |
+          cargo build --locked --release
+          cp target/release/chain-viz "$RUNNER_TEMP/bin/chain-viz"
+      - name: Client legs (report-only)
+        run: |
+          python3 crates/kogany-rpc/qa/kogany_client_legs.py \
+            --zakurad target/debug/zakurad \
+            --lightwalletd "$RUNNER_TEMP/bin/lightwalletd" --lwdinfo "$RUNNER_TEMP/bin/lwdinfo" \
+            --chain-viz "$RUNNER_TEMP/bin/chain-viz" \
+            --miner-address "$MINER_ADDRESS" --out kogany-client-legs
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: ${{ !cancelled() }}
+        with:
+          name: kogany-client-legs
+          path: kogany-client-legs
+          retention-days: 30
+          if-no-files-found: ignore
