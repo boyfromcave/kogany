@@ -881,6 +881,7 @@ fn real_non_finalized_path_evaluates_forks_and_stops_on_failure() {
 /// a Vault height Yellowback is off; mainnet and testnet refuse regtest-only keys and are off
 /// (no attestor set); invalid values are refused; the TOML section parses.
 #[test]
+#[cfg(feature = "ycash")] // regtest_params with a Falcon height needs the ycash build (YcashUpgradeNeedsYcashBuild)
 fn config_maps_to_params_as_params_from_args() {
     let _init_guard = zakura_test::init();
     let set_hex = "0eeebe67c4bc64cf5deb624972629c92b09e3362e126a3702443b192dca80f4a";
