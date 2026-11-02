@@ -3,31 +3,34 @@
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or https://www.opensource.org/licenses/mit-license.php .
 
-"""The lightwalletd-dd and chain-viz client legs against a regtest kogany (plan W7-d; report-only).
+"""The lightwalletd-dd and chain-viz client legs against a regtest kogany (plan W7-d, W9-c; report-only).
 
     python crates/kogany-rpc/qa/kogany_client_legs.py \\
-        --zakurad target/debug/zakurad --lightwalletd BIN --lwdinfo BIN --chain-viz BIN \\
+        --zakurad target/debug/zakurad --ycashd YCASHD --ycash6 TREE \\
+        --lightwalletd BIN --lwdinfo BIN --chain-viz BIN \\
         [--miner-address ADDR] [--blocks 25] [--out DIR] [--port-base N] [--strict]
 
 It starts one regtest `zakurad` per scenario and runs each client against it, unmodified, through
 its public interface only:
 
-  mock      KOGANY_VAULT_RPC_MOCK=1 KOGANY_YED_RPC_MOCK=1: the vault and yed_* reads answer from
-            kogany-rpc's fixtures (plan W7-a/W7-b), Yellowback is "live".
-  not-live  KOGANY_VAULT_RPC_MOCK=1 only: every yed_* method answers -32601 "Yellowback is not
-            active", zakurad's default until plan W5-f registers the module.
+  live      the live regtest of `yed_live_rig.py` (W9-c's proposal): kogany and a ycash6 sidecar on
+            one chain with a real YED attestor set, an ARMED attestation layer and a mint; the
+            vault and yed_* reads answer from kogany's own index (plan W7-b). Needs --ycashd and
+            --ycash6.
+  not-live  KOGANY_VAULT_RPC_MOCK=1 only, no attestor set: every yed_* method answers -32601
+            "Yellowback is not active".
 
 lightwalletd-dd (`--yellowback`): its startup probe (`common/yellowback.go` ProbeYellowback) must
-start the YellowbackStreamer service on `mock` (rpcversion 8) and not on `not-live`; its own probe
+start the YellowbackStreamer service on `live` (rpcversion 8) and not on `not-live`; its own probe
 tool `testtools/lwdinfo -yellowback` must answer GetLightdInfo at the node's height and, on
-`mock`, every Yellowback method "ok" except the four whose harmless inputs the node refuses
+`live`, every Yellowback method "ok" except the four whose harmless inputs the node refuses
 (GetTxInfo, GetVault, GetNotice: an unknown txid; ValidateRawTransaction: not a transaction),
 which must carry the node's own error as FailedPrecondition; on `not-live` every method is
 Unimplemented, as against the baseline server.
 
 chain-viz (polling: kogany has no ZMQ and no -blocknotify, plan K-17): `/api/health` must be
 `ok` with the node up and its tip equal to the node's best block; `/api/snapshot` must show the
-node's Yellowback flag as the scenario says (true on `mock`, false on `not-live`) and its vault
+node's Yellowback flag as the scenario says (true on `live`, false on `not-live`) and its vault
 panel available, with no node error.
 
 Mining: with `--miner-address`, `generate --blocks` first, so the clients see a chain; when the
@@ -51,7 +54,7 @@ import urllib.error
 import urllib.request
 
 SCENARIOS = {
-    'mock': {'KOGANY_VAULT_RPC_MOCK': '1', 'KOGANY_YED_RPC_MOCK': '1'},
+    'live': {},
     'not-live': {'KOGANY_VAULT_RPC_MOCK': '1'},
 }
 # lwdinfo's harmless inputs that the node refuses (testtools/lwdinfo/main.go probeYellowback)
@@ -195,7 +198,7 @@ def lightwalletd_leg(args, scenario, work, ports, height, procs, report):
         '--rpcport', str(ports['rpc']), '--no-tls-very-insecure',
         '--grpc-bind-addr', '127.0.0.1:%d' % ports['lwd'], '--http-bind-addr', '127.0.0.1:%d' % ports['lwdhttp'],
         '--data-dir', datadir, '--log-file', log, '--yellowback'], os.path.join(work, 'lightwalletd.out'))
-    want = LWD_STARTED if scenario == 'mock' else LWD_NOT_STARTED
+    want = LWD_STARTED if scenario == 'live' else LWD_NOT_STARTED
 
     def probe_logged():
         with open(log, encoding='utf-8', errors='replace') as f:
@@ -203,7 +206,7 @@ def lightwalletd_leg(args, scenario, work, ports, height, procs, report):
         return (LWD_STARTED in text or 'Yellowback service not started' in text) and text
     text = wait_for(probe_logged, 30) or ''
     line = next((ln for ln in text.splitlines() if 'Yellowback service' in ln), 'no Yellowback line in the log')
-    report.check(scenario, 'lightwalletd-dd', 'startup probe: ' + ('service started, rpcversion 8' if scenario == 'mock' else 'service not started (-32601)'),
+    report.check(scenario, 'lightwalletd-dd', 'startup probe: ' + ('service started, rpcversion 8' if scenario == 'live' else 'service not started (-32601)'),
                  want in text, json.loads(line).get('msg', line) if line.startswith('{') else line)
 
     out = subprocess.run([args.lwdinfo, '-server', '127.0.0.1:%d' % ports['lwd'], '-timeout', '10s', '-yellowback'],
@@ -216,7 +219,7 @@ def lightwalletd_leg(args, scenario, work, ports, height, procs, report):
                  'blockHeight %s, node %s, chainName %s, branch %s' % (info.get('blockHeight'), height, info.get('chainName'), info.get('consensusBranchId')))
     yb = info.get('yellowback', {})
     methods = sorted(k for k in yb if '#' not in k)
-    if scenario == 'mock':
+    if scenario == 'live':
         bad = []
         for m in methods:
             v = yb[m]
@@ -260,8 +263,8 @@ def chain_viz_leg(args, scenario, work, ports, best, procs, report):
     tip = health.get('tip') or {}
     report.check(scenario, 'chain-viz', 'tip = node best block', tip.get('hash') == best['hash'] and tip.get('height') == best['height'],
                  'tip %s, node %s' % (tip, best))
-    report.check(scenario, 'chain-viz', 'Yellowback flag %s' % ('true' if scenario == 'mock' else 'false'),
-                 node.get('yellowback') is (scenario == 'mock'), 'nodes[0].yellowback = %r' % node.get('yellowback'))
+    report.check(scenario, 'chain-viz', 'Yellowback flag %s' % ('true' if scenario == 'live' else 'false'),
+                 node.get('yellowback') is (scenario == 'live'), 'nodes[0].yellowback = %r' % node.get('yellowback'))
     vault = snap.get('vault') or {}
     report.check(scenario, 'chain-viz', 'vault panel available', node.get('vault') is True and vault.get('available') is True,
                  'nodes[0].vault %r, vault.available %r, sets %s' % (node.get('vault'), vault.get('available'), (vault.get('info') or {}).get('sets')))
@@ -283,7 +286,42 @@ def free_ports(names):
             s.close()
 
 
+def run_live(args, report):
+    """The `live` scenario: the legs against kogany in `yed_live_rig.py`'s regtest."""
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import yed_live_rig
+    if not (args.ycashd and args.ycash6):
+        raise SetupError('the live scenario needs --ycashd and --ycash6')
+    work = os.path.join(args.out, 'live')
+    shutil.rmtree(work, ignore_errors=True)
+    os.makedirs(work)
+    rig = yed_live_rig.LiveRig(args.zakurad, args.ycashd, args.ycash6, os.path.join(work, 'rig'))
+    procs = Procs()
+    try:
+        try:
+            rig.up()
+            info = rig.arm()
+            rig.do_mint(info['params']['classes'][0]['minBlocks'])
+        except yed_live_rig.RigError as e:
+            raise SetupError('live rig: %s' % (e,)) from e
+        ports = dict(zip(('lwd', 'lwdhttp', 'cv'), yed_live_rig.free_ports(3)), rpc=rig.ports['rpc'])
+        url = rig.kogany.url
+        height = rpc(url, 'getblockcount')
+        best = {'hash': rpc(url, 'getbestblockhash'), 'height': height}
+        report.note('live', 'zakurad at height %d with an ARMED layer and mint %s (attestor set %s)' % (
+            height, rig.mint['txid'], rig.setid))
+        if args.lightwalletd:
+            lightwalletd_leg(args, 'live', work, ports, height, procs, report)
+        if args.chain_viz:
+            chain_viz_leg(args, 'live', work, ports, best, procs, report)
+    finally:
+        procs.stop()
+        rig.down()
+
+
 def run_scenario(args, scenario, port_base, report):
+    if scenario == 'live':
+        return run_live(args, report)
     names = ('rpc', 'p2p', 'v2', 'lwd', 'lwdhttp', 'cv')
     ports = {k: port_base + i for i, k in enumerate(names)} if port_base else free_ports(names)
     work = os.path.join(args.out, scenario)
@@ -330,6 +368,8 @@ def run_scenario(args, scenario, port_base, report):
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split('\n\n')[0])
     ap.add_argument('--zakurad', required=True)
+    ap.add_argument('--ycashd', help='ycash6 ycashd: the live scenario\'s sidecar')
+    ap.add_argument('--ycash6', help='a ycash6 tree: the live scenario\'s test framework')
     ap.add_argument('--lightwalletd', help='lightwalletd-dd binary (omit to skip the leg)')
     ap.add_argument('--lwdinfo', help="lightwalletd-dd's testtools/lwdinfo binary")
     ap.add_argument('--chain-viz', help='chain-viz binary (omit to skip the leg)')
@@ -346,7 +386,7 @@ def main(argv=None):
     os.makedirs(args.out, exist_ok=True)
     report = Report()
     status = 0
-    for i, scenario in enumerate(args.scenario or ['mock', 'not-live']):
+    for i, scenario in enumerate(args.scenario or ['live', 'not-live']):
         try:
             run_scenario(args, scenario, args.port_base and args.port_base + 10 * i, report)
         except SetupError as e:
