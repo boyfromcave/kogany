@@ -5,7 +5,7 @@
 # Kogany: the Ycash node in Rust (`koganyd`)
 
 **Kogany** is the Ycash developers' Ycash full node in Rust. The name is a play on the Japanese
-word *kogane* (黄金, "gold"): the node carries the Ycash Yellowback (YED) upgrade with **vaults**,
+word _kogane_ (黄金, "gold"): the node carries the Ycash Yellowback (YED) upgrade with **vaults**,
 so the Ycash contributors called it Kogany. The codebase began as [Zakura](README-zakura.md), a
 consensus-compatible Zcash full node in Rust (Zebra lineage); on that baseline the Ycash
 contributors added the vault network upgrade and made the node compatible with the Ycash network.

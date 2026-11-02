@@ -72,8 +72,8 @@ fork (`zakura-common-ycash`, its `.github/README-ycash.md`):
   one of them across a merge of upstream. The rebase cost the settings approach avoided is a
   conflict only when upstream renames or deletes an off workflow, which the sync agent resolves
   by moving the file again (plan §4.2 rule 7).
-- The `workflows` leg reports (report-only) an off file that differs from `kogany-legacy`'s copy,
-  expected only between an upstream merge and the re-pin.
+- The `workflows` leg reports (report-only) an off file that differs from the upstream pin's copy
+  (`qa/UPSTREAM_PIN`, below), expected only between an upstream merge and the re-pin.
 - A workflow an upstream sync adds lands in `.github/workflows/`; the leg fails until it is
   classified, and its trigger policy fails it anyway unless its triggers are kogany's. The sync
   agent moves it off or trims it.
@@ -123,6 +123,18 @@ re-runs its consumers.
 Blocking means a candidate for a required status check (see "Turning Actions on"); a
 `continue-on-error` job never turns its run red. The durations are estimates for a
 GitHub-hosted 4-core runner, not measurements: kogany's Actions have not run yet.
+
+**The upstream pin.** The audit legs compare against the upstream Zakura commit the tree is
+synced to, which `qa/UPSTREAM_PIN` names (since the 2026-11-02 sync, `b44ec121d`), not against
+upstream's moving `main` (already past the sync, with tests the tree does not have yet) and not
+against `kogany-legacy` until that branch is moved to the pin. An upstream sync bumps
+`qa/UPSTREAM_PIN` in its merge; `kogany-legacy` is fast-forwarded to it afterwards (the audit
+prints a note while they differ). `kogany-audit.yml` fetches the pin from zakura-core/zakura when
+the checkout lacks it. The `greps` leg scans the lines added against the pin and only kogany's
+commits, those reachable from neither the pin nor `upstream/main` (where that remote ref exists):
+upstream's commits, merged by a sync, carry upstream's own trailers (co-author lines and the
+like), which are not kogany's to fail on. The `dormancy` leg counts the tests at the pin, so a
+test upstream itself deleted before the pin is not a kogany deletion.
 
 **What runs where.** Locally (seconds, stdlib Python; run before every push): every audit leg
 (`python3 qa/kogany_audit.py all`), its tests, the cross-line leg against a local ycash6 clone

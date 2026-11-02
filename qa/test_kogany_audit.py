@@ -240,6 +240,49 @@ class RepositoryTest(unittest.TestCase):
         self.git("commit", "-q", "-m", "add\n\nCo-" + "authored-by: someone")
         self.assertEqual(self.run_legs("greps"), 1)
 
+    def upstream_sync(self, message):
+        """An upstream commit past the pin (on branch `upstream-next`), merged into `work`."""
+        self.git("checkout", "-q", "-b", "upstream-next", "kogany-legacy")
+        self.write("crates/zakura-chain/src/lib.rs", "#[test]\nfn kept() {}\n")
+        self.git("commit", "-q", "-am", message)
+        self.git("checkout", "-q", "work")
+        self.git("merge", "-q", "--no-edit", "upstream-next")
+
+    def pin(self, ref):
+        sha = subprocess.run(["git", "-C", self.repo, "rev-parse", ref], check=True,
+                             capture_output=True, text=True).stdout.strip()
+        self.write("qa/UPSTREAM_PIN", "# the upstream commit\n%s\n" % sha)
+        self.git("add", "qa/UPSTREAM_PIN")
+        self.git("commit", "-q", "-m", "pin the upstream sync")
+
+    def test_upstream_commits_and_deletions_after_a_sync_are_not_ours(self):
+        self.upstream_sync("upstream drops a test\n\nCo-" + "authored-by: someone")
+        # Against the old pin (kogany-legacy) the sync's commit and deletion look like ours.
+        self.assertEqual(self.run_legs("greps"), 1)
+        self.assertEqual(self.run_legs("dormancy"), 1)
+        # qa/UPSTREAM_PIN names the synced commit: the default upstream follows it.
+        self.pin("upstream-next")
+        self.assertEqual(self.run_legs("greps", "dormancy"), 0)
+
+    def test_an_upstream_main_ref_is_excluded_from_the_commit_scan(self):
+        self.upstream_sync("upstream\n\nCo-" + "authored-by: someone")
+        self.git("update-ref", "refs/remotes/upstream/main", "upstream-next")
+        self.assertEqual(self.run_legs("greps"), 0)
+
+    def test_our_attribution_after_a_pinned_sync_still_fails_greps(self):
+        self.upstream_sync("upstream")
+        self.pin("upstream-next")
+        self.write("crates/zakura-chain/src/new.rs", "pub fn f() {}\n")
+        self.git("add", "-A")
+        self.git("commit", "-q", "-m", "add\n\nCo-" + "authored-by: someone")
+        self.assertEqual(self.run_legs("greps"), 1)
+
+    def test_an_unresolvable_or_malformed_pin_is_an_error(self):
+        self.write("qa/UPSTREAM_PIN", "%s\n" % ("ab" * 20))
+        self.assertEqual(self.run_legs("greps"), 2)
+        self.write("qa/UPSTREAM_PIN", "kogany-legacy\n")
+        self.assertEqual(self.run_legs("greps"), 2)
+
     def test_an_unclassified_workflow_fails(self):
         self.write(".github/workflows/new.yml", GOOD_WORKFLOW)
         self.assertEqual(self.run_legs("workflows"), 1)

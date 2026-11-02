@@ -202,6 +202,9 @@ impl
 /// Transaction verification has slightly different consensus rules, depending on
 /// whether the transaction is to be included in a block on in the mempool.
 #[derive(Clone, Debug, Eq, PartialEq)]
+// kogany: the `Block` variant carries the Vault set snapshot (W4-d); boxing it would change the
+// request every caller builds, so the size is accepted (CI clippy runs with `-D warnings`).
+#[allow(clippy::large_enum_variant)]
 pub enum Request {
     /// Verify the supplied transaction as part of a block.
     Block {

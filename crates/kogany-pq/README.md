@@ -21,18 +21,18 @@ Byte copies of ycash6 `src/crypto/pq/{falcon,slhdsa}/` at `vaults/kogany-compat`
 (identical to ycash-dd's), **verify subset only**. ycash6 `src/crypto/pq/README.md` is the
 authority on provenance and the local patches; in short:
 
-* `falcon/`: PQClean `crypto_sign/falcon-padded-512/clean` and `common/fips202.{c,h}` at
+- `falcon/`: PQClean `crypto_sign/falcon-padded-512/clean` and `common/fips202.{c,h}` at
   `0586a824fc0d49df0b6b6e9179d8d15d06d0974f` (MIT; `fips202` public domain), plus the Ycash entry
   point `ycash_falcon_verify.c` and `ycash_falcon.h`. Vendored: `codec.c common.c vrfy.c fips202.c
   ycash_falcon_verify.c` and the headers `inner.h fpr.h fips202.h ycash_falcon.h`, `LICENSE`.
   **Not vendored** (signing/keygen/floating point): `keygen.c sign.c fft.c fpr.c rng.c
   ycash_falcon_sign.c`. `ycash_falcon.h` still declares the signing entry points; nothing defines
   or binds them.
-* `slhdsa/`: pq-code-package `slhdsa-c` at `174c02e42257f95c210963272877c49dbb50070f`
+- `slhdsa/`: pq-code-package `slhdsa-c` at `174c02e42257f95c210963272877c49dbb50070f`
   (`Apache-2.0 OR ISC OR MIT`, used under MIT), the same 13 files the C++ lines carry.
   `slh_dsa.c` is one translation unit holding signing and verification; it is vendored whole so
   its bytes stay identical, and only `slh_verify` is bound.
-* Local patches carried unchanged (lines marked `YCASH LOCAL PATCH`): **P1** `falcon/fips202.{c,h}`
+- Local patches carried unchanged (lines marked `YCASH LOCAL PATCH`): **P1** `falcon/fips202.{c,h}`
   (SHAKE256 incremental context inline: no `malloc`/`exit` on the consensus path), **P2**
   `falcon/ycash_falcon_verify.c` + `ycash_falcon.h` (exactly 666-byte signatures and 897-byte keys
   in the C entry point, so the compact form is refused), **P3** `slhdsa/slh_dsa.c` (zeroization in
