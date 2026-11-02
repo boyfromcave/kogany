@@ -429,9 +429,9 @@ impl zcash_protocol::consensus::Parameters for Network {
         &self,
         nu: zcash_protocol::consensus::NetworkUpgrade,
     ) -> Option<zcash_protocol::consensus::BlockHeight> {
-        // zakura-protocol's Vault upgrade is not scheduled on any Zakura
-        // network until W2-b adds it.
-        if nu == zcash_protocol::consensus::NetworkUpgrade::Vault {
+        // kogany: Vault (and, in a Zcash build, Ycash) only where this network schedules it,
+        // never through the fallback to a later upgrade's height (plan §2.2).
+        if !self.is_kogany_upgrade_scheduled(NetworkUpgrade::from(nu)) {
             return None;
         }
         NetworkUpgrade::from(nu)

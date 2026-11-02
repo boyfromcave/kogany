@@ -33,5 +33,7 @@ pub use constants::MAX_NON_FINALIZED_CHAIN_FORKS;
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod vault_tests;
 #[cfg(all(test, not(feature = "ycash")))]
 mod ycash_dormancy_tests;
