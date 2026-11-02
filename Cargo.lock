@@ -1201,6 +1201,9 @@ name = "kogany-yellowback"
 version = "0.1.0"
 dependencies = [
  "hex",
+ "kogany-pq",
+ "kogany-vault",
+ "secp256k1",
  "serde_json",
  "sha2",
 ]

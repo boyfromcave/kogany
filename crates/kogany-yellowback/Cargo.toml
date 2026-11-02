@@ -12,11 +12,19 @@ publish = false
 # Dependency-light by design (coordination brief): no zakura-* crate, so the module's pure layers build in
 # seconds and replay the pinned cross-line vectors ahead of the upstream waves.
 [dependencies]
+# The vault primitive's byte types, script tokenizer/builder and V template (W4-a): the YED vault is
+# a V, so the module builds it with the primitive's own builder rather than a second copy.
+kogany-vault = { path = "../kogany-vault" }
+# CPubKey::IsFullyValid for the TX_PQCHANNEL server key (TOK-PQ, consensus-reachable through HolderKey).
+secp256k1 = { workspace = true }
+# Base58Check's double SHA-256 checksum.
+sha2 = { workspace = true }
 
 [dev-dependencies]
 hex = { workspace = true }
+# key_hash for the pq_wallet_vectors.json owners (tests only; the codecs never hash a PQ key).
+kogany-pq = { path = "../kogany-pq" }
 serde_json = { workspace = true }
-sha2 = { workspace = true }
 
 [lints]
 workspace = true

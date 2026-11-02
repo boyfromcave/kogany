@@ -13,7 +13,7 @@
 //! |---|---|---|---|
 //! | [`math`] | `src/yellowback/math.h`, `src/arith_uint256.h` | W5-a | done |
 //! | [`params`] | `src/yellowback/params.{h,cpp}`, `src/amount.h` | W5-a | done |
-//! | [`codecs`] | `payload`, `script`, `address`, `tag` | W5-b | stub |
+//! | [`codecs`] | `payload`, `script`, `address`, `tag` (+ `base58.cpp`, `MatchPQChannel`) | W5-b | done |
 //! | [`attest`] | `attest`, `bundle` | W5-c | stub |
 //! | [`state`] | `view`, `state` | W5-d1/d2 | stub |
 //!
