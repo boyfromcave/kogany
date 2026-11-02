@@ -2768,6 +2768,7 @@ dependencies = [
  "indexmap",
  "insta",
  "kogany-rpc",
+ "kogany-vault",
  "libc",
  "metrics",
  "pin-project",

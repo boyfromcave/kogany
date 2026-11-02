@@ -160,3 +160,32 @@ jobs:
           path: kogany-client-legs
           retention-days: 30
           if-no-files-found: ignore
+
+  kogany-regtest:
+    # Plan W4-e (§5 leg kogany-regtest): the nextest profile `kogany-regtest` (.config/nextest.toml),
+    # crates/zakurad/tests/kogany_regtest.rs on a running zakurad on a Ycash regtest: Vault activation,
+    # a vault built from the pinned vector keys and its set-signed spend through sendrawtransaction,
+    # invalidateblock/reconsiderblock, a restart. Report-only until the coordinator makes it the W4
+    # gate (the plan's "blocking from W4"): drop continue-on-error then.
+    name: kogany-regtest (report-only)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    continue-on-error: true
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f #v2.0.0 # zizmor: ignore[cache-poisoning] -- test-only build of the node, nothing published or released
+        with:
+          toolchain: stable
+          cache-key: kogany-regtest
+          cache-on-failure: true
+          cache-save-if: ${{ github.ref == 'refs/heads/vaults/kogany-compat' || github.ref == 'refs/heads/upgrade/vault' }}
+      - uses: ./.github/actions/setup-zakura-build
+      - uses: taiki-e/install-action@a4d3f3f761dcd95cce1b72cb61cb6d1963438177 #v2.87.30
+        with:
+          tool: cargo-nextest
+      - name: nextest profile kogany-regtest (ycash feature)
+        run: cargo nextest run --locked --profile kogany-regtest -p zakura --features ycash
