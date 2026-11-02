@@ -486,20 +486,6 @@ pub fn tip_yed_snapshot(best_chain: Option<&Arc<Chain>>, db: &ZakuraDb) -> YedSn
     }
 }
 
-/// `MempoolCheckReason(tx)` (ycash6 `src/main.cpp` `AcceptToMemoryPool`, after the scripts) over
-/// `snapshot`, the YED state at the best chain tip (kogany W6-b): `None` = admitted, else the
-/// module's reason (ycashd refuses `bad-yellowback-<reason>` at DoS 0: the module's state moves
-/// with the tip, which the relaying peer need not share).
-pub fn yed_mempool_check(
-    snapshot: &YedSnapshot,
-    transaction: &zakura_chain::transaction::Transaction,
-) -> Option<String> {
-    let vault_tx =
-        crate::service::finalized_state::vault::vault_tx(transaction, &transaction.hash());
-    let expiry = transaction.expiry_height().map_or(0, |h| h.0);
-    snapshot.mempool_check(&vault_tx, expiry)
-}
-
 /// The YED state after the block `hash` (fork-aware): a block of any of `chains`, the finalized
 /// tip, or a finalized block up to [`UNDO_KEEP`] below it (through the stored undo records).
 /// `None` when `hash` is none of these.

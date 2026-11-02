@@ -40,7 +40,8 @@ internal-miner = []
 # The Ycash network profile (kogany): Ycash answers in the stock RPCs (the YDF coinbase output,
 # `getblocksubsidy`, `chain`, `validateaddress` with the post-quantum addresses, `chainwork`,
 # `testnetprofile`), see zakura-chain's `ycash` feature. kogany W8: the coinbase tag and the
-# vault and YED template filter read kogany-yellowback and kogany-vault too.
+# vault and YED template filter read kogany-yellowback and kogany-vault too; W7-e: the reject
+# table (VaultReject, the YED verdicts) and the Ycash scriptPubKey shapes.
 ycash = ["zakura-chain/ycash", "zakura-consensus/ycash", "dep:kogany-vault", "dep:kogany-yellowback"]
 
 # Test-only features

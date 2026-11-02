@@ -111,9 +111,15 @@ pub enum Response {
     /// [`Request::BestChainVaultSnapshot`] with the Vault set state after the block.
     VaultSnapshot(Option<crate::service::vault::VaultSnapshot>),
 
-    /// kogany (W6-b): response to [`Request::YedMempoolCheck`]: `None` = admitted, else the YED
-    /// module's reason.
-    YedMempoolCheck(Option<String>),
+    /// kogany (W6-c): response to [`Request::BestChainYedMempoolCheck`]: the tip the YED state
+    /// was read at (`None` before the state has a block) and, per transaction in request order,
+    /// `None` (admitted) or the module's reason.
+    YedMempoolCheck {
+        /// The best chain tip the check read.
+        tip: Option<(block::Height, block::Hash)>,
+        /// The reasons, in request order.
+        reasons: Vec<Option<String>>,
+    },
 
     /// The response to a `BlockHeader` request.
     BlockHeader {
@@ -495,8 +501,14 @@ pub enum ReadResponse {
     /// [`ReadRequest::BestChainVaultSnapshot`].
     VaultSnapshot(Option<crate::service::vault::VaultSnapshot>),
 
-    /// kogany (W6-b): response to [`ReadRequest::YedMempoolCheck`].
-    YedMempoolCheck(Option<String>),
+    /// kogany (W6-c): response to [`ReadRequest::BestChainYedMempoolCheck`]; see
+    /// [`Response::YedMempoolCheck`].
+    YedMempoolCheck {
+        /// The best chain tip the check read.
+        tip: Option<(block::Height, block::Hash)>,
+        /// The reasons, in request order.
+        reasons: Vec<Option<String>>,
+    },
 
     /// Response to [`ReadRequest::Depth`] with the depth of the specified block.
     Depth(Option<u32>),
@@ -781,7 +793,9 @@ impl TryFrom<ReadResponse> for Response {
 
             ReadResponse::BlockInfo(block_info) => Ok(Response::BlockInfo(block_info)),
             ReadResponse::VaultSnapshot(snapshot) => Ok(Response::VaultSnapshot(snapshot)),
-            ReadResponse::YedMempoolCheck(reason) => Ok(Response::YedMempoolCheck(reason)),
+            ReadResponse::YedMempoolCheck { tip, reasons } => {
+                Ok(Response::YedMempoolCheck { tip, reasons })
+            }
 
             ReadResponse::Depth(_)
             | ReadResponse::Transaction(_)
