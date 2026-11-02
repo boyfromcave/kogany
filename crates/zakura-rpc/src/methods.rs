@@ -4188,7 +4188,27 @@ where
     async fn get_peer_info(&self) -> Result<Vec<PeerInfo>> {
         let address_book = self.address_book.clone();
         if let Some(connected_peers) = address_book.connected_peers() {
-            return Ok(connected_peers.into_iter().map(PeerInfo::from).collect());
+            // Ycash (S5 parity): ycashd's `banscore`, the address book's misbehavior score.
+            #[cfg(feature = "ycash")]
+            let scores: std::collections::HashMap<_, _> = address_book
+                .recently_live_peers(chrono::Utc::now())
+                .into_iter()
+                .map(|meta| (meta.addr(), meta.misbehavior()))
+                .collect();
+            return Ok(connected_peers
+                .into_iter()
+                .map(|peer| {
+                    #[cfg(feature = "ycash")]
+                    let score = scores.get(&peer.addr).copied().unwrap_or(0);
+                    #[allow(unused_mut)]
+                    let mut info = PeerInfo::from(peer);
+                    #[cfg(feature = "ycash")]
+                    {
+                        info.banscore = score;
+                    }
+                    info
+                })
+                .collect());
         }
 
         Ok(address_book

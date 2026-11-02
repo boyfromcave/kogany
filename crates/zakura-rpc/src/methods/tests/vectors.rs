@@ -5166,6 +5166,8 @@ async fn rpc_addnode() {
             pingwait: None,
             subver: None,
             version: None,
+            #[cfg(feature = "ycash")]
+            banscore: 0,
         }]
     );
 
