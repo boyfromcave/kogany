@@ -18,5 +18,9 @@ pub mod unified_address;
 pub mod validate_address;
 #[cfg(feature = "ycash")]
 pub mod ycash;
+#[cfg(feature = "ycash")]
+pub mod ycash_reject;
+#[cfg(feature = "ycash")]
+pub(crate) mod ycash_script;
 pub mod z_validate_address;
 pub mod zec;

@@ -338,6 +338,11 @@ pub enum SubmitBlockErrorResponse {
     Inconclusive,
     /// Block rejected as invalid
     Rejected,
+    /// Ycash (W7-e): block rejected as invalid, with ycashd's reason (BIP 22, the
+    /// `CValidationState` reject reason; `ycash6 src/rpc/mining.cpp` `BIP22ValidationResult`).
+    #[cfg(feature = "ycash")]
+    #[serde(untagged)]
+    Invalid(String),
 }
 
 /// Response to a `submitblock` RPC request.
@@ -409,6 +414,8 @@ impl From<SubmitBlockResponse> for SubmitSolutionResponse {
                 }
                 SubmitBlockErrorResponse::Inconclusive => SubmitSolutionErrorResponse::Inconclusive,
                 SubmitBlockErrorResponse::Rejected => SubmitSolutionErrorResponse::Rejected,
+                #[cfg(feature = "ycash")]
+                SubmitBlockErrorResponse::Invalid(_) => SubmitSolutionErrorResponse::Rejected,
             }),
         }
     }
