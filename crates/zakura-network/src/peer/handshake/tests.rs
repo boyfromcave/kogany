@@ -799,15 +799,28 @@ async fn p2p_v2_service_bit_advertisement_preserves_user_agent() {
         TEST_REMOTE_USER_AGENT
     );
 
-    assert!(enabled_peer_seen_by_disabled
-        .remote
-        .services
-        .contains(PeerServices::NODE_P2P_V2));
-    assert!(enabled_peer_seen_by_disabled
-        .remote
-        .address_from
-        .untrusted_services()
-        .contains(PeerServices::NODE_P2P_V2));
+    // kogany: on Ycash the Zakura P2P v2 stack is off (decision K-11): `P2pStack::resolve` maps
+    // every stack to Legacy, so the Dual peer advertises no NODE_P2P_V2 bit either. The user
+    // agent is still preserved as received both ways.
+    #[cfg(not(feature = "ycash"))]
+    let expect_p2p_v2 = true;
+    #[cfg(feature = "ycash")]
+    let expect_p2p_v2 = false;
+    assert_eq!(
+        enabled_peer_seen_by_disabled
+            .remote
+            .services
+            .contains(PeerServices::NODE_P2P_V2),
+        expect_p2p_v2
+    );
+    assert_eq!(
+        enabled_peer_seen_by_disabled
+            .remote
+            .address_from
+            .untrusted_services()
+            .contains(PeerServices::NODE_P2P_V2),
+        expect_p2p_v2
+    );
     assert_eq!(
         enabled_peer_seen_by_disabled.remote.user_agent,
         TEST_LOCAL_USER_AGENT
