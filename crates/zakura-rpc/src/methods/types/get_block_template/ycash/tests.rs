@@ -687,3 +687,54 @@ fn no_template_carries_two_conflicting_acts() {
     assert_eq!(selected.len(), 4);
     assert!(!kept_first.is_empty());
 }
+
+/// Hooks that serve one set state.
+struct WithState(Arc<SetState>);
+
+#[async_trait::async_trait]
+impl YcashMining for WithState {
+    async fn yellowback_miner(&self) -> Result<Option<YellowbackMiner>, String> {
+        Ok(None)
+    }
+    async fn vault_state(&self, _: zakura_chain::block::Hash) -> Option<Arc<SetState>> {
+        Some(self.0.clone())
+    }
+}
+
+/// `prepare`: no vault filter before activation (ycashd builds no `TemplateRun` there), the
+/// fail-closed filter without a state, the running one with the state and the network's rules.
+#[tokio::test]
+async fn prepare_follows_the_vault_activation() {
+    use zakura_chain::parameters::testnet::{ConfiguredActivationHeights, RegtestParameters};
+    use zakura_state::vault::{register_vault_params_for_test, VaultNetworkParams};
+
+    let network = Network::new_regtest(RegtestParameters::from(ConfiguredActivationHeights {
+        vault: Some(101),
+        ..Default::default()
+    }));
+    let (state, set_id) = open_set();
+    let parent = zakura_chain::block::Hash([0; 32]);
+    let a = join(set_id, 1, 0x41);
+
+    let mut before = TemplateFilter::prepare(&network, Height(100), parent, &NotLive).await;
+    assert!(before.keep(&a), "no vault filter below activation");
+
+    let mut no_state = TemplateFilter::prepare(&network, Height(101), parent, &NotLive).await;
+    assert!(!no_state.keep(&a), "fail closed without a set state");
+    assert!(no_state.keep(&payment(0x43)));
+
+    // The network's Vault parameters (W4-d makes them live; a test registers them).
+    let hooks = WithState(Arc::new(state));
+    let mut unregistered = TemplateFilter::prepare(&network, Height(101), parent, &hooks).await;
+    assert!(!unregistered.keep(&a), "no Vault parameters: fail closed");
+    register_vault_params_for_test(
+        &network,
+        VaultNetworkParams {
+            activation_height: Height(101),
+            min_set_maturity: 0,
+        },
+    );
+    let mut running = TemplateFilter::prepare(&network, Height(101), parent, &hooks).await;
+    assert!(running.keep(&a));
+    assert!(!running.keep(&join(set_id, 1, 0x42)));
+}
