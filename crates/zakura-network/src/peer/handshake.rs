@@ -1883,6 +1883,11 @@ where
                 .boxed(),
             );
 
+            // kogany (F-S5-6): `disconnectnode` closes the connection through its task.
+            if let Some(updater) = &client_peer_registry_updater {
+                updater.attach_connection_task(connection_task.abort_handle());
+            }
+
             let heartbeat_task = tokio::spawn(
                 send_periodic_heartbeats_with_shutdown_handle(
                     connected_addr,

@@ -332,6 +332,12 @@ pub struct AddressBook {
 
     /// The last time we logged a message about the address metrics.
     last_address_log: Option<Instant>,
+
+    /// Listener addresses an operator disconnected (`disconnectnode`, kogany F-S5-6): left out of
+    /// the book, and every change for them ignored, so the crawler never redials them and a
+    /// gossiped copy never brings them back, until `addnode` adds them again. ycashd never
+    /// redials a node it disconnected unless `addnode` names it.
+    disconnected_by_operator: HashSet<PeerSocketAddr>,
 }
 
 /// Metrics about the states of the addresses in an [`AddressBook`].
@@ -403,6 +409,7 @@ impl AddressBook {
             last_address_log: None,
             most_recent_by_ip: should_limit_outbound_conns_per_ip.then(HashMap::new),
             bans_by_ip: Default::default(),
+            disconnected_by_operator: HashSet::new(),
         };
 
         new_book.update_metrics(instant_now, chrono_now);
@@ -682,6 +689,23 @@ impl AddressBook {
                 ?change,
                 "attempted to add a banned peer addr to address book"
             );
+            return None;
+        }
+
+        // kogany (F-S5-6): a gossiped address ycashd's address manager would refuse (loopback,
+        // private) is not kept, so it is never dialled (`crate::ycash::is_routable`).
+        #[cfg(feature = "ycash")]
+        if matches!(change, MetaAddrChange::NewGossiped { .. })
+            && !crate::ycash::is_routable(change.addr().ip())
+        {
+            return None;
+        }
+
+        // kogany (F-S5-6): an address an operator disconnected stays out of the book.
+        if self
+            .disconnected_by_operator
+            .contains(&canonical_peer_addr(*change.addr()))
+        {
             return None;
         }
 
@@ -1094,7 +1118,41 @@ impl AddressBookPeers for AddressBook {
             .map(PeerRegistry::connected_peers)
     }
 
+    fn try_peer_now(&mut self, peer: PeerSocketAddr) -> bool {
+        let peer = canonical_peer_addr(*peer);
+        self.disconnected_by_operator.remove(&peer);
+        if self
+            .peer_registry
+            .as_ref()
+            .is_some_and(|registry| registry.has_outbound(peer))
+        {
+            // ycashd's `OpenNetworkConnection` skips a node it is already connected to.
+            return true;
+        }
+        // A known address waits out its reconnection delay (two minutes after a disconnect);
+        // `onetry` is an operator's request to dial it now, as ycashd's is.
+        self.take(peer);
+        self.update(MetaAddr::new_initial_peer(peer)).is_some()
+    }
+
+    fn disconnect_peer(&mut self, peer: PeerSocketAddr) -> bool {
+        let closed = self
+            .peer_registry
+            .as_ref()
+            .map_or(0, |registry| registry.disconnect(peer));
+        if closed == 0 {
+            return false;
+        }
+        let peer = canonical_peer_addr(*peer);
+        self.disconnected_by_operator.insert(peer);
+        self.take(peer);
+        true
+    }
+
     fn add_peer(&mut self, peer: PeerSocketAddr) -> bool {
+        // kogany (F-S5-6): `addnode` undoes a `disconnectnode`.
+        self.disconnected_by_operator
+            .remove(&canonical_peer_addr(*peer));
         if self.get(peer).is_some() {
             // Peer already exists in the address book, so we don't need to add it again.
             return false;
@@ -1120,6 +1178,18 @@ impl AddressBookPeers for Arc<Mutex<AddressBook>> {
         self.lock()
             .expect("panic in a previous thread that was holding the mutex")
             .add_peer(peer)
+    }
+
+    fn disconnect_peer(&mut self, peer: PeerSocketAddr) -> bool {
+        self.lock()
+            .expect("panic in a previous thread that was holding the mutex")
+            .disconnect_peer(peer)
+    }
+
+    fn try_peer_now(&mut self, peer: PeerSocketAddr) -> bool {
+        self.lock()
+            .expect("panic in a previous thread that was holding the mutex")
+            .try_peer_now(peer)
     }
 }
 
@@ -1166,6 +1236,7 @@ impl Clone for AddressBook {
             last_address_log: None,
             most_recent_by_ip: self.most_recent_by_ip.clone(),
             bans_by_ip: self.bans_by_ip.clone(),
+            disconnected_by_operator: self.disconnected_by_operator.clone(),
         }
     }
 }

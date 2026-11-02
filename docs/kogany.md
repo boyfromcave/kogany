@@ -22,3 +22,17 @@ Where these documents name a Zcash value, a `koganyd` uses Ycash's instead:
 
 [README.md](../README.md) has the full table, how to build and run each network, and the pointers
 to the Yellowback and vault RPC documents in [`doc/`](../doc/).
+
+## Where a `koganyd` behaves as ycashd does
+
+The Yellowback parity gate (S5) runs ycash6's functional scripts against kogany; these node
+behaviours follow ycashd's there, each against Zakura's own:
+
+- **Peers.** `disconnectnode "ip:port"` closes the connections to that node (`-29` "Node not found
+  in connected nodes" when there are none) and keeps its address out of the address book until
+  `addnode` names it again, so it is not redialled. `addnode "ip:port" onetry` dials a node now,
+  where `add` of a known address waits out its two-minute reconnection delay. A gossiped address
+  that ycashd's address manager refuses as not routable (loopback, RFC 1918 and the other reserved
+  ranges, `CNetAddr::IsRoutable`) is not kept, so a regtest node connects only to the nodes
+  `addnode` names; operator addresses (`addnode`, the initial peers, the disk cache) are kept
+  whatever their range.

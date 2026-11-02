@@ -130,7 +130,13 @@ impl RpcSchema for AddNodeCommand {
     fn schema(_: &mut Generator) -> Value {
         string_enum(
             "Commands for the `addnode` RPC method.",
-            &[("add", "Add a node to the address book.")],
+            &[
+                ("add", "Add a node to the address book."),
+                (
+                    "onetry",
+                    "Try a connection to a node now, without waiting out its reconnection delay.",
+                ),
+            ],
         )
     }
 }

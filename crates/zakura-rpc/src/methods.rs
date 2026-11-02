@@ -249,6 +249,7 @@ pub(crate) const RPC_METHOD_ACCESS: &[(&str, RpcAccess)] = &[
     ("preciousblock", RpcAccess::Admin),
     ("generate", RpcAccess::Test),
     ("addnode", RpcAccess::Test),
+    ("disconnectnode", RpcAccess::Admin),
     ("rpc.discover", RpcAccess::Unauthenticated),
     ("gettxout", RpcAccess::Unauthenticated),
 ];
@@ -283,6 +284,7 @@ pub(super) const PARAM_BLOCK_HASH_DESC: &str = "The hash of the block to return.
 pub(super) const PARAM_ADDRESS_DESC: &str = "The address to return.";
 pub(super) const PARAM_ADDRESS_STRINGS_DESC: &str = "The addresses to return.";
 pub(super) const PARAM_ADDR_DESC: &str = "The address to return.";
+pub(super) const PARAM_NODE_DESC: &str = "The node's address, as `getpeerinfo` reports it.";
 pub(super) const PARAM_HEX_DATA_DESC: &str = "The hex-encoded data to return.";
 pub(super) const PARAM_TXID_DESC: &str = "The transaction ID to return.";
 pub(super) const PARAM_HASH_OR_HEIGHT_DESC: &str = "The block hash or height to return.";
@@ -990,12 +992,33 @@ pub trait RpcServer {
     ///
     /// # Notes
     ///
-    /// Only the "add" command is currently supported.
+    /// The "add" and "onetry" commands are supported. kogany (F-S5-6): "onetry" dials a known
+    /// address now instead of after its reconnection delay, as ycashd's does.
     ///
     /// zcashd reference: [`addnode`](https://zcash.github.io/rpc/addnode.html)
     /// method: post
     /// tags: network
     async fn add_node(&self, addr: PeerSocketAddr, command: AddNodeCommand) -> Result<()>;
+
+    #[method(name = "disconnectnode")]
+    /// Immediately disconnects from the specified node.
+    ///
+    /// # Parameters
+    ///
+    /// - `node`: (string, required) The node's address, as `getpeerinfo` reports it (`ip:port`).
+    ///
+    /// # Notes
+    ///
+    /// kogany (finding F-S5-6): closes every connection to `node`, and keeps its address out of
+    /// the address book, so the node is not redialed, until `addnode` adds it again, as ycashd
+    /// never redials a node it disconnected that `addnode` does not name
+    /// (`ycash6` `src/rpc/net.cpp:224-245`). Answers `-29` ("Node not found in connected nodes")
+    /// when no connection to `node` is open.
+    ///
+    /// zcashd reference: [`disconnectnode`](https://zcash.github.io/rpc/disconnectnode.html)
+    /// method: post
+    /// tags: network
+    async fn disconnect_node(&self, node: String) -> Result<()>;
 
     /// Returns an OpenRPC schema as a description of this service.
     #[method(name = "rpc.discover")]
@@ -4565,6 +4588,19 @@ where
     ) -> Result<()> {
         if self.network.is_regtest() {
             match command {
+                AddNodeCommand::OneTry => {
+                    tracing::info!(?addr, "trying a connection to a peer address now");
+                    if self.address_book.clone().try_peer_now(addr) {
+                        Ok(())
+                    } else {
+                        Err(ErrorObject::new(
+                            ErrorCode::InvalidParams,
+                            format!(
+                                "peer address cannot be used for an outbound connection: {addr}"
+                            ),
+                        ))
+                    }
+                }
                 AddNodeCommand::Add => {
                     tracing::info!(?addr, "adding peer address to the address book");
                     if self.address_book.clone().add_peer(addr) {
@@ -4582,6 +4618,22 @@ where
                 ErrorCode::InvalidParams,
                 "addnode command is only supported on regtest",
             ));
+        }
+    }
+
+    async fn disconnect_node(&self, node: String) -> Result<()> {
+        let not_connected = || {
+            ErrorObject::new(
+                server::error::LegacyCode::ClientNodeNotConnected,
+                "Node not found in connected nodes",
+            )
+        };
+        let addr: PeerSocketAddr = node.parse().map_err(|_| not_connected())?;
+        if self.address_book.clone().disconnect_peer(addr) {
+            tracing::info!(?addr, "disconnected peer by RPC request");
+            Ok(())
+        } else {
+            Err(not_connected())
         }
     }
 
@@ -6609,6 +6661,11 @@ pub enum AddNodeCommand {
     /// Add a node to the address book.
     #[serde(rename = "add")]
     Add,
+
+    /// kogany (F-S5-6): try a connection to a node now, as ycashd's `onetry` does: a known
+    /// address is attempted without waiting out its reconnection delay.
+    #[serde(rename = "onetry")]
+    OneTry,
 }
 
 /// Response to a `gettxout` RPC request.

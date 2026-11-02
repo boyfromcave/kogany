@@ -485,3 +485,134 @@ fn peer_ports_of_zcash_and_other_ycash_networks_are_refused() {
     assert_eq!(valid(addr(8833), None), Ok(()));
     assert_eq!(valid(addr(46_000), regtest), Ok(()));
 }
+
+/// ycashd's `CNetAddr::IsRoutable` (`ycash6 src/netbase.cpp:854-857`): loopback, `0/8` and the
+/// private and reserved ranges are not routable; a public address is.
+#[test]
+fn routable_matches_ycashd() {
+    use std::net::IpAddr;
+
+    for unroutable in [
+        "127.0.0.1",
+        "0.1.2.3",
+        "10.0.0.1",
+        "172.16.0.1",
+        "172.31.255.255",
+        "192.168.1.1",
+        "198.18.0.1",
+        "169.254.1.1",
+        "100.64.0.1",
+        "192.0.2.1",
+        "198.51.100.1",
+        "203.0.113.7",
+        "255.255.255.255",
+        "::1",
+        "::",
+        "::ffff:127.0.0.1",
+        "fc00::1",
+        "fd12::1",
+        "fe80::1",
+        "2001:db8::1",
+        "2001:10::1",
+    ] {
+        let ip: IpAddr = unroutable.parse().expect("test address parses");
+        assert!(!is_routable(ip), "{unroutable} is not routable on ycashd");
+    }
+    for routable in [
+        "1.2.3.4",
+        "172.32.0.1",
+        "8.8.8.8",
+        "2600::1",
+        "::ffff:1.2.3.4",
+    ] {
+        let ip: IpAddr = routable.parse().expect("test address parses");
+        assert!(is_routable(ip), "{routable} is routable on ycashd");
+    }
+}
+
+/// A gossiped loopback address never enters the address book (ycashd `CAddrMan::Add_`), while an
+/// operator's (`addnode`) does (finding F-S5-6).
+#[test]
+fn gossiped_loopback_address_is_not_kept() {
+    use crate::{meta_addr::MetaAddr, protocol::types::PeerServices, AddressBook};
+    use zakura_chain::serialization::DateTime32;
+
+    let regtest = Network::new_regtest(Default::default());
+    let mut book = AddressBook::new(
+        "127.0.0.1:0".parse().expect("listener parses"),
+        &regtest,
+        16,
+        tracing::Span::none(),
+    );
+    let gossiped: crate::PeerSocketAddr = "127.0.0.1:18344".parse().expect("parses");
+    let change =
+        MetaAddr::new_gossiped_meta_addr(gossiped, PeerServices::NODE_NETWORK, DateTime32::now())
+            .new_gossiped_change()
+            .expect("a gossiped address makes a change");
+    assert!(book.update(change).is_none());
+    assert!(book.get(gossiped).is_none());
+
+    let public: crate::PeerSocketAddr = "1.2.3.4:18344".parse().expect("parses");
+    let change =
+        MetaAddr::new_gossiped_meta_addr(public, PeerServices::NODE_NETWORK, DateTime32::now())
+            .new_gossiped_change()
+            .expect("a gossiped address makes a change");
+    assert!(book.update(change).is_some());
+
+    use crate::address_book_peers::AddressBookPeers;
+    assert!(book.add_peer(gossiped), "addnode keeps a loopback address");
+    assert!(book.get(gossiped).is_some());
+}
+
+/// `disconnectnode` (finding F-S5-6): the connection's task is aborted, the address leaves the
+/// book and no change brings it back until `addnode` adds it again; an address with no open
+/// connection is refused.
+#[tokio::test]
+async fn disconnect_peer_closes_the_connection_and_keeps_the_address_out() {
+    use crate::{
+        address_book_peers::AddressBookPeers, meta_addr::MetaAddr, peer_registry::PeerRegistry,
+        AddressBook, ConnectedPeer,
+    };
+
+    let regtest = Network::new_regtest(Default::default());
+    let registry = PeerRegistry::default();
+    let mut book = AddressBook::new(
+        "127.0.0.1:0".parse().expect("listener parses"),
+        &regtest,
+        16,
+        tracing::Span::none(),
+    )
+    .with_peer_registry(registry.clone());
+    let peer: crate::PeerSocketAddr = "127.0.0.1:18344".parse().expect("parses");
+    assert!(book.add_peer(peer));
+    assert!(!book.disconnect_peer(peer), "no connection is open yet");
+
+    let (guard, updater) = registry.register_legacy(ConnectedPeer {
+        addr: peer,
+        user_agent: "/koganyd:test/".into(),
+        version: Version(270_200),
+        start_height: Height(0),
+        is_inbound: false,
+        rtt: None,
+        ping_sent_at: None,
+    });
+    let task = tokio::spawn(async move {
+        let _guard = guard;
+        std::future::pending::<()>().await
+    });
+    updater.attach_connection_task(task.abort_handle());
+
+    assert!(book.disconnect_peer(peer));
+    assert!(task.await.expect_err("the task was aborted").is_cancelled());
+    assert!(
+        registry.connected_peers().is_empty(),
+        "the guard left the registry"
+    );
+    assert!(book.get(peer).is_none(), "the address left the book");
+    assert!(
+        book.update(MetaAddr::new_initial_peer(peer)).is_none(),
+        "no change brings a disconnected address back"
+    );
+    assert!(book.add_peer(peer), "addnode adds it again");
+    assert!(book.get(peer).is_some());
+}
