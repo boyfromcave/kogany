@@ -373,7 +373,7 @@ fn template_info_matches_ycashd_fields() {
     assert!(info.payout_address.is_some());
     // The unhealthy refusal is ycashd's.
     let error = unhealthy_error("storage failure in ConnectBlock");
-    assert_eq!(i32::from(error.code()), -26);
+    assert_eq!(error.code(), -26);
     assert_eq!(
         error.message(),
         "yellowback-unhealthy: storage failure in ConnectBlock; restart with -reindex-yellowback"
