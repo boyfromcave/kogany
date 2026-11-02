@@ -81,7 +81,7 @@ class Rpc:
 
     def _one(self, method, params):
         self.next_id += 1
-        reply = self._post({"jsonrpc": "1.0", "id": self.next_id, "method": method, "params": params})
+        reply = self._post({"jsonrpc": "2.0", "id": self.next_id, "method": method, "params": params})
         return reply.get("result"), reply.get("error")
 
     def batch(self, calls):
@@ -90,7 +90,7 @@ class Rpc:
             body = []
             for method, params in calls:
                 self.next_id += 1
-                body.append({"jsonrpc": "1.0", "id": self.next_id, "method": method, "params": params})
+                body.append({"jsonrpc": "2.0", "id": self.next_id, "method": method, "params": params})
             replies = self._post(body)
             if isinstance(replies, list):
                 by_id = {x.get("id"): x for x in replies}
