@@ -6,11 +6,13 @@ on:
   # that touch no test-relevant files. This keeps the `test success` required
   # check reporting on every PR instead of sitting in "Expected" forever.
   pull_request:
-    branches: [main, "feat/**", "split/**", "adam/**", "release/**"]
+    # kogany (2026-11-01): also PRs into kogany's integration branches (K-15, .github/README-kogany.md).
+    branches: [main, "feat/**", "split/**", "adam/**", "release/**", upgrade/vault, "vaults/**"]
     types: [opened, synchronize, reopened, labeled, unlabeled]
 
   push:
-    branches: [main]
+    # kogany (2026-11-01): also pushes to kogany's integration branches (K-15).
+    branches: [main, upgrade/vault, "vaults/**"]
     paths:
       - "**/*.rs"
       - "**/Cargo.toml"
@@ -37,9 +39,11 @@ on:
   # filters, so this runs unconditionally on every queued entry.
   merge_group:
 
-  schedule:
-    # Verify the exact production release profile, including ThinLTO, nightly.
-    - cron: "0 8 * * *"
+  # kogany (2026-11-01): no nightly release-profile run and so no nightly-failure issue (K-15);
+  # the release profile and the simulator jobs run on workflow_dispatch.
+  # schedule:
+  #   # Verify the exact production release profile, including ThinLTO, nightly.
+  #   - cron: "0 8 * * *"
 
   workflow_dispatch:
 
@@ -641,11 +645,14 @@ jobs:
     needs: changes
     # Path-gated on PRs and pushes. Always runs in the merge queue and
     # nightly so a docs-only merge cannot land on top of a broken graph.
+    # kogany (2026-11-01): upstream's repository only (K-15): kogany publishes no crate, so the
+    # crates.io index pins this checks are upstream's, not kogany's.
     if: >
+      github.repository == 'zakura-core/zakura' && (
       needs.changes.outputs.publish_graph == 'true'
       || github.event_name == 'merge_group'
       || github.event_name == 'schedule'
-      || github.event_name == 'workflow_dispatch'
+      || github.event_name == 'workflow_dispatch')
     permissions:
       contents: read
     runs-on: ubuntu-latest
