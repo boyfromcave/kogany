@@ -153,6 +153,15 @@ build = "sim-asan"
 args = "test --locked -p zakura-rt -p zakura-scheduler --features zakura-scheduler/sanitizer --target x86_64-unknown-linux-gnu --tests"
 timeout-secs = 2700
 
+# kogany (W3-e): the vault fuzz verdict replay, every recorded corpus input through kogany's
+# parsers against the verdict recorded once from ycash6 (qa/fuzz/vault/README.md), on the
+# `ycash` build.
+[[lane]]
+id = "kogany/vault-fuzz-verdicts"
+build = "ordinary"
+args = "test --locked -p zakura-consensus --features ycash --test vault_fuzz_verdicts"
+timeout-secs = 2700
+
 # Fuzz targets. A `sim` target runs the one harness that
 # qa/fuzz/sim/Cargo.toml's `[package.metadata.zakura-sim.targets]` table
 # maps it to, and starts from that harness's admitted seeds. Its smoke run
@@ -222,6 +231,15 @@ name = "recovery_rows"
 smoke-secs = 60
 args = ["-rss_limit_mb=4096", "-max_len=256", "-detect_leaks=0"]
 env = ["ASAN_OPTIONS=detect_leaks=0"]
+timeout-secs = 2700
+
+# kogany (W3-e): the vault, Yellowback and TX_PQPKH parsers over arbitrary bytes, asserting
+# ycash6's recorded verdict on every recorded input (qa/fuzz/vault/README.md).
+[[target]]
+package = "vault"
+name = "vault_verdicts"
+smoke-secs = 60
+args = ["-rss_limit_mb=2048", "-max_len=4096"]
 timeout-secs = 2700
 
 [[excluded-target]]
