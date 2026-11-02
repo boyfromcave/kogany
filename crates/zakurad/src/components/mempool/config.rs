@@ -52,6 +52,24 @@ pub struct Config {
     /// If unset, defaults to [`DEFAULT_MAX_DATACARRIER_BYTES`]. This size includes the OP_RETURN
     /// opcode and pushdata overhead. Matches zcashd's `-datacarriersize` default behavior.
     pub max_datacarrier_bytes: Option<u32>,
+
+    /// Ycash: accept non-standard transactions, ycashd's `-acceptnonstdtxn` (regtest only).
+    ///
+    /// ycashd checks `IsStandardTx` and `AreInputsStandard` only on networks that require
+    /// standard transactions: mainnet and testnet always, regtest only with
+    /// `-acceptnonstdtxn=0`. Unset follows the network (accept on regtest only); a value is
+    /// honoured on regtest and ignored elsewhere, as ycashd refuses the flag there. The
+    /// sigop limit applies either way. (kogany W1-Y9)
+    #[cfg(feature = "ycash")]
+    pub accept_non_standard: Option<bool>,
+
+    /// Ycash: the ZIP-317 unpaid-action limit, ycashd's `-txunpaidactionlimit`.
+    ///
+    /// Unset (the Ycash default) applies no limit: ycashd's `DEFAULT_TX_UNPAID_ACTION_LIMIT` is
+    /// `SIZE_MAX`. A value rejects a transaction with more unpaid actions, counted at ycashd's
+    /// 500-zatoshi marginal fee. (kogany W1-Y9)
+    #[cfg(feature = "ycash")]
+    pub tx_unpaid_action_limit: Option<u32>,
 }
 
 impl Default for Config {
@@ -73,12 +91,26 @@ impl Default for Config {
             debug_enable_at_height: None,
 
             max_datacarrier_bytes: Some(DEFAULT_MAX_DATACARRIER_BYTES),
+
+            #[cfg(feature = "ycash")]
+            accept_non_standard: None,
+            #[cfg(feature = "ycash")]
+            tx_unpaid_action_limit: None,
         }
     }
 }
 
 /// Default maximum serialized size of an individual mempool transaction, in bytes.
+#[cfg(not(feature = "ycash"))]
 pub const DEFAULT_MAX_TRANSACTION_BYTES: u64 = 250_000;
+
+/// Default maximum serialized size of an individual mempool transaction, in bytes.
+///
+/// Ycash: ycashd has no standard size limit below the consensus one, `MAX_TX_SIZE_AFTER_SAPLING`
+/// = `MAX_BLOCK_SIZE` (ycash6 `consensus/consensus.h:29-34`), so a larger transaction is
+/// refused as invalid, not as policy. (kogany W1-Y9)
+#[cfg(feature = "ycash")]
+pub const DEFAULT_MAX_TRANSACTION_BYTES: u64 = zakura_chain::block::MAX_BLOCK_BYTES;
 
 /// Default maximum size of data carrier scripts (OP_RETURN), in bytes.
 ///

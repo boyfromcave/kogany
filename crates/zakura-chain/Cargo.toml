@@ -25,6 +25,8 @@ ycash = [
     "zcash_primitives/ycash",
     "zcash_address/ycash",
     "zcash_transparent/ycash",
+    "dep:kogany-vault",
+    "dep:kogany-yellowback",
 ]
 
 # Production features that activate extra functionality
@@ -78,6 +80,10 @@ sha2 = { workspace = true, features = ["compress"] }
 uint = { workspace = true }
 bech32 = { workspace = true }
 zcash_script.workspace = true
+
+# Ycash (kogany): the TX_PQPKH shape and the vault primitive's byte types (`ycash` only).
+kogany-vault = { path = "../kogany-vault", optional = true }
+kogany-yellowback = { path = "../kogany-yellowback", optional = true }
 
 # ECC deps
 halo2 = { workspace = true }

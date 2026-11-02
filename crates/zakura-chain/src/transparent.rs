@@ -1,6 +1,8 @@
 //! Transparent-related (Bitcoin-inherited) functionality.
 
 mod address;
+#[cfg(feature = "ycash")]
+mod destination;
 mod keys;
 mod opcodes;
 mod script;
@@ -22,6 +24,8 @@ use crate::{
 };
 
 pub use address::Address;
+#[cfg(feature = "ycash")]
+pub use destination::{Destination, PqKeyId};
 pub use script::Script;
 pub use serialize::GENESIS_COINBASE_SCRIPT_SIG;
 pub use utxo::{

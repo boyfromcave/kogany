@@ -33,6 +33,8 @@ pub use serialize::{
     MIN_TRANSPARENT_TX_V5_SIZE,
 };
 pub use sighash::{HashType, SigHash, SigHasher};
+#[cfg(feature = "ycash")]
+pub use unmined::ycash_relay;
 pub use unmined::{
     zip317, UnminedTx, UnminedTxId, VerifiedUnminedTx, MEMPOOL_TRANSACTION_COST_THRESHOLD,
 };

@@ -45,6 +45,8 @@ mod eviction_list;
 mod fixtures;
 mod policy;
 mod verified_set;
+#[cfg(feature = "ycash")]
+mod ycash_policy;
 
 #[cfg(feature = "mempool-bench")]
 pub(super) use verified_set::benchmarks::mempool_eviction_benchmarks;
@@ -192,6 +194,14 @@ pub enum NonStandardTransactionError {
     TooManySigops,
     #[error("transaction has non-standard inputs")]
     NonStandardInputs,
+    /// Ycash `tx-expiring-soon` (kogany W1-Y9).
+    #[cfg(feature = "ycash")]
+    #[error("transaction is expiring soon")]
+    ExpiringSoon,
+    /// Ycash `-txunpaidactionlimit` (kogany W1-Y9).
+    #[cfg(feature = "ycash")]
+    #[error("transaction has more unpaid actions than the configured limit")]
+    UnpaidActionLimit,
 }
 
 /// Represents a set of transactions that have been removed from the mempool, either because
@@ -255,6 +265,10 @@ pub struct Storage {
 
     /// Maximum allowed size of OP_RETURN scripts, in bytes.
     max_datacarrier_bytes: u32,
+
+    /// The Ycash policy that depends on the configuration and the network (kogany W1-Y9).
+    #[cfg(feature = "ycash")]
+    ycash: ycash_policy::Policy,
 }
 
 impl Drop for Storage {
@@ -290,12 +304,26 @@ impl Storage {
             max_datacarrier_bytes: config
                 .max_datacarrier_bytes
                 .unwrap_or(config::DEFAULT_MAX_DATACARRIER_BYTES),
+            #[cfg(feature = "ycash")]
+            ycash: ycash_policy::Policy::new(config, None),
             verified: Default::default(),
             pending_outputs: Default::default(),
             tip_rejected_exact: Default::default(),
             tip_rejected_same_effects: Default::default(),
             chain_rejected_same_effects: Default::default(),
         }
+    }
+
+    /// The Ycash storage for `network`: as [`Storage::new`], with the policy `network` selects
+    /// (regtest accepts non-standard transactions unless configured otherwise). (kogany W1-Y9)
+    #[cfg(feature = "ycash")]
+    pub(crate) fn new_for_network(
+        config: &config::Config,
+        network: &zakura_chain::parameters::Network,
+    ) -> Self {
+        let mut storage = Self::new(config);
+        storage.ycash = ycash_policy::Policy::new(config, Some(network));
+        storage
     }
 
     /// Check and reject non-standard transaction.
@@ -311,6 +339,12 @@ impl Storage {
     /// limits), and dust checks.
     fn reject_if_non_standard_tx(&mut self, tx: &VerifiedUnminedTx) -> Result<(), MempoolError> {
         use zcash_script::script::{self, Evaluable as _};
+
+        // Ycash: `RequireStandard()` is false (regtest), kogany W1-Y9.
+        #[cfg(feature = "ycash")]
+        if self.ycash.accept_non_standard {
+            return Ok(());
+        }
 
         let transaction = tx.transaction.transaction().as_ref();
         let spent_outputs = &tx.spent_outputs;
@@ -530,6 +564,15 @@ impl Storage {
             );
 
             return (Err(MempoolError::InMempool), HashSet::new());
+        }
+
+        // Ycash: the expiring-soon rule, the sigop limit and `-txunpaidactionlimit`, whether or
+        // not standardness is required (kogany W1-Y9).
+        #[cfg(feature = "ycash")]
+        if let Err(rejection_error) = self.ycash.check(&tx, height) {
+            if let Err(error) = self.reject_non_standard(&tx, rejection_error) {
+                return (Err(error), HashSet::new());
+            }
         }
 
         // Check that the transaction is standard.

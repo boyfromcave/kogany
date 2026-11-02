@@ -297,6 +297,18 @@ impl<'a> Reader<'a> {
     }
 }
 
+/// A key as the C++ `Writer::key` writes it: the 33 bytes of a `0x02`/`0x03` key, else 33 zero
+/// bytes. The C++ reader holds any other header as an invalid `CPubKey` (size 0), which
+/// re-encodes as zeros, so [`decode_act`]'s round trip refuses such an act as malformed unless
+/// its key bytes are all zero (found by the W3-e verdict replay, qa/fuzz/vault).
+fn key_bytes(k: &PubKeyBytes) -> [u8; 33] {
+    if k.is_compressed() {
+        k.0
+    } else {
+        [0; 33]
+    }
+}
+
 /// `P = "YV" || version || type || body` (C++ `EncodePayload`).
 pub fn encode_payload(body: &ActBody) -> Vec<u8> {
     let mut w = vec![ACT_MAGIC_0, ACT_MAGIC_1, ACT_VERSION, body.act_type()];
@@ -315,21 +327,21 @@ pub fn encode_payload(body: &ActBody) -> Vec<u8> {
             w.extend_from_slice(&c.bond_min.to_le_bytes());
             w.extend_from_slice(&c.bond_lock_min.to_le_bytes());
             w.extend_from_slice(&c.maturity.to_le_bytes());
-            w.extend_from_slice(&c.admit_key.0);
+            w.extend_from_slice(&key_bytes(&c.admit_key));
         }
         ActBody::Join(j) => {
             w.extend_from_slice(&j.set_id.0);
-            w.extend_from_slice(&j.member_key.0);
+            w.extend_from_slice(&key_bytes(&j.member_key));
             w.extend_from_slice(&j.bond_locktime.to_le_bytes());
             w.push(j.bond_vout);
         }
         ActBody::Heartbeat(h) => {
             w.extend_from_slice(&h.set_id.0);
-            w.extend_from_slice(&h.member_key.0);
+            w.extend_from_slice(&key_bytes(&h.member_key));
         }
         ActBody::Remove(r) => {
             w.extend_from_slice(&r.set_id.0);
-            w.extend_from_slice(&r.member_key.0);
+            w.extend_from_slice(&key_bytes(&r.member_key));
             w.push(r.burn);
         }
         ActBody::Equivocation(e) => {

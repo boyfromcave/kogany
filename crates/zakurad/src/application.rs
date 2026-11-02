@@ -178,8 +178,13 @@ pub fn release_version() -> Version {
 /// This must be a valid [BIP 14] user agent.
 ///
 /// [BIP 14]: https://github.com/bitcoin/bips/blob/master/bip-0014.mediawiki
+#[cfg_attr(feature = "ycash", allow(unreachable_code))]
 pub fn user_agent() -> String {
     let release_version = release_version();
+    // kogany: `/kogany:<version>/` on Ycash (`zakura_network::ycash::user_agent`).
+    #[cfg(feature = "ycash")]
+    return zakura_network::ycash::user_agent(release_version);
+
     format!("/Zakura:{release_version}/")
 }
 
