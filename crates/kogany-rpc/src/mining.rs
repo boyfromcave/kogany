@@ -11,29 +11,43 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
+use kogany_vault::state::SetState;
+use tower::{Service, ServiceExt};
+use zakura_chain::block;
 use zakura_rpc::ycash_mining::{YcashMining, YedTemplateFilter, YellowbackMiner};
+use zakura_state::{BoxError, ReadRequest, ReadResponse};
 
 use crate::yed::YedReadState;
 
-/// The template hooks of a node whose Yellowback state is `yed`.
+/// The template hooks of a node whose Yellowback state is `yed` and whose read state service is
+/// `read_state`.
 ///
-/// The vault half of the template filter needs the set state at the tip, which plan W4-d
-/// serves ([`YcashMining::vault_state`] keeps its default until then); the YED half needs the
-/// registered index, which plan W5-f serves ([`YcashMining::yed_template_filter`]).
+/// The vault half of the template filter reads the set state after the template's parent
+/// (`ReadRequest::VaultSnapshot`, plan W4-d); the YED half needs the registered index, which
+/// plan W5-f serves ([`YcashMining::yed_template_filter`]).
 #[derive(Clone)]
-pub struct YedMining {
+pub struct YedMining<R> {
     yed: Arc<dyn YedReadState>,
+    read_state: R,
 }
 
-impl YedMining {
-    /// The hooks over `yed`.
-    pub fn new(yed: Arc<dyn YedReadState>) -> Self {
-        Self { yed }
+impl<R> YedMining<R> {
+    /// The hooks over `yed` and `read_state`.
+    pub fn new(yed: Arc<dyn YedReadState>, read_state: R) -> Self {
+        Self { yed, read_state }
     }
 }
 
 #[async_trait]
-impl YcashMining for YedMining {
+impl<R> YcashMining for YedMining<R>
+where
+    R: Service<ReadRequest, Response = ReadResponse, Error = BoxError>
+        + Clone
+        + Send
+        + Sync
+        + 'static,
+    R::Future: Send,
+{
     /// ycashd's `g_yellowback` checks in `getblocktemplate`: no state is "not live", an
     /// unhealthy index refuses, and otherwise the miner status with `BuildTagScript`'s tag.
     async fn yellowback_miner(&self) -> Result<Option<YellowbackMiner>, String> {
@@ -60,6 +74,26 @@ impl YcashMining for YedMining {
             registered: miner.registered,
             eligible: miner.eligible,
         }))
+    }
+
+    /// ycash6 `TemplateRun`'s base: the set state after `parent`, `None` when the state
+    /// service does not know it (the template then leaves out every vault transaction).
+    async fn vault_state(&self, parent: block::Hash) -> Option<Arc<SetState>> {
+        match self
+            .read_state
+            .clone()
+            .oneshot(ReadRequest::VaultSnapshot {
+                parent_hash: parent,
+            })
+            .await
+        {
+            Ok(ReadResponse::VaultSnapshot(Some(snapshot))) => Some(snapshot.state),
+            Ok(_) => None,
+            Err(error) => {
+                tracing::warn!(%error, "the template's vault state could not be read");
+                None
+            }
+        }
     }
 
     fn yed_template_filter(

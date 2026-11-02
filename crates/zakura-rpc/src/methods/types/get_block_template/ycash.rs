@@ -79,8 +79,8 @@ pub trait YcashMining: Send + Sync + 'static {
     async fn yellowback_miner(&self) -> Result<Option<YellowbackMiner>, String>;
 
     /// The set state after the block `parent` (ycash6 `vault::TemplateRun`'s copy of the set
-    /// state at the tip), `None` when it is not available. Plan W4-d answers it from
-    /// `zakura_state::ReadRequest::VaultSnapshot`. While it is `None` and Vault is active, the
+    /// state at the tip), `None` when it is not available. kogany-rpc answers it from
+    /// `zakura_state::ReadRequest::VaultSnapshot` (plan W4-d). While it is `None` and Vault is active, the
     /// template leaves out every candidate that touches the vault primitive (fail closed).
     async fn vault_state(&self, parent: block::Hash) -> Option<Arc<SetState>> {
         let _ = parent;

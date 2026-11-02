@@ -737,8 +737,10 @@ impl StartCmd {
         node_tasks.track(&rpc_tx_queue_handle);
         // kogany W8-b: the coinbase tag and the template filter read the node's Yellowback state.
         #[cfg(feature = "ycash")]
-        let rpc_impl =
-            rpc_impl.with_ycash_mining(kogany_rpc::mining_hooks(latest_chain_tip.clone()));
+        let rpc_impl = rpc_impl.with_ycash_mining(kogany_rpc::mining_hooks(
+            latest_chain_tip.clone(),
+            read_only_state_service.clone(),
+        ));
 
         let node_services = ready.as_ref().map(|_| crate::node::NodeServices {
             read_state: read_only_state_service.clone(),
@@ -751,7 +753,11 @@ impl StartCmd {
         let rpc_task_handle = if config.rpc.listen_addr.is_some() {
             zakura_rpc::server::kogany_extension::start_node_server(
                 &rpc_impl,
-                kogany_rpc::node_extension(&config.network.network, latest_chain_tip.clone()),
+                kogany_rpc::node_extension(
+                    &config.network.network,
+                    latest_chain_tip.clone(),
+                    read_only_state_service.clone(),
+                ),
                 config.rpc.clone(),
             )
             .await
@@ -764,7 +770,11 @@ impl StartCmd {
         let admin_rpc_task_handle = if config.rpc.admin_listen_addr.is_some() {
             zakura_rpc::server::kogany_extension::start_node_admin_server(
                 &rpc_impl,
-                kogany_rpc::node_extension(&config.network.network, latest_chain_tip.clone()),
+                kogany_rpc::node_extension(
+                    &config.network.network,
+                    latest_chain_tip.clone(),
+                    read_only_state_service.clone(),
+                ),
                 config.rpc.clone(),
             )
             .await
