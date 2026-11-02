@@ -50,6 +50,16 @@ class SyncGateTest(unittest.TestCase):
              "sprout": {"commitments": {"finalState": "ef"}}}
         self.assertEqual(gate.compare_treestates(k, y), (["sapling.finalState"], []))
 
+    def test_chainhistoryroot_is_the_blocks_own_commitment(self):
+        h = gate.MAINNET_HEARTWOOD + 1
+        same = block(blockcommitments="84", chainhistoryroot="84")
+        self.assertEqual(gate.compare_blocks(h, block(blockcommitments="84"), same), [])
+        other = block(blockcommitments="84", chainhistoryroot="8d")
+        self.assertEqual([d[0] for d in gate.compare_blocks(h, block(blockcommitments="84"), other)],
+                         ["zip221 chainhistoryroot(h) vs blockcommitments(h)"])
+        self.assertEqual(gate.compare_blocks(gate.MAINNET_HEARTWOOD, block(blockcommitments="00"),
+                                             block(blockcommitments="00", chainhistoryroot="84")), [])
+
     def test_recheck_keeps_only_the_differences_that_remain(self):
         class Fake:
             def __init__(self, blocks, trees):

@@ -16,8 +16,9 @@ JSON-RPC and requires byte-identical answers for:
   * `getblock <h> 1`: `finalsaplingroot`, `chainSupply`, and each value pool's `chainValueZat`
     and `valueDeltaZat` (`valuePools`, by `id`, where ycash6 marks the pool `monitored`);
   * from Heartwood (1,100,003 on mainnet) the ZIP-221 commitment: `blockcommitments` on both,
-    and ycash6's `chainhistoryroot` at h against the `blockcommitments` of h+1 (before NU5 the
-    header commits to the previous block's history root);
+    and, above it, ycash6's `chainhistoryroot` at h against the `blockcommitments` of h (ycashd
+    reports `hashChainHistoryRoot`, the history root through h-1 that header h commits to before
+    NU5);
   * `z_gettreestate <h>` at sampled heights (every `--treestate-every`, every activation
     boundary, and the last height compared): each tree's `finalState` and `finalRoot` that both
     nodes report.
@@ -131,6 +132,13 @@ def compare_blocks(height, k_block, y_block):
     if height >= MAINNET_HEARTWOOD and "blockcommitments" in k_block and "blockcommitments" in y_block:
         if k_block["blockcommitments"] != y_block["blockcommitments"]:
             diffs.append(("blockcommitments", k_block["blockcommitments"], y_block["blockcommitments"]))
+    # ycashd's `chainhistoryroot` at h is `hashChainHistoryRoot`, the root of the history tree
+    # through h-1, which is what header h commits to before NU5 (Ycash never reaches NU5's
+    # auth-data commitment): it must equal the block's own `blockcommitments` above Heartwood.
+    if height > MAINNET_HEARTWOOD and y_block.get("chainhistoryroot") and y_block.get("blockcommitments") \
+            and y_block["chainhistoryroot"] != y_block["blockcommitments"]:
+        diffs.append(("zip221 chainhistoryroot(h) vs blockcommitments(h)",
+                      y_block["chainhistoryroot"], y_block["blockcommitments"]))
     k_supply, y_supply = k_block.get("chainSupply"), y_block.get("chainSupply")
     if k_supply and y_supply and y_supply.get("monitored") is not False:
         for field in ("chainValueZat", "valueDeltaZat"):
@@ -224,11 +232,6 @@ def run_round(kogany, ycash, state, args):
             if k_err or y_err or k_block is None or y_block is None:
                 raise GateError("getblock %d: kogany %s, ycash6 %s" % (height, k_err, y_err))
             diffs = compare_blocks(height, k_block, y_block)
-            prev = state.get("_prev_chainhistoryroot")
-            if height > MAINNET_HEARTWOOD and prev and y_block.get("blockcommitments") \
-                    and prev != y_block["blockcommitments"]:
-                diffs.append(("zip221 chainhistoryroot(h-1) vs blockcommitments(h)", prev, y_block["blockcommitments"]))
-            state["_prev_chainhistoryroot"] = y_block.get("chainhistoryroot")
             if diffs:
                 state["mismatches"].append({"height": height, "diffs": diffs})
             sample = (height % args.treestate_every == 0) or (height in MAINNET_BOUNDARIES) or height == top
@@ -261,10 +264,6 @@ def recheck(kogany, ycash, state, args):
     trees = sorted({m["height"] for m in state["mismatches"] if m.get("rpc") == "z_gettreestate"}
                    | {t["height"] for t in state["treestate_samples"] if not t["identical"]})
     kept = [m for m in state["mismatches"] if m.get("rpc") not in (None, "z_gettreestate")]
-    # The ZIP-221 check is ycash6 against ycash6; a recheck cannot change it.
-    kept += [{"height": m["height"], "diffs": [d for d in m["diffs"] if d[0].startswith("zip221")]}
-             for m in state["mismatches"] if not m.get("rpc")
-             and any(d[0].startswith("zip221") for d in m["diffs"])]
     for i in range(0, len(blocks), args.batch):
         heights = blocks[i:i + args.batch]
         calls = [("getblock", [str(x), 1]) for x in heights]
