@@ -333,13 +333,13 @@ mod tests {
                 let ReadRequest::VaultSnapshot { parent_hash } = request else {
                     return Ok::<_, BoxError>(ReadResponse::VaultSnapshot(None));
                 };
-                Ok(ReadResponse::VaultSnapshot((parent_hash == parent).then(
-                    || zakura_state::vault::VaultSnapshot {
+                Ok(ReadResponse::VaultSnapshot(
+                    (parent_hash == parent).then_some(zakura_state::vault::VaultSnapshot {
                         tip: None,
                         state: served,
                         yed_params: None,
-                    },
-                )))
+                    }),
+                ))
             }
         });
         let hooks = YedMining::new(Arc::new(UnavailableYedState), read_state);
