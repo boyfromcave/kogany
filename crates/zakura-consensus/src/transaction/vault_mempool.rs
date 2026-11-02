@@ -8,7 +8,7 @@
 //! Ported by meaning from ycashd 6.22 (`ycash6` at `65cb4ae0f`), `src/main.cpp`
 //! `AcceptToMemoryPool` and `src/vault/node.cpp`:
 //!
-//! - [`check_vault_rules`]: `vault::CheckTx(tx, coins, nextHeight, *vaultSnapshot, ...)`
+//! - [`zakura_state::vault::mempool_vault_check`]: `vault::CheckTx(tx, coins, nextHeight, *vaultSnapshot, ...)`
 //!   (`main.cpp:2197-2203`), scored by [`is_byte_level_act_failure`] (`IsByteLevelActFailure`,
 //!   `node.cpp:517`): 10 for a malformed act no honest relay produces, else 0;
 //! - [`check_template_input`]: the template (V/I) input's script checked alone, first, with the
@@ -23,11 +23,10 @@
 //! transaction after the tip grows (`zakurad` `mempool::tip_recheck`, ycashd's
 //! `RemoveInvalidVaultSpends` and `RecheckMempool` in `ConnectTip`).
 
-use std::{collections::HashMap, sync::Arc};
+use std::sync::Arc;
 
 use kogany_vault::{
     act::{decode_act, is_act_output, ActError},
-    state::check_tx,
     template::{match_intent, match_vault, Shape},
 };
 use tower::{timeout::Timeout, Service, ServiceExt};
@@ -119,40 +118,7 @@ pub fn is_vault_relevant(
         })
 }
 
-/// `vault::CheckTx` for the block at `height` (tip + 1) over the tip's set state `state`, with
-/// the spent coins of `spent_utxos` (a mempool parent at `height`).
-pub fn check_vault_rules(
-    network: &Network,
-    tx: &Transaction,
-    txid: &transaction::Hash,
-    height: Height,
-    state: &VaultStateSnapshot,
-    spent_utxos: &HashMap<transparent::OutPoint, transparent::Utxo>,
-) -> Result<(), TransactionError> {
-    let Some(params) = zs::vault::vault_network_params(network).filter(|p| p.is_active(height))
-    else {
-        return Ok(());
-    };
-    let vault_tx = zs::vault::vault_tx(tx, txid);
-    check_tx(
-        &**state,
-        &vault_tx,
-        i64::from(height.0),
-        &zs::vault::UtxoCoins(spent_utxos),
-        &params.rules(),
-    )
-    .map(|_delta| ())
-    .map_err(|reject| {
-        let reason = reject.reason().to_owned();
-        let byte_level = is_byte_level_act_failure(
-            &reason,
-            tx.outputs().iter().map(|o| o.lock_script.as_raw_bytes()),
-        );
-        TransactionError::VaultRejected { reason, byte_level }
-    })
-}
-
-/// ycashd's order for a transaction `check_vault_rules` refused: `IsStandardTx` (outputs
+/// ycashd's order for a transaction `zakura_state::vault::mempool_vault_check` refused: `IsStandardTx` (outputs
 /// included) runs first where standardness is required, so a non-standard transaction is
 /// reported as that (W6-a finding F-3, for the vault pair). The relay knobs are ycashd's
 /// defaults (`-datacarriersize` 83; the mempool storage applies the configured ones).
@@ -402,12 +368,14 @@ mod tests {
     fn the_new_verdicts_score_as_ycashd() {
         let byte_level = TransactionError::VaultRejected {
             reason: "bad-vault-act-malformed".into(),
+            height: Height(10),
             byte_level: true,
         };
         assert_eq!(byte_level.mempool_misbehavior_score(), 10);
         for error in [
             TransactionError::VaultRejected {
                 reason: "bad-vault-act-noset".into(),
+                height: Height(10),
                 byte_level: false,
             },
             TransactionError::VaultTemplateSetState {

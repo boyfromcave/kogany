@@ -663,25 +663,46 @@ where
 
             // kogany (W4-d): the set state the scripts read.
             let vault_state = Self::vault_script_state(&req, &network, state.clone()).await?;
+            // kogany (W4-d): the mempool's vault rules at the next height over the tip's set state
+            // (ycash6 `vault::CheckTx`, unscored); a block's run in contextual validation.
+            if let (true, Some(tip_state)) = (req.is_mempool(), vault_state.as_ref()) {
+                zakura_state::vault::mempool_vault_check(
+                    &network,
+                    tip_state.as_ref(),
+                    &tx,
+                    &req.tx_mined_id(),
+                    req.height(),
+                    &spent_utxos,
+                )
+                .map_err(|reason| {
+                    // kogany (W6-c): ycashd scores a byte-level act failure 10, and reports a
+                    // non-standard transaction as such before the vault rules.
+                    #[cfg(feature = "ycash")]
+                    if let Some(error) = vault_mempool::non_standard_first(&network, &tx, req.height()) {
+                        return error;
+                    }
+                    #[cfg(feature = "ycash")]
+                    let byte_level = vault_mempool::is_byte_level_act_failure(
+                        &reason,
+                        tx.outputs().iter().map(|o| o.lock_script.as_raw_bytes()),
+                    );
+                    #[cfg(not(feature = "ycash"))]
+                    let byte_level = false;
+                    TransactionError::VaultRejected {
+                        reason,
+                        height: req.height(),
+                        byte_level,
+                    }
+                })?;
+            }
 
             #[cfg(feature = "ycash")]
             let mempool_vault_state = vault_state.clone();
 
-            // kogany (W6-c): the primitive's rules and the template input's script for the next
-            // block over the tip's set state (ycash6 `AcceptToMemoryPool`, after the fee checks).
+            // kogany (W6-c): the template input's script for the next block over the tip's set
+            // state (ycash6 `AcceptToMemoryPool`, after `vault::CheckTx`).
             #[cfg(feature = "ycash")]
             if let (true, Some(vault_state)) = (req.is_mempool(), &vault_state) {
-                vault_mempool::check_vault_rules(
-                    &network,
-                    &tx,
-                    &tx_id.mined_id(),
-                    req.height(),
-                    vault_state,
-                    &spent_utxos,
-                )
-                .map_err(|error| {
-                    vault_mempool::non_standard_first(&network, &tx, req.height()).unwrap_or(error)
-                })?;
                 vault_mempool::check_template_input(
                     &network,
                     &tx,

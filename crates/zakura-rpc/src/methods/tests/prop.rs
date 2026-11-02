@@ -92,6 +92,8 @@ proptest! {
     ///
     /// Mempool service errors should become server errors.
     #[test]
+    // kogany W7-e: under `ycash` the rejections carry ycashd's codes and texts (ycash_reject).
+    #[cfg_attr(feature = "ycash", ignore)]
     fn mempool_errors_are_forwarded(transaction in any::<Transaction>(), network in any::<Network>()) {
         prop_assume!(!(transaction.is_coinbase() && transaction.sapling_spends_per_anchor().count() > 0));
 
@@ -148,6 +150,8 @@ proptest! {
 
     /// Test that when the mempool rejects a transaction the caller receives an error.
     #[test]
+    // kogany W7-e: under `ycash` the rejections carry ycashd's codes and texts (ycash_reject).
+    #[cfg_attr(feature = "ycash", ignore)]
     fn rejected_txs_are_reported(transaction in any::<Transaction>(), network in any::<Network>()) {
         prop_assume!(!(transaction.is_coinbase() && transaction.sapling_spends_per_anchor().count() > 0));
 

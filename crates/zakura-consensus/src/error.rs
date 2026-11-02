@@ -211,6 +211,20 @@ pub enum TransactionError {
     // This error variant is at least 128 bytes
     ValidateContextError(Box<ValidateContextError>),
 
+    /// kogany (W4-d): the mempool's vault check failed against the best chain tip's set state
+    /// (ycash6 `vault::CheckTx` in `AcceptToMemoryPool`, DoS 0: it depends on the tip).
+    #[error("vault rule violation in the mempool at {height:?}: {reason}")]
+    VaultRejected {
+        /// The C++ reject reason.
+        reason: String,
+        /// The next block's height, which the check ran at.
+        height: zakura_chain::block::Height,
+        /// kogany (W6-c): ycashd's `IsByteLevelActFailure` (`src/vault/node.cpp:517`): a
+        /// malformed act no honest relay produces, scored 10; every other reason depends on the
+        /// set state at this node's tip and scores 0.
+        byte_level: bool,
+    },
+
     #[error("could not validate mempool transaction lock time on best chain: {0}")]
     #[cfg_attr(any(test, feature = "proptest-impl"), proptest(skip))]
     // TODO: turn this into a typed error
@@ -312,16 +326,6 @@ pub enum TransactionError {
 
     #[error("unexpected error")]
     Other(String),
-
-    /// kogany (W6-c): the Vault primitive's rules refuse the transaction for the next block
-    /// (ycash6 `vault::CheckTx` in `AcceptToMemoryPool`, `src/main.cpp:2197-2203`). `reason` is
-    /// ycashd's reject reason (`VaultReject::reason`). `byte_level` is ycashd's
-    /// `IsByteLevelActFailure` (`src/vault/node.cpp:517`): a malformed act no honest relay
-    /// produces, scored 10; every other reason depends on the set state at this node's tip and
-    /// scores 0.
-    #[cfg(feature = "ycash")]
-    #[error("vault rule violation in the mempool: {reason}")]
-    VaultRejected { reason: String, byte_level: bool },
 
     /// kogany (W6-c): a vault template (V/I) input's script fails on the set state at this node's
     /// tip (`OP_CHECKSETSIG`, `OP_CHECKSETDORMANT`), which the relaying peer's tip need not share
@@ -544,6 +548,9 @@ impl TransactionError {
                 BodyVerificationClass::Retryable(TransientBodyFailureKind::MissingContext)
             }
             Self::ValidateContextError(error) => error.body_verification_class(),
+            Self::VaultRejected { .. } => {
+                BodyVerificationClass::Retryable(TransientBodyFailureKind::VerifierUnavailable)
+            }
             Self::ValidateMempoolLockTimeError(_)
             | Self::Zip317(_)
             | Self::NonStandardScriptSigSize { .. }
@@ -575,8 +582,7 @@ impl TransactionError {
             // kogany (W6-c): mempool-only verdicts at this node's tip; a block's vault and YED
             // rules fail in contextual validation instead.
             #[cfg(feature = "ycash")]
-            Self::VaultRejected { .. }
-            | Self::VaultTemplateSetState { .. }
+            Self::VaultTemplateSetState { .. }
             | Self::NonMandatoryScriptFlag { .. }
             | Self::NonStandardTransaction { .. }
             | Self::YellowbackRejected { .. } => {
@@ -659,13 +665,11 @@ impl TransactionError {
 
             // kogany (W6-c): ycashd scores a byte-level act failure 10 and every other vault
             // or YED mempool refusal 0 (`src/main.cpp:2202,2229,2260`).
-            #[cfg(feature = "ycash")]
             VaultRejected {
                 byte_level: true, ..
             } => 10,
             #[cfg(feature = "ycash")]
-            VaultRejected { .. }
-            | VaultTemplateSetState { .. }
+            VaultTemplateSetState { .. }
             | NonMandatoryScriptFlag { .. }
             | NonStandardTransaction { .. }
             | YellowbackRejected { .. } => 0,

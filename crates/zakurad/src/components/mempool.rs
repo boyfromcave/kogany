@@ -405,6 +405,9 @@ fn peer_action(error: &TransactionError) -> PeerAction {
         // can fail.
         TransparentInputNotFound | ValidateMempoolLockTimeError(_) => Ignore,
 
+        // kogany (W4-d): the vault rules depend on the tip's set state (ycash6 DoS 0).
+        VaultRejected { .. } => Ignore,
+
         // Policy rejections: blocks can contain these transactions.
         Zip317(_)
         | NonStandardScriptSigSize { .. }
@@ -432,8 +435,7 @@ fn peer_action(error: &TransactionError) -> PeerAction {
         // act failure gets ycashd's score of 10 (`tip_recheck::extra_misbehavior_score`), not a
         // ban.
         #[cfg(feature = "ycash")]
-        VaultRejected { .. }
-        | VaultTemplateSetState { .. }
+        VaultTemplateSetState { .. }
         | NonMandatoryScriptFlag { .. }
         | NonStandardTransaction { .. }
         | YellowbackRejected { .. } => Ignore,

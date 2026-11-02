@@ -32,6 +32,7 @@ pub mod live;
 #[cfg(feature = "ycash")]
 pub mod mining;
 pub mod mock;
+pub mod regtest;
 pub mod state;
 pub mod types;
 pub mod vault;
@@ -83,6 +84,7 @@ where
     VaultRpcImpl::new(state, network.clone())
         .into_extension()
         .and(yed::extension(yed, network))
+        .and(regtest::RegtestRpcImpl::new(network.clone()).into_extension())
 }
 
 /// The `getblocktemplate` hooks `zakurad` installs on a Ycash node (plan W8-b): over the same

@@ -27,7 +27,7 @@ use crate::{
             ZakuraDb, STATE_COLUMN_FAMILIES_IN_CODE,
         },
         non_finalized_state::Chain,
-        vault::block_vault_delta_for_chain,
+        vault::{block_vault_delta_for_chain, mempool_vault_check},
     },
     CheckpointVerifiedBlock, ContextuallyVerifiedBlock, SemanticallyVerifiedBlock,
     ValidateContextError,
@@ -189,6 +189,43 @@ fn check_vault_accepts_the_recorded_chain_and_rejects_acts_out_of_order() {
         }
     }
     assert!(rejected >= 5, "out-of-order acts are rejected ({rejected})");
+
+    // The mempool check (ycash6 `vault::CheckTx`): over the parent's state, a vault-writing
+    // block's first non-coinbase transaction passes at the block's height; over the state
+    // before the first act, some transaction of every rejected block fails with a C++ reason.
+    let all_coins: HashMap<_, _> = blocks
+        .iter()
+        .flat_map(|b| {
+            transparent::new_ordered_outputs_with_height(&b.block, b.height, &b.tx_hashes)
+        })
+        .map(|(op, u)| (op, u.utxo))
+        .collect();
+    let mut mempool_rejected = 0;
+    for &i in &writers {
+        let b = &blocks[i];
+        let parent_state = chains[i].vault_view(&db).set_state();
+        let base_state = base.vault_view(&db).set_state();
+        let mut first = true;
+        let mut any_failed = false;
+        for (tx, txid) in b.block.transactions.iter().zip(b.tx_hashes.iter()) {
+            if tx.is_coinbase() {
+                continue;
+            }
+            if first {
+                mempool_vault_check(&network, &parent_state, tx, txid, b.height, &all_coins)
+                    .unwrap_or_else(|r| panic!("block {:?}'s first tx passes: {r}", b.height));
+                first = false;
+            }
+            if let Err(reason) =
+                mempool_vault_check(&network, &base_state, tx, txid, b.height, &all_coins)
+            {
+                assert!(reason.starts_with("bad-"), "a ycash6 reason: {reason}");
+                any_failed = true;
+            }
+        }
+        mempool_rejected += usize::from(any_failed);
+    }
+    assert!(mempool_rejected >= 5, "the mempool rejects them too ({mempool_rejected})");
 
     // Before the activation height nothing is checked.
     let mut pre = contextual(&network, &mut HashMap::new(), &blocks[0]);

@@ -396,6 +396,7 @@ mod tests {
             .respond(Err::<tx::Response, BoxError>(
                 TransactionError::VaultRejected {
                     reason: "bad-txns-vault-release".into(),
+                    height: Height(201),
                     byte_level: false,
                 }
                 .into(),
@@ -426,6 +427,7 @@ mod tests {
                     act_id.mined_id(),
                     TransactionError::VaultRejected {
                         reason: "bad-txns-vault-release".into(),
+                        height: Height(201),
                         byte_level: false
                     }
                 ),
@@ -589,6 +591,7 @@ mod tests {
         for error in [
             TransactionError::VaultRejected {
                 reason: "bad-txns-vault-release".into(),
+                height: Height(201),
                 byte_level: false,
             },
             TransactionError::VaultTemplateSetState {
@@ -616,11 +619,13 @@ mod tests {
     fn byte_level_act_failures_score_ten() {
         let byte_level = TransactionError::VaultRejected {
             reason: "bad-vault-act-malformed".into(),
+            height: Height(201),
             byte_level: true,
         };
         assert_eq!(extra_misbehavior_score(&byte_level), Some(10));
         let state = TransactionError::VaultRejected {
             reason: "bad-vault-act-noset".into(),
+            height: Height(201),
             byte_level: false,
         };
         assert_eq!(extra_misbehavior_score(&state), None);

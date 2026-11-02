@@ -235,7 +235,11 @@ impl<T: ChainTip + Send + Sync + 'static> YedReadState for MockYedState<T> {
                     } else {
                         "none"
                     },
-                    quote_age_seconds: quote.map(|_| 0),
+                    // W7-e: the age on the `setmocktime` clock; 0 on the system clock (fixture).
+                    quote_age_seconds: quote.map(|q| {
+                        zakura_rpc::server::kogany_extension::mock_clock::mock_time()
+                            .map_or(0, |now| (now - q.2).max(0))
+                    }),
                     registered: true,
                     eligible: true,
                     quote: quote.filter(|q| q.0 != 0).map(|q| HeldQuote {
@@ -268,9 +272,8 @@ impl<T: ChainTip + Send + Sync + 'static> YedReadState for MockYedState<T> {
     }
 
     async fn set_quote(&self, price: i64, mask: u16) -> Result<QuoteAck, YedError> {
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map_or(0, |d| i64::try_from(d.as_secs()).unwrap_or(i64::MAX));
+        // W7-e: `receivedAt` on the node's clock, which `setmocktime` sets.
+        let now = zakura_rpc::server::kogany_extension::mock_clock::now();
         let mut n = self
             .node
             .lock()
