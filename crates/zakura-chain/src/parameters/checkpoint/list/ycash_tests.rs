@@ -1,6 +1,6 @@
 //! kogany: the Ycash checkpoint lists (W1-Y4; K-9; M24-14), checked in a `ycash` build.
 
-use crate::parameters::{ycash, Network, NetworkUpgrade};
+use crate::parameters::{ycash, Network};
 
 use super::*;
 
