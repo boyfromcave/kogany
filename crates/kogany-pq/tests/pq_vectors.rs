@@ -422,3 +422,83 @@ fn verify_is_thread_safe() {
         }
     });
 }
+
+/// Truncations and cross-scheme lengths the length gate must refuse before any C reads a byte:
+/// a signature cut at every script-chunk boundary (a spend missing its last `MAX_CHUNK` pushes),
+/// cut to half, to the Falcon header plus nonce, or to the header byte alone; a key of the other
+/// scheme's length (zero-padded or cut); and the same refusals at the `primitive` entry points,
+/// which are public and carry their own length checks.
+#[test]
+fn rejects_truncated_and_cross_length_encodings() {
+    let doc = load_pinned("pq_vectors.json");
+    for k in keys(&doc) {
+        let (scheme, pk, msg, sig) = (k.scheme, &k.pk, &k.msg, &k.sig);
+        let other = 3 - scheme;
+
+        let mut cuts: Vec<usize> = (1..=sig.len() / MAX_CHUNK).map(|n| n * MAX_CHUNK).collect();
+        cuts.extend([1, 41, sig.len() / 2, sig.len() - MAX_CHUNK]);
+        for cut in cuts.into_iter().filter(|c| *c < sig.len()) {
+            assert!(
+                !verify(scheme, pk, msg, &sig[..cut]),
+                "{scheme}: sig cut to {cut}"
+            );
+        }
+        // The signature's bytes with the hashtype byte prepended rather than appended, cut to size.
+        let shifted = [&[0x01], &sig[..sig.len() - 1]].concat();
+        assert!(!verify(scheme, pk, msg, &shifted), "{scheme}: shifted sig");
+
+        let mut padded_pk = pk.clone();
+        padded_pk.resize(pubkey_size(other), 0);
+        assert!(
+            !verify(scheme, &padded_pk, msg, sig),
+            "{scheme}: pk at the other scheme's size"
+        );
+        assert!(
+            !verify(other, &padded_pk, msg, sig),
+            "{scheme}: pk relabelled"
+        );
+        // Key and signature swapped.
+        assert!(
+            !verify(scheme, sig, msg, pk),
+            "{scheme}: pk and sig swapped"
+        );
+
+        match scheme {
+            1 => {
+                for s in [
+                    &sig[..sig.len() - 1],
+                    &[sig.as_slice(), &[0]].concat(),
+                    &[][..],
+                ] {
+                    assert!(
+                        !primitive::slh_dsa_sha2_128s_verify(pk, msg, &[], s),
+                        "slh primitive sig len {}",
+                        s.len()
+                    );
+                }
+                assert!(!primitive::slh_dsa_sha2_128s_verify(
+                    &[pk.as_slice(), &[0]].concat(),
+                    msg,
+                    &[],
+                    sig
+                ));
+                assert!(!primitive::slh_dsa_sha2_128s_verify(&[], msg, &[], sig));
+            }
+            _ => {
+                for s in [&sig[..1], &sig[..41], &[][..], &sig[..sig.len() - 1]] {
+                    assert!(
+                        !primitive::falcon512_padded_verify(pk, msg, s),
+                        "falcon primitive sig len {}",
+                        s.len()
+                    );
+                }
+                assert!(!primitive::falcon512_padded_verify(&[], msg, sig));
+                // Header and nonce kept, compressed body zeroed: a 666-byte, correctly headed
+                // signature that encodes s = 0 is refused (comp_decode needs 512 stop bits).
+                let mut s = sig.clone();
+                s[41..].fill(0);
+                assert!(!primitive::falcon512_padded_verify(pk, msg, &s));
+            }
+        }
+    }
+}

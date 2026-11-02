@@ -18,11 +18,11 @@ Consumer: `crates/kogany-pq` (W3-b). C++: ycash6 `src/test/pq_crypto_tests.cpp` 
 | `keys[].name` | `golden_keys_verify_and_hash` (failure message only) |
 | `keys[].label` | not consumed (provenance of seed/msg/entropy; consumers take the hex) |
 | `keys[].seed` | `golden_keys_verify_and_hash` (48 bytes only); not replayed: KeyGen is not vendored (K-8, verify-only) |
-| `keys[].pk` | `golden_keys_verify_and_hash` (registry size), `rejects_malformed_and_mismatched`, `falcon_padding_is_canonical`, `falcon_rejects_out_of_range_encodings` |
+| `keys[].pk` | `golden_keys_verify_and_hash` (registry size), `rejects_malformed_and_mismatched`, `falcon_padding_is_canonical`, `falcon_rejects_out_of_range_encodings`, `rejects_truncated_and_cross_length_encodings` |
 | `keys[].keyhash` | `golden_keys_verify_and_hash` (`key_hash(scheme, pk)`) |
 | `keys[].msg` | `golden_keys_verify_and_hash` (32 bytes; signed message) |
 | `keys[].entropy` | `golden_keys_verify_and_hash` (0 / 88 bytes only); not replayed: signing is not vendored |
-| `keys[].sig` | `golden_keys_verify_and_hash` (registry size, `verify` true), `rejects_malformed_and_mismatched`, `slh_dsa_context_is_empty`, `falcon_padding_is_canonical`, `falcon_rejects_out_of_range_encodings`, `verify_is_thread_safe` |
+| `keys[].sig` | `golden_keys_verify_and_hash` (registry size, `verify` true), `rejects_malformed_and_mismatched`, `slh_dsa_context_is_empty`, `falcon_padding_is_canonical`, `falcon_rejects_out_of_range_encodings`, `rejects_truncated_and_cross_length_encodings`, `verify_is_thread_safe` |
 | `spends[].scheme` | `golden_spends_encode_and_verify` (equals its key's scheme) |
 | `spends[].key` | `golden_spends_encode_and_verify` |
 | `spends[].scriptPubKey` | `golden_spends_encode_and_verify` (`0x20 ‖ keyhash ‖ OP_n ‖ 0xc2`, 35 bytes) |

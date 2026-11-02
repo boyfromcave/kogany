@@ -40,7 +40,7 @@ authority on provenance and the local patches; in short:
 
 `csrc/SHA256SUMS` pins every file; `build.rs` refuses to compile if a file drifts or the set
 changes, and `tests/vendored.rs` checks the same. Regenerate after a deliberate re-vendor with
-`(cd csrc && find falcon slhdsa -type f | sort | xargs sha256sum > SHA256SUMS)`.
+`(cd csrc && find falcon slhdsa -type f | LC_ALL=C sort | xargs shasum -a 256 > SHA256SUMS)`.
 
 Build: the `cc` crate, C99, no target-feature flags, optimisation from the Cargo profile. The
 generic global names (`sha2_*`, `sha3_*`, `shake*`, `slh_*`, `ycash_falcon512_verify`) are renamed
