@@ -187,7 +187,7 @@ pub fn proof_of_work_is_valid(
         Ok(policy) if policy.is_authenticated_custom_waiver() => true,
         Ok(_) => {
             difficulty_is_valid(header, network, height, hash).is_ok()
-                && equihash_solution_is_valid(header, network).is_ok()
+                && equihash_solution_is_valid(header, network, height).is_ok()
         }
         Err(_) => false,
     }

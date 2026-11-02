@@ -4112,6 +4112,7 @@ fn sapling_coinbase_output_with_invalid_value_commitment_is_rejected() {
                 known_outpoint_hashes: Arc::new(HashSet::new()),
                 height,
                 time: DateTime::<Utc>::MAX_UTC,
+                vault_snapshot: None,
             })
             .await;
 
