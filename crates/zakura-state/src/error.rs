@@ -816,6 +816,25 @@ pub enum ValidateContextError {
         created_height: block::Height,
     },
 
+    // kogany (W3-d): BIP68 relative lock-times from the Vault upgrade, height-based only.
+    #[error(
+        "time-based relative lock-time: input {input_index} has nSequence {sequence:#010x} \
+         with BIP68's type flag set, which the Vault upgrade makes invalid \
+         (bad-txns-vault-timelock)"
+    )]
+    #[non_exhaustive]
+    VaultTimeLock { input_index: usize, sequence: u32 },
+
+    #[error(
+        "unsatisfied relative lock-time: a spend at {spend_height:?} is invalid \
+         before {min_spend_height:?} (bad-txns-nonfinal; non-BIP68-final in the mempool)"
+    )]
+    #[non_exhaustive]
+    UnsatisfiedSequenceLock {
+        spend_height: block::Height,
+        min_spend_height: block::Height,
+    },
+
     #[error("sprout double-spend: duplicate nullifier: {nullifier:?}, in finalized state: {in_finalized_state:?}")]
     #[non_exhaustive]
     DuplicateSproutNullifier {
@@ -1074,6 +1093,8 @@ impl ValidateContextError {
             Self::ImmatureTransparentCoinbaseSpend { .. } => {
                 consensus("context.immature_transparent_coinbase_spend")
             }
+            Self::VaultTimeLock { .. } => consensus("context.vault_timelock"),
+            Self::UnsatisfiedSequenceLock { .. } => consensus("context.unsatisfied_sequence_lock"),
             Self::DuplicateSproutNullifier { .. } => {
                 consensus("context.duplicate_sprout_nullifier")
             }
@@ -1122,6 +1143,8 @@ impl ValidateContextError {
             | ValidateContextError::EarlyTransparentSpend { .. }
             | ValidateContextError::UnshieldedTransparentCoinbaseSpend { .. }
             | ValidateContextError::ImmatureTransparentCoinbaseSpend { .. }
+            | ValidateContextError::VaultTimeLock { .. }
+            | ValidateContextError::UnsatisfiedSequenceLock { .. }
             | ValidateContextError::DuplicateSproutNullifier { .. }
             | ValidateContextError::DuplicateSaplingNullifier { .. }
             | ValidateContextError::DuplicateOrchardNullifier { .. }
@@ -1549,6 +1572,14 @@ mod tests {
                 spend_height: height,
                 min_spend_height: Height(100),
                 created_height: Height(1),
+            },
+            ValidateContextError::VaultTimeLock {
+                input_index: 0,
+                sequence: 1 << 22,
+            },
+            ValidateContextError::UnsatisfiedSequenceLock {
+                spend_height: height,
+                min_spend_height: Height(100),
             },
             ValidateContextError::DuplicateSproutNullifier {
                 nullifier: sprout::Nullifier::from([0; 32]),

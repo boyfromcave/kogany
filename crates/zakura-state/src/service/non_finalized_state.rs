@@ -827,6 +827,13 @@ impl NonFinalizedState {
         );
         let spent_utxos = spent_utxos?;
 
+        // kogany (W3-d): BIP68 relative lock-times at the block's height, on this fork.
+        check::sequence_locks::block_sequence_locks_are_satisfied(
+            &self.network,
+            &prepared,
+            &spent_utxos,
+        )?;
+
         // Reads from disk
         let shielded_anchor_start = Instant::now();
         let shielded_anchors =

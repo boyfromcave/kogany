@@ -56,6 +56,8 @@ use super::{check, Request, Verifier};
 mod prop;
 // kogany: the Vault epoch (W2-b).
 mod vault;
+// kogany: BIP68 relative lock-times (W3-d).
+mod bip68;
 
 /// Returns the timeout duration for tests, extended when running under coverage
 /// instrumentation to account for the performance overhead.

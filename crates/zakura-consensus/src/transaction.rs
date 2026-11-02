@@ -604,6 +604,8 @@ where
             //       the state once #2336 has been implemented?
             if req.is_mempool() {
                 Self::check_maturity_height(&network, &req, &spent_utxos)?;
+                // kogany (W3-d): BIP68 relative lock-times at the next block's height.
+                check::tx_transparent_sequence_locks(&network, &tx, req.height(), &spent_utxos)?;
 
                 // Reject non-standard input scripts (oversized or non-push-only
                 // scriptSigs, and high-sigop P2SH redeem scripts) *before*
