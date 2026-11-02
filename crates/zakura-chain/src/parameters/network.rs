@@ -429,6 +429,11 @@ impl zcash_protocol::consensus::Parameters for Network {
         &self,
         nu: zcash_protocol::consensus::NetworkUpgrade,
     ) -> Option<zcash_protocol::consensus::BlockHeight> {
+        // zakura-protocol's Vault upgrade is not scheduled on any Zakura
+        // network until W2-b adds it.
+        if nu == zcash_protocol::consensus::NetworkUpgrade::Vault {
+            return None;
+        }
         NetworkUpgrade::from(nu)
             .activation_height(self)
             .map(|Height(h)| zcash_protocol::consensus::BlockHeight::from_u32(h))

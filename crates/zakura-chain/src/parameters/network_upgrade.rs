@@ -717,6 +717,9 @@ impl From<zcash_protocol::consensus::NetworkUpgrade> for NetworkUpgrade {
             zcash_protocol::consensus::NetworkUpgrade::Overwinter => Self::Overwinter,
             zcash_protocol::consensus::NetworkUpgrade::Sapling => Self::Sapling,
             zcash_protocol::consensus::NetworkUpgrade::Ycash => Self::Ycash,
+            // Vault: no Zakura upgrade yet (W2-b adds it). Never scheduled here:
+            // `Parameters::activation_height` answers `None` before converting.
+            zcash_protocol::consensus::NetworkUpgrade::Vault => Self::Canopy,
             zcash_protocol::consensus::NetworkUpgrade::Blossom => Self::Blossom,
             zcash_protocol::consensus::NetworkUpgrade::Heartwood => Self::Heartwood,
             zcash_protocol::consensus::NetworkUpgrade::Canopy => Self::Canopy,
