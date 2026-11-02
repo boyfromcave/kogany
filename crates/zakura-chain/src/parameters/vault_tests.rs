@@ -604,3 +604,66 @@ fn ycash_profile_vault_heights_equal_ycashd() {
         None
     );
 }
+
+/// Plan §2.3/§2.5: an upgrade a network does not schedule is not observable there. Neither
+/// `Ycash` (in a Zcash build) nor `Vault` appears in `full_activation_list` (getblockchaininfo's
+/// `upgrades`) or in librustzcash's `activation_height`, even on a configured testnet whose
+/// later upgrades give them a fallback height (the `nu6testnet` snapshot's shape: Sapling 584,000
+/// and NU6 set), so Zcash-network RPC output stays byte-identical to upstream.
+#[cfg(not(feature = "ycash"))]
+#[test]
+fn unscheduled_kogany_upgrades_are_not_observable() {
+    let configured = testnet::Parameters::build()
+        .with_activation_heights(ConfiguredActivationHeights {
+            before_overwinter: Some(1),
+            overwinter: Some(207_500),
+            sapling: Some(584_000),
+            blossom: Some(584_001),
+            heartwood: Some(584_002),
+            canopy: Some(584_003),
+            nu5: Some(584_004),
+            nu6: Some(2_976_000),
+            ..Default::default()
+        })
+        .expect("a valid configured testnet")
+        .clear_funding_streams()
+        .to_network()
+        .expect("a valid configured testnet");
+    let mut networks = networks_without_vault();
+    networks.push(configured);
+    for network in networks {
+        for nu in [Ycash, Vault] {
+            assert!(!network.is_kogany_upgrade_scheduled(nu), "{network} {nu:?}");
+            assert!(
+                !network
+                    .full_activation_list()
+                    .iter()
+                    .any(|(_, listed)| *listed == nu),
+                "{network}: {nu:?} is listed without a height"
+            );
+            assert!(
+                !network
+                    .full_activation_list()
+                    .iter()
+                    .any(|(_, listed)| listed.branch_id() == nu.branch_id()),
+                "{network}: {nu:?}'s branch ID is reported"
+            );
+            assert_eq!(
+                zcash_protocol::consensus::Parameters::activation_height(
+                    &network,
+                    match nu {
+                        Ycash => zcash_protocol::consensus::NetworkUpgrade::Ycash,
+                        _ => zcash_protocol::consensus::NetworkUpgrade::Vault,
+                    }
+                ),
+                None,
+                "{network} {nu:?}"
+            );
+        }
+    }
+    // Scheduled, Vault is listed at its own height, with its branch ID.
+    let network = regtest_with_vault(10);
+    assert!(network
+        .full_activation_list()
+        .contains(&(Height(10), Vault)));
+}
