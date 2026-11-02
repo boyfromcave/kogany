@@ -729,3 +729,29 @@ async fn prepare_follows_the_vault_activation() {
     assert!(running.keep(&a));
     assert!(!running.keep(&join(set_id, 1, 0x42)));
 }
+
+/// S5 parity (`yellowback_stock_node.py`, `yellowback_mining.py`): a Ycash template carries
+/// ycashd's key set, so neither Zakura's `maxtime` nor its `workid`; one read back from JSON
+/// still parses (the internal `maxtime` is the latest time).
+#[test]
+fn ycash_template_has_no_maxtime_or_workid() {
+    let json = include_str!("../../../../../tests/vectors/getblocktemplate_response_template.json");
+    let parsed: crate::methods::types::get_block_template::GetBlockTemplateResponse =
+        serde_json::from_str(json).expect("the vector parses");
+    let out = serde_json::to_value(&parsed).expect("serializes");
+    assert!(out.get("curtime").is_some() && out.get("mintime").is_some());
+    assert!(out.get("maxtime").is_none(), "{out}");
+    assert!(out.get("workid").is_none(), "{out}");
+    let mut without: serde_json::Value = serde_json::from_str(json).expect("json");
+    let object = without.as_object_mut().expect("an object");
+    object.remove("maxtime");
+    object.remove("workid");
+    let back: crate::methods::types::get_block_template::GetBlockTemplateResponse =
+        serde_json::from_value(without).expect("ycashd's key set parses");
+    let crate::methods::types::get_block_template::GetBlockTemplateResponse::TemplateMode(t) =
+        back
+    else {
+        panic!("a template");
+    };
+    assert_eq!(t.max_time(), zakura_chain::serialization::DateTime32::MAX);
+}

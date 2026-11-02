@@ -435,12 +435,23 @@ pub struct BlockTemplateResponse {
     /// fixed 90 minute consensus rule, or a smaller fixed interval (like 1000s).
     /// Some miners don't check the maximum time. This can cause invalid blocks after network downtime,
     /// a significant drop in the hash rate, or after the testnet minimum difficulty interval.
+    ///
+    /// Ycash (S5 parity): ycashd's template has no `maxtime` (ycash6 `src/rpc/mining.cpp`), so a
+    /// Ycash build keeps it for its own use (proposals) and does not send it.
     #[serde(rename = "maxtime")]
+    #[cfg_attr(
+        feature = "ycash",
+        serde(skip_serializing, default = "ycash_absent_max_time")
+    )]
     #[getset(get_copy = "pub")]
     pub(crate) max_time: DateTime32,
 
     /// Identifies this prepared mining candidate.
+    ///
+    /// Ycash (S5 parity): not in ycashd's template either; `submitblock` finds the candidate by
+    /// its bytes, so a Ycash build does not send it.
     #[serde(rename = "workid")]
+    #[cfg_attr(feature = "ycash", serde(skip_serializing, default))]
     #[getset(get = "pub")]
     pub(crate) work_id: String,
 
@@ -1297,4 +1308,10 @@ where
 
     // Check that the mempool and state were in sync when we made the requests
     Ok((last_seen_tip_hash == chain_tip_hash).then_some((transactions, transaction_dependencies)))
+}
+
+/// The `maxtime` a Ycash template read back from JSON carries: ycashd sends none (S5 parity).
+#[cfg(feature = "ycash")]
+fn ycash_absent_max_time() -> DateTime32 {
+    DateTime32::MAX
 }
