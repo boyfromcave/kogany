@@ -55,7 +55,12 @@ impl Version {
     /// - during the initial block download,
     /// - after Zebra restarts, and
     /// - after Zebra's local network is slow or shut down.
+    #[cfg_attr(feature = "ycash", allow(unreachable_code, unused_variables))]
     fn initial_min_for_network(network: &Network) -> Version {
+        // kogany: ycashd's `MIN_PEER_PROTO_VERSION` floor on every Ycash network.
+        #[cfg(feature = "ycash")]
+        return crate::ycash::MIN_PEER_PROTO_VERSION;
+
         *constants::INITIAL_MIN_NETWORK_PROTOCOL_VERSION
             .get(&network.kind())
             .expect("We always have a value for testnet or mainnet")
@@ -85,10 +90,15 @@ impl Version {
     ///
     /// - The citation above is a generalization of a statement in ZIP-253 since that ZIP is
     ///   concerned only with NU6 on Mainnet and Testnet.
+    #[cfg_attr(feature = "ycash", allow(unreachable_code))]
     pub(crate) fn min_specified_for_upgrade(
         network: &Network,
         network_upgrade: NetworkUpgrade,
     ) -> Version {
+        // kogany: ycashd's per-upgrade versions (`crate::ycash::min_specified_for_upgrade`).
+        #[cfg(feature = "ycash")]
+        return crate::ycash::min_specified_for_upgrade(network, network_upgrade);
+
         Version(match (network, network_upgrade) {
             (_, Genesis) | (_, BeforeOverwinter) => 170_002,
             (Testnet(_), Overwinter) => 170_003,
