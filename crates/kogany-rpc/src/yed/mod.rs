@@ -22,6 +22,7 @@ use zakura_rpc::server::kogany_extension::RpcExtension;
 mod format;
 mod params;
 
+pub mod live;
 pub mod mock;
 pub mod rpc;
 pub mod state;
