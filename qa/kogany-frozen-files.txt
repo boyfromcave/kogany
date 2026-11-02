@@ -1,0 +1,40 @@
+# Frozen files (plan docs/plans/kogany/kogany-yellowback-plan.md §2.5, §3 W0-d, §5 audit leg (b)):
+# the Orchard, Ironwood, NU5-NU7 and Tachyon code paths that Ycash does not activate. kogany keeps
+# them byte for byte as upstream Zakura has them, dormant behind Zcash-only heights, so every
+# upstream test of them still runs on the feature-off build. qa/kogany_audit.py `frozen` reports
+# any delta against kogany-legacy (report-only; a non-zero report is a §9 finding).
+#
+# One entry per line. A line ending in `/` is a directory prefix; any other line is a glob
+# (fnmatch, `*` crosses `/`). Shared files that mention these upgrades among others
+# (network_upgrade.rs, transaction.rs, sighash.rs, ...) are not frozen: W1/W2 hook into them, and
+# their delta is in the consensus-diff report instead.
+#
+# Tachyon: no variant and no code path at the pin (plan §2.4); add its paths when an upstream sync
+# brings them.
+
+# Orchard (NU5 shielded pool)
+crates/zakura-chain/src/orchard/
+crates/zakura-chain/src/orchard.rs
+crates/zakura-chain/src/primitives/proofs/halo2.rs
+crates/zakura-consensus/src/primitives/halo2/
+crates/zakura-consensus/src/primitives/halo2.rs
+crates/zakura-consensus/benches/halo2.rs
+crates/zakura-test/src/vectors/orchard_note_encryption.rs
+crates/*/snapshots/*orchard*
+
+# NU5 transaction format (v5, ZIP-225 / ZIP-244)
+crates/zakura-chain/src/transaction/zip244.rs
+
+# Ironwood (NU6.x, v6)
+crates/zakura-chain/src/ironwood.rs
+crates/zakura-chain/src/transaction/tests/ironwood_v6_tx_hash.rs
+crates/zakura-state/src/service/finalized_state/disk_format/upgrade/add_ironwood_tree.rs
+crates/*/snapshots/*ironwood*
+
+# NU7 (ZIP-218 funding streams, the NU7 diff and compatibility tests, the NU7 fork tooling)
+crates/zakura-chain/src/parameters/network/tests/zip218_funding_streams.rs
+crates/zakura-chain/proptest-regressions/parameters/network/tests/zip218_funding_streams.txt
+crates/zakura-consensus/tests/nu7_diff_dump.rs
+crates/zakurad/tests/common/zcashd_compat/nu7.rs
+crates/zakura-network/src/config/tests/data/nu7-fork-node.toml
+deploy/nu7-fork/

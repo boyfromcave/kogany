@@ -35,6 +35,13 @@ def run(number, conclusion, event="push", attempt=1):
 ALERT_EXCEPTIONS = {
     "PR node image bake": "Has a dedicated failure notification job.",
     "VCT handoff canary": "Has phase-aware alerts with persistent deduplication.",
+    # kogany (2026-11-01): kogany's own workflows report through code scanning and the run
+    # summary (.github/README-kogany.md); ci-alerts.yml is off on kogany (K-15).
+    "kogany-yellowback": "kogany audit and build legs; reported in the run summary.",
+    "semgrep": "kogany security CI; reports to code scanning.",
+    "codeql": "kogany security CI; reports to code scanning.",
+    "secops": "kogany security CI; reports to code scanning.",
+    "code-scanning": "kogany security CI triage; dismisses reviewed alerts.",
 }
 
 

@@ -2,8 +2,9 @@ name: RPC fuzzing
 
 on:
   # Run a bounded campaign daily, and a longer one on Sunday.
+  # kogany (2026-11-01): weekly, the Sunday campaign only (K-15).
   schedule:
-    - cron: "43 5 * * 1-6"
+    # - cron: "43 5 * * 1-6"
     - cron: "43 5 * * 0"
   workflow_dispatch:
 

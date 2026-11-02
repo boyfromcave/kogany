@@ -17,7 +17,9 @@ on:
   # - block-sync fuzz must run after every merge to `main`, even when
   #   the merged PR did not touch an obviously Zakura-specific path.
   pull_request:
-    branches: [main, "feat/**", "split/**", "adam/**", "release/**"]
+    # kogany (2026-11-01): also PRs into kogany's integration branches, for the pr-gate (K-15);
+    # pushes to them run nothing here.
+    branches: [main, "feat/**", "split/**", "adam/**", "release/**", upgrade/vault, "vaults/**"]
     types: [opened, synchronize, reopened, labeled, unlabeled]
 
   push:
@@ -28,8 +30,9 @@ on:
   merge_group:
 
   # Long four-node modes run nightly and on demand.
+  # kogany (2026-11-01): weekly, Sunday, instead of nightly (K-15).
   schedule:
-    - cron: "0 8 * * *"
+    - cron: "0 8 * * 0"
 
   workflow_dispatch:
 

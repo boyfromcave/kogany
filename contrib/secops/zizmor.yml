@@ -1,0 +1,16 @@
+# Copyright (c) 2026 The Ycash developers
+# Distributed under the MIT software license, see the accompanying
+# file COPYING or https://www.opensource.org/licenses/mit-license.php .
+#
+# zizmor configuration for the `zizmor` job of .github/workflows/secops.yml (zizmor pinned by
+# contrib/secops/zizmor-requirements.txt). It lives here, not at .github/zizmor.yml, because
+# upstream's lint.yml runs its own pinned zizmor over the same workflows and discovers that path.
+# What is disabled below is a design property of the upstream tree, not an unfixed finding.
+rules:
+  self-repository:
+    # A help-level audit newer than the zizmor release upstream's lint.yml pins: it proposes the
+    # `$/...` self-repository syntax for every `uses: ./.github/...` (49 sites in upstream's
+    # workflows at kogany-legacy). Rewriting them is a rebase cost on every upstream file with no
+    # security gain: each job that uses a local action or workflow checks out this repository at
+    # the triggering commit first. ycash6's .github/zizmor.yml disables it for the same reason.
+    disable: true
