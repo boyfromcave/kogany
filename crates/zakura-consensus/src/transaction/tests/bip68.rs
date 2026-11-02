@@ -77,6 +77,8 @@ async fn mempool_verify(
 ) -> Result<(), TransactionError> {
     let mut state: MockService<_, _, _, _> = MockService::build().for_prop_tests();
     let verifier = Verifier::new_for_tests(network, state.clone());
+    // kogany (W4-d): from Vault the verifier reads the tip's set state for the scripts.
+    let vault_active = network.is_vault_active(height);
 
     tokio::spawn(async move {
         state
@@ -91,6 +93,19 @@ async fn mempool_verify(
             .await
             .expect("the verifier asks the state")
             .respond(zakura_state::Response::UnspentBestChainUtxo(Some(utxo)));
+        if vault_active {
+            let tip = height.previous().expect("a mempool height is above genesis");
+            state
+                .expect_request(zakura_state::Request::BestChainVaultSnapshot)
+                .await
+                .expect("the verifier asks the state")
+                .respond(zakura_state::Response::VaultSnapshot(Some(
+                    zakura_state::vault::VaultSnapshot {
+                        tip: Some((tip, zakura_chain::block::Hash([0; 32]))),
+                        state: Default::default(),
+                    },
+                )));
+        }
         state
             .expect_request_that(|req| {
                 matches!(
