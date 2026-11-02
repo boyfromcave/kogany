@@ -11,7 +11,8 @@ name: kogany-tests
 #   kogany-crates (matrix)    kogany-pq, kogany-vault, kogany-yellowback in dev, release and
 #                             ci-tests (plan §4.2 rule 6: math and state tests also release-like)
 #   upstream (matrix)         one upstream crate, feature off, nextest profile all-tests
-#   ycash (matrix)            one crate with --features ycash, nextest profile kogany-ycash
+#   ycash (matrix)            one crate's full suite with --features ycash, nextest profile
+#                             kogany-ycash (a deny-list; Zcash-fixture tests are cfg-gated)
 #   vault-fuzz-verdicts       the ycash6 fuzz verdict replay (W3-e)
 #   kogany-regtest            nextest profile kogany-regtest (W4-e), report-only until the W4 gate
 on:
@@ -100,7 +101,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        crate: [zakura-chain, zakura-header-chain, zakura-consensus, zakura-network, zakura-rpc, zakura-script, kogany-rpc, kogany]
+        crate: [zakura-chain, zakura-header-chain, zakura-consensus, zakura-network, zakura-rpc, zakura-script, kogany-rpc, kogany, zakura-state]
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
