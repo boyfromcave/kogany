@@ -746,6 +746,9 @@ impl StartCmd {
         // kogany W8-b: the coinbase tag and the template filter read the node's Yellowback state.
         // kogany W5-f: the YED payout key is the miner address's (ycashd -yellowbackpayoutaddress).
         kogany_rpc::yed::live::set_payout_address(config.mining.miner_address.as_ref());
+        // kogany S5 (F-S5-5): the extension's mempool reads (yed_getvault.spendPending,
+        // getaddressmempool).
+        kogany_rpc::mempool::set_mempool(mempool.clone());
         #[cfg(feature = "ycash")]
         let rpc_impl = rpc_impl.with_ycash_mining(kogany_rpc::mining_hooks(
             latest_chain_tip.clone(),

@@ -12,9 +12,9 @@
 //! the transaction behind a TxLog row (`yed_gettxinfo`) and the notice transaction
 //! (`yed_getnotice`).
 //!
-//! Not read here (no mempool access in the RPC extension): `yed_getvault.spendPending` is
-//! always false, a mempool coin is an unknown input to the dry run's script check, and
-//! MINTPOL-1's pending mints count zero.
+//! The mempool (`crate::mempool`, F-S5-5) is read for `yed_getvault.spendPending` only: a
+//! mempool coin is still an unknown input to the dry run's script check, and MINTPOL-1's
+//! pending mints count zero.
 
 use std::sync::{Arc, Mutex};
 
@@ -575,6 +575,17 @@ where
             }
         }
         Ok(row)
+    }
+
+    /// The node's mempool (`crate::mempool`): its spender of `outpoint` (F-S5-5).
+    async fn mempool_spender(&self, outpoint: &OutPoint) -> Option<Hash32> {
+        let outpoint = zakura_chain::transparent::OutPoint {
+            hash: zakura_chain::transaction::Hash(outpoint.txid.0),
+            index: outpoint.n,
+        };
+        crate::mempool::spender_of(&outpoint)
+            .await
+            .map(|hash| Hash32(hash.0))
     }
 
     /// `AuditLockedValue` over the best chain's set state.

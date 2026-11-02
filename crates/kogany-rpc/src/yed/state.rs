@@ -94,6 +94,14 @@ pub trait YedReadState: Send + Sync + 'static {
         Ok(snapshot.index.notice(txid))
     }
 
+    /// `MempoolSpenderOf(outpoint)` (ycash6 `src/yellowback/policy.cpp`): the mempool
+    /// transaction that spends `outpoint`, for `yed_getvault`'s `spendPending`/`spendTxid`
+    /// (F-S5-5). The default has no mempool.
+    async fn mempool_spender(&self, outpoint: &OutPoint) -> Option<Hash32> {
+        let _ = outpoint;
+        None
+    }
+
     /// `yed_verifyindex`'s vault half (`vault::AuditLockedValue` over the set-state database):
     /// one line per mismatch and every signer set's stored and re-derived locked value. The
     /// default has no set state to read.
@@ -139,6 +147,9 @@ impl<S: YedReadState + ?Sized> YedReadState for Arc<S> {
         txid: &Hash32,
     ) -> Result<NoticeLookup, YedError> {
         (**self).notice(snapshot, txid).await
+    }
+    async fn mempool_spender(&self, outpoint: &OutPoint) -> Option<Hash32> {
+        (**self).mempool_spender(outpoint).await
     }
     async fn set_audit(&self) -> (Vec<String>, Vec<SetAudit>) {
         (**self).set_audit().await

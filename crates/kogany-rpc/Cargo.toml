@@ -25,7 +25,7 @@ serde = { workspace = true, features = ["serde_derive"] }
 # preserve_order: the json!-built objects (yed_getinfo.params, yed_decodepayload) keep ycashd's
 # field order (zakurad enables it too).
 serde_json = { workspace = true, features = ["raw_value", "preserve_order"] }
-tower = { workspace = true }
+tower = { workspace = true, features = ["util"] }
 tracing = { workspace = true }
 
 kogany-vault = { path = "../kogany-vault" }
@@ -35,6 +35,8 @@ zcash_address = { workspace = true }
 zcash_protocol = { workspace = true }
 zakura-chain = { path = "../zakura-chain", version = "11.0.0-rc0" }
 zakura-rpc = { path = "../zakura-rpc", version = "13.0.1-rc0", default-features = false }
+# The mempool's request types: yed_getvault.spendPending and getaddressmempool (S5, F-S5-5).
+zakura-node-services = { path = "../zakura-node-services", version = "5.0.1-rc0" }
 # W7-b: yed_validaterawtransaction's script check (VerifyAllInputs at tip + 1).
 zakura-script = { path = "../zakura-script", version = "5.0.1-rc0" }
 # W4-d: the live vault state is the read state service's best-chain vault snapshot.

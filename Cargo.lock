@@ -1259,6 +1259,7 @@ dependencies = [
  "tracing",
  "zakura-address",
  "zakura-chain",
+ "zakura-node-services",
  "zakura-protocol",
  "zakura-rpc",
  "zakura-script",

@@ -29,6 +29,7 @@ mod macros;
 
 pub mod json;
 pub mod live;
+pub mod mempool;
 #[cfg(feature = "ycash")]
 pub mod mining;
 pub mod mock;
