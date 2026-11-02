@@ -7,18 +7,26 @@
 //! ([`crate::service::finalized_state::vault`]); each non-finalized [`Chain`] holds an
 //! overlay of what its blocks wrote ([`ChainVaultOverlay`]).
 
-use std::{ops::Bound, sync::Arc};
+use std::{collections::HashMap, ops::Bound, sync::Arc};
 
-use kogany_vault::{state::SetState, Hash32};
+use kogany_vault::{
+    state::{check_tx, SetState, StateRead},
+    Hash32,
+};
 use zakura_chain::{
     block::{self, Height},
     parameters::Network,
+    transaction::{self, Transaction},
+    transparent,
 };
 
 use crate::{
     service::{
         finalized_state::{
-            vault::{block_vault_delta_total, report_skipped, vault_txs, OrderedUtxoCoins},
+            vault::{
+                block_vault_delta_total, report_skipped, vault_tx, vault_txs, OrderedUtxoCoins,
+                UtxoCoins,
+            },
             ZakuraDb,
         },
         non_finalized_state::Chain,
@@ -122,4 +130,32 @@ pub fn vault_snapshot_by_hash<'a>(
     }
     let tip = db.tip()?;
     (tip.1 == hash).then(|| finalized_vault_snapshot(db))
+}
+
+/// The mempool's vault check (ycash6 `AcceptToMemoryPool`'s `vault::CheckTx`, `src/main.cpp:2198-2202`):
+/// would `tx` apply at `height`, the next block's, over `tip_state`, the set state at the best
+/// chain tip? `spent_utxos` are the coins it spends, a mempool parent's at `height`.
+///
+/// `Ok` where the Vault upgrade is not active at `height`. `Err` is the C++ reject reason; the
+/// mempool does not score it (ycash6 DoS 0: it depends on the tip).
+pub fn mempool_vault_check(
+    network: &Network,
+    tip_state: &dyn StateRead,
+    tx: &Transaction,
+    txid: &transaction::Hash,
+    height: Height,
+    spent_utxos: &HashMap<transparent::OutPoint, transparent::Utxo>,
+) -> Result<(), String> {
+    let Some(params) = vault_network_params(network).filter(|p| p.is_active(height)) else {
+        return Ok(());
+    };
+    check_tx(
+        tip_state,
+        &vault_tx(tx, txid),
+        i64::from(height.0),
+        &UtxoCoins(spent_utxos),
+        &params.rules(),
+    )
+    .map(|_| ())
+    .map_err(|reject| reject.reason().to_owned())
 }
