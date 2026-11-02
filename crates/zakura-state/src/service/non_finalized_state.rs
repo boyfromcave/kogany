@@ -889,14 +889,14 @@ impl NonFinalizedState {
         );
         let mut contextual = contextual?;
 
-        // kogany (W4-c): the block's vault delta over the parent fork's set state, pushed onto the
-        // chain's overlay with the block. Total here; W4-d's `check::vault` rejects instead.
-        contextual.vault_delta = Arc::new(crate::service::vault::block_vault_delta_for_chain(
+        // kogany (W4-c, W4-d): the block's vault delta over the parent fork's set state, pushed
+        // onto the chain's overlay with the block; a vault rule violation rejects the block.
+        contextual.vault_delta = Arc::new(check::vault::block_vault_delta(
             &self.network,
             &new_chain,
             finalized_state,
             &contextual,
-        ));
+        )?);
 
         let parallel_update_start = Instant::now();
         let result = Self::validate_and_update_parallel(
