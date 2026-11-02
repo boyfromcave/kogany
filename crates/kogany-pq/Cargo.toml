@@ -1,0 +1,26 @@
+[package]
+name = "kogany-pq"
+version = "0.1.0"
+authors = ["The Ycash developers"]
+description = "Post-quantum signature verification for OP_CHECKPQSIG (SLH-DSA-SHA2-128s, Falcon-512 padded): the Ycash C++ lines' verify-only C, vendored"
+license = "MIT"
+repository = "https://github.com/boyfromcave/kogany"
+edition.workspace = true
+rust-version.workspace = true
+publish = false
+build = "build.rs"
+links = "kogany_pq"
+
+[dependencies]
+sha2 = { workspace = true }
+
+[build-dependencies]
+cc = "1.2.66"
+sha2 = { workspace = true }
+
+[dev-dependencies]
+hex = { workspace = true }
+serde_json = { workspace = true }
+
+[lints]
+workspace = true
