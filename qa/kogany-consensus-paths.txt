@@ -1,0 +1,37 @@
+# The consensus path set (plan docs/plans/kogany/kogany-yellowback-plan.md §3 W0-d), read by
+# qa/kogany_audit.py `consensus-diff` (audit leg (a), report-only): the delta against kogany-baseline
+# over these paths is the artefact the two independent reviewers of every consensus change read
+# (AGENTS.md rule 2 review gate). Every hunk here also falls under rule 7: never tidy.
+#
+# One entry per line. A line ending in `/` is a directory prefix; any other line is a glob
+# (fnmatch, `*` crosses `/`). `lock: <package>` names a Cargo.lock package whose entries are
+# compared (the crates the common fork, zakura-common-ycash, carries: W0-b).
+
+crates/zakura-consensus/
+crates/zakura-script/
+crates/zakura-chain/src/transaction/
+crates/zakura-chain/src/transaction.rs
+crates/zakura-chain/src/block/
+crates/zakura-chain/src/block.rs
+crates/zakura-chain/src/parameters/
+crates/zakura-chain/src/parameters.rs
+crates/zakura-chain/src/work/
+crates/zakura-chain/src/work.rs
+crates/zakura-chain/src/transparent/
+crates/zakura-chain/src/transparent.rs
+crates/zakura-chain/src/amount/
+crates/zakura-chain/src/amount.rs
+crates/zakura-state/src/service/check/
+crates/zakura-state/src/service/check.rs
+crates/zakura-state/src/service/finalized_state/
+crates/zakura-state/src/service/finalized_state.rs
+crates/zakura-state/src/service/non_finalized_state/
+crates/zakura-state/src/service/non_finalized_state.rs
+crates/zakura-header-chain/src/validation/
+
+lock: zakura-protocol
+lock: zakura-primitives
+lock: zakura-address
+lock: zakura-transparent
+lock: zakura-equihash
+lock: zakura-zcash-script

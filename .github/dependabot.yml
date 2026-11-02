@@ -1,3 +1,9 @@
+# kogany (2026-11-01): security updates only (plan §5, K-15; .github/README-kogany.md). Version
+# updates are off in every ecosystem (open-pull-requests-limit: 0): kogany's dependencies move with
+# an upstream sync or a reviewed commit, and the forked zakura-* crates are pinned by
+# [patch.crates-io] to the common fork, never Dependabot's to move. Each ecosystem's security
+# updates come as one grouped `security` PR. Enable "Dependabot security updates" in
+# Settings -> Code security for them to open.
 version: 2
 updates:
   # Rust section
@@ -39,10 +45,26 @@ updates:
     # https://astral.sh/blog/open-source-security-at-astral#dependency-security
     cooldown:
       default-days: 7
-    open-pull-requests-limit: 4
+    # kogany (2026-11-01): security updates only, grouped (was: 4 open version-update PRs).
+    open-pull-requests-limit: 0
     labels:
       - "C-exclude-from-changelog"
     groups:
       devops:
+        applies-to: security-updates
         patterns:
           - "*"
+  # kogany (2026-11-01): the hash-locked tool requirements of the security CI, security updates only.
+  - package-ecosystem: pip
+    directories:
+      - "/contrib/semgrep"
+      - "/contrib/secops"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 0
+    cooldown:
+      default-days: 7
+    groups:
+      security:
+        applies-to: security-updates
+        patterns: ["*"]

@@ -1,0 +1,95 @@
+# Copyright (c) 2026 The Ycash developers
+# Distributed under the MIT software license, see the accompanying
+# file COPYING or https://www.opensource.org/licenses/mit-license.php .
+#
+name: kogany-yellowback
+
+# kogany's own legs (plan docs/plans/kogany/kogany-yellowback-plan.md §5; .github/README-kogany.md).
+# The audit logic is qa/kogany_audit.py (stdlib Python, tested by qa/test_kogany_audit.py); this
+# file only runs it.
+#
+#   audit      (a) consensus-diff   report-only: the consensus path set vs kogany-baseline
+#              (b) frozen-file      report-only: qa/kogany-frozen-files.txt vs kogany-legacy
+#              (e) greps            blocking: naming (AGENTS.md rule 6) and attribution (rule 8)
+#              dormancy             blocking: no upstream test function deleted
+#              workflows            blocking: every workflow classified in .github/kogany-workflows.txt
+#              The reports are the `kogany-audit` artifact and the step summary.
+#   build      the feature matrix: `ycash` off (blocking) and on. The `ycash` feature does not exist
+#              until W1-Y1 adds it, so that leg is continue-on-error until then.
+#
+# Legs that start later (plan §5): (c) cross-line identity and (d) vault-params from W2, the
+# vectors from W2, kogany-regtest from W4, mixed-regtest from W1, sidecar/parity at W9/S5.
+#
+# Triggers: every pull_request, push to upgrade/vault and vaults/kogany-compat, workflow_dispatch.
+on:
+  push:
+    branches: ['upgrade/vault', 'vaults/kogany-compat']
+  pull_request:
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: kogany-yellowback-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0  # the legs diff against kogany-legacy / kogany-baseline and read the commit log
+          persist-credentials: false
+      - name: Fetch the baselines
+        # kogany-legacy is a branch and kogany-baseline a tag; a pull_request checkout has neither
+        # as a local ref, so name them explicitly (the tag is absent until the coordinator sets it).
+        run: |
+          git fetch --no-tags origin '+refs/heads/kogany-legacy:refs/remotes/origin/kogany-legacy'
+          git fetch --no-tags origin '+refs/tags/kogany-baseline:refs/tags/kogany-baseline' || echo "no kogany-baseline tag yet: consensus-diff uses kogany-legacy"
+      - name: Audit script tests
+        run: python3 -m unittest discover -s qa -p 'test_kogany_*.py'
+      - name: Audit legs
+        run: python3 qa/kogany_audit.py --out kogany-audit-out all
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: ${{ !cancelled() }}
+        with:
+          name: kogany-audit
+          path: kogany-audit-out
+          retention-days: 30
+          if-no-files-found: ignore
+
+  build:
+    name: build (ycash feature ${{ matrix.ycash && 'on' || 'off' }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    # W1-Y1 adds the `ycash` feature (zakurad forwarding it to zakura-chain); until then the feature-on
+    # leg fails with "unknown feature" and must not block. W1-Y1 removes this continue-on-error.
+    continue-on-error: ${{ matrix.ycash }}
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        ycash: [false, true]
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f #v2.0.0 # zizmor: ignore[cache-poisoning] -- check-only build of the node, nothing published or released
+        with:
+          toolchain: stable
+          cache-key: kogany-build-${{ matrix.ycash && 'ycash' || 'default' }}
+          cache-on-failure: true
+          cache-save-if: ${{ github.ref == 'refs/heads/vaults/kogany-compat' || github.ref == 'refs/heads/upgrade/vault' }}
+      - uses: ./.github/actions/setup-zakura-build
+      - name: cargo check (ycash feature ${{ matrix.ycash && 'on' || 'off' }})
+        env:
+          YCASH: ${{ matrix.ycash }}
+        run: |
+          features=()
+          if [ "$YCASH" = true ]; then features=(--features ycash); fi
+          cargo check --locked -p zakura "${features[@]}"

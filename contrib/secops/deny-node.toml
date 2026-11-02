@@ -1,0 +1,30 @@
+# Copyright (c) 2026 The Ycash developers
+# Distributed under the MIT software license, see the accompanying
+# file COPYING or https://www.opensource.org/licenses/mit-license.php .
+#
+# cargo-deny policy for kogany's Rust graph (the root Cargo.toml / Cargo.lock), the secops.yml
+# `cargo-deny` job (SECURITY-CI.md):
+#   cargo deny --locked --manifest-path Cargo.toml --config contrib/secops/deny-node.toml check advisories bans sources
+# Beside, not instead of, upstream Zakura's own policy: the root deny.toml (licences, bans, sources)
+# that lint.yml's `supply-chain` job runs, kept as upstream wrote it so an upstream sync never
+# conflicts here. Every ignore carries its reason; the same list, with an expiry, is in
+# osv-scanner.toml.
+
+[graph]
+targets = ["x86_64-unknown-linux-gnu", "aarch64-unknown-linux-gnu", "x86_64-apple-darwin", "aarch64-apple-darwin", "x86_64-pc-windows-msvc"]
+
+[advisories]
+version = 2
+yanked = "warn"
+ignore = []
+
+[bans]
+# Duplicate versions are the Zakura graph as upstream left it; upstream's deny.toml judges them.
+multiple-versions = "allow"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+# The Ycash developers' fork of zakura-core/common (K-2), which the root Cargo.toml
+# [patch.crates-io] pins by rev from W0-b on.
+allow-git = ["https://github.com/boyfromcave/zakura-common-ycash"]

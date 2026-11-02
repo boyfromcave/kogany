@@ -32,6 +32,10 @@ on:
   # path filters, so this runs unconditionally on every queued entry.
   merge_group:
 
+  # kogany (2026-11-01): weekly on the default branch (K-15); not on kogany's PRs or pushes.
+  schedule:
+    - cron: "23 6 * * 0"
+
   workflow_dispatch:
 
 # Ensures that only one workflow task will run at a time. Previous builds, if

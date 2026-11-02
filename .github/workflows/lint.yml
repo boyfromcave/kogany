@@ -2,7 +2,8 @@ name: Lint
 
 on:
   pull_request:
-    branches: [main, "feat/**", "split/**", "adam/**", "release/**"]
+    # kogany (2026-11-01): also PRs into kogany's integration branches (K-15, .github/README-kogany.md).
+    branches: [main, "feat/**", "split/**", "adam/**", "release/**", upgrade/vault, "vaults/**"]
     paths:
       - "**/*.rs"
       - "**/Cargo.toml"
@@ -29,7 +30,8 @@ on:
       - ".github/release-review/**"
 
   push:
-    branches: [main, "feat/**", "release/**"]
+    # kogany (2026-11-01): also pushes to kogany's integration branches (K-15).
+    branches: [main, "feat/**", "release/**", upgrade/vault, "vaults/**"]
     paths:
       - "**/*.rs"
       - "**/Cargo.toml"
@@ -62,8 +64,9 @@ on:
 
   # Nightly run for the expensive, non-gating unused-deps lint that is
   # gated off the PR/merge path below.
-  schedule:
-    - cron: "0 8 * * *"
+  # kogany (2026-11-01): no nightly run (K-15); unused-deps runs on workflow_dispatch only.
+  # schedule:
+  #   - cron: "0 8 * * *"
 
   workflow_dispatch:
 
