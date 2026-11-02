@@ -3430,6 +3430,8 @@ where
             );
 
             let entry = Utxo {
+                #[cfg(feature = "ycash")]
+                address_name: None,
                 address,
                 txid,
                 output_index,
@@ -3446,12 +3448,26 @@ where
         // lightwalletd compares byte for byte; Zakura's chain order stays feature-off.
         #[cfg(feature = "ycash")]
         {
-            let request_addresses: Vec<Address> = utxos_request
+            let named: Vec<(Address, &String)> = utxos_request
                 .addresses()
                 .iter()
-                .filter_map(|address| address.parse().ok())
+                .filter_map(|text| types::ycash::insight_address(text).map(|a| (a, text)))
                 .collect();
+            let request_addresses: Vec<Address> = named.iter().map(|(a, _)| *a).collect();
             types::ycash::order_address_utxos_as_ycashd(&mut response_utxos, &request_addresses);
+            // ycashd names a post-quantum key with the caller's form (`AddressNames`).
+            for utxo in &mut response_utxos {
+                let name = match utxo.address() {
+                    pq @ Address::PayToPqKeyHash { .. } => named
+                        .iter()
+                        .find(|(a, _)| a == pq)
+                        .map_or_else(|| pq.to_string(), |(_, text)| (*text).clone()),
+                    other => other.to_string(),
+                };
+                if name != utxo.address().to_string() {
+                    utxo.set_address_name(name);
+                }
+            }
         }
 
         if !utxos_request.chain_info {
@@ -6060,10 +6076,19 @@ pub struct GetAddressUtxosResponseObject {
 #[derive(
     Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize, Getters, CopyGetters, new,
 )]
+#[cfg_attr(feature = "ycash", serde(into = "UtxoJson"))]
 pub struct Utxo {
     /// The transparent address, base58check encoded
     #[getset(get = "pub")]
     address: transparent::Address,
+
+    /// Ycash (S5 parity): the address as ycashd answers it, the form the caller named for a
+    /// post-quantum key (`AddressNames`: `rq…` or its `yr…` YED form); `None` is the canonical
+    /// form.
+    #[cfg(feature = "ycash")]
+    #[serde(skip)]
+    #[new(default)]
+    address_name: Option<String>,
 
     /// The output txid, in big-endian order, hex-encoded
     #[serde(with = "hex")]
@@ -6091,9 +6116,51 @@ pub struct Utxo {
     height: Height,
 }
 
+/// A [`Utxo`] as a Ycash build writes it (S5 parity): `address` is the caller's name of a
+/// post-quantum key, else the canonical address; the fields in zcashd's order.
+#[cfg(feature = "ycash")]
+#[derive(serde::Serialize)]
+struct UtxoJson {
+    address: String,
+    #[serde(with = "hex")]
+    txid: transaction::Hash,
+    #[serde(rename = "outputIndex")]
+    output_index: OutputIndex,
+    #[serde(with = "hex")]
+    script: transparent::Script,
+    satoshis: u64,
+    height: Height,
+}
+
+#[cfg(feature = "ycash")]
+impl From<Utxo> for UtxoJson {
+    fn from(utxo: Utxo) -> Self {
+        Self {
+            address: utxo
+                .address_name
+                .unwrap_or_else(|| utxo.address.to_string()),
+            txid: utxo.txid,
+            output_index: utxo.output_index,
+            script: utxo.script,
+            satoshis: utxo.satoshis,
+            height: utxo.height,
+        }
+    }
+}
+
+#[cfg(feature = "ycash")]
+impl Utxo {
+    /// Names the address as the caller did (a post-quantum key) or canonically.
+    pub(crate) fn set_address_name(&mut self, name: String) {
+        self.address_name = Some(name);
+    }
+}
+
 impl Default for Utxo {
     fn default() -> Self {
         Self {
+            #[cfg(feature = "ycash")]
+            address_name: None,
             address: transparent::Address::from_pub_key_hash(
                 zakura_chain::parameters::NetworkKind::default(),
                 [0u8; 20],
