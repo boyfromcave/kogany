@@ -65,8 +65,14 @@ impl GetMiningInfoResponse {
             current_block_tx,
             networksolps,
             networkhashps: networksolps,
+            #[cfg(not(feature = "ycash"))]
             chain: network.bip70_network_name(),
+            #[cfg(feature = "ycash")]
+            chain: super::ycash::chain_name(&network),
+            #[cfg(not(feature = "ycash"))]
             testnet: network.is_a_test_network(),
+            #[cfg(feature = "ycash")]
+            testnet: super::ycash::is_testnet_field(&network),
         }
     }
 }

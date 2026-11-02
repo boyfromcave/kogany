@@ -7,6 +7,9 @@
 //! - [`vault`]: the vault primitive's read RPCs (`vault_getinfo`, `set_list`, `set_getinfo`,
 //!   `vault_list`, `vault_decodescript`; `ycash6/doc/vault-rpc.md`), over a
 //!   [`state::VaultReadState`].
+//! - [`yed`]: Ycash Yellowback (YED)'s node-context RPCs (`yed_*`, `ycash6/doc/yellowback-rpc.md`,
+//!   rpcversion 8) over a [`yed::YedReadState`] (plan W5-e/W5-f), and the wallet-context ones
+//!   refused (`-32601`; yewd serves them, K-3).
 //! - [`state`]: the read boundary plan W4-d implements; [`mock`]: the prototype's states.
 //! - [`node_extension`]: what `zakurad` passes to
 //!   `zakura_rpc::server::kogany_extension::start_node_server`.
@@ -27,6 +30,7 @@ pub mod mock;
 pub mod state;
 pub mod types;
 pub mod vault;
+pub mod yed;
 
 #[doc(hidden)]
 pub mod __private {
@@ -46,11 +50,14 @@ pub use vault::{VaultRpc, VaultRpcDispatch, VaultRpcImpl};
 ///
 /// Until plan W4-d wires the vault state, the vault reads answer from
 /// [`mock::UnavailableVaultState`], or from [`mock::MockVaultState`] when the environment
-/// variable [`mock::MOCK_ENV`] is `1`.
+/// variable [`mock::MOCK_ENV`] is `1`. Until plan W5-f registers the YED module, the `yed_*`
+/// methods answer from [`yed::mock::UnavailableYedState`] (`-32601`, Yellowback not live), or
+/// from [`yed::mock::MockYedState`] when [`yed::mock::MOCK_ENV`] is `1`.
 pub fn node_extension<T>(network: &Network, tip: T) -> RpcExtension
 where
     T: ChainTip + Clone + Send + Sync + 'static,
 {
+    let yed = yed_state(tip.clone());
     let state: Arc<dyn VaultReadState> =
         if std::env::var(mock::MOCK_ENV).is_ok_and(|value| value == "1") {
             tracing::warn!(
@@ -61,5 +68,23 @@ where
         } else {
             Arc::new(mock::UnavailableVaultState::new(tip))
         };
-    VaultRpcImpl::new(state, network.clone()).into_extension()
+    VaultRpcImpl::new(state, network.clone())
+        .into_extension()
+        .and(yed::extension(yed, network))
+}
+
+/// The YED state `zakurad` serves until plan W5-f registers the module.
+fn yed_state<T>(tip: T) -> Arc<dyn yed::YedReadState>
+where
+    T: ChainTip + Clone + Send + Sync + 'static,
+{
+    if std::env::var(yed::mock::MOCK_ENV).is_ok_and(|value| value == "1") {
+        tracing::warn!(
+            "{}=1: the yed_* RPCs answer from a fixed fixture, not the chain",
+            yed::mock::MOCK_ENV
+        );
+        Arc::new(yed::mock::MockYedState::new(tip))
+    } else {
+        Arc::new(yed::mock::UnavailableYedState)
+    }
 }

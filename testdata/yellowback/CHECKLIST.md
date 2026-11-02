@@ -205,3 +205,49 @@ Also from ycash6, not a schema key: the payload, script, address and tag cases o
 `src/test/yellowback_{payload,script,address,tag}_tests.cpp` (`tests/{payload,script,address,tag}_tests.rs`,
 the C++ test names kept), and PQ-address known answers computed with ycash6's
 `qa/rpc-tests/test_framework/yellowback_model.py` (`pq_addresses_53_characters_known_answers`).
+
+## yellowback_attest_vectors.json
+
+Consumer: `crates/kogany-yellowback` (W5-c). C++: ycash6 `src/test/yellowback_attest_tests.cpp`
+(`message_layout`, `vectors_verify`, `highs_rejected`, `invalid_vectors_rejected`,
+`shared_vector_list`, `codec`) and `src/test/yellowback_bundle_tests.cpp` (`Fixture`,
+`codec_round_trip_and_sizes`, `verify_order_every_reason`, `sig_cache_contract`, `bundle_stat`).
+Every test loads the file through `tests/common/mod.rs` `load_pinned`.
+
+| key | Rust test (`crates/kogany-yellowback/tests/yellowback_{attest,bundle}_tests.rs`) |
+|---|---|
+| `_comment` | not consumed (prose) |
+| `prefix` | `message_layout` (equals `YBATTEST1`) |
+| `keys[]` (count 6), `.seq`, `.secret`, `.pubkey` | `vectors_verify` (the secret derives the pubkey; re-signs each valid vector with RFC 6979 to its `sig`); the bundle `Fixture` (seq → key) |
+| `valid[]` (count 8) | `vectors_verify`, `highs_rejected` (8 seen); the bundle `Fixture` (first six seq 0..5, then seq 0 at 1002 and seq 1 at 1003) |
+| `valid[].seq`, `.priceMicroUsd`, `.citedHeight`, `.blockHashInternal` | `message_layout` (`attest_message` equals `message`) |
+| `valid[].blockHash` | `message_layout` (the reversed hex of `blockHashInternal`) |
+| `valid[].message` | `message_layout`, `vectors_verify`, `highs_rejected` |
+| `valid[].pubkey`, `.sig` | `vectors_verify` (verifies; equals the re-signed signature), `highs_rejected` |
+| `valid[].sigHighS` | `highs_rejected` (refused; same `r`, differs from `sig`) |
+| `valid[].attestation` | `vectors_verify` (`encode_attestation` of the parts); the bundle `Fixture` (decoded) |
+| `invalid[]` (count 5), `.name`, `.seq`, `.priceMicroUsd`, `.citedHeight`, `.blockHashInternal`, `.pubkey`, `.sig` | `invalid_vectors_rejected` (every one refused; `high_s`, `wrong_block_hash`, `wrong_key` present), `highs_rejected` (`high_s`) |
+| `invalid[].why` | `invalid_vectors_rejected` (non-empty; prose) |
+| `bundle6` | `codec_round_trip_and_sizes` (`encode_bundle` of the first six valid attestations, 448 bytes) |
+| `vectors[]` (count 15: 10 valid, 5 invalid, 2 regtest) | `shared_vector_list` |
+| `vectors[].attestation`, `.seq`, `.price`, `.citedHeight` | `shared_vector_list` (decodes to the fields) |
+| `vectors[].blockHash` (display form), `.pubkey`, `.valid` | `shared_vector_list` (verifies iff `valid`) |
+| `vectors[].secret` | `shared_vector_list` (valid rows: derives `pubkey`, re-signs to the attestation's `sig`; the regtest rows' secret is `sha256("yellowback-regtest-attestor-0")`) |
+| `vectors[].name` | `shared_vector_list` (the `regtest-attestor-0` rows: fixed pubkey, block hash `00…01`) |
+
+Also from ycash6, not a schema key: the rest of `yellowback_bundle_tests.cpp`
+(`extract_positions_and_modes`, `cancel_cosign_codecs`; `tests/yellowback_bundle_tests.rs`); the
+attest cases of `yellowback_state_tests.cpp` (`selected_matches_python`,
+`seat_eviction_victim_rule`, `weight_clamped_before_trigger`, `founding_cohort_origin`,
+`seating_ties_by_seq`, `selected_excludes_pinned`, `default_attest_payee_in_A`,
+`attestor_set_adopted_only_with_threshold_one`, `p4b_slashed_key_barred_remove_winddown_refused`
+on a registry-only fixture; `tests/yellowback_attest_state_tests.rs`, which also checks the
+mirror's set acts, bond spends, EQV-1, liveness credit, the SNAP attestor passes, the record
+encodings, `VerifyTxBundle`'s statistic, the bundle log and the fee price); and the YED halves of
+`vault_state_tests.cpp` (`module_ejection_hook_eqv1_yed`, `module_ejection_hook_cancel_statement`,
+`module_liveness_hook`, plus displacement and `CheckBlock`; `tests/yellowback_attest_hooks_tests.rs`).
+The attest cases that need mints, prices or vaults (`mint9_*`, `red1_claim_needs_bundle`,
+`afee1_*`, `cancel_cosign_*`, `cancel_statement_*`, `dormancy_needs_selection_evidence`,
+`liveness_needs_held_act_and_fresh_ref`, `pin2_excludes_seq`, `rev1_*`, `dq28_*`, `undo_identity_v3`)
+are the state machine's (W5-d1/d2), over this module's API; the signature cache's LRU
+(`yellowback_index_tests.cpp` `sigcache_lru_and_hit_equals_cold`) is the index's (W5-e).

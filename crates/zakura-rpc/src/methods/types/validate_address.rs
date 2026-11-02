@@ -36,6 +36,17 @@ pub struct ValidateAddressResponse {
     #[getset(get = "pub")]
     pub(crate) address: Option<String>,
 
+    /// Ycash (W1-Y6): the hex `scriptPubKey` of a valid address, as ycashd sends it
+    /// (`ycash6 src/rpc/misc.cpp`, `validateaddress`); yolo builds its payout output from it.
+    #[cfg(feature = "ycash")]
+    #[serde(
+        rename = "scriptPubKey",
+        skip_serializing_if = "Option::is_none",
+        default
+    )]
+    #[new(default)]
+    pub(crate) script_pub_key: Option<String>,
+
     /// If the key is a script.
     #[serde(rename = "isscript")]
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -88,6 +99,13 @@ pub fn validate_address(
 
     Ok(validate_address::ValidateAddressResponse {
         address: Some(raw_address),
+        #[cfg(feature = "ycash")]
+        script_pub_key: match &address {
+            primitives::Address::Transparent(taddr) => {
+                Some(hex::encode(taddr.script().as_raw_bytes()))
+            }
+            _ => None,
+        },
         is_valid: true,
         is_script: Some(address.is_script_hash()),
     })

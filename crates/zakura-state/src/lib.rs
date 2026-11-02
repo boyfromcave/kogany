@@ -87,6 +87,8 @@ pub use service::{
 // Allow use in the scanner and external tests
 #[cfg(any(test, feature = "proptest-impl"))]
 pub use service::finalized_state::{ReadDisk, TypedColumnFamily, WriteTypedBatch};
+// kogany (W4-c): the Vault upgrade's set state (read API for W4-d and W7).
+pub use service::vault;
 
 // Lets tests above this crate drive real RPC handlers over a fast-synced node's absent band.
 #[cfg(any(test, feature = "proptest-impl"))]
