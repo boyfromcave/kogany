@@ -498,9 +498,6 @@ pub enum ReadResponse {
     /// kogany (W6-b): response to [`ReadRequest::YedMempoolCheck`].
     YedMempoolCheck(Option<String>),
 
-    /// kogany (W6-b): response to [`ReadRequest::YedFeePrice`], micro-USD per YEC.
-    YedFeePrice(Option<i64>),
-
     /// Response to [`ReadRequest::Depth`] with the depth of the specified block.
     Depth(Option<u32>),
 
@@ -787,7 +784,6 @@ impl TryFrom<ReadResponse> for Response {
             ReadResponse::YedMempoolCheck(reason) => Ok(Response::YedMempoolCheck(reason)),
 
             ReadResponse::Depth(_)
-            | ReadResponse::YedFeePrice(_)
             | ReadResponse::Transaction(_)
             | ReadResponse::UsageInfo(_)
             | ReadResponse::PruningInfo { .. }

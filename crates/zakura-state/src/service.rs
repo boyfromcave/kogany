@@ -3026,8 +3026,7 @@ impl Service<ReadRequest> for ReadStateService {
                 },
             ))),
 
-            // kogany (W6-b): the YED module's admission check and the network-fee price, at
-            // the best chain tip.
+            // kogany (W6-b): the YED module's admission check at the best chain tip.
             ReadRequest::YedMempoolCheck(transaction) => {
                 let snapshot = yed::tip_yed_snapshot(state.latest_best_chain().as_ref(), &state.db);
                 Ok(ReadResponse::YedMempoolCheck(yed::yed_mempool_check(
@@ -3035,10 +3034,6 @@ impl Service<ReadRequest> for ReadStateService {
                     &transaction,
                 )))
             }
-            ReadRequest::YedFeePrice => Ok(ReadResponse::YedFeePrice(
-                yed::tip_yed_snapshot(state.latest_best_chain().as_ref(), &state.db)
-                    .attested_fee_price(),
-            )),
 
             // Used by the StateService.
             ReadRequest::Depth(hash) => Ok(ReadResponse::Depth(read::depth(

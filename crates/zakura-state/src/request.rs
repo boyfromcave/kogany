@@ -1708,13 +1708,6 @@ pub enum ReadRequest {
     /// Returns [`ReadResponse::YedMempoolCheck`].
     YedMempoolCheck(Arc<zakura_chain::transaction::Transaction>),
 
-    /// kogany (W6-b): the network-fee price the YED index publishes at the best chain tip
-    /// (ycash6 `AttestedFeePrice()`: the highest window median while the price is trusted), the
-    /// price `yed_getinfo.params.fees.network` converts at.
-    ///
-    /// Returns [`ReadResponse::YedFeePrice`]: `None` is the `-pqfeerate` fallback.
-    YedFeePrice,
-
     /// Computes the depth in the current best chain of the block identified by the given hash.
     ///
     /// Returns
@@ -2230,7 +2223,6 @@ impl ReadRequest {
             ReadRequest::VaultSnapshot { .. } => "vault_snapshot",
             ReadRequest::BestChainVaultSnapshot => "best_chain_vault_snapshot",
             ReadRequest::YedMempoolCheck(_) => "yed_mempool_check",
-            ReadRequest::YedFeePrice => "yed_fee_price",
             ReadRequest::Depth(_) => "depth",
             ReadRequest::Block(_) => "block",
             ReadRequest::AnyChainBlock(_) => "any_chain_block",
