@@ -802,8 +802,9 @@ pub fn are_inputs_standard(
 /// `IsStandardTx` and `AreInputsStandard`, both before script verification in
 /// `AcceptToMemoryPool`), where [`require_standard`] holds. `height` is the next block's.
 ///
-/// Returns the verifier's existing standardness errors, so a non-standard transaction is
-/// refused before its scripts run, as on ycashd.
+/// Returns the verifier's standardness errors (an output rule as
+/// [`TransactionError::NonStandardOutputs`](crate::error::TransactionError::NonStandardOutputs)),
+/// so a non-standard transaction is refused before its scripts run, as on ycashd.
 pub fn mempool_standard_checks(
     tx: &Transaction,
     spent_outputs: &[transparent::Output],
@@ -836,9 +837,9 @@ pub fn mempool_standard_checks(
             _ => TransactionError::NonStandardScriptSigNotPushOnly { input_index },
         });
     }
-    if is_standard_tx(tx, network, height, &RelayPolicy::configured()).is_err()
-        || !are_inputs_standard(tx, spent_outputs, None)
-    {
+    is_standard_tx(tx, network, height, &RelayPolicy::configured())
+        .map_err(|reason| TransactionError::NonStandardOutputs(reason.as_str()))?;
+    if !are_inputs_standard(tx, spent_outputs, None) {
         return Err(TransactionError::NonStandardInputs);
     }
     Ok(())

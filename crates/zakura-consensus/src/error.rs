@@ -261,6 +261,13 @@ pub enum TransactionError {
     #[error("mempool transaction has non-standard transparent inputs")]
     NonStandardInputs,
 
+    /// Ycash `IsStandardTx`'s output rules, before script verification (kogany W6-a): the
+    /// reason is ycashd's (`scriptpubkey`, `dust`, `multi-op-return`, `bare-multisig`).
+    #[cfg(feature = "ycash")]
+    #[error("mempool transaction is non-standard: {0}")]
+    #[cfg_attr(any(test, feature = "proptest-impl"), proptest(skip))]
+    NonStandardOutputs(&'static str),
+
     #[error("transaction uses an incorrect consensus branch id")]
     WrongConsensusBranchId,
 
@@ -495,6 +502,10 @@ impl TransactionError {
             | Self::NonStandardScriptSigNotPushOnly { .. }
             | Self::NonStandardInputs
             | Self::WrongConsensusBranchIdNu6_3GracePeriod => {
+                BodyVerificationClass::Retryable(TransientBodyFailureKind::VerifierUnavailable)
+            }
+            #[cfg(feature = "ycash")]
+            Self::NonStandardOutputs(_) => {
                 BodyVerificationClass::Retryable(TransientBodyFailureKind::VerifierUnavailable)
             }
             Self::WrongConsensusBranchId => consensus("transaction.wrong_consensus_branch_id"),
