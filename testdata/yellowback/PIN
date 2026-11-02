@@ -1,0 +1,12 @@
+# Byte-identical copies of the C++ lines' cross-line vector files (plan §4.2 rule 4 (i)).
+# Source: boyfromcave/ycash6 @ 65cb4ae0ff (vaults/kogany-compat). Never edit; a change is a PIN bump.
+# sha256  kogany-path  ycash6-path
+2f7a3ab2fc909bca4772957f15696e8ed5f6feec6914f957e016adf5d0fd7dc8  testdata/yellowback/vault_vectors.json  src/test/data/vault_vectors.json
+1a146175d7815b825a3c961bb41d85a5a3b59ae7f62b468a8550ec5bd1f23be5  testdata/yellowback/pq_vectors.json  src/test/data/pq_vectors.json
+053c765de96e0b943b1d4c7ad1b93bc6dac6c0f2f4c1087a7779f2fd504db34c  testdata/yellowback/pq_wallet_vectors.json  src/test/data/pq_wallet_vectors.json
+e3e4bfda845256776a28e045abd6955a9fb2a7f92dae76aa1465d49e6112e735  testdata/yellowback/yellowback_golden.json  src/test/data/yellowback_golden.json
+dc07c22cde7874251e2805b43f717ecd19b85db34fdae149adc8eecbac186d59  testdata/yellowback/yellowback_attest_vectors.json  src/test/data/yellowback_attest_vectors.json
+db792673f777953bb0fad6dae9613bf80041b467e0a1959a56c85b668b577413  testdata/yellowback/yellowback_math_cases.json  src/test/data/yellowback_math_cases.json
+23acd1d3c0474eaf1ca1a4d9941332fc3df8c3d1e0e659bd28ddc3b3b72be0a7  testdata/yellowback/yellowback_pq_vectors.json  src/test/data/yellowback_pq_vectors.json
+b3547f1adbd5a322ac5d3821d4a33344f7e544f5b6d5c22ff01d8a1fb2e85bf7  testdata/yellowback/pq_acvp_slhdsa.json  src/test/data/pq_acvp_slhdsa.json
+5afd31f5debd290c2f68f42a759eed0121641bf4fe36e6ecd6ab2d81eba048cb  testdata/yellowback/pq_falcon_kat.json  src/test/data/pq_falcon_kat.json
