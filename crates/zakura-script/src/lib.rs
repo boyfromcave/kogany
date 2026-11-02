@@ -9,7 +9,7 @@ mod encoding_tests;
 #[cfg(test)]
 mod tests;
 mod ycash;
-#[cfg(test)]
+#[cfg(all(test, feature = "ycash"))]
 mod ycash_tests;
 
 pub use ycash::{

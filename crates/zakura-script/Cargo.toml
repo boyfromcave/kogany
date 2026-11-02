@@ -14,6 +14,11 @@ keywords.workspace = true
 # Must be one of <https://crates.io/category_slugs>
 categories = ["cryptography::cryptocurrencies"]
 
+[features]
+# The Ycash network profile (kogany), see zakura-chain's `ycash` feature. Gates the W3-c
+# `ycash_tests`, which need the Ycash network parameters.
+ycash = ["zakura-chain/ycash"]
+
 [dependencies]
 zcash_script = { workspace = true }
 zcash_primitives = { workspace = true }
