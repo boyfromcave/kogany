@@ -2788,8 +2788,8 @@ dependencies = [
 
 [[package]]
 name = "zakura-address"
-version = "5.0.0-rc.2"
-source = "git+https://github.com/boyfromcave/zakura-common-ycash?rev=bdbca121628d38d5975cb014ef86365ed1fb55b4#bdbca121628d38d5975cb014ef86365ed1fb55b4"
+version = "5.0.0-rc.2+ycash.1"
+source = "git+https://github.com/boyfromcave/zakura-common-ycash?rev=1dd25c9d8e45f2c6e53daa970a71779f51489485#1dd25c9d8e45f2c6e53daa970a71779f51489485"
 dependencies = [
  "bech32",
  "blake2b_simd",
@@ -2806,8 +2806,8 @@ checksum = "25e857d2204b2fb78fe753a20c9014f77190045b4b9828ff6839dfa2620f7fa8"
 
 [[package]]
 name = "zakura-bellman"
-version = "5.0.0-rc.2"
-source = "git+https://github.com/boyfromcave/zakura-common-ycash?rev=bdbca121628d38d5975cb014ef86365ed1fb55b4#bdbca121628d38d5975cb014ef86365ed1fb55b4"
+version = "5.0.0-rc.2+ycash.1"
+source = "git+https://github.com/boyfromcave/zakura-common-ycash?rev=1dd25c9d8e45f2c6e53daa970a71779f51489485#1dd25c9d8e45f2c6e53daa970a71779f51489485"
 dependencies = [
  "blake2s_simd",
  "ff",
@@ -2849,8 +2849,8 @@ dependencies = [
 
 [[package]]
 name = "zakura-bls12-381"
-version = "5.0.0-rc.2"
-source = "git+https://github.com/boyfromcave/zakura-common-ycash?rev=bdbca121628d38d5975cb014ef86365ed1fb55b4#bdbca121628d38d5975cb014ef86365ed1fb55b4"
+version = "5.0.0-rc.2+ycash.1"
+source = "git+https://github.com/boyfromcave/zakura-common-ycash?rev=1dd25c9d8e45f2c6e53daa970a71779f51489485#1dd25c9d8e45f2c6e53daa970a71779f51489485"
 dependencies = [
  "ff",
  "group",
@@ -2962,8 +2962,8 @@ dependencies = [
 
 [[package]]
 name = "zakura-equihash"
-version = "5.0.0-rc.2"
-source = "git+https://github.com/boyfromcave/zakura-common-ycash?rev=bdbca121628d38d5975cb014ef86365ed1fb55b4#bdbca121628d38d5975cb014ef86365ed1fb55b4"
+version = "5.0.0-rc.2+ycash.1"
+source = "git+https://github.com/boyfromcave/zakura-common-ycash?rev=1dd25c9d8e45f2c6e53daa970a71779f51489485#1dd25c9d8e45f2c6e53daa970a71779f51489485"
 dependencies = [
  "blake2b_simd",
  "corez",
@@ -2972,8 +2972,8 @@ dependencies = [
 
 [[package]]
 name = "zakura-halo2-gadgets"
-version = "5.0.0-rc.2"
-source = "git+https://github.com/boyfromcave/zakura-common-ycash?rev=bdbca121628d38d5975cb014ef86365ed1fb55b4#bdbca121628d38d5975cb014ef86365ed1fb55b4"
+version = "5.0.0-rc.2+ycash.1"
+source = "git+https://github.com/boyfromcave/zakura-common-ycash?rev=1dd25c9d8e45f2c6e53daa970a71779f51489485#1dd25c9d8e45f2c6e53daa970a71779f51489485"
 dependencies = [
  "arrayvec",
  "ff",
@@ -2986,8 +2986,8 @@ dependencies = [
 
 [[package]]
 name = "zakura-halo2-poseidon"
-version = "5.0.0-rc.2"
-source = "git+https://github.com/boyfromcave/zakura-common-ycash?rev=bdbca121628d38d5975cb014ef86365ed1fb55b4#bdbca121628d38d5975cb014ef86365ed1fb55b4"
+version = "5.0.0-rc.2+ycash.1"
+source = "git+https://github.com/boyfromcave/zakura-common-ycash?rev=1dd25c9d8e45f2c6e53daa970a71779f51489485#1dd25c9d8e45f2c6e53daa970a71779f51489485"
 dependencies = [
  "ff",
  "group",
@@ -2996,8 +2996,8 @@ dependencies = [
 
 [[package]]
 name = "zakura-halo2-proofs"
-version = "5.0.0-rc.2"
-source = "git+https://github.com/boyfromcave/zakura-common-ycash?rev=bdbca121628d38d5975cb014ef86365ed1fb55b4#bdbca121628d38d5975cb014ef86365ed1fb55b4"
+version = "5.0.0-rc.2+ycash.1"
+source = "git+https://github.com/boyfromcave/zakura-common-ycash?rev=1dd25c9d8e45f2c6e53daa970a71779f51489485#1dd25c9d8e45f2c6e53daa970a71779f51489485"
 dependencies = [
  "blake2b_simd",
  "ff",
@@ -3038,8 +3038,8 @@ dependencies = [
 
 [[package]]
 name = "zakura-jubjub"
-version = "5.0.0-rc.2"
-source = "git+https://github.com/boyfromcave/zakura-common-ycash?rev=bdbca121628d38d5975cb014ef86365ed1fb55b4#bdbca121628d38d5975cb014ef86365ed1fb55b4"
+version = "5.0.0-rc.2+ycash.1"
+source = "git+https://github.com/boyfromcave/zakura-common-ycash?rev=1dd25c9d8e45f2c6e53daa970a71779f51489485#1dd25c9d8e45f2c6e53daa970a71779f51489485"
 dependencies = [
  "ff",
  "group",
@@ -3134,8 +3134,8 @@ dependencies = [
 
 [[package]]
 name = "zakura-note-encryption"
-version = "5.0.0-rc.2"
-source = "git+https://github.com/boyfromcave/zakura-common-ycash?rev=bdbca121628d38d5975cb014ef86365ed1fb55b4#bdbca121628d38d5975cb014ef86365ed1fb55b4"
+version = "5.0.0-rc.2+ycash.1"
+source = "git+https://github.com/boyfromcave/zakura-common-ycash?rev=1dd25c9d8e45f2c6e53daa970a71779f51489485#1dd25c9d8e45f2c6e53daa970a71779f51489485"
 dependencies = [
  "chacha20",
  "chacha20poly1305",
@@ -3146,8 +3146,8 @@ dependencies = [
 
 [[package]]
 name = "zakura-orchard"
-version = "5.0.0-rc.2"
-source = "git+https://github.com/boyfromcave/zakura-common-ycash?rev=bdbca121628d38d5975cb014ef86365ed1fb55b4#bdbca121628d38d5975cb014ef86365ed1fb55b4"
+version = "5.0.0-rc.2+ycash.1"
+source = "git+https://github.com/boyfromcave/zakura-common-ycash?rev=1dd25c9d8e45f2c6e53daa970a71779f51489485#1dd25c9d8e45f2c6e53daa970a71779f51489485"
 dependencies = [
  "blake2b_simd",
  "corez",
@@ -3170,8 +3170,8 @@ dependencies = [
 
 [[package]]
 name = "zakura-orchard-legacy"
-version = "5.0.0-rc.2"
-source = "git+https://github.com/boyfromcave/zakura-common-ycash?rev=bdbca121628d38d5975cb014ef86365ed1fb55b4#bdbca121628d38d5975cb014ef86365ed1fb55b4"
+version = "5.0.0-rc.2+ycash.1"
+source = "git+https://github.com/boyfromcave/zakura-common-ycash?rev=1dd25c9d8e45f2c6e53daa970a71779f51489485#1dd25c9d8e45f2c6e53daa970a71779f51489485"
 dependencies = [
  "ff",
  "group",
@@ -3185,16 +3185,16 @@ dependencies = [
 
 [[package]]
 name = "zakura-pairing"
-version = "5.0.0-rc.2"
-source = "git+https://github.com/boyfromcave/zakura-common-ycash?rev=bdbca121628d38d5975cb014ef86365ed1fb55b4#bdbca121628d38d5975cb014ef86365ed1fb55b4"
+version = "5.0.0-rc.2+ycash.1"
+source = "git+https://github.com/boyfromcave/zakura-common-ycash?rev=1dd25c9d8e45f2c6e53daa970a71779f51489485#1dd25c9d8e45f2c6e53daa970a71779f51489485"
 dependencies = [
  "group",
 ]
 
 [[package]]
 name = "zakura-pasta-curves"
-version = "5.0.0-rc.2"
-source = "git+https://github.com/boyfromcave/zakura-common-ycash?rev=bdbca121628d38d5975cb014ef86365ed1fb55b4#bdbca121628d38d5975cb014ef86365ed1fb55b4"
+version = "5.0.0-rc.2+ycash.1"
+source = "git+https://github.com/boyfromcave/zakura-common-ycash?rev=1dd25c9d8e45f2c6e53daa970a71779f51489485#1dd25c9d8e45f2c6e53daa970a71779f51489485"
 dependencies = [
  "blake2b_simd",
  "cc",
@@ -3209,8 +3209,8 @@ dependencies = [
 
 [[package]]
 name = "zakura-primitives"
-version = "5.0.0-rc.2"
-source = "git+https://github.com/boyfromcave/zakura-common-ycash?rev=bdbca121628d38d5975cb014ef86365ed1fb55b4#bdbca121628d38d5975cb014ef86365ed1fb55b4"
+version = "5.0.0-rc.2+ycash.1"
+source = "git+https://github.com/boyfromcave/zakura-common-ycash?rev=1dd25c9d8e45f2c6e53daa970a71779f51489485#1dd25c9d8e45f2c6e53daa970a71779f51489485"
 dependencies = [
  "blake2b_simd",
  "corez",
@@ -3233,8 +3233,8 @@ dependencies = [
 
 [[package]]
 name = "zakura-protocol"
-version = "5.0.0-rc.2"
-source = "git+https://github.com/boyfromcave/zakura-common-ycash?rev=bdbca121628d38d5975cb014ef86365ed1fb55b4#bdbca121628d38d5975cb014ef86365ed1fb55b4"
+version = "5.0.0-rc.2+ycash.1"
+source = "git+https://github.com/boyfromcave/zakura-common-ycash?rev=1dd25c9d8e45f2c6e53daa970a71779f51489485#1dd25c9d8e45f2c6e53daa970a71779f51489485"
 dependencies = [
  "corez",
  "hex",
@@ -3270,8 +3270,8 @@ dependencies = [
 
 [[package]]
 name = "zakura-reddsa"
-version = "5.0.0-rc.2"
-source = "git+https://github.com/boyfromcave/zakura-common-ycash?rev=bdbca121628d38d5975cb014ef86365ed1fb55b4#bdbca121628d38d5975cb014ef86365ed1fb55b4"
+version = "5.0.0-rc.2+ycash.1"
+source = "git+https://github.com/boyfromcave/zakura-common-ycash?rev=1dd25c9d8e45f2c6e53daa970a71779f51489485#1dd25c9d8e45f2c6e53daa970a71779f51489485"
 dependencies = [
  "blake2b_simd",
  "group",
@@ -3284,8 +3284,8 @@ dependencies = [
 
 [[package]]
 name = "zakura-redjubjub"
-version = "5.0.0-rc.2"
-source = "git+https://github.com/boyfromcave/zakura-common-ycash?rev=bdbca121628d38d5975cb014ef86365ed1fb55b4#bdbca121628d38d5975cb014ef86365ed1fb55b4"
+version = "5.0.0-rc.2+ycash.1"
+source = "git+https://github.com/boyfromcave/zakura-common-ycash?rev=1dd25c9d8e45f2c6e53daa970a71779f51489485#1dd25c9d8e45f2c6e53daa970a71779f51489485"
 dependencies = [
  "rand_core 0.10.1",
  "serde",
@@ -3375,8 +3375,8 @@ dependencies = [
 
 [[package]]
 name = "zakura-sapling-crypto"
-version = "5.0.0-rc.2"
-source = "git+https://github.com/boyfromcave/zakura-common-ycash?rev=bdbca121628d38d5975cb014ef86365ed1fb55b4#bdbca121628d38d5975cb014ef86365ed1fb55b4"
+version = "5.0.0-rc.2+ycash.1"
+source = "git+https://github.com/boyfromcave/zakura-common-ycash?rev=1dd25c9d8e45f2c6e53daa970a71779f51489485#1dd25c9d8e45f2c6e53daa970a71779f51489485"
 dependencies = [
  "blake2b_simd",
  "blake2s_simd",
@@ -3428,7 +3428,7 @@ dependencies = [
 [[package]]
 name = "zakura-sensei"
 version = "0.1.0"
-source = "git+https://github.com/boyfromcave/zakura-common-ycash?rev=bdbca121628d38d5975cb014ef86365ed1fb55b4#bdbca121628d38d5975cb014ef86365ed1fb55b4"
+source = "git+https://github.com/boyfromcave/zakura-common-ycash?rev=1dd25c9d8e45f2c6e53daa970a71779f51489485#1dd25c9d8e45f2c6e53daa970a71779f51489485"
 dependencies = [
  "blake2b_simd",
  "once_cell",
@@ -3445,7 +3445,7 @@ dependencies = [
 [[package]]
 name = "zakura-sensei-artifacts"
 version = "0.1.0"
-source = "git+https://github.com/boyfromcave/zakura-common-ycash?rev=bdbca121628d38d5975cb014ef86365ed1fb55b4#bdbca121628d38d5975cb014ef86365ed1fb55b4"
+source = "git+https://github.com/boyfromcave/zakura-common-ycash?rev=1dd25c9d8e45f2c6e53daa970a71779f51489485#1dd25c9d8e45f2c6e53daa970a71779f51489485"
 dependencies = [
  "zakura-bento",
  "zakura-sensei-shared",
@@ -3455,7 +3455,7 @@ dependencies = [
 [[package]]
 name = "zakura-sensei-macros"
 version = "0.1.0"
-source = "git+https://github.com/boyfromcave/zakura-common-ycash?rev=bdbca121628d38d5975cb014ef86365ed1fb55b4#bdbca121628d38d5975cb014ef86365ed1fb55b4"
+source = "git+https://github.com/boyfromcave/zakura-common-ycash?rev=1dd25c9d8e45f2c6e53daa970a71779f51489485#1dd25c9d8e45f2c6e53daa970a71779f51489485"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3466,7 +3466,7 @@ dependencies = [
 [[package]]
 name = "zakura-sensei-shared"
 version = "0.1.0"
-source = "git+https://github.com/boyfromcave/zakura-common-ycash?rev=bdbca121628d38d5975cb014ef86365ed1fb55b4#bdbca121628d38d5975cb014ef86365ed1fb55b4"
+source = "git+https://github.com/boyfromcave/zakura-common-ycash?rev=1dd25c9d8e45f2c6e53daa970a71779f51489485#1dd25c9d8e45f2c6e53daa970a71779f51489485"
 dependencies = [
  "zakura-bento",
  "zakura-udon",
@@ -3500,8 +3500,8 @@ dependencies = [
 
 [[package]]
 name = "zakura-sinsemilla"
-version = "5.0.0-rc.2"
-source = "git+https://github.com/boyfromcave/zakura-common-ycash?rev=bdbca121628d38d5975cb014ef86365ed1fb55b4#bdbca121628d38d5975cb014ef86365ed1fb55b4"
+version = "5.0.0-rc.2+ycash.1"
+source = "git+https://github.com/boyfromcave/zakura-common-ycash?rev=1dd25c9d8e45f2c6e53daa970a71779f51489485#1dd25c9d8e45f2c6e53daa970a71779f51489485"
 dependencies = [
  "group",
  "once_cell",
@@ -3588,8 +3588,8 @@ dependencies = [
 
 [[package]]
 name = "zakura-transparent"
-version = "5.0.0-rc.2"
-source = "git+https://github.com/boyfromcave/zakura-common-ycash?rev=bdbca121628d38d5975cb014ef86365ed1fb55b4#bdbca121628d38d5975cb014ef86365ed1fb55b4"
+version = "5.0.0-rc.2+ycash.1"
+source = "git+https://github.com/boyfromcave/zakura-common-ycash?rev=1dd25c9d8e45f2c6e53daa970a71779f51489485#1dd25c9d8e45f2c6e53daa970a71779f51489485"
 dependencies = [
  "bs58",
  "corez",
@@ -3638,7 +3638,7 @@ dependencies = [
 [[package]]
 name = "zakura-zcash-script"
 version = "0.0.1"
-source = "git+https://github.com/boyfromcave/zakura-common-ycash?rev=bdbca121628d38d5975cb014ef86365ed1fb55b4#bdbca121628d38d5975cb014ef86365ed1fb55b4"
+source = "git+https://github.com/boyfromcave/zakura-common-ycash?rev=1dd25c9d8e45f2c6e53daa970a71779f51489485#1dd25c9d8e45f2c6e53daa970a71779f51489485"
 dependencies = [
  "bitflags",
  "bounded-vec",

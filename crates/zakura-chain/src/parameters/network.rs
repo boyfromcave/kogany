@@ -417,6 +417,11 @@ impl zcash_protocol::consensus::Parameters for Network {
         &self,
         nu: zcash_protocol::consensus::NetworkUpgrade,
     ) -> Option<zcash_protocol::consensus::BlockHeight> {
+        // Ycash: zakura-protocol's Ycash upgrade is not scheduled on any
+        // Zakura network until the ycash profile (W1-Y1) adds it.
+        if nu == zcash_protocol::consensus::NetworkUpgrade::Ycash {
+            return None;
+        }
         NetworkUpgrade::from(nu)
             .activation_height(self)
             .map(|Height(h)| zcash_protocol::consensus::BlockHeight::from_u32(h))
