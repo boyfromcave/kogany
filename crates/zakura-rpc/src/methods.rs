@@ -2021,7 +2021,11 @@ where
             .latest_chain_tip
             .best_tip_height()
             .unwrap_or(Height::MIN);
+        #[cfg(not(feature = "ycash"))]
         let testnet = self.network.is_a_test_network();
+        // Ycash (W1-Y6): `testnet` is false on Regtest, as ycashd reports it.
+        #[cfg(feature = "ycash")]
+        let testnet = types::ycash::is_testnet_field(&self.network);
 
         // This field is behind the `ENABLE_WALLET` feature flag in zcashd:
         // https://github.com/zcash/zcash/blob/v6.1.0/src/rpc/misc.cpp#L113
@@ -2252,7 +2256,10 @@ where
         };
 
         let response = GetBlockchainInfoResponse {
+            #[cfg(not(feature = "ycash"))]
             chain: network.bip70_network_name(),
+            #[cfg(feature = "ycash")]
+            chain: types::ycash::chain_name(network),
             blocks: tip_height,
             best_block_hash: tip_hash,
             estimated_height,
@@ -4133,11 +4140,18 @@ where
                     .collect()
             });
 
+        let miner = miner_subsidy(height, &net, subsidy).map_misc_error()?;
+        let founders = founders_reward(&net, height);
+        // Ycash (W1-Y6): `founders` is the founders' or YDF share ycashd's miner pays, and
+        // `miner` the rest, including the optional post-mandate YDF.
+        #[cfg(feature = "ycash")]
+        let (miner, founders) =
+            types::ycash::subsidy_fields(&net, height, subsidy, miner, founders)
+                .map_misc_error()?;
+
         Ok(GetBlockSubsidyResponse {
-            miner: miner_subsidy(height, &net, subsidy)
-                .map_misc_error()?
-                .into(),
-            founders: founders_reward(&net, height).into(),
+            miner: miner.into(),
+            founders: founders.into(),
             funding_streams,
             lockbox_streams,
             funding_streams_total: funding_streams_total?,
