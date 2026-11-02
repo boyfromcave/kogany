@@ -26,6 +26,8 @@ use zakura_rpc::server::kogany_extension::RpcExtension;
 mod macros;
 
 pub mod json;
+#[cfg(feature = "ycash")]
+pub mod mining;
 pub mod mock;
 pub mod state;
 pub mod types;
@@ -73,8 +75,28 @@ where
         .and(yed::extension(yed, network))
 }
 
-/// The YED state `zakurad` serves until plan W5-f registers the module.
+/// The `getblocktemplate` hooks `zakurad` installs on a Ycash node (plan W8-b): over the same
+/// YED state as the `yed_*` methods of [`node_extension`], so `yed_setquote` sets the quote the
+/// next template's coinbase tag carries.
+#[cfg(feature = "ycash")]
+pub fn mining_hooks<T>(tip: T) -> Arc<dyn zakura_rpc::ycash_mining::YcashMining>
+where
+    T: ChainTip + Clone + Send + Sync + 'static,
+{
+    Arc::new(mining::YedMining::new(yed_state(tip)))
+}
+
+/// The YED state `zakurad` serves until plan W5-f registers the module: one per process, so
+/// every listener and the template read one quote (ycash6's `g_yellowback`).
 fn yed_state<T>(tip: T) -> Arc<dyn yed::YedReadState>
+where
+    T: ChainTip + Clone + Send + Sync + 'static,
+{
+    static YED_STATE: std::sync::OnceLock<Arc<dyn yed::YedReadState>> = std::sync::OnceLock::new();
+    YED_STATE.get_or_init(|| new_yed_state(tip)).clone()
+}
+
+fn new_yed_state<T>(tip: T) -> Arc<dyn yed::YedReadState>
 where
     T: ChainTip + Clone + Send + Sync + 'static,
 {

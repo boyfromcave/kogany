@@ -30,3 +30,7 @@ pub use methods::types::{
         PendingBlockSignal, SubmitBlockChannel,
     },
 };
+
+// kogany W8: the Ycash `getblocktemplate` hooks the node installs (`RpcImpl::with_ycash_mining`).
+#[cfg(feature = "ycash")]
+pub use methods::types::get_block_template::ycash as ycash_mining;
