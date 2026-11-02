@@ -112,35 +112,49 @@ async fn mempool_verify(
         .map(|_| ())
 }
 
-/// A coin at 100 with a lock of 5: the mempool request for height 104 (tip 103) waits, the one
-/// for height 105 (tip 104) is accepted. The block at 105 is checked at 105 by contextual
+/// A coin at H with a lock of 5: the mempool request for height H + 4 (tip H + 3) waits, the
+/// one for H + 5 (tip H + 4) is accepted. The block at H + 5 is checked at H + 5 by contextual
 /// validation, so the mempool admits exactly what the next block may include.
 #[tokio::test]
 async fn vault_bip68_mempool_evaluates_at_the_next_height() {
     let _init_guard = zakura_test::init();
-    let network = regtest_with_vault();
 
-    let (tx, outpoint, utxo) = spend(Height(100), 5);
-    let error = mempool_verify(&network, tx.clone(), outpoint, utxo.clone(), Height(104))
-        .await
-        .expect_err("the lock is not satisfied by the next block at 104");
-    let TransactionError::ValidateContextError(context) = &error else {
-        panic!("a contextual rejection, got {error:?}")
-    };
-    assert!(matches!(
-        **context,
-        ValidateContextError::UnsatisfiedSequenceLock {
-            spend_height: Height(104),
-            min_spend_height: Height(105),
-            ..
-        }
+    // The Vault regtest and, in a `ycash` build, the Ycash `fast` testnet.
+    #[allow(unused_mut)]
+    let mut networks = vec![(regtest_with_vault(), 100)];
+    #[cfg(feature = "ycash")]
+    networks.push((
+        Network::new_default_testnet(),
+        zakura_chain::parameters::ycash::testnet::VAULT_FAST.0 + 100,
     ));
-    // non-BIP68-final: never scored in the mempool (ycash6 DoS 0).
-    assert_eq!(error.mempool_misbehavior_score(), 0);
 
-    mempool_verify(&network, tx, outpoint, utxo, Height(105))
-        .await
-        .expect("the lock is satisfied by the next block at 105");
+    for (network, coin) in networks {
+        let (tx, outpoint, utxo) = spend(Height(coin), 5);
+        let error =
+            mempool_verify(&network, tx.clone(), outpoint, utxo.clone(), Height(coin + 4))
+                .await
+                .expect_err("the lock is not satisfied by the next block at coin + 4");
+        let TransactionError::ValidateContextError(context) = &error else {
+            panic!("a contextual rejection, got {error:?}")
+        };
+        assert!(
+            matches!(
+                **context,
+                ValidateContextError::UnsatisfiedSequenceLock {
+                    spend_height,
+                    min_spend_height,
+                    ..
+                } if spend_height == Height(coin + 4) && min_spend_height == Height(coin + 5)
+            ),
+            "{network:?}: {context:?}"
+        );
+        // non-BIP68-final: never scored in the mempool (ycash6 DoS 0).
+        assert_eq!(error.mempool_misbehavior_score(), 0);
+
+        mempool_verify(&network, tx, outpoint, utxo, Height(coin + 5))
+            .await
+            .expect("the lock is satisfied by the next block at coin + 5");
+    }
 }
 
 /// A time-based relative lock is `bad-txns-vault-timelock`, unscored in the mempool (ycash6
