@@ -984,6 +984,15 @@ impl NonFinalizedState {
         // kogany (W5-e, W5-f): the block's YED effect over the parent fork's index state, pushed
         // onto the chain's overlay with the block; stops the node when it cannot be evaluated,
         // and a module verdict rejects the block (U-21).
+        // kogany (S5): `yellowback.test_fault` fires on a block being committed (not a
+        // template check, which runs on a copy without metrics).
+        if self.should_count_metrics {
+            crate::service::yed::maybe_inject_yed_test_fault(
+                &finalized_state.config().yellowback,
+                contextual.height,
+            )
+            .unwrap_or_else(|e| e.stop_the_node("contextual validation"));
+        }
         contextual.yed_effect = Arc::new(check::yed::block_yed_effect(
             &self.network,
             &new_chain,
