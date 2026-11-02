@@ -510,7 +510,11 @@ impl YedRpc for YedRpcImpl {
 
     async fn yed_verifyindex(&self) -> RpcResult<VerifyIndexJson> {
         let s = self.live().await?;
-        let a = s.index.verify();
+        let mut a = s.index.verify();
+        let (set_mismatches, sets) = self.state.set_audit().await;
+        a.ok = a.ok && set_mismatches.is_empty();
+        a.sets.extend(sets);
+        a.mismatches.extend(set_mismatches);
         let totals = |t: &super::state::Totals| TotalsJson {
             supply_cents: t.supply_cents,
             collateral_zat: t.collateral_zat,
@@ -1062,8 +1066,9 @@ impl YedRpc for YedRpcImpl {
         Ok(CollateralJson {
             required_zat: e.required_zat,
             required_zat_floored: e.required_zat_floored,
-            protocol_fee_cents: e.protocol_fee_cents,
-            protocol_fee_zat: e.protocol_fee_zat,
+            // ycashd writes the fee fields only with a price (`yed_estimatecollateral`).
+            protocol_fee_cents: e.p_mint.map(|_| e.protocol_fee_cents),
+            protocol_fee_zat: e.p_mint.map(|_| e.protocol_fee_zat),
             term_class: class_letter(e.term_class),
             lock_height: e.lock_height,
             claim_height: e.claim_height,

@@ -541,6 +541,31 @@ where
         s.index.tx_info_with(txid, tx.as_ref())
     }
 
+    /// `AuditLockedValue` over the best chain's set state.
+    async fn set_audit(&self) -> (Vec<String>, Vec<SetAudit>) {
+        match self
+            .read_state
+            .clone()
+            .oneshot(ReadRequest::BestChainVaultSnapshot)
+            .await
+        {
+            Ok(ReadResponse::VaultSnapshot(Some(v))) => {
+                let (mismatches, sets) = kogany_vault::state::audit_locked_value(&v.state);
+                (
+                    mismatches,
+                    sets.into_iter()
+                        .map(|a| SetAudit {
+                            set_id: a.set_id,
+                            locked_value_zat: a.stored,
+                            records_zat: a.derived,
+                        })
+                        .collect(),
+                )
+            }
+            _ => (Vec::new(), Vec::new()),
+        }
+    }
+
     /// `yed_getnotice`, naming the notice transaction: the CLAIM_NOTICE of this vault in the
     /// block at the notice's height whose TxLog row says it held.
     async fn notice(&self, s: &YedSnapshot, txid: &Hash32) -> NoticeLookup {

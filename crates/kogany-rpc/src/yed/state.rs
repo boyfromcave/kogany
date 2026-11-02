@@ -81,6 +81,13 @@ pub trait YedReadState: Send + Sync + 'static {
     async fn notice(&self, snapshot: &YedSnapshot, txid: &Hash32) -> NoticeLookup {
         snapshot.index.notice(txid)
     }
+
+    /// `yed_verifyindex`'s vault half (`vault::AuditLockedValue` over the set-state database):
+    /// one line per mismatch and every signer set's stored and re-derived locked value. The
+    /// default has no set state to read.
+    async fn set_audit(&self) -> (Vec<String>, Vec<SetAudit>) {
+        (Vec::new(), Vec::new())
+    }
 }
 
 #[async_trait]
@@ -112,6 +119,9 @@ impl<S: YedReadState + ?Sized> YedReadState for Arc<S> {
     }
     async fn notice(&self, snapshot: &YedSnapshot, txid: &Hash32) -> NoticeLookup {
         (**self).notice(snapshot, txid).await
+    }
+    async fn set_audit(&self) -> (Vec<String>, Vec<SetAudit>) {
+        (**self).set_audit().await
     }
 }
 
