@@ -72,6 +72,9 @@ mod tip_recheck;
 // kogany (W9-a/F-6): failures on the tip's state are verified again, not cached.
 #[cfg(feature = "ycash")]
 mod state_retry;
+// kogany (F-S5-7): a disconnected block's transactions return to the mempool.
+#[cfg(feature = "ycash")]
+mod reorg_resurrect;
 
 /// Supplies named, timed storage operations to a benchmark harness.
 #[cfg(feature = "mempool-bench")]
@@ -661,6 +664,11 @@ pub struct Mempool {
     /// (kogany W9-a/F-6). Kept across mempool resets.
     #[cfg(feature = "ycash")]
     state_retries: state_retry::StateRetries,
+
+    /// Ycash: the recent best-chain blocks' transactions, returned to the mempool when their
+    /// block is disconnected (kogany F-S5-7). Kept across mempool resets.
+    #[cfg(feature = "ycash")]
+    reorg_resurrect: reorg_resurrect::ReorgResurrect,
 }
 
 impl Mempool {
@@ -706,6 +714,8 @@ impl Mempool {
             tip_recheck: Default::default(),
             #[cfg(feature = "ycash")]
             state_retries: Default::default(),
+            #[cfg(feature = "ycash")]
+            reorg_resurrect: Default::default(),
         };
 
         // Make sure `is_enabled` is accurate.
@@ -966,6 +976,17 @@ impl Service<Request> for Mempool {
                 }
             }
 
+            // Ycash: find the blocks that left the best chain; their transactions are queued when
+            // the lookup finishes (ycashd `DisconnectTip`, kogany F-S5-7).
+            #[cfg(feature = "ycash")]
+            if let Some(TipAction::Reset { height, hash }) = &tip_action {
+                self.reorg_resurrect.reset(
+                    (*height, *hash),
+                    self.read_state.clone(),
+                    self.verification_finished.clone(),
+                );
+            }
+
             return Poll::Ready(Ok(()));
         }
 
@@ -985,6 +1006,24 @@ impl Service<Request> for Mempool {
             // Ycash: the transactions inserted in this pass, whose kept orphans are verified again.
             #[cfg(feature = "ycash")]
             let mut inserted_parents = HashSet::new();
+
+            // Ycash: the transactions of the blocks a reset disconnected, verified at the new tip
+            // as ycashd's `DisconnectTip` hands them to `AcceptToMemoryPool` (kogany F-S5-7).
+            #[cfg(feature = "ycash")]
+            if let Some(transactions) = self.reorg_resurrect.poll_disconnected(cx) {
+                if !transactions.is_empty() {
+                    info!(
+                        transactions = transactions.len(),
+                        "returning the transactions of disconnected blocks to the mempool"
+                    );
+                }
+                for tx in transactions {
+                    let _result = tx_downloads.retry_after_tip_reset(
+                        Gossip::Tx(zakura_chain::transaction::UnminedTx::from(tx)),
+                        None,
+                    );
+                }
+            }
 
             let best_tip_height = self.latest_chain_tip.best_tip_height();
             let next_height = best_tip_height
@@ -1202,6 +1241,11 @@ impl Service<Request> for Mempool {
             if let Some(TipAction::Grow { block }) = tip_action {
                 tracing::trace!(block_height = ?block.height, "handling blocks added to tip");
                 *last_seen_tip_hash = block.hash;
+
+                // Ycash: kept, in case a reorg disconnects it (kogany F-S5-7).
+                #[cfg(feature = "ycash")]
+                self.reorg_resurrect
+                    .grew(block.height, block.hash, &block.transactions);
 
                 // Cancel downloads/verifications/storage of transactions
                 // with the same mined IDs as recently mined transactions.

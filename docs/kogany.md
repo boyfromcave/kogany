@@ -36,3 +36,8 @@ behaviours follow ycashd's there, each against Zakura's own:
   ranges, `CNetAddr::IsRoutable`) is not kept, so a regtest node connects only to the nodes
   `addnode` names; operator addresses (`addnode`, the initial peers, the disk cache) are kept
   whatever their range.
+- **Reorgs and restarts.** The transactions of a block that leaves the best chain (a reorg, an
+  `invalidateblock`) return to the mempool and are verified at the new tip, as ycashd's
+  `DisconnectTip` resurrects them; the mempool keeps the last 100 best-chain blocks' transactions
+  for this. The non-finalized blocks are written to the backup directory before each tip update,
+  so a stopped node restarts at the tip it reported.
