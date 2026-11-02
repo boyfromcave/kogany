@@ -617,16 +617,21 @@ where
                 // doing expensive script verification, to avoid DoS attacks on
                 // the script interpreter.
                 //
-                // Ycash (W1-Y9): ycashd checks standardness only where `RequireStandard()`, which
-                // regtest is not (ycash6 `chainparams.cpp:839`, `main.cpp:1979,2070`); the
-                // mempool storage applies it there when `accept_non_standard` is off.
+                // Ycash (W1-Y9, W6-a): ycashd checks standardness only where `RequireStandard()`,
+                // which regtest is not unless `-acceptnonstdtxn=0` (ycash6 `chainparams.cpp:839`,
+                // `main.cpp:1979,2070`), and with its own rules from the Vault height: the
+                // mempool's configuration selects it (`ycash_standard::require_standard`).
                 #[cfg(feature = "ycash")]
-                let check_standard = !network.is_regtest();
-                #[cfg(not(feature = "ycash"))]
-                let check_standard = true;
-                if check_standard {
-                    check::mempool_standard_input_scripts(tx.as_ref(), &spent_outputs)?;
+                if check::ycash_standard::require_standard(&network) {
+                    check::ycash_standard::mempool_standard_checks(
+                        tx.as_ref(),
+                        &spent_outputs,
+                        &network,
+                        req.height(),
+                    )?;
                 }
+                #[cfg(not(feature = "ycash"))]
+                check::mempool_standard_input_scripts(tx.as_ref(), &spent_outputs)?;
             }
 
             let mempool_transaction = req.mempool_transaction();

@@ -740,6 +740,12 @@ impl StartCmd {
             sync::end_of_support::end_of_support_height(&config.network.network),
         );
         node_tasks.track(&rpc_tx_queue_handle);
+        // kogany W8-b: the coinbase tag and the template filter read the node's Yellowback state.
+        #[cfg(feature = "ycash")]
+        let rpc_impl = rpc_impl.with_ycash_mining(kogany_rpc::mining_hooks(
+            latest_chain_tip.clone(),
+            read_only_state_service.clone(),
+        ));
 
         let node_services = ready.as_ref().map(|_| crate::node::NodeServices {
             read_state: read_only_state_service.clone(),

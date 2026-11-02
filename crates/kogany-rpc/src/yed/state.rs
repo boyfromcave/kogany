@@ -285,6 +285,19 @@ pub struct MinerStatus {
     pub registered: bool,
     /// Membership in `E(tip)` (FEE-2).
     pub eligible: bool,
+    /// The held quote (`GetQuote()`), `None` without one (or after `yed_setquote 0`): the price
+    /// and source mask the next template's tag carries when `quote_kind` is `"quote"` (plan
+    /// W8-b, `BuildTagScript`).
+    pub quote: Option<HeldQuote>,
+}
+
+/// The miner's held quote (ycash6 `QuoteHolder`, set by `yed_setquote`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct HeldQuote {
+    /// The YEC/USD quote, micro-USD (non-zero).
+    pub price_micro_usd: i64,
+    /// The informational source bitfield.
+    pub source_mask: u16,
 }
 
 /// The dollar-per-KB network-fee policy (fees spec §3.4; ycash6 `AttestedFeePolicy`).

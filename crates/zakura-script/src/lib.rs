@@ -13,8 +13,8 @@ mod ycash;
 mod ycash_tests;
 
 pub use ycash::{
-    is_pq_falcon_active, pq_falcon_height, script_flags, ScriptContext, VaultStateSnapshot,
-    YcashSignatureChecker,
+    is_pq_falcon_active, pq_falcon_height, script_flags, standard_script_flags, ScriptContext,
+    VaultStateSnapshot, YcashSignatureChecker, STANDARD_NOT_MANDATORY_FLAGS,
 };
 
 use core::fmt;
