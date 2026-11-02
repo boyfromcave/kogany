@@ -50,6 +50,7 @@ use crate::{
     server::{
         http::{HttpBody, JsonRpcHttpService},
         http_request_compatibility::HttpRequestMiddlewareLayer,
+        kogany_extension::{ExtendedMethods, RpcExtension},
         rpc_call_compatibility::FixRpcResponseMiddleware,
         rpc_logger::RpcLoggerMiddleware,
         rpc_metrics::RpcMetricsMiddleware,
@@ -65,6 +66,7 @@ pub mod fuzz;
 pub mod http;
 pub mod http_request_compatibility;
 pub mod jsonrpc;
+pub mod kogany_extension;
 pub mod rpc_call_compatibility;
 pub mod rpc_logger;
 pub mod rpc_metrics;
@@ -188,7 +190,14 @@ impl RpcServer {
 
         let surface = primary_rpc_surface(rpc.network(), conf.enable_cookie_auth);
 
-        Self::start_inner(rpc, conf, surface, OPENED_RPC_ENDPOINT_MSG).await
+        Self::start_inner(
+            rpc,
+            conf,
+            surface,
+            OPENED_RPC_ENDPOINT_MSG,
+            RpcExtension::none(),
+        )
+        .await
     }
 
     /// Starts the loopback-only, cookie-authenticated admin RPC server.
@@ -227,7 +236,14 @@ impl RpcServer {
         conf.enable_cookie_auth = true;
         conf.tls = None;
 
-        Self::start_inner(rpc, conf, RpcSurface::Full, OPENED_ADMIN_RPC_ENDPOINT_MSG).await
+        Self::start_inner(
+            rpc,
+            conf,
+            RpcSurface::Full,
+            OPENED_ADMIN_RPC_ENDPOINT_MSG,
+            RpcExtension::none(),
+        )
+        .await
     }
 
     /// Starts one RPC listener with the selected method surface.
@@ -244,6 +260,7 @@ impl RpcServer {
         conf: config::rpc::Config,
         surface: RpcSurface,
         opened_endpoint_msg: &'static str,
+        extension: RpcExtension,
     ) -> Result<ServerTask, tower::BoxError>
     where
         Mempool: MempoolService,
@@ -259,7 +276,8 @@ impl RpcServer {
             .expect("caller should make sure listen_addr is set");
 
         let rpc = rpc.with_rpc_surface(surface);
-        let enabled_methods = enabled_rpc_methods(registered_methods(&rpc), surface)?;
+        let mut enabled_methods = enabled_rpc_methods(registered_methods(&rpc), surface)?;
+        enabled_methods.extend(extension.enabled_methods(registered_methods(&rpc), surface)?);
 
         // The largest RPC request is submitblock, which sends a full block
         // as a hex string (2x MAX_BLOCK_BYTES) plus a small JSON-RPC wrapper.
@@ -277,7 +295,11 @@ impl RpcServer {
         let max_response_body_size = conf.max_response_body_size;
         let rpc_service = RpcLoggerMiddleware::new(
             FixRpcResponseMiddleware::new(RpcMetricsMiddleware::new(RpcTracingMiddleware::new(
-                RpcService::new(rpc, enabled_methods, max_response_body_size),
+                RpcService::new(
+                    ExtendedMethods::new(rpc, extension),
+                    enabled_methods,
+                    max_response_body_size,
+                ),
             ))),
             MAX_RPC_LOG_CHARS,
         );
