@@ -262,6 +262,8 @@ class LiveRig:
         self.sidecar.generate(VAULT)
         # set_create spends no coinbase: give the wallet ordinary coins first
         fund = self.sidecar.getnewaddress()
+        # the wallet catches up with the blocks asynchronously
+        wait_for('the mature coinbases in the wallet', lambda: float(self.sidecar.getbalance()) >= 45, 120)
         for _ in range(4):
             self.sidecar.sendtoaddress(fund, 10)
         self.sidecar.generate(1)
