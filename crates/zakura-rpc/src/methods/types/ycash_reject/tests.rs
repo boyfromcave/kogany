@@ -257,16 +257,20 @@ fn script_reasons() -> Vec<(&'static str, &'static str, Source)> {
         (
             "tx",
             "old-consensus-branch-id",
-            NotReachable(
-                "ycashd retries a failing signature under the previous epoch's branch ID to name \
-                 the cause (main.cpp:1457-1466); kogany's verifier does not, and answers \
-                 mandatory-script-verify-flag-failed (the same reject-consensus class)",
-            ),
+            // S5: the mempool retries a failing input under the previous epoch's branch ID
+            // (vault_mempool::non_mandatory_script_failure, main.cpp:3060-3075).
+            Produced(mempool(TransactionError::OldConsensusBranchId {
+                expected: 0x6d5b_7a31,
+                found: 0xe9ff_75a6,
+            })),
         ),
         (
             "tx",
             "old-consensus-branch-id (Expected %08x, found %08x)*",
-            NotReachable("as old-consensus-branch-id"),
+            Produced(mempool(TransactionError::OldConsensusBranchId {
+                expected: 0x6d5b_7a31,
+                found: 0xe9ff_75a6,
+            })),
         ),
         // Lock times.
         (
@@ -796,4 +800,17 @@ fn setmocktime_moves_the_template_cur_time() {
         info.max_time
     );
     assert_eq!(with_cur_time(info.clone(), Some(1)).cur_time, info.min_time);
+}
+
+/// S5 (`vault_primitive`): a signature over the previous epoch's branch ID is ycashd's
+/// `old-consensus-branch-id (Expected <current>, found <previous>)`, REJECT_INVALID.
+#[test]
+fn old_consensus_branch_id_is_ycashds_text() {
+    assert_eq!(
+        mempool(TransactionError::OldConsensusBranchId {
+            expected: 0x6d5b_7a31,
+            found: 0xe9ff_75a6,
+        }),
+        "16: old-consensus-branch-id (Expected 6d5b7a31, found e9ff75a6)"
+    );
 }

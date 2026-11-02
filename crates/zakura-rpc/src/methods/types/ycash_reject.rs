@@ -209,6 +209,10 @@ pub fn transaction_reject(error: &TransactionError, context: Context) -> CxxReje
             REJECT_NONSTANDARD,
             format!("{NON_MANDATORY_SCRIPT_FAILED} ({script_error})"),
         ),
+        // main.cpp:3060-3075 (S5): a signature made for the previous epoch's branch ID, DoS 10.
+        E::OldConsensusBranchId { expected, found } => CxxReject::invalid(format!(
+            "old-consensus-branch-id (Expected {expected:08x}, found {found:08x})"
+        )),
         // main.cpp:1979-1983 (W6-c): IsStandardTx before vault::CheckTx.
         E::NonStandardTransaction { reason } => {
             CxxReject::reject(REJECT_NONSTANDARD, reason.clone())

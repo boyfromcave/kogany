@@ -355,6 +355,13 @@ pub enum TransactionError {
         script_error: String,
     },
 
+    /// kogany (S5): an input's script fails under the current consensus branch ID but passes
+    /// under the previous epoch's (ycash6 `ContextualCheckInputs`' retry, `src/main.cpp:3060-3075`,
+    /// DoS 10): the signatures were made for the old branch. Reported by the mempool only.
+    #[cfg(feature = "ycash")]
+    #[error("old-consensus-branch-id (Expected {expected:#010x}, found {found:#010x})")]
+    OldConsensusBranchId { expected: u32, found: u32 },
+
     /// kogany (W6-c): a transaction the Vault rules refuse is non-standard as well, which ycashd
     /// reports first (`IsStandardTx`, outputs included, runs before `vault::CheckTx`;
     /// `REJECT_NONSTANDARD`, DoS 0). `reason` is ycashd's (`scriptpubkey`, `dust`, ...).
@@ -584,6 +591,7 @@ impl TransactionError {
             #[cfg(feature = "ycash")]
             Self::VaultTemplateSetState { .. }
             | Self::NonMandatoryScriptFlag { .. }
+            | Self::OldConsensusBranchId { .. }
             | Self::NonStandardTransaction { .. }
             | Self::YellowbackRejected { .. } => {
                 BodyVerificationClass::Retryable(TransientBodyFailureKind::VerifierUnavailable)
@@ -668,6 +676,9 @@ impl TransactionError {
             VaultRejected {
                 byte_level: true, ..
             } => 10,
+            // ycashd's `old-consensus-branch-id` is DoS 10 (`main.cpp:3070`).
+            #[cfg(feature = "ycash")]
+            OldConsensusBranchId { .. } => 10,
             #[cfg(feature = "ycash")]
             VaultTemplateSetState { .. }
             | NonMandatoryScriptFlag { .. }

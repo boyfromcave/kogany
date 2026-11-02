@@ -445,6 +445,10 @@ fn peer_action(error: &TransactionError) -> PeerAction {
         | NonMandatoryScriptFlag { .. }
         | NonStandardTransaction { .. }
         | YellowbackRejected { .. } => Ignore,
+        // kogany (S5): signatures for the previous epoch's branch ID; ycashd scores it 10 and asks
+        // the sender to upgrade, which is no proof the relaying peer misbehaved.
+        #[cfg(feature = "ycash")]
+        OldConsensusBranchId { .. } => Ignore,
 
         // The verifier failed, or the error does not name the rule that failed.
         Script(_)
