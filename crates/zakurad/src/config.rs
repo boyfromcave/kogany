@@ -91,6 +91,12 @@ pub struct ZakuradConfig {
 
     /// zcashd-compat mode configuration.
     pub zcashd_compat: crate::components::zcashd_compat::Config,
+
+    /// kogany (W5-e): Ycash Yellowback (YED) configuration, ycashd's regtest-only
+    /// `-yellowback*` flags (`attestor_set`, `sigma_ref`, `supply_cap_bps`, `attest_arm_min`,
+    /// `bundle_carrier`, `mint_requires_armed`). Omitted from generated configs at its defaults.
+    #[serde(skip_serializing_if = "zakura_state::yed::YellowbackConfig::is_default")]
+    pub yellowback: zakura_state::yed::YellowbackConfig,
 }
 
 impl ZakuradConfig {
@@ -104,6 +110,8 @@ impl ZakuradConfig {
         state_config.enable_zakura_header_seed_from_committed_blocks = self.network.v2_p2p();
         state_config.checkpoint_sync = self.consensus.checkpoint_sync;
         state_config.vct_fast_sync = self.consensus.vct_fast_sync_enabled();
+        // kogany (W5-e)
+        state_config.yellowback = self.yellowback.clone();
         state_config
     }
 
@@ -163,5 +171,28 @@ impl With<MinerAddressType> for ZakuradConfig {
         );
 
         self
+    }
+}
+
+// kogany (W5-e): the `[yellowback]` section.
+#[cfg(test)]
+mod yellowback_section_tests {
+    use super::ZakuradConfig;
+
+    #[test]
+    fn yellowback_section_parses_and_reaches_the_state_config() {
+        let config: ZakuradConfig = toml::from_str(
+            "[yellowback]\n\
+             attestor_set = \"0eeebe67c4bc64cf5deb624972629c92b09e3362e126a3702443b192dca80f4a\"\n\
+             sigma_ref = 250\nsupply_cap_bps = 100\nattest_arm_min = 2\n\
+             bundle_carrier = \"either\"\nmint_requires_armed = true\n",
+        )
+        .expect("the section parses");
+        assert_eq!(config.yellowback.sigma_ref, 250);
+        assert_eq!(config.mirrored_state_config().yellowback, config.yellowback);
+        assert!(toml::from_str::<ZakuradConfig>("[yellowback]\nunknown = 1\n").is_err());
+        // Omitted from a generated default config.
+        let generated = toml::to_string(&ZakuradConfig::default()).unwrap();
+        assert!(!generated.contains("[yellowback]"));
     }
 }

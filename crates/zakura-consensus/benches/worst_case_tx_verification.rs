@@ -476,6 +476,7 @@ fn build_workload(case: &BenchmarkCase, candidates: &[CandidateTx]) -> Option<Wo
                 known_utxos: known_utxos.clone(),
                 height: candidate.height,
                 time: candidate.time,
+                vault_snapshot: None,
             }
         })
         .collect();

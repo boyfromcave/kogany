@@ -431,6 +431,13 @@ proptest! {
                             min_time: DateTime32::now(),
                             max_time: DateTime32::now()
                         }));
+
+                    // Ycash (W7-c): `chainwork` sums the headers (`types::ycash::chain_work`);
+                    // this mock has none, so the field is omitted.
+                    #[cfg(feature = "ycash")]
+                    while let Some(request) = state.try_next_request().await {
+                        request.respond(Err(BoxError::from("no headers in this mock state")));
+                    }
                 }
             };
 
@@ -552,6 +559,13 @@ proptest! {
                             min_time: DateTime32::now(),
                             max_time: DateTime32::now()
                         }));
+
+                    // Ycash (W7-c): `chainwork` sums the headers (`types::ycash::chain_work`);
+                    // this mock has none, so the field is omitted.
+                    #[cfg(feature = "ycash")]
+                    while let Some(request) = state.try_next_request().await {
+                        request.respond(Err(BoxError::from("no headers in this mock state")));
+                    }
                 }
             };
 
@@ -678,6 +692,13 @@ proptest! {
                     .expect("getblockchaininfo should call mock state service with correct request")
                     .respond(Err(BoxError::from("chain info not available")));
 
+
+                    // Ycash (W7-c): `chainwork` sums the headers (`types::ycash::chain_work`);
+                    // this mock has none, so the field is omitted.
+                    #[cfg(feature = "ycash")]
+                    while let Some(request) = state.try_next_request().await {
+                        request.respond(Err(BoxError::from("no headers in this mock state")));
+                    }
                 }
             };
 

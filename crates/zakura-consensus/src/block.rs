@@ -588,6 +588,35 @@ where
                 block.transactions.len(),
             );
 
+            // kogany (W4-d): the Vault set state after the parent, fetched once for the block's
+            // scripts (ycash6 `ConnectBlock`'s `vaultSnapshot`), awaited like the ZIP 234 parent
+            // info above. A state that is not the parent's is never used: the set opcodes then
+            // fail closed.
+            let vault_snapshot = if network.is_vault_active(height) {
+                let parent_request = if request.is_proposal() {
+                    zs::Request::VaultSnapshot {
+                        parent_hash: parent,
+                    }
+                } else {
+                    zs::Request::AwaitVaultSnapshot {
+                        parent_hash: parent,
+                    }
+                };
+                let zs::Response::VaultSnapshot(snapshot) = state_service
+                    .ready()
+                    .await
+                    .map_err(|source| VerifyBlockError::Depth { source, hash })?
+                    .call(parent_request)
+                    .await
+                    .map_err(|source| VerifyBlockError::Depth { source, hash })?
+                else {
+                    unreachable!("wrong response to a vault snapshot request");
+                };
+                snapshot.filter(|s| s.tip.is_some_and(|(_, tip_hash)| tip_hash == parent))
+            } else {
+                None
+            };
+
             for (&transaction_hash, transaction) in
                 transaction_hashes.iter().zip(block.transactions.iter())
             {
@@ -602,6 +631,7 @@ where
                         known_utxos: known_utxos.clone(),
                         height,
                         time: block.header.time,
+                        vault_snapshot: vault_snapshot.clone(),
                     });
                 async_checks.push(rsp);
             }

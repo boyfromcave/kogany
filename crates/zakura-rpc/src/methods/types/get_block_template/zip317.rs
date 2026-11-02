@@ -80,6 +80,8 @@ fn block_template_overhead_bytes(net: &Network) -> usize {
 ///
 /// [ZIP-317]: https://zips.z.cash/zip-0317#block-production
 #[allow(clippy::too_many_arguments, clippy::unwrap_in_result)]
+// Ycash (W8-a): the node selects with `select_mempool_transactions_filtered`; tests call this.
+#[cfg_attr(feature = "ycash", allow(dead_code))]
 pub fn select_mempool_transactions(
     net: &Network,
     height: Height,
@@ -87,6 +89,62 @@ pub fn select_mempool_transactions(
     nsm_value_balance: Option<Amount<amount::NonNegative>>,
     mempool_txs: Vec<VerifiedUnminedTx>,
     mempool_tx_deps: TransactionDependencies,
+) -> Result<Vec<SelectedMempoolTx>, TransactionError> {
+    #[cfg(feature = "ycash")]
+    return select_mempool_transactions_filtered(
+        net,
+        height,
+        miner_params,
+        nsm_value_balance,
+        mempool_txs,
+        mempool_tx_deps,
+        None,
+    );
+
+    #[cfg(not(feature = "ycash"))]
+    select_mempool_transactions_inner(
+        net,
+        height,
+        miner_params,
+        nsm_value_balance,
+        mempool_txs,
+        mempool_tx_deps,
+    )
+}
+
+/// Ycash (W8-a): [`select_mempool_transactions`] with the template filter `filter` (the vault
+/// and YED checks of ycashd's `TestForBlock`) asked about each candidate that fits the limits.
+#[cfg(feature = "ycash")]
+#[allow(clippy::too_many_arguments)]
+pub fn select_mempool_transactions_filtered(
+    net: &Network,
+    height: Height,
+    miner_params: &MinerParams,
+    nsm_value_balance: Option<Amount<amount::NonNegative>>,
+    mempool_txs: Vec<VerifiedUnminedTx>,
+    mempool_tx_deps: TransactionDependencies,
+    filter: Option<super::ycash::TemplateFilter>,
+) -> Result<Vec<SelectedMempoolTx>, TransactionError> {
+    select_mempool_transactions_inner(
+        net,
+        height,
+        miner_params,
+        nsm_value_balance,
+        mempool_txs,
+        mempool_tx_deps,
+        filter,
+    )
+}
+
+#[allow(clippy::too_many_arguments, clippy::unwrap_in_result)]
+fn select_mempool_transactions_inner(
+    net: &Network,
+    height: Height,
+    miner_params: &MinerParams,
+    nsm_value_balance: Option<Amount<amount::NonNegative>>,
+    mempool_txs: Vec<VerifiedUnminedTx>,
+    mempool_tx_deps: TransactionDependencies,
+    #[cfg(feature = "ycash")] filter: Option<super::ycash::TemplateFilter>,
 ) -> Result<Vec<SelectedMempoolTx>, TransactionError> {
     let coinbase_resources =
         TransactionTemplate::coinbase_resource_usage(net, height, miner_params, nsm_value_balance)?;
@@ -107,6 +165,10 @@ pub fn select_mempool_transactions(
 
     // Set up limit tracking.
     let mut limits = BlockTemplateLimits::initial(net, height, coinbase_resources);
+    #[cfg(feature = "ycash")]
+    {
+        limits.filter = filter;
+    }
     // > Repeat while there is any candidate transaction
     // > that pays at least the conventional fee:
     let mut conventional_fee_tx_weights = setup_fee_weighted_index(&conventional_fee_txs);
@@ -311,6 +373,9 @@ struct BlockTemplateLimits {
     remaining_sapling_ios: u32,
     remaining_sprout_joinsplits: u32,
     remaining_shielded_cost: u32,
+    /// Ycash (W8-a): the template filter, asked last.
+    #[cfg(feature = "ycash")]
+    filter: Option<super::ycash::TemplateFilter>,
 }
 
 impl BlockTemplateLimits {
@@ -339,6 +404,8 @@ impl BlockTemplateLimits {
             remaining_sapling_ios: shielded_limits.sapling_ios,
             remaining_sprout_joinsplits: shielded_limits.sprout_joinsplits,
             remaining_shielded_cost: shielded_limits.cost,
+            #[cfg(feature = "ycash")]
+            filter: None,
         }
     }
 
@@ -398,6 +465,9 @@ impl BlockTemplateLimits {
         let counts = tx.transaction.transaction().shielded_action_counts();
         let cost = counts.cost();
         let tx_block_sigops = tx.block_sigop_count();
+        // Ycash (W8-b): ycashd charges 20 per OP_CHECKPQSIG against the block's sigop limit.
+        #[cfg(feature = "ycash")]
+        let tx_block_sigops = tx_block_sigops.saturating_add(super::ycash::pq_sigops(tx));
 
         if tx.transaction.size() > self.remaining_bytes
             || tx_block_sigops > self.remaining_sigops
@@ -408,6 +478,12 @@ impl BlockTemplateLimits {
             || counts.sprout_joinsplits > self.remaining_sprout_joinsplits
             || cost > self.remaining_shielded_cost
         {
+            return false;
+        }
+
+        // Ycash (W8-a): the vault and YED checks, after the limits, as ycashd's `TestForBlock`.
+        #[cfg(feature = "ycash")]
+        if self.filter.as_mut().is_some_and(|filter| !filter.keep(tx)) {
             return false;
         }
 

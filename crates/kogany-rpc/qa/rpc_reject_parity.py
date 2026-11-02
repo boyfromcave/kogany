@@ -12,8 +12,8 @@ chain with the Vault upgrade active (W7-e), and `setmocktime`.
 It starts a ycashd (`-mocktime`) and a zakurad on Ycash regtest with every upgrade through Vault
 at height 1 (blocks mined on ycashd and fed to zakurad, as in `rpc_ycash_parity.py`), then
 provokes, on both nodes, each reject string the shared regtest scripts match
-(`qa/rpc-tests/vault_*.py`, `yellowback_*.py`) that kogany can produce before the vault set state
-reaches its verifiers (W4-c/d) and the YED module is registered (W5-f):
+(`qa/rpc-tests/vault_*.py`, `yellowback_*.py`) that kogany can produce before the mempool checks
+the vault rules (W6) and the YED module is registered (W5-f):
 
 - `sendrawtransaction`: `64: non-final`, `64: non-BIP68-final`, `16: bad-txns-vault-timelock`,
   `tx-expiring-soon: …`, `-25 Missing inputs`, `-27 transaction already in block chain`, the
@@ -21,15 +21,16 @@ reaches its verifiers (W4-c/d) and the YED module is registered (W5-f):
   `16: mandatory-script-verify-flag-failed (…)` texts of a false signature, `OP_VERIFY`, a bad
   opcode, `OP_CHECKSEQUENCEVERIFY` and `OP_CHECKSETSIG`;
 - `submitblock` (blocks assembled and solved in Python with ycash6's `test_framework.mininode`):
-  `bad-txns-nonfinal` (a lock time and a BIP68 lock), `bad-txns-vault-timelock`, a mandatory script
-  failure, and `-22 Block decode failed`;
+  `bad-txns-nonfinal` (a lock time and a BIP68 lock), `bad-txns-vault-timelock`, a script failure
+  (`rejected`: ycashd checks a block's scripts in parallel, without a reason), the vault act rules
+  (`bad-vault-act-version`, `bad-vault-act-type`, W4-d) and `-22 Block decode failed`;
 - `setmocktime`: `getblocktemplate.curtime` follows it on both nodes.
 
 The answers must be equal: the error code and message of `sendrawtransaction`, the result of
 `submitblock`. The table is printed at the end, and with `--json` written as JSON. The scripts'
 other reject strings (the vault primitive's `bad-vault-*`/`bad-txns-vault-*` and the YED
-`bad-yellowback-*`) have their mapping tested in zakura-rpc (`ycash_reject` tests) and wait for
-W4-c/d and W5-f.
+`bad-yellowback-*`) have their mapping tested in zakura-rpc (`ycash_reject` tests); in the mempool
+they wait for W6 and W5-f.
 
 The node plumbing is `rpc_ycash_parity.py`'s and `mempool_ycash_parity.py`'s; block assembly
 imports ycash6's `qa/rpc-tests/test_framework` (`--ycash6-qa`, default the harness worktree).
@@ -48,6 +49,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import rpc_ycash_parity as base  # noqa: E402
 import mempool_ycash_parity as mp  # noqa: E402
 
+VAULT_VECTORS = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', '..', 'testdata',
+                             'yellowback', 'vault_vectors.json')
 DEFAULT_YCASH6_QA = os.path.join(os.getenv('WS', ''), 'wt', 'kc-ycash6-int', 'qa', 'rpc-tests')
 VAULT_BRANCH = '6d5b7a31'
 COIN = mp.COIN
@@ -211,6 +214,12 @@ def run_cases(c, clock_base):
     c.block('non-BIP68-final', [bip68])
     c.block('bad-txns-vault-timelock', [timelock])
     c.block('OP_CHECKSETSIG', [setsig_spend])
+    # The vault primitive's act rules in a block (W4-d check::vault): a YV act whose version or
+    # type does not decode (vault_vectors.json actsInvalid).
+    acts = {a['name']: bytes.fromhex(a['payload']) for a in json.load(open(VAULT_VECTORS))['actsInvalid']}
+    for name, reason in (('version-2', 'bad-vault-act-version'), ('type-7', 'bad-vault-act-type')):
+        act_tx = chain.build([(0, b'\x6a' + push(acts[name]))], 10000)
+        c.block(reason, [act_tx])
     a = c.answer(y.call('submitblock', '00'))
     b = c.answer(z.call('submitblock', '00'))
     c.record('block/decode-failed', a, b, lambda r: r.get('code') == -22)

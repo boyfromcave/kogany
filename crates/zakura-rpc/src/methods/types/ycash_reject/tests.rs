@@ -163,6 +163,12 @@ enum Source {
     NotReachable(&'static str),
 }
 
+/// A mempool storage rejection's text, as `sendrawtransaction` renders it.
+fn storage(text: &str) -> String {
+    let error: Box<dyn StdError + Send + Sync> = text.into();
+    tx_message(mempool_reject(error.as_ref()))
+}
+
 fn yed(reason: &str) -> String {
     tx_message(yed_verdict(reason))
 }
@@ -173,7 +179,8 @@ fn yed(reason: &str) -> String {
 /// `assert_mempool_rejects`, `assert_block_rejects` over `sendrawtransaction`/`submitblock`).
 fn script_reasons() -> Vec<(&'static str, &'static str, Source)> {
     use Source::*;
-    const VAULT: &str = "W4-c/d: the vault set state reaches the verifiers as VaultReject";
+    const VAULT: &str = "W6: the mempool's vault checks (kogany_vault::check_tx at the tip); \
+                         a block carries them since W4-d (ValidateContextError::VaultRejected)";
     const YED: &str = "W5-f: the YED module registered on the vault primitive";
     let mut rows = vec![
         // Script failures (zakura_script::Error through TransactionError::Script).
@@ -242,14 +249,10 @@ fn script_reasons() -> Vec<(&'static str, &'static str, Source)> {
         (
             "tx",
             "non-mandatory-script-verify-flag",
-            Pending(
-                "W3-c/W6-a: kogany's mempool verifies with the consensus flags only, so the \
-                 policy-flag failure (DISCOURAGE_UPGRADABLE_NOPS) is not raised yet",
-                mempool(TransactionError::Script(script(
-                    InterpreterError::DiscourageUpgradableNOPs,
-                    None,
-                ))),
-            ),
+            Produced(storage(
+                "transaction scripts fail a standard script verification flag \
+                 (non-mandatory-script-verify-flag): input 0: NOPx reserved for soft-fork upgrades",
+            )),
         ),
         (
             "tx",
@@ -350,9 +353,20 @@ fn script_reasons() -> Vec<(&'static str, &'static str, Source)> {
         ("tx", "bad-vault-bond-frozen"),
         ("tx", "bad-vault-bond-locked"),
     ] {
-        let rendered =
-            vault_reason(reason).unwrap_or_else(|| panic!("no VaultReject for {reason}"));
-        rows.push((rpc, reason, Pending(VAULT, rendered)));
+        let reject = vault_rejects()
+            .into_iter()
+            .find(|reject| reject.reason() == reason)
+            .unwrap_or_else(|| panic!("no VaultReject for {reason}"));
+        if rpc == "block" {
+            // W4-d: check::vault renders a block's violation as VaultRejected { reason }.
+            rows.push((rpc, reason, Produced(vault_reject(&reject).block_reason())));
+        } else {
+            rows.push((
+                rpc,
+                reason,
+                Pending(VAULT, tx_message(vault_reject(&reject))),
+            ));
+        }
     }
 
     // The YED module's verdicts (bad-yellowback-<verdict>), and the module's set-act refusals,
@@ -431,7 +445,8 @@ fn every_reason_the_scripts_match_has_a_kogany_source() {
             Source::NotReachable(why) => assert!(!why.is_empty()),
         }
     }
-    assert_eq!(pending.len(), 3, "{pending:?}");
+    // The vault primitive in the mempool (W6) and the YED module (W5-f).
+    assert_eq!(pending.len(), 2, "{pending:?}");
 }
 
 #[test]
@@ -537,6 +552,16 @@ fn mempool_rejections_render_from_the_type_or_the_storage_text() {
         let error: Box<dyn StdError + Send + Sync> = text.into();
         assert_eq!(mempool_reject(error.as_ref()), expected, "{text}");
     }
+    // W6-a's policy-flag failure, with ycashd's ScriptErrorString (zakurad ycash_policy.rs).
+    assert_eq!(
+        storage(
+            "the transaction will be rejected from the mempool until the next chain tip block: \
+             transaction did not pass standard validation: transaction scripts fail a standard \
+             script verification flag (non-mandatory-script-verify-flag): input 0: Data push \
+             larger than necessary"
+        ),
+        "64: non-mandatory-script-verify-flag (Data push larger than necessary)"
+    );
     let in_mempool: Box<dyn StdError + Send + Sync> =
         "transaction already exists in mempool".into();
     assert!(send_raw_transaction_error(in_mempool.as_ref()).is_none());

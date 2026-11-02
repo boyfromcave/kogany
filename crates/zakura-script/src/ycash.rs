@@ -48,6 +48,10 @@ pub struct ScriptContext {
     /// Not the same as an empty state: in an empty state every set is unknown, and an unknown
     /// set is *released* (§15.4), so `OP_CHECKSETDORMANT` would succeed.
     pub vault_state: Option<VaultStateSnapshot>,
+    /// Relay-policy flags verified on top of the consensus flags (kogany W6-a): empty for
+    /// consensus verification, [`STANDARD_NOT_MANDATORY_FLAGS`] for the mempool's
+    /// standard-flags check ([`ScriptContext::with_standard_policy`]).
+    pub policy_flags: Flags,
 }
 
 impl fmt::Debug for ScriptContext {
@@ -59,6 +63,7 @@ impl fmt::Debug for ScriptContext {
                 "vault_state",
                 &self.vault_state.as_ref().map(|_| "StateRead"),
             )
+            .field("policy_flags", &self.policy_flags)
             .finish()
     }
 }
@@ -70,13 +75,40 @@ impl ScriptContext {
             network,
             height,
             vault_state,
+            policy_flags: Flags::empty(),
         }
     }
 
-    /// The script verification flags at this height ([`script_flags`]).
-    pub fn flags(&self) -> Flags {
-        script_flags(&self.network, self.height)
+    /// This context with the standard (relay policy) flags on top of the consensus ones: ycash6
+    /// `AcceptToMemoryPool`'s `STANDARD_SCRIPT_VERIFY_FLAGS | GetVaultScriptFlags(height)`
+    /// (kogany W6-a).
+    pub fn with_standard_policy(mut self) -> Self {
+        self.policy_flags = STANDARD_NOT_MANDATORY_FLAGS;
+        self
     }
+
+    /// The script verification flags at this height ([`script_flags`]), plus the policy flags.
+    pub fn flags(&self) -> Flags {
+        script_flags(&self.network, self.height) | self.policy_flags
+    }
+}
+
+/// ycash6 `STANDARD_SCRIPT_VERIFY_FLAGS & ~(P2SH | CHECKLOCKTIMEVERIFY)` (`policy/policy.h`):
+/// the relay-policy flags every mempool applies, regtest included, beside the consensus flags
+/// (`STRICTENC`, `MINIMALDATA`, `NULLDUMMY`, `DISCOURAGE_UPGRADABLE_NOPS`, `CLEANSTACK`,
+/// `LOW_S`). A script that fails them but passes the consensus flags is non-standard
+/// (`non-mandatory-script-verify-flag`), valid in a block.
+pub const STANDARD_NOT_MANDATORY_FLAGS: Flags = Flags::StrictEnc
+    .union(Flags::MinimalData)
+    .union(Flags::NullDummy)
+    .union(Flags::DiscourageUpgradableNOPs)
+    .union(Flags::CleanStack)
+    .union(Flags::LowS);
+
+/// The flags of ycash6's mempool script check at `height` (the next block's):
+/// `STANDARD_SCRIPT_VERIFY_FLAGS | GetVaultScriptFlags(height)`.
+pub fn standard_script_flags(network: &Network, height: Height) -> Flags {
+    script_flags(network, height) | STANDARD_NOT_MANDATORY_FLAGS
 }
 
 /// The consensus script verification flags of a block at `height` on `network` (ycash6

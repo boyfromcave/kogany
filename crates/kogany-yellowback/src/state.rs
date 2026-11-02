@@ -19,6 +19,8 @@
 //! | `intent` | `state.cpp` | an intent's release and cancel: CAN-1/2/3, C4b |
 //! | [`tx`] | `state.cpp` `ProcessTxImpl` | [`process_tx`]: IN-1..3, the mirror's set acts, NOT-1, EQV-1, liveness, U-23's output rule |
 //! | [`block`] | `state.cpp` `EvaluateBlock`, `ComputeSnapshot` | [`evaluate_block`]: TAG, BLK-1, BundleLog, SNAP (REG-4, PIN, seating, PRICE-1, SIGMA-1, HALT-1..3, S15) |
+//! | [`policy`] | `state.cpp`, `view.cpp` | REG-1..3 and FEE-W (`Registered`, `Penalized`, `AccuracyBps`, `PayeePolicy`, `DefaultPayee`), `OpenDebtInvariantViolation`, `HaltMaskNames` |
+//! | [`mempool`] | `index.cpp` `MempoolCheckInner` | [`mempool_check_reason`]: the mempool-time check and its reasons (K7, MP-1) |
 //!
 //! **State and delta model** (mirroring `kogany_vault::state`): state is a `BTreeMap` from
 //! [`YedKey`] to [`YedRecord`]; [`evaluate_block`] evaluates a block over a read-only
@@ -38,7 +40,9 @@ pub(crate) mod eval;
 mod intent;
 pub mod keys;
 pub mod lookups;
+pub mod mempool;
 mod mint;
+pub mod policy;
 pub mod records;
 mod redeem;
 mod transfer;
@@ -51,6 +55,11 @@ pub use keys::{Table, YedKey, YedRecord};
 pub use lookups::{
     armed_at, block_hash_at, bond_min_zat, cancel_q, cancels_required, eligible_payees,
     judgement_at, p2pkh_key, selection_basis, snapshot_at, tag_at, RegistryView,
+};
+pub use mempool::{mempool_check_reason, MEMPOOL_EXPIRY, UNHEALTHY};
+pub use policy::{
+    accuracy_bps, default_payee, halt_mask_names, open_debt_invariant_violation, penalized,
+    registered, PayeePolicy,
 };
 pub use records::{
     is_null_outpoint, AssignedOutput, IntentRecord, IntentRole, Judgement, NoticeRecord,

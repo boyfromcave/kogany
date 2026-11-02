@@ -92,6 +92,8 @@ pub(crate) mod read;
 mod traits;
 pub mod vault;
 mod write;
+// kogany (W5-e): the Yellowback (YED) index across finalized and non-finalized states.
+pub mod yed;
 
 #[cfg(any(test, feature = "proptest-impl"))]
 pub mod arbitrary;
@@ -2093,6 +2095,60 @@ impl Service<Request> for StateService {
                 .boxed()
             }
 
+            // kogany (W4-d): the Vault set state after a parent block, once the parent commits, for
+            // the block verifier's script checks (modelled on `AwaitBlockInfo`).
+            Request::AwaitVaultSnapshot { parent_hash } => {
+                let mut block_commit_receiver = self.block_commit_sender.subscribe();
+                let read_service = self.read_service.clone();
+                let limit = self.await_block_info_timeout;
+                let hash = parent_hash;
+
+                async move {
+                    let wait = async {
+                        loop {
+                            // Mark this notice as seen before the read, so a write that lands
+                            // after the read still wakes this request.
+                            block_commit_receiver.borrow_and_update();
+
+                            let response = read_service
+                                .clone()
+                                .oneshot(ReadRequest::VaultSnapshot { parent_hash: hash })
+                                .await?;
+                            let ReadResponse::VaultSnapshot(snapshot) = response else {
+                                unreachable!("wrong response to ReadRequest::VaultSnapshot");
+                            };
+                            if snapshot.is_some() {
+                                return Ok(Response::VaultSnapshot(snapshot));
+                            }
+
+                            // A committed block without a state (finalized below the tip) never
+                            // gets one: answer `None` instead of waiting out the limit.
+                            let response = read_service
+                                .clone()
+                                .oneshot(ReadRequest::BlockInfo(hash.into()))
+                                .await?;
+                            if matches!(response, ReadResponse::BlockInfo(Some(_))) {
+                                return Ok(Response::VaultSnapshot(None));
+                            }
+
+                            if block_commit_receiver.borrow().is_rejected(&hash) {
+                                return Err(AwaitBlockInfoError::Rejected { hash }.into());
+                            }
+
+                            block_commit_receiver
+                                .changed()
+                                .await
+                                .map_err(BoxError::from)?;
+                        }
+                    };
+
+                    tokio::time::timeout(limit, wait)
+                        .await
+                        .map_err(|_elapsed| AwaitBlockInfoError::TimedOut { hash, limit })?
+                }
+                .boxed()
+            }
+
             // Used by sync, inbound, and block verifier to check if a block is already in the state
             // before downloading or validating it.
             Request::KnownBlock(hash) => {
@@ -2202,6 +2258,8 @@ impl Service<Request> for StateService {
             | Request::CheckParentInputs { .. }
             | Request::Block(_)
             | Request::BlockInfo(_)
+            | Request::VaultSnapshot { .. }
+            | Request::BestChainVaultSnapshot
             | Request::AnyChainBlock(_)
             | Request::BlockHeader(_)
             | Request::FindBlockHashes { .. }
@@ -2949,6 +3007,23 @@ impl Service<ReadRequest> for ReadStateService {
                     hash_or_height,
                 ),
             )),
+
+            // kogany (W4-d): the block verifier's script snapshot (fork-aware).
+            ReadRequest::VaultSnapshot { parent_hash } => {
+                Ok(ReadResponse::VaultSnapshot(vault::vault_snapshot_by_hash(
+                    state.latest_non_finalized_state().chain_iter(),
+                    &state.db,
+                    parent_hash,
+                )))
+            }
+
+            // kogany (W4-d): the mempool's script snapshot and the vault read RPCs.
+            ReadRequest::BestChainVaultSnapshot => Ok(ReadResponse::VaultSnapshot(Some(
+                match state.latest_best_chain() {
+                    Some(chain) => vault::chain_tip_vault_snapshot(&chain, &state.db),
+                    None => vault::finalized_vault_snapshot(&state.db),
+                },
+            ))),
 
             // Used by the StateService.
             ReadRequest::Depth(hash) => Ok(ReadResponse::Depth(read::depth(

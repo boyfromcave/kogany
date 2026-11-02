@@ -462,6 +462,9 @@ mod zip218_template_limits {
             remaining_sapling_ios: SAPLING_BLOCK_IO_LIMIT,
             remaining_sprout_joinsplits: SPROUT_BLOCK_JOINSPLIT_LIMIT,
             remaining_shielded_cost: GLOBAL_SHIELDED_BUDGET,
+            // Ycash (kogany W8-a): no template filter.
+            #[cfg(feature = "ycash")]
+            filter: None,
         }
     }
 

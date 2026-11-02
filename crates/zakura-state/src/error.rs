@@ -835,6 +835,15 @@ pub enum ValidateContextError {
         min_spend_height: block::Height,
     },
 
+    // kogany (W4-d): the Vault upgrade's sequential act and template rules (ycash6 DoS 100).
+    #[error("vault rule violation in block {hash} at {height:?}: {reason}")]
+    #[non_exhaustive]
+    VaultRejected {
+        reason: String,
+        height: block::Height,
+        hash: block::Hash,
+    },
+
     #[error("sprout double-spend: duplicate nullifier: {nullifier:?}, in finalized state: {in_finalized_state:?}")]
     #[non_exhaustive]
     DuplicateSproutNullifier {
@@ -1095,6 +1104,7 @@ impl ValidateContextError {
             }
             Self::VaultTimeLock { .. } => consensus("context.vault_timelock"),
             Self::UnsatisfiedSequenceLock { .. } => consensus("context.unsatisfied_sequence_lock"),
+            Self::VaultRejected { .. } => consensus("context.vault_rejected"),
             Self::DuplicateSproutNullifier { .. } => {
                 consensus("context.duplicate_sprout_nullifier")
             }
@@ -1145,6 +1155,7 @@ impl ValidateContextError {
             | ValidateContextError::ImmatureTransparentCoinbaseSpend { .. }
             | ValidateContextError::VaultTimeLock { .. }
             | ValidateContextError::UnsatisfiedSequenceLock { .. }
+            | ValidateContextError::VaultRejected { .. }
             | ValidateContextError::DuplicateSproutNullifier { .. }
             | ValidateContextError::DuplicateSaplingNullifier { .. }
             | ValidateContextError::DuplicateOrchardNullifier { .. }
@@ -1580,6 +1591,11 @@ mod tests {
             ValidateContextError::UnsatisfiedSequenceLock {
                 spend_height: height,
                 min_spend_height: Height(100),
+            },
+            ValidateContextError::VaultRejected {
+                reason: "bad-vault-act-sigs".to_owned(),
+                height,
+                hash: block::Hash([0; 32]),
             },
             ValidateContextError::DuplicateSproutNullifier {
                 nullifier: sprout::Nullifier::from([0; 32]),

@@ -89,6 +89,8 @@ pub use service::{
 pub use service::finalized_state::{ReadDisk, TypedColumnFamily, WriteTypedBatch};
 // kogany (W4-c): the Vault upgrade's set state (read API for W4-d and W7).
 pub use service::vault;
+// kogany (W5-e): the Yellowback (YED) index (read API for W5-f and W6-b).
+pub use service::yed;
 
 // Lets tests above this crate drive real RPC handlers over a fast-synced node's absent band.
 #[cfg(any(test, feature = "proptest-impl"))]

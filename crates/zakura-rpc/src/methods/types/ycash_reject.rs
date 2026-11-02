@@ -443,6 +443,9 @@ pub fn context_reject(error: &ValidateContextError, context: Context) -> CxxReje
     match error {
         // main.cpp:905 (fMempool ? 0 : 100, the same reason).
         E::VaultTimeLock { .. } => CxxReject::invalid("bad-txns-vault-timelock"),
+        // W4-d: the vault primitive's (or a module's) reason, as ycash6 `src/vault/state.cpp`
+        // writes it (main.cpp:4351; in the mempool main.cpp:2204).
+        E::VaultRejected { reason, .. } => CxxReject::invalid(reason.clone()),
         // main.cpp:907-910.
         E::UnsatisfiedSequenceLock { .. } => {
             if mempool {
@@ -702,7 +705,25 @@ pub const STORAGE_TEXTS: &[(&str, u16, &str)] = &[
     ),
 ];
 
+/// The prefix of the mempool storage's policy-flag script failure (W6-a,
+/// `NonStandardTransactionError::NonMandatoryScriptVerifyFlag`), followed by `input <n>: ` and
+/// ycashd's `ScriptErrorString`.
+const STORAGE_NON_MANDATORY: &str = "(non-mandatory-script-verify-flag): input ";
+
 fn storage_text_reject(text: &str) -> Option<CxxReject> {
+    // main.cpp:3085-3087: `64: non-mandatory-script-verify-flag (<ScriptErrorString>)`.
+    if let Some((_, rest)) = text.split_once(STORAGE_NON_MANDATORY) {
+        let script_error = rest
+            .split_once(": ")
+            .map_or(rest, |(_, error)| error)
+            .lines()
+            .next()
+            .unwrap_or_default();
+        return Some(CxxReject::reject(
+            REJECT_NONSTANDARD,
+            format!("{NON_MANDATORY_SCRIPT_FAILED} ({script_error})"),
+        ));
+    }
     STORAGE_TEXTS.iter().find_map(|(needle, code, reason)| {
         text.contains(needle).then(|| match (*needle, *code) {
             ("transaction already exists in mempool", _) => CxxReject::InMempool,
