@@ -144,8 +144,6 @@ ACCEPTED = [
      "Zakura's mempool tracks no in-template dependencies"),
     ('getblocktemplate', r'\.coinbase\.(script_sig_tail|expiry_height)$', 'derived',
      "Zakura's coinbase tag, random data and expiry height"),
-    ('getblocktemplate', r'\.yellowback$', 'chunk', 'W8-b (coinbase-tag): the YED template info'),
-    ('getblocktemplate', r'\.coinbaseaux$', 'chunk', 'W8-b (coinbase-tag): the YED coinbase flags'),
     # submitblock
     ('submitblock', r'=answer$|!error$', 'chunk',
      'W7-e (rpc-parity) maps the rejection strings and the -22 decode error; accept is null on both'),
@@ -184,9 +182,12 @@ CLIENT_FIELDS = {
     'getrawmempool': r'.*',
     'gettxout': r'\.(value|confirmations|bestblock|scriptPubKey(\.\w+)?)$|=answer$',
     'getblocktemplate': r'\.(version|previousblockhash|blockcommitmentshash|lightclientroothash|'
-                        r'finalsaplingroothash|transactions(\[\d+\]\.(data|hash|fee))?|target|bits|height|'
+                        r'finalsaplingroothash|transactions(\[\d+\]\.(data|hash|fee|sigops))?|target|bits|height|'
                         r'mintime|sizelimit|sigoplimit|noncerange|mutable|defaultroots\.chainhistoryroot|'
                         r'coinbasetxn\.(fee|sigops|foundersreward|required)|'
+                        # W8-b: the Yellowback fields, sent by both nodes exactly while Yellowback
+                        # is live (ycash6 src/rpc/mining.cpp:830-847).
+                        r'coinbaseaux(\.flags)?|yellowback(\.\w+)?|'
                         r'coinbase\.(header|versiongroupid|height_push|outputs.*|locktime)|proposal.*)$',
     'validateaddress': r'\.(isvalid|address|scriptPubKey|pqscheme|pqkeyhash)$',
     'getblocksubsidy': r'\.(miner|founders|totalblocksubsidy)$',

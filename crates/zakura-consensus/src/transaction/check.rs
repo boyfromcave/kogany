@@ -734,6 +734,10 @@ pub fn standard_script_kind(lock_script: &transparent::Script) -> Option<solver:
     solver::standard(&component)
 }
 
+/// Ycash relay standardness before and from the Vault upgrade (kogany W6-a).
+#[cfg(feature = "ycash")]
+pub mod ycash_standard;
+
 /// Ycash (kogany): a standard script kind, the `zcash_script` solver's or a TX_PQPKH (ycash6
 /// `Solver`'s `TX_PQPKH`, quantum spec §2.1).
 ///

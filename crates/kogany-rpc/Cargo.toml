@@ -13,8 +13,10 @@ publish = false
 # zakura-rpc and zakura-chain; the vault parsing is kogany-vault's; the live vault state is
 # zakura-state's (W4-d).
 [features]
-# The Ycash network profile (tests/live_state.rs replays Ycash regtest blocks).
-ycash = ["zakura-chain/ycash"]
+# The Ycash network profile (tests/live_state.rs replays Ycash regtest blocks), and the
+# `getblocktemplate` hooks over the Yellowback state (plan W8, `mining`), which need
+# zakura-rpc's `ycash` hooks.
+ycash = ["zakura-chain/ycash", "zakura-rpc/ycash"]
 
 [dependencies]
 async-trait = { workspace = true }
