@@ -140,7 +140,13 @@ impl From<&VerifiedUnminedTx> for TransactionTemplate<NonNegative> {
 
             // Report the full block-level sigop count (legacy + P2SH) so the template `sigops`
             // field matches what the block verifier charges against `MAX_BLOCK_SIGOPS`.
+            #[cfg(not(feature = "ycash"))]
             sigops: tx.block_sigop_count(),
+            // Ycash (W8-b): plus 20 per OP_CHECKPQSIG, as ycashd's mempool entry counts them.
+            #[cfg(feature = "ycash")]
+            sigops: tx
+                .block_sigop_count()
+                .saturating_add(super::get_block_template::ycash::pq_sigops(tx)),
 
             #[cfg(feature = "ycash")]
             founders_reward: None,
@@ -482,7 +488,7 @@ impl TransactionTemplate<NegativeOrZero> {
             auth_digest
         };
 
-        Ok(Self {
+        let coinbase = Self {
             data: data.into(),
             hash: tx.txid().as_ref().into(),
             auth_digest,
@@ -492,7 +498,17 @@ impl TransactionTemplate<NegativeOrZero> {
             #[cfg(feature = "ycash")]
             founders_reward: super::ycash::template_founders_reward(net, height, block_subsidy),
             required: true,
-        })
+        };
+        // Ycash (W8-b): the Yellowback tag after the coinbase data (ycashd's COINBASE_FLAGS).
+        #[cfg(feature = "ycash")]
+        let coinbase = super::get_block_template::ycash::append_coinbase_flags(
+            coinbase,
+            &miner_params
+                .yellowback()
+                .map(super::get_block_template::ycash::YellowbackMiner::flags)
+                .unwrap_or_default(),
+        )?;
+        Ok(coinbase)
     }
 }
 

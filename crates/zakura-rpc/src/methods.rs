@@ -1076,6 +1076,10 @@ where
 
     /// Handler for the `getblocktemplate` RPC.
     gbt: GetBlockTemplateHandler<BlockVerifierRouter, SyncStatus>,
+
+    /// Ycash (W8): the node's Yellowback and vault hooks of `getblocktemplate`.
+    #[cfg(feature = "ycash")]
+    ycash_mining: Arc<dyn types::get_block_template::ycash::YcashMining>,
 }
 
 /// How long one mining template may take to pass proposal validation.
@@ -1427,6 +1431,8 @@ where
             address_book,
             last_warn_error_log_rx,
             gbt,
+            #[cfg(feature = "ycash")]
+            ycash_mining: Arc::new(types::get_block_template::ycash::NotLive),
         };
 
         // run the process queue
@@ -3400,10 +3406,21 @@ where
         &self,
         parameters: Option<GetBlockTemplateParameters>,
     ) -> Result<GetBlockTemplateResponse> {
+        #[cfg(not(feature = "ycash"))]
+        use types::get_block_template::zip317::select_mempool_transactions;
         use types::get_block_template::{
             check_parameters, check_synced_to_tip, fetch_chain_info, fetch_mempool_transactions,
-            validate_block_proposal, zip317::select_mempool_transactions,
+            validate_block_proposal,
         };
+
+        // Ycash (W8-b): ycashd refuses every getblocktemplate call while the YED index is
+        // unhealthy, and the miner's Yellowback state decides the coinbase tag.
+        #[cfg(feature = "ycash")]
+        let yellowback = self
+            .ycash_mining
+            .yellowback_miner()
+            .await
+            .map_err(|reason| types::get_block_template::ycash::unhealthy_error(&reason))?;
 
         // Clone Services
         let mempool = self.mempool.clone();
@@ -3439,6 +3456,10 @@ where
             .gbt
             .miner_params()
             .ok_or_error(0, "miner parameters are required for get_block_template")?;
+        #[cfg(feature = "ycash")]
+        let ycash_miner_params = miner_params.clone().with_yellowback(yellowback);
+        #[cfg(feature = "ycash")]
+        let miner_params = &ycash_miner_params;
 
         // A template can be superseded while it is being built: the tip moves (a new
         // block, or an equal-height reorg), a concurrent caller selects a newer parent,
@@ -3754,6 +3775,29 @@ where
             );
 
             let height = chain_info.tip_height.next().map_misc_error()?;
+
+            // Ycash (W8-a): the vault and YED template filter, asked about every candidate that
+            // fits the block limits; selection is otherwise Zakura's.
+            #[cfg(feature = "ycash")]
+            let template_filter = types::get_block_template::ycash::TemplateFilter::prepare(
+                &self.network,
+                height,
+                chain_info.tip_hash,
+                self.ycash_mining.as_ref(),
+            )
+            .await;
+            #[cfg(feature = "ycash")]
+            let select_mempool_transactions = |net, height, miner_params, nsm, txs, deps| {
+                types::get_block_template::zip317::select_mempool_transactions_filtered(
+                    net,
+                    height,
+                    miner_params,
+                    nsm,
+                    txs,
+                    deps,
+                    Some(template_filter),
+                )
+            };
 
             // Randomly select some mempool transactions.
             let mempool_txs = select_mempool_transactions(
