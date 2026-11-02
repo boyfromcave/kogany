@@ -93,21 +93,26 @@ impl Fmt<'_> {
         if let Some(o) = decode_pq_address(s, self.params) {
             return Some(Holder::Pq(o));
         }
-        if let Ok(a) = s.parse::<transparent::Address>() {
-            // A P2PKH address of this network: it re-encodes to itself here (regtest shares
-            // testnet's prefixes, so the parsed network kind alone cannot tell).
-            let key = a.hash_bytes();
-            return (!a.is_script_hash() && self.p2pkh(&key) == s).then_some(Holder::KeyId(key));
+        // The plain-YEC post-quantum form first: a ycash build of zakura-chain parses it as a
+        // transparent::Address too (its index key, W9-c finding 3).
+        if let Some(owner) = decode_base58_check(s).and_then(|data| {
+            let body = data
+                .strip_prefix(self.plain_pq_version.as_slice())?
+                .to_vec();
+            let (scheme, hash) = body.split_first()?;
+            Some(PqOwner {
+                scheme: *scheme,
+                hash: kogany_vault::Hash32::from_slice(hash)?,
+            })
+        }) {
+            return kogany_vault::template::is_known_pq_scheme(owner.scheme)
+                .then_some(Holder::Pq(owner));
         }
-        let data = decode_base58_check(s)?;
-        let body = data.strip_prefix(self.plain_pq_version.as_slice())?;
-        let (scheme, hash) = body.split_first()?;
-        let hash = kogany_vault::Hash32::from_slice(hash)?;
-        let owner = PqOwner {
-            scheme: *scheme,
-            hash,
-        };
-        kogany_vault::template::is_known_pq_scheme(owner.scheme).then_some(Holder::Pq(owner))
+        let a = s.parse::<transparent::Address>().ok()?;
+        // A P2PKH address of this network: it re-encodes to itself here (regtest shares
+        // testnet's prefixes, so the parsed network kind alone cannot tell).
+        let key = a.hash_bytes();
+        (!a.is_script_hash() && self.p2pkh(&key) == s).then_some(Holder::KeyId(key))
     }
 }
 

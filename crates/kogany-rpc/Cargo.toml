@@ -35,6 +35,8 @@ zcash_address = { workspace = true }
 zcash_protocol = { workspace = true }
 zakura-chain = { path = "../zakura-chain", version = "11.0.0-rc0" }
 zakura-rpc = { path = "../zakura-rpc", version = "13.0.1-rc0", default-features = false }
+# W7-b: yed_validaterawtransaction's script check (VerifyAllInputs at tip + 1).
+zakura-script = { path = "../zakura-script", version = "5.0.1-rc0" }
 # W4-d: the live vault state is the read state service's best-chain vault snapshot.
 zakura-state = { path = "../zakura-state", version = "11.1.0-rc0" }
 

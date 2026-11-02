@@ -55,6 +55,52 @@ pub enum Address {
         /// 20 bytes specifying the validating key hash.
         validating_key_hash: [u8; 20],
     },
+
+    /// Ycash (kogany W7-b): a post-quantum TX_PQPKH key (ycash6 `CPQKeyID`), the plain-YEC
+    /// `sq…`/`tq…`/`rq…` address (D-Q-20): `Base58Check(version ‖ scheme ‖ keyHash)`. The
+    /// address index keys it by `Hash160(scheme ‖ keyHash)` ([`Address::hash_bytes`], ycash6
+    /// `CScript::AddressHash`).
+    #[cfg(feature = "ycash")]
+    PayToPqKeyHash {
+        /// Production, test, or other network
+        network_kind: NetworkKind,
+        /// The scheme byte (1 = SLH-DSA-SHA2-128s, 2 = FN-DSA-512).
+        scheme: u8,
+        /// `SHA256(scheme ‖ pk)`.
+        key_hash: [u8; 32],
+    },
+}
+
+/// Ycash (kogany): `PlainPQAddressVersion` (ycash6 `src/key_io.cpp:25-31`): `sq…` on Mainnet,
+/// `tq…` on the testnets, `rq…` on Regtest.
+#[cfg(feature = "ycash")]
+fn plain_pq_address_version(network_kind: NetworkKind) -> [u8; 2] {
+    match network_kind {
+        NetworkKind::Mainnet => [0x4D, 0xD9],
+        NetworkKind::Testnet => [0x4F, 0x61],
+        NetworkKind::Regtest => [0x4C, 0x51],
+    }
+}
+
+/// Ycash (kogany): a plain-YEC post-quantum address's Base58Check payload (`version ‖ scheme ‖
+/// keyHash`, 35 bytes), as ycash6 `DecodeDestination` reads it; `None` for anything else.
+#[cfg(feature = "ycash")]
+fn decode_plain_pq(data: &[u8]) -> Option<Address> {
+    let (version, rest) = data.split_first_chunk::<2>()?;
+    let (scheme, key_hash) = rest.split_first()?;
+    let key_hash: [u8; 32] = key_hash.try_into().ok()?;
+    let network_kind = [
+        NetworkKind::Mainnet,
+        NetworkKind::Testnet,
+        NetworkKind::Regtest,
+    ]
+    .into_iter()
+    .find(|kind| plain_pq_address_version(*kind) == *version)?;
+    kogany_vault::template::is_known_pq_scheme(*scheme).then_some(Address::PayToPqKeyHash {
+        network_kind,
+        scheme: *scheme,
+        key_hash,
+    })
 }
 
 impl serde::Serialize for Address {
@@ -91,6 +137,11 @@ impl From<Address> for ZcashAddress {
                 network_kind,
                 validating_key_hash,
             } => ZcashAddress::from_tex(network_kind.into(), validating_key_hash),
+            // ZcashAddress has no post-quantum form; its index key is the closest name.
+            #[cfg(feature = "ycash")]
+            Address::PayToPqKeyHash { network_kind, .. } => {
+                ZcashAddress::from_transparent_p2pkh(network_kind.into(), taddr.hash_bytes())
+            }
         }
     }
 }
@@ -105,6 +156,10 @@ impl TryFrom<Address> for TransparentAddress {
                 Ok(Self::PublicKeyHash(pub_key_hash))
             }
             Address::Tex { .. } => Err("TransparentAddress can't be a Tex address"),
+            #[cfg(feature = "ycash")]
+            Address::PayToPqKeyHash { .. } => {
+                Err("TransparentAddress can't be a post-quantum address")
+            }
         }
     }
 }
@@ -135,6 +190,16 @@ impl fmt::Debug for Address {
                 .field("network_kind", network_kind)
                 .field("validating_key_hash", &hex::encode(validating_key_hash))
                 .finish(),
+            #[cfg(feature = "ycash")]
+            Address::PayToPqKeyHash {
+                network_kind,
+                scheme,
+                key_hash,
+            } => debug_struct
+                .field("network_kind", network_kind)
+                .field("scheme", scheme)
+                .field("key_hash", &hex::encode(key_hash))
+                .finish(),
         }
     }
 }
@@ -154,6 +219,11 @@ impl std::str::FromStr for Address {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         // Try Base58Check (prefixes: t1, t3, tm, t2)
         if let Ok(data) = bs58::decode(s).with_check(None).into_vec() {
+            // Ycash (kogany W7-b): a plain-YEC post-quantum address (D-Q-20).
+            #[cfg(feature = "ycash")]
+            if let Some(address) = decode_plain_pq(&data) {
+                return Ok(address);
+            }
             return Address::zcash_deserialize(&data[..]);
         }
 
@@ -214,6 +284,16 @@ impl ZcashSerialize for Address {
             } => {
                 writer.write_all(&network_kind.tex_address_prefix())?;
                 writer.write_all(validating_key_hash)?
+            }
+            #[cfg(feature = "ycash")]
+            Address::PayToPqKeyHash {
+                network_kind,
+                scheme,
+                key_hash,
+            } => {
+                writer.write_all(&plain_pq_address_version(*network_kind))?;
+                writer.write_all(&[*scheme])?;
+                writer.write_all(key_hash)?
             }
         }
 
@@ -284,6 +364,8 @@ impl Address {
             Address::PayToScriptHash { network_kind, .. } => *network_kind,
             Address::PayToPublicKeyHash { network_kind, .. } => *network_kind,
             Address::Tex { network_kind, .. } => *network_kind,
+            #[cfg(feature = "ycash")]
+            Address::PayToPqKeyHash { network_kind, .. } => *network_kind,
         }
     }
 
@@ -305,6 +387,17 @@ impl Address {
                 validating_key_hash,
                 ..
             } => validating_key_hash,
+            // ycash6 `CScript::AddressHash` of a TX_PQPKH: Hash160(scheme ‖ keyHash).
+            #[cfg(feature = "ycash")]
+            Address::PayToPqKeyHash {
+                scheme, key_hash, ..
+            } => {
+                let mut id = [0u8; 33];
+                let (s, h) = id.split_at_mut(1);
+                s.copy_from_slice(&[scheme]);
+                h.copy_from_slice(&key_hash);
+                kogany_vault::template::hash160(&id)
+            }
         }
     }
 
@@ -332,6 +425,17 @@ impl Address {
                 script_bytes.push(OpCode::CheckSig as u8);
             }
             Address::Tex { .. } => {}
+            #[cfg(feature = "ycash")]
+            Address::PayToPqKeyHash {
+                scheme, key_hash, ..
+            } => {
+                let owner = kogany_vault::PqOwner {
+                    scheme: *scheme,
+                    hash: kogany_vault::Hash32(*key_hash),
+                };
+                script_bytes =
+                    kogany_yellowback::codecs::script::pq_key_script(&owner).unwrap_or_default();
+            }
         };
 
         Script::new(&script_bytes)
@@ -414,6 +518,43 @@ mod tests {
             payload[..].copy_from_slice(&ripe_hash[..]);
             payload
         }
+    }
+
+    /// Ycash (kogany W9-c finding 3): the plain post-quantum address round-trips, and its
+    /// index hash is ycash6's `CScript::AddressHash` (Hash160(scheme || keyHash)).
+    #[cfg(feature = "ycash")]
+    #[test]
+    fn plain_pq_address_round_trips() {
+        let key_hash = [0x42u8; 32];
+        let address = Address::PayToPqKeyHash {
+            network_kind: NetworkKind::Regtest,
+            scheme: 2,
+            key_hash,
+        };
+        let text = address.to_string();
+        assert!(text.starts_with("rq"), "{text}");
+        assert_eq!(text.parse::<Address>().unwrap(), address);
+        let mut id = vec![2u8];
+        id.extend_from_slice(&key_hash);
+        assert_eq!(address.hash_bytes(), Address::hash_payload(&id));
+        let mut script = vec![0x20];
+        script.extend_from_slice(&key_hash);
+        script.extend_from_slice(&[0x52, 0xc2]);
+        assert_eq!(address.script().as_raw_bytes(), script.as_slice());
+        // an unregistered scheme is not an address
+        let mut data = vec![0x4C, 0x51, 9];
+        data.extend_from_slice(&key_hash);
+        let unknown = bs58::encode(data).with_check().into_string();
+        assert!(unknown.parse::<Address>().is_err());
+        // a TX_PQPKH output names it, as the address index reads it
+        let output = crate::transparent::Output {
+            value: crate::amount::Amount::try_from(1).unwrap(),
+            lock_script: Script::new(&script),
+        };
+        assert_eq!(
+            output.address(&crate::parameters::Network::new_regtest(Default::default())),
+            Some(address)
+        );
     }
 
     #[test]

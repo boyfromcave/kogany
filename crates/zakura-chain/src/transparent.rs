@@ -352,6 +352,17 @@ impl Output {
     ///
     /// Returns None if the address type is not valid or unrecognized.
     pub fn address(&self, net: &Network) -> Option<Address> {
+        // Ycash (kogany W7-b): a TX_PQPKH output is indexed under its post-quantum key (ycash6's
+        // insightexplorer `CScript::AddressIndexKey`, D-Q-20).
+        #[cfg(feature = "ycash")]
+        if let Some(id) = self.lock_script.pq_key_id() {
+            return Some(Address::PayToPqKeyHash {
+                // the plain post-quantum versions differ on Regtest (`rq…`), unlike t-addresses
+                network_kind: net.kind(),
+                scheme: id.scheme,
+                key_hash: id.key_hash,
+            });
+        }
         match TxOut::try_from(self).ok()?.recipient_address()? {
             TransparentAddress::PublicKeyHash(pkh) => {
                 Some(Address::from_pub_key_hash(net.t_addr_kind(), pkh))

@@ -25,7 +25,9 @@ mod params;
 
 pub mod fees;
 pub mod live;
+pub mod live_index;
 pub mod mock;
+pub mod pool;
 pub mod rpc;
 pub mod state;
 pub mod types;
