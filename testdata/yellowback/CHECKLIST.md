@@ -128,6 +128,25 @@ sighash under `NetworkUpgrade::Vault`, the file checked against `PIN` first:
 | `spends[].tx`, `.nIn`, `.scriptCode`, `.amount`, `.branchId`, `.sighash` | `Transaction::sighash(Vault, SIGHASH_ALL\|ANYONECANPAY, ..)` equals `sighash`; under Canopy it differs |
 | `ownerSpends[].tx`, `.nIn`, `.scriptCode`, `.amount`, `.branchId`, `.sighash` | the same with `SIGHASH_ALL` |
 
+Script verification (W3-c), `crates/zakura-script/src/ycash_tests.rs`, through
+`CachedFfiTransaction::is_valid_in` (the consensus entry point) under the flags of a Vault network
+and height, the file checked against `PIN` first. C++: `vault_vectors_tests.cpp` `pq_owner_spends`,
+`template_spends`.
+
+| key | Rust test |
+|---|---|
+| `ownerSpends[].tx`, `.nIn`, `.scriptCode`, `.amount` | `vault_vectors_owner_spends_through_the_verifier` (the spent output is `(amount, scriptCode)` for every input; amount + 1 fails) |
+| `ownerSpends[].verify` = `script` | the same: selector 2 verifies with any snapshot; Falcon refused with `PqScheme` without the Falcon height, SLH-DSA not; a bad opcode before Vault |
+| `ownerSpends[].verify` = `signature` | the same: selector 3 verifies with an unknown set and a dormant one, fails with a live set and with no snapshot |
+| `ownerSpends[].kind`, `.selector`, `.falconEntropy` | not consumed here (the template half is W4-a's; the Falcon re-sign needs signing, not vendored) |
+| `spends[].tx`, `.nIn`, `.scriptCode`, `.amount`, `.setId`, `.role` | `vault_vectors_set_spends_through_the_verifier` (a snapshot from `acts[set-create]` and `keys[member-0..2]`: verifies; `SetSig` with no snapshot, an unknown set, unmatured seats, removed members, another amount, threshold 3; a bad opcode before Vault) |
+| `spends[].signers`, `.sigs`, `.setSigMsg`, `.sighash` | through the same verification (the signatures recover over `set_sig_msg` of the replayed sighash); compared field by field in W4-a / W2-c |
+
+`pq_vectors.json` `spends[].scheme`, `.key`, `.scriptPubKey`, `.scriptSig` and `keys[].msg`:
+`pq_vectors_spends_through_the_ycash_checker` (the interpreter with `YcashSignatureChecker`, the
+sighash callback returning `msg`: true; another message: false; scheme 2 without Falcon:
+`PqScheme`).
+
 Also from ycash6 `src/vault/act.cpp`, not a schema key: `act_carrier_edges` (more than
 `MAX_ACT_SIGS` signatures → `bad-vault-act-sigs`, exactly `MAX_ACT_SIGS` decodes, the `"YV"` carrier
 test, a header-27 signature decodes but fails the field rules).
