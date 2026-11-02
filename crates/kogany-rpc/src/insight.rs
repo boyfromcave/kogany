@@ -173,9 +173,18 @@ pub fn parse_addresses(params: &Value) -> RpcResult<Vec<(Address, String)>> {
     texts
         .into_iter()
         .map(|text| {
-            text.parse::<Address>()
-                .map(|address| (address, text.to_owned()))
-                .map_err(|_| invalid_address())
+            // ycashd answers a P2PKH delta with its canonical address and a post-quantum one
+            // with the form the caller named (`AddressNames` holds only P2PQPKH keys).
+            zakura_rpc::ycash_insight_address(text)
+                .map(|address| {
+                    let name = if matches!(address, Address::PayToPqKeyHash { .. }) {
+                        text.to_owned()
+                    } else {
+                        address.to_string()
+                    };
+                    (address, name)
+                })
+                .ok_or_else(invalid_address)
         })
         .collect()
 }

@@ -5393,6 +5393,11 @@ pub trait ValidateAddresses {
             .addresses()
             .iter()
             .map(|address| {
+                // Ycash (S5 parity): a YED form (yb…/yt…/yr…) names its transparent key too.
+                #[cfg(feature = "ycash")]
+                if let Some(address) = types::ycash::insight_address(address) {
+                    return Ok(address);
+                }
                 address
                     .parse()
                     .map_error(server::error::LegacyCode::InvalidAddressOrKey)
