@@ -122,7 +122,7 @@ re-runs its consumers.
 
 Blocking means a candidate for a required status check (see "Turning Actions on"); a
 `continue-on-error` job never turns its run red. The durations are estimates for a
-GitHub-hosted 4-core runner, not measurements: kogany's Actions have not run yet.
+GitHub-hosted 4-core runner, not measurements: kogany's Actions first ran on 2026-11-02 (push 38f785543).
 
 **The upstream pin.** The audit legs compare against the upstream Zakura commit the tree is
 synced to, which `qa/UPSTREAM_PIN` names (since the 2026-11-02 sync, `b44ec121d`), not against
