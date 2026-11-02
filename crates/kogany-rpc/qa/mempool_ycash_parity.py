@@ -35,6 +35,12 @@ three policy modes, each a restart of both nodes:
   rules on dummy spends (the `s + p + 2` push count, the 9,000-byte scriptSig bound, the
   template selector shapes). A dummy spend at the boundary fails its script (reject-consensus
   on both) and one past it fails standardness first (reject-policy on both).
+- `fees` (W6-b): a third chain with Vault at height 1 and ycashd's network-fee options raised
+  far above the relay floor (`-pqfeerate`, `-pqfeeusdperkb`, `-yellowbackfeeusdperkb`,
+  `-yellowbackmaxtxfeeusd`, `-yellowbackmaxtxfee`, `-maxtxfee`, `-yellowbackfee`,
+  `-yellowbackmintlag`), kogany's `[mempool]` keys at the same values. The fee policy is wallet
+  policy, so the relay verdicts stay the floor's: a spend at the minimum relay fee is accepted by
+  both, the vault RPCs' size-priced owner spend too.
 
 Every mode also offers a P2PKH spend whose public key is pushed non-minimally: valid in a block,
 refused by `STANDARD_SCRIPT_VERIFY_FLAGS` (`MINIMALDATA`) in every mempool, regtest included.
@@ -142,8 +148,15 @@ ACCEPTED = [
      'so a CLTV failure is non-mandatory-script-verify-flag (reject-policy)',
      'CLTV is a consensus flag of every script check', 'unchanged (W6-a finding F-4): reject-consensus on '
      'kogany; W6-c (the verifier\'s error scoring)', []),
+    ('ported', 'the network fee is wallet policy (W6-b)',
+     'policy/policy.h AttestedFeePolicy (-pqfeerate, -pqfeeusdperkb, -yellowbackfeeusdperkb, '
+     '-yellowbackmaxtxfeeusd, -yellowbackmaxtxfee, -yellowbackfee): read by the wallet, the YED and vault '
+     'builders and yed_getinfo only; AcceptToMemoryPool keeps the minimum relay fee',
+     'none', 'kogany_yellowback::fee in yed_getinfo (the [mempool] keys of the same names); the relay '
+     'rules unchanged, so both mempools take what the relay floor takes',
+     ['fees/below-pqfeerate', 'fees/below-min-relay-fee', 'fees/vault_lock', 'fees/vault_ownerspend']),
     ('open', 'absurd fee', 'rpc/rawtransaction.cpp:1346 fRejectAbsurdFee: maxTxFee 0.1 YEC unless allowhighfees',
-     'allow_high_fees ignored (methods.rs send_raw_transaction)', 'unchanged: an RPC rule, W7-e', []),
+     'allow_high_fees ignored (methods.rs send_raw_transaction)', 'unchanged: an RPC rule, W7-e', ['fees/above-maxtxfee']),
     ('open', 'expiry eviction at the tip', 'txmempool.cpp:785-805 removeExpired(h): expiry < h',
      'storage.rs remove_expired: expiry <= tip', 'unchanged: ycashd keeps a transaction whose expiry is '
      'the tip for one more block, though no block can mine it; W6-c (tip-recheck)', []),
@@ -752,7 +765,19 @@ MODES = {
     'standard': (['-acceptnonstdtxn=0'], ['accept_non_standard = false']),
     'zip317': (['-txunpaidactionlimit=0'], ['tx_unpaid_action_limit = 0']),
     'vault': (['-acceptnonstdtxn=0'], ['accept_non_standard = false']),
+    # W6-b: ycashd's network-fee and Yellowback wallet options raised far above the relay floor,
+    # and kogany's [mempool] keys for the same values (integer units). Wallet policy only: the
+    # relay verdicts must not move.
+    'fees': (['-pqfeerate=0.0005', '-pqfeeusdperkb=0.05', '-yellowbackfeeusdperkb=0.1',
+              '-yellowbackmaxtxfeeusd=5', '-yellowbackmaxtxfee=20', '-maxtxfee=0.5',
+              '-yellowbackfee=20000', '-yellowbackmintlag=10'],
+             ['pq_fee_rate = 50000', 'pq_fee_usd_per_kb_micro = 50000', 'yellowback_fee_usd_per_kb_micro = 100000',
+              'yellowback_max_tx_fee_usd_micro = 5000000', 'yellowback_max_tx_fee = 2000000000',
+              'max_tx_fee = 50000000', 'yellowback_fee = 20000', 'yellowback_mint_lag = 10']),
 }
+
+# The modes that run on a chain of their own with Vault at height 1.
+VAULT_CHAIN_MODES = ('vault', 'fees')
 
 # The modes whose ycashd applies IsStandardTx / AreInputsStandard (`-acceptnonstdtxn=0`).
 STRICT_MODES = ('standard', 'vault')
@@ -802,7 +827,7 @@ def run(args):
         miner = y.ok('getnewaddress')
         chain = Chain(y, z)
         first = True
-        for mode in [m for m in args.modes if m != 'vault']:
+        for mode in [m for m in args.modes if m not in VAULT_CHAIN_MODES]:
             yextra, zextra = MODES[mode]
             for k in list(procs):
                 base.stop(procs.pop(k))
@@ -834,6 +859,8 @@ def run(args):
             base.stop(procs.pop(k))
         if 'vault' in args.modes:
             run_vault(args, v, os.path.join(workdir, 'vault'), procs)
+        if 'fees' in args.modes:
+            run_fees(args, v, os.path.join(workdir, 'fees'), procs)
     finally:
         for k in list(procs):
             base.stop(procs.pop(k))
@@ -877,6 +904,75 @@ def run_vault(args, v, workdir, procs):
     mempool_point(chain, v, 'vault/after-block')
 
 
+def cases_fees(chain, v):
+    """The network-fee policy (W6-b) is wallet policy: with -pqfeerate at 50,000 zat/kB, the dollar
+    targets set and -yellowbackfee at 20,000, both mempools still take what the minimum relay fee
+    takes, and both take the post-quantum spend ycashd's vault RPC prices at the -pqfeerate
+    fallback (no attested price: Yellowback is not configured here)."""
+    y, mode = chain.y, 'fees'
+    pay = bytes.fromhex(y.ok('validateaddress', y.ok('getnewaddress'))['scriptPubKey'])
+    min_fee = lambda size: min(size * 100 // 1000 or 100, 1000)  # noqa: E731  GetFeeForRelay
+    # far below -pqfeerate x size and below -yellowbackfee: relayed
+    v.offer(chain, '%s/below-pqfeerate' % mode, chain.build([(COIN, pay)], min_fee), ACCEPT)
+    v.offer(chain, '%s/below-min-relay-fee' % mode,
+            chain.build([(COIN, pay)], lambda s: min_fee(s) - 1), REJECT_POLICY)
+    # a fee above -maxtxfee (0.5 YEC) from outside: ycashd's sendrawtransaction refuses it
+    # (absurdly-high-fee) and kogany relays it: the open `absurd fee` row (W7-e), recorded
+    v.offer(chain, '%s/above-maxtxfee' % mode, chain.build([(COIN, pay)], COIN), None)
+    mempool_point(chain, v, '%s/transparent' % mode)
+    chain.mine()
+
+    # A V and its SLH-DSA owner spend (~8 kB): the vault RPCs price it by size at -pqfeerate
+    # (50,000 zat/kB), capped at YedMaxTxFee = min(max(-maxtxfee, -), -yellowbackmaxtxfee).
+    created = y.ok('set_create', {'seats': 1, 'unlockthreshold': 1, 'open': True})
+    offer_wallet_tx(chain, v, '%s/set_create' % mode, created['txid'])
+    chain.mine()
+    owner_height = chain.tip() + 3
+    locked = y.ok('vault_lock', {'tag': 'TEST', 'setid': created['setid'], 'delay': 5,
+                                 'ownerheight': owner_height, 'amount': 2})
+    offer_wallet_tx(chain, v, '%s/vault_lock' % mode, locked['txid'])
+    mempool_point(chain, v, '%s/vault-1' % mode)
+    chain.mine()
+    while chain.tip() + 1 <= owner_height:
+        chain.mine()
+    spent = y.ok('vault_ownerspend', '%s:%d' % (locked['txid'], locked['vout']), y.ok('getnewaddress'))
+    raw = raw_of(chain, spent['txid'])
+    fee = int(round(float(y.ok('getrawmempool', True)[spent['txid']]['fee']) * COIN))
+    print('    vault_ownerspend: %d bytes, fee %s zat' % (len(raw) // 2, fee))
+    v.record('%s/vault_ownerspend' % mode, None, chain.z.call('sendrawtransaction', raw)[1], ACCEPT)
+    mempool_point(chain, v, '%s/vault-2' % mode)
+
+
+def run_fees(args, v, workdir, procs):
+    """The `fees` mode on its own chain: Vault at height 1, the fee options set on both nodes."""
+    os.makedirs(workdir, exist_ok=True)
+    p = args.port_base + 60
+    y = base.Node('ycash6', p + 1, 'u:p')
+    z = base.Node('kogany', p + 11)
+    yextra, zextra = MODES['fees']
+    procs['y'] = start_ycashd(args.ycash6_bin, workdir, p, p + 1, None, [], vault=True)
+    base.wait_up(y, procs['y'], 'ycashd')
+    miner = y.ok('getnewaddress')
+    base.stop(procs.pop('y'))
+    procs['y'] = start_ycashd(args.ycash6_bin, workdir, p, p + 1, miner, yextra, vault=True)
+    base.wait_up(y, procs['y'], 'ycashd')
+    procs['z'] = base.start_zakurad(args.zakurad, workdir, kogany_toml(workdir, p, miner, zextra, vault=True))
+    base.wait_up(z, procs['z'], 'zakurad')
+    print('\n== mode fees: ycashd %s -nuparams=%s:1, kogany [mempool] %s, Vault = 1'
+          % (' '.join(yextra), VAULT_BRANCH_ID, ', '.join(zextra)))
+    chain = Chain(y, z)
+    chain.mine(1)
+    chain.mine(200)
+    base.wait_balance(y, 100)
+    raw = y.ok('getrawtransaction', y.ok('getblock', y.ok('getblockhash', 1), 1)['tx'][0], 0)
+    chain.group = bytes.fromhex(raw)[4:8]
+    chain.change_script = bytes.fromhex(y.ok('validateaddress', miner)['scriptPubKey'])
+    mempool_point(chain, v, 'fees/start')
+    cases_fees(chain, v)
+    chain.mine()
+    mempool_point(chain, v, 'fees/after-block')
+
+
 def print_accepted():
     print('\nWhere Zakura\'s ZIP-317 mempool and ycashd\'s pre-Vault policy differ (ACCEPTED):')
     for kind, rule, src, zak, kog, cases in ACCEPTED:
@@ -891,7 +987,7 @@ def main(argv=None):
     ap.add_argument('--workdir', help='keep the datadirs here (default: a temporary directory)')
     ap.add_argument('--keep', action='store_true', help='keep the temporary directory')
     ap.add_argument('--port-base', type=int, default=28700)
-    ap.add_argument('--modes', default='default,standard,zip317,vault', help='comma-separated: ' + ', '.join(MODES))
+    ap.add_argument('--modes', default='default,standard,zip317,vault,fees', help='comma-separated: ' + ', '.join(MODES))
     ap.add_argument('--no-sapling', action='store_true', help='skip the z_sendmany cases')
     ap.add_argument('--json', help='write the verdict table here')
     args = ap.parse_args(argv)
