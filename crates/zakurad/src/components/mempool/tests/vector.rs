@@ -3299,6 +3299,21 @@ async fn mempool_reject_bare_multisig() -> Result<(), Report> {
 
     service.enable(&mut recent_syncs).await;
 
+    // Ycash: ycashd's `-permitbaremultisig` defaults to true, so a 1-of-1 bare multisig output
+    // is standard there (kogany W6-a).
+    if cfg!(feature = "ycash") {
+        let result = service
+            .storage()
+            .insert(last_transaction.clone(), Vec::new(), None);
+        assert_ne!(
+            result.err(),
+            Some(MempoolError::NonStandardTransaction(
+                storage::NonStandardTransactionError::BareMultiSig
+            ))
+        );
+        return Ok(());
+    }
+
     let insert_err = service
         .storage()
         .insert(last_transaction.clone(), Vec::new(), None)

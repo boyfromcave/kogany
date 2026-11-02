@@ -65,10 +65,7 @@ impl Policy {
             ..RelayPolicy::default()
         };
         if network.is_some() {
-            ycash_standard::configure_relay_policy(
-                config.accept_non_standard.unwrap_or(true),
-                relay.max_datacarrier_bytes,
-            );
+            ycash_standard::configure_relay_policy(config.accept_non_standard.unwrap_or(true));
         }
         Self {
             accept_non_standard,
@@ -91,10 +88,12 @@ impl Policy {
     ) -> Result<(), NonStandardTransactionError> {
         let transaction = tx.transaction.transaction().as_ref();
         let next_height = tip_height.and_then(|height| height.next().ok());
+        // Without a tip, the rules of the genesis block's successor.
+        let rules_height = next_height.unwrap_or(Height(1));
         let standard = self.network.as_ref().filter(|_| !self.accept_non_standard);
 
-        if let (Some(network), Some(next_height)) = (standard, next_height) {
-            ycash_standard::is_standard_tx(transaction, network, next_height, &self.relay)
+        if let Some(network) = standard {
+            ycash_standard::is_standard_tx(transaction, network, rules_height, &self.relay)
                 .map_err(non_standard_error)?;
         }
 
@@ -126,13 +125,13 @@ impl Policy {
             }
         }
 
-        if let (Some(network), Some(next_height)) = (self.network.as_ref(), next_height) {
+        if let Some(network) = self.network.as_ref() {
             if !tx.spent_outputs.is_empty() {
                 ycash_standard::standard_script_check(
                     tx.transaction.transaction().clone(),
                     tx.spent_outputs.clone(),
                     network,
-                    next_height,
+                    rules_height,
                 )
                 .map_err(|(input_index, error)| {
                     NonStandardTransactionError::NonMandatoryScriptVerifyFlag(format!(

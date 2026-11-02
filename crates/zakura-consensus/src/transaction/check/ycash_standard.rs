@@ -37,7 +37,7 @@
 //! runs them through [`standard_script_check`].
 
 use std::sync::{
-    atomic::{AtomicBool, AtomicUsize, Ordering},
+    atomic::{AtomicBool, Ordering},
     Arc,
 };
 
@@ -116,16 +116,12 @@ const OP_CHECKPQSIG: u8 = 0xc2;
 /// mempool was configured with `accept_non_standard = false`.
 static REGTEST_ACCEPT_NON_STANDARD: AtomicBool = AtomicBool::new(true);
 
-/// `nMaxDatacarrierBytes` (`-datacarriersize`): the mempool's `max_datacarrier_bytes`.
-static MAX_DATACARRIER_BYTES: AtomicUsize = AtomicUsize::new(MAX_OP_RETURN_RELAY);
-
-/// Records the mempool's standardness configuration for the transaction verifier, which checks
-/// standard inputs before script verification (ycashd's `fRequireStandard` and
-/// `nMaxDatacarrierBytes` are process-wide too). Called when the mempool storage is created
-/// for its network.
-pub fn configure_relay_policy(regtest_accept_non_standard: bool, max_datacarrier_bytes: usize) {
+/// Records the mempool's `accept_non_standard` for the transaction verifier, which checks
+/// standard inputs before script verification where [`require_standard`] holds (ycashd's
+/// `fRequireStandard` is process-wide too). Called when the mempool storage is created for its
+/// network.
+pub fn configure_relay_policy(regtest_accept_non_standard: bool) {
     REGTEST_ACCEPT_NON_STANDARD.store(regtest_accept_non_standard, Ordering::Relaxed);
-    MAX_DATACARRIER_BYTES.store(max_datacarrier_bytes, Ordering::Relaxed);
 }
 
 /// `chainparams.RequireStandard()`: always on mainnet and testnet; on regtest only when the
@@ -151,16 +147,6 @@ impl Default for RelayPolicy {
             max_datacarrier_bytes: MAX_OP_RETURN_RELAY,
             accept_datacarrier: true,
             permit_bare_multisig: true,
-        }
-    }
-}
-
-impl RelayPolicy {
-    /// The policy [`configure_relay_policy`] recorded.
-    pub fn configured() -> Self {
-        Self {
-            max_datacarrier_bytes: MAX_DATACARRIER_BYTES.load(Ordering::Relaxed),
-            ..Self::default()
         }
     }
 }
@@ -798,13 +784,12 @@ pub fn are_inputs_standard(
     true
 }
 
-/// The transaction verifier's standardness pre-check for a mempool transaction (ycashd's
-/// `IsStandardTx` and `AreInputsStandard`, both before script verification in
-/// `AcceptToMemoryPool`), where [`require_standard`] holds. `height` is the next block's.
-///
-/// Returns the verifier's standardness errors (an output rule as
-/// [`TransactionError::NonStandardOutputs`](crate::error::TransactionError::NonStandardOutputs)),
-/// so a non-standard transaction is refused before its scripts run, as on ycashd.
+/// The transaction verifier's standardness pre-check for a mempool transaction, where
+/// [`require_standard`] holds: ycashd's input rules (`IsStandardTx`'s scriptSig rules at the
+/// next block's `height`, then `AreInputsStandard`), before script verification as in
+/// `AcceptToMemoryPool`. The output rules of `IsStandardTx` run in the mempool storage, as
+/// Zakura's do, so a transaction with a non-standard output *and* a failing script is
+/// reject-consensus here and reject-policy on ycashd (finding W6-a/F-3).
 pub fn mempool_standard_checks(
     tx: &Transaction,
     spent_outputs: &[transparent::Output],
@@ -834,8 +819,6 @@ pub fn mempool_standard_checks(
             _ => TransactionError::NonStandardScriptSigNotPushOnly { input_index },
         });
     }
-    is_standard_tx(tx, network, height, &RelayPolicy::configured())
-        .map_err(|reason| TransactionError::NonStandardOutputs(reason.as_str()))?;
     if !are_inputs_standard(tx, spent_outputs, None) {
         return Err(TransactionError::NonStandardInputs);
     }

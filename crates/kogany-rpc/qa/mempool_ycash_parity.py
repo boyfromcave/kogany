@@ -115,7 +115,7 @@ ACCEPTED = [
      'UPGRADE_VAULT is active; other OP_RETURNs keep -datacarriersize (83)',
      'max_datacarrier_bytes 83 for every OP_RETURN',
      'W6-a: ycash_standard::is_standard_tx, in the verifier pre-check and the storage',
-     ['vault/op-return-83', 'vault/op-return-84', 'vault/act-1200-badsig', 'vault/act-1201-badsig',
+     ['vault/op-return-83', 'vault/op-return-84', 'vault/act-1200-badsig', 'vault/act-1201',
       'vault/set_create', 'vault/set_join']),
     ('ported', 'PQ and template outputs from Vault, Falcon outputs from the Falcon height, PQ dust',
      'policy/policy.cpp IsStandardTx: TX_VAULT/TX_VAULT_INTENT/TX_PQPKH/TX_PQCHANNEL only where Vault is '
@@ -131,6 +131,17 @@ ACCEPTED = [
      ['vault/pqpkh-spend-exact', 'vault/pqpkh-spend-extra-push', 'vault/pqpkh-spend-falcon-shape',
       'vault/v-owner-9000', 'vault/v-owner-9001', 'vault/v-owner-extra-push', 'vault/v-app-junk',
       'vault/v-no-selector', 'vault/vault_ownerspend']),
+    ('open', 'output standardness before scripts',
+     'main.cpp AcceptToMemoryPool: IsStandardTx (outputs included) before ContextualCheckInputs',
+     'the verifier pre-checks inputs only; output rules run in the mempool storage, after scripts',
+     'unchanged (W6-a finding F-3): a transaction with a non-standard output and a failing script is '
+     'reject-policy on ycashd, reject-consensus on kogany; moving the output rules into the verifier '
+     'breaks upstream verifier tests whose mock outputs are non-standard', []),
+    ('open', 'CHECKLOCKTIMEVERIFY failures in the mempool',
+     'main.cpp ContextualCheckInputs: the retry drops STANDARD_NOT_MANDATORY_VERIFY_FLAGS, CLTV included, '
+     'so a CLTV failure is non-mandatory-script-verify-flag (reject-policy)',
+     'CLTV is a consensus flag of every script check', 'unchanged (W6-a finding F-4): reject-consensus on '
+     'kogany; W6-c (the verifier\'s error scoring)', []),
     ('open', 'absurd fee', 'rpc/rawtransaction.cpp:1346 fRejectAbsurdFee: maxTxFee 0.1 YEC unless allowhighfees',
      'allow_high_fees ignored (methods.rs send_raw_transaction)', 'unchanged: an RPC rule, W7-e', []),
     ('open', 'expiry eviction at the tip', 'txmempool.cpp:785-805 removeExpired(h): expiry < h',
@@ -659,11 +670,11 @@ def cases_vault(chain, v):
     v.offer(chain, '%s/op-return-84' % mode, chain.build([(0, op_return(81))], 1000), REJECT_POLICY)
 
     # A `YV` carrier of 1,200 bytes passes standardness and then fails (its act does not decode on
-    # ycashd; its signature, corrupted, on both); one of 1,201 bytes fails standardness first.
+    # ycashd; its signature, corrupted, on both: kogany has no act check in the mempool yet); one
+    # of 1,201 bytes is non-standard.
     v.offer(chain, '%s/act-1200-badsig' % mode,
             corrupt_signature(chain.build([(0, act_carrier(1200))], 1000)), REJECT_CONSENSUS)
-    v.offer(chain, '%s/act-1201-badsig' % mode,
-            corrupt_signature(chain.build([(0, act_carrier(1201))], 1000)), REJECT_POLICY)
+    v.offer(chain, '%s/act-1201' % mode, chain.build([(0, act_carrier(1201))], 1000), REJECT_POLICY)
 
     # TX_PQPKH outputs: standard from Vault, priced at the real spend's dust threshold; scheme 2
     # (Falcon) stays non-standard on regtest (no -pqfalcon on ycashd, no Falcon height on kogany).

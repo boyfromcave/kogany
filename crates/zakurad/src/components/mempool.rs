@@ -407,8 +407,6 @@ fn peer_action(error: &TransactionError) -> PeerAction {
         | NonStandardScriptSigSize { .. }
         | NonStandardScriptSigNotPushOnly { .. }
         | NonStandardInputs => Ignore,
-        #[cfg(feature = "ycash")]
-        NonStandardOutputs(_) => Ignore,
 
         // Only block verification returns these. The mempool rejects coinbase
         // transactions before their coinbase checks.
