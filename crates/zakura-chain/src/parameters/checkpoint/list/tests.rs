@@ -272,11 +272,9 @@ fn checkpoint_list_duplicate_hashes_fail() -> Result<(), BoxError> {
 fn checkpoint_list_load_hard_coded() -> Result<(), BoxError> {
     let _init_guard = zakura_test::init();
 
-    let _: CheckpointList = MAINNET_CHECKPOINTS
-        .parse()
+    let _: CheckpointList = hard_coded_list(MAINNET_CHECKPOINTS)
         .expect("hard-coded Mainnet checkpoint list should parse");
-    let _: CheckpointList = TESTNET_CHECKPOINTS
-        .parse()
+    let _: CheckpointList = hard_coded_list(TESTNET_CHECKPOINTS)
         .expect("hard-coded Testnet checkpoint list should parse");
 
     let _ = Mainnet.checkpoint_list();
@@ -303,6 +301,12 @@ fn checkpoint_list_hard_coded_mandatory(network: Network) -> Result<(), BoxError
     let mandatory_checkpoint = network.mandatory_checkpoint_height();
 
     let list = network.checkpoint_list();
+
+    // kogany: a `# PARTIAL` Ycash list may stop short (W1-Y4); a complete one must not.
+    #[cfg(feature = "ycash")]
+    if network.ycash_checkpoint_list_is_partial() {
+        return Ok(());
+    }
 
     assert!(
         list.max_height() >= mandatory_checkpoint,

@@ -369,6 +369,11 @@ impl StartCmd {
         Self::validate_consensus_config(&config)?;
         Self::validate_debug_blocksync_throughput_config(&config)?;
         config.rpc.validate().map_err(|error| eyre!(error))?;
+        // kogany (W6-b): the network-fee policy `yed_getinfo` reports, as ycashd's init sets it.
+        #[cfg(feature = "ycash")]
+        kogany_rpc::yed::fees::install_node_policy(
+            config.mempool.yed_node_policy().map_err(|error| eyre!(error))?,
+        );
 
         if config.zcashd_compat.enabled {
             zcashd_compat::run_preflight(&config, self.unsafe_low_specs)?;
@@ -1463,6 +1468,8 @@ impl StartCmd {
         Self::validate_consensus_config(&config).map_err(config_error)?;
         Self::validate_debug_blocksync_throughput_config(&config).map_err(config_error)?;
         config.rpc.validate().map_err(config_error)?;
+        #[cfg(feature = "ycash")]
+        config.mempool.yed_node_policy().map_err(config_error)?;
 
         Ok(config)
     }

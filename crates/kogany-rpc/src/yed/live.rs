@@ -20,7 +20,7 @@ use async_trait::async_trait;
 use kogany_vault::Hash32;
 use kogany_yellowback::{
     attest::registry::AttestStatus as RecordStatus,
-    params::{Params, DEFAULT_REF_LAG},
+    params::Params,
     state::{default_payee, eligible_payees, PayeePolicy as StatePayeePolicy, YedRead},
 };
 use tower::{Service, ServiceExt};
@@ -28,9 +28,6 @@ use zakura_chain::chain_tip::ChainTip;
 use zakura_state::{BoxError, ReadRequest, ReadResponse};
 
 use super::state::*;
-
-/// ycash6 `DEFAULT_YELLOWBACK_FEE` (`src/yellowback/params.h:94`).
-pub const DEFAULT_YELLOWBACK_FEE: i64 = 1_000;
 
 /// ycash6 `MinerConfig::quoteMaxAge` (`-yellowbackquotemaxage`, `src/yellowback/index.h:123`):
 /// a held quote older than this builds no tag (MINER-1).
@@ -155,6 +152,7 @@ where
         let tip_height = index.tip().map_or(-1, |t| t.height);
         let quote = self.held_quote();
         let price = index.snap.attested_fee_price();
+        let (network_fees, fee_zat, ref_lag) = super::fees::node_info_fees(price);
         // ycash6 `GetMinerStatus` (`src/yellowback/index.cpp:766-786`).
         let now = now_seconds();
         let payout = payout_key();
@@ -176,8 +174,8 @@ where
             chain_height,
             params,
             node: NodeInfo {
-                ref_lag: i64::from(DEFAULT_REF_LAG),
-                fee_zat: DEFAULT_YELLOWBACK_FEE,
+                ref_lag,
+                fee_zat,
                 payee_policy: PayeePolicy {
                     penalty_blocks: i64::from(params.n_penalty),
                     accuracy_window: i64::from(params.accuracy_window),
@@ -196,19 +194,7 @@ where
                         source_mask: q.source_mask,
                     }),
                 },
-                network_fees: NetworkFees {
-                    price_micro_usd: price,
-                    plain_usd_per_kb_micro: 0,
-                    plain_zat_per_kb: 0,
-                    yed_usd_per_kb_micro: 0,
-                    yed_zat_per_kb: 0,
-                    yed_max_tx_fee_usd_micro: 0,
-                    yed_max_tx_fee_ceiling_zat: 0,
-                    yed_max_tx_fee_zat: 0,
-                    floor_zat_per_kb: 0,
-                    fallback_zat_per_kb: 0,
-                    max_tx_fee_zat: 0,
-                },
+                network_fees,
                 falcon_active_next: params.is_pq_falcon_active(tip_height.saturating_add(1)),
                 plain_pq_address_version: plain_pq_address_version(params.network),
             },
