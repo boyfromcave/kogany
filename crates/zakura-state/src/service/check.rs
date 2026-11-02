@@ -40,8 +40,8 @@ pub(crate) mod utxo;
 #[doc(hidden)]
 pub use utxo::remaining_transaction_value;
 
-pub use utxo::transparent_coinbase_spend;
 pub use sequence_locks::transparent_sequence_locks;
+pub use utxo::transparent_coinbase_spend;
 
 #[cfg(test)]
 mod tests;

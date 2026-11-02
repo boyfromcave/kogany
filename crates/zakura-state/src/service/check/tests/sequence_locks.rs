@@ -49,7 +49,11 @@ fn regtest_with_vault(vault: u32) -> Network {
 /// `CalculateSequenceLocks` over `(nSequence, coin height)` pairs.
 fn calc(seqs: &[u32], heights: &[u32]) -> Option<i64> {
     assert_eq!(seqs.len(), heights.len());
-    calculate_sequence_locks(seqs.iter().copied().zip(heights.iter().copied().map(Height)))
+    calculate_sequence_locks(
+        seqs.iter()
+            .copied()
+            .zip(heights.iter().copied().map(Height)),
+    )
 }
 
 fn outpoint(byte: u8, index: u32) -> transparent::OutPoint {
@@ -118,9 +122,18 @@ fn vault_bip68_calculate() {
     assert!(!evaluate_sequence_locks(Height(104), m));
     assert!(evaluate_sequence_locks(Height(105), m));
     // Lock 0 and 1: the same block and the next block.
-    assert!(evaluate_sequence_locks(Height(100), calc(&[0], &[100]).unwrap()));
-    assert!(!evaluate_sequence_locks(Height(100), calc(&[1], &[100]).unwrap()));
-    assert!(evaluate_sequence_locks(Height(101), calc(&[1], &[100]).unwrap()));
+    assert!(evaluate_sequence_locks(
+        Height(100),
+        calc(&[0], &[100]).unwrap()
+    ));
+    assert!(!evaluate_sequence_locks(
+        Height(100),
+        calc(&[1], &[100]).unwrap()
+    ));
+    assert!(evaluate_sequence_locks(
+        Height(101),
+        calc(&[1], &[100]).unwrap()
+    ));
     // Only the low 16 bits count.
     assert_eq!(calc(&[0x3fbf_0005], &[100]), Some(104));
     assert_eq!(calc(&[0xffff], &[0]), Some(65534));
@@ -142,7 +155,10 @@ fn vault_bip68_calculate() {
         calc(&[0xffff], &[Height::MAX.0]),
         Some(i64::from(Height::MAX.0) + 0xffff - 1)
     );
-    assert!(!evaluate_sequence_locks(Height::MAX, calc(&[0xffff], &[Height::MAX.0]).unwrap()));
+    assert!(!evaluate_sequence_locks(
+        Height::MAX,
+        calc(&[0xffff], &[Height::MAX.0]).unwrap()
+    ));
 }
 
 #[test]
@@ -183,7 +199,11 @@ fn vault_bip68_contextual() {
     assert!(matches!(
         contextual(
             &network,
-            &spend(&[(a, SEQUENCE_FINAL), (a, 0), (a, SEQUENCE_LOCKTIME_TYPE_FLAG)]),
+            &spend(&[
+                (a, SEQUENCE_FINAL),
+                (a, 0),
+                (a, SEQUENCE_LOCKTIME_TYPE_FLAG)
+            ]),
             1000,
             &coins
         ),
@@ -288,11 +308,23 @@ fn vault_bip68_inactive_before_vault() {
     ] {
         let mut heights = vec![0, 1, Height::MAX.0];
         for (height, _) in network.full_activation_list() {
-            heights.extend([height.0.saturating_sub(1), height.0, height.0.saturating_add(1)]);
+            heights.extend([
+                height.0.saturating_sub(1),
+                height.0,
+                height.0.saturating_add(1),
+            ]);
         }
-        for nu in [NetworkUpgrade::Nu5, NetworkUpgrade::Nu6, NetworkUpgrade::Nu7] {
+        for nu in [
+            NetworkUpgrade::Nu5,
+            NetworkUpgrade::Nu6,
+            NetworkUpgrade::Nu7,
+        ] {
             if let Some(height) = nu.activation_height(&network) {
-                heights.extend([height.0.saturating_sub(1), height.0, height.0.saturating_add(1)]);
+                heights.extend([
+                    height.0.saturating_sub(1),
+                    height.0,
+                    height.0.saturating_add(1),
+                ]);
             }
         }
         let vault = network.vault_activation_height();
@@ -371,7 +403,10 @@ fn vault_bip68_reorg_lock_satisfied_on_one_fork_only() {
 
     // Fork A mined the parent at 16: 16 + 4 <= 20.
     let fork_a = fork_with_parent(parent, 16);
-    assert_eq!(check_block_on_fork(&network, &finalized, &fork_a, &block), Ok(()));
+    assert_eq!(
+        check_block_on_fork(&network, &finalized, &fork_a, &block),
+        Ok(())
+    );
 
     // Fork B mined the same parent at 17: 17 + 4 > 20.
     let fork_b = fork_with_parent(parent, 17);
@@ -391,7 +426,10 @@ fn vault_bip68_reorg_lock_satisfied_on_one_fork_only() {
 
     // On fork B the block one height later is valid again.
     let later = block_at(21, vec![spend(&[(parent, 4)])]);
-    assert_eq!(check_block_on_fork(&network, &finalized, &fork_b, &later), Ok(()));
+    assert_eq!(
+        check_block_on_fork(&network, &finalized, &fork_b, &later),
+        Ok(())
+    );
 }
 
 /// An output of an earlier transaction of the same block is at the block's height: lock 0 is
@@ -414,10 +452,7 @@ fn vault_bip68_parent_in_the_same_block() {
     };
 
     for (lock, ok) in [(0, true), (1, false), (SEQUENCE_FINAL, true)] {
-        let block = block_at(
-            30,
-            vec![parent_tx.clone(), spend(&[(child_output, lock)])],
-        );
+        let block = block_at(30, vec![parent_tx.clone(), spend(&[(child_output, lock)])]);
         assert_eq!(
             check_block_on_fork(&network, &finalized, &fork, &block).is_ok(),
             ok,
@@ -440,5 +475,8 @@ fn vault_bip68_parent_in_the_same_block() {
     // Before Vault the same blocks pass.
     let network = regtest_with_vault(1_000);
     let block = block_at(30, vec![parent_tx, spend(&[(child_output, 1)])]);
-    assert_eq!(check_block_on_fork(&network, &finalized, &fork, &block), Ok(()));
+    assert_eq!(
+        check_block_on_fork(&network, &finalized, &fork, &block),
+        Ok(())
+    );
 }

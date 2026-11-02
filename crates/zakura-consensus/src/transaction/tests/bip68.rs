@@ -6,6 +6,7 @@
 
 use std::collections::HashMap;
 
+use tower::ServiceExt;
 use zakura_chain::{
     amount::Amount,
     block::Height,
@@ -18,11 +19,10 @@ use zakura_chain::{
     transparent,
 };
 use zakura_state::{
-    check::sequence_locks::{SEQUENCE_LOCKTIME_TYPE_FLAG, SEQUENCE_LOCKTIME_MASK},
+    check::sequence_locks::{SEQUENCE_LOCKTIME_MASK, SEQUENCE_LOCKTIME_TYPE_FLAG},
     ValidateContextError,
 };
 use zakura_test::mock_service::MockService;
-use tower::ServiceExt;
 
 use crate::error::TransactionError;
 
@@ -130,10 +130,15 @@ async fn vault_bip68_mempool_evaluates_at_the_next_height() {
 
     for (network, coin) in networks {
         let (tx, outpoint, utxo) = spend(Height(coin), 5);
-        let error =
-            mempool_verify(&network, tx.clone(), outpoint, utxo.clone(), Height(coin + 4))
-                .await
-                .expect_err("the lock is not satisfied by the next block at coin + 4");
+        let error = mempool_verify(
+            &network,
+            tx.clone(),
+            outpoint,
+            utxo.clone(),
+            Height(coin + 4),
+        )
+        .await
+        .expect_err("the lock is not satisfied by the next block at coin + 4");
         let TransactionError::ValidateContextError(context) = &error else {
             panic!("a contextual rejection, got {error:?}")
         };
