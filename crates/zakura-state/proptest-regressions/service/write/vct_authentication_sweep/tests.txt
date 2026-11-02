@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 583fd1e246537953e4face2044440c21de5628cf9ace6894488bd83693fafe88 # shrinks to offset = 1, corruption = AuthDataRoot
