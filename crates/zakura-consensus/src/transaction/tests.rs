@@ -4532,6 +4532,7 @@ fn v4_deprecation_boundary() {
 fn configured_network_with_nu7(nu7: Option<Height>) -> Network {
     Parameters::build()
         .with_activation_heights(ConfiguredActivationHeights {
+            ycash: None,
             before_overwinter: Some(1),
             overwinter: Some(2),
             sapling: Some(3),

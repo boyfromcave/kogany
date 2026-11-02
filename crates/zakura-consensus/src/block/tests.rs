@@ -1109,7 +1109,10 @@ fn equihash_is_valid_for_historical_blocks() -> Result<(), Report> {
             .zcash_deserialize_into::<Block>()
             .expect("block is structurally valid");
 
-        check::equihash_solution_is_valid(&block.header, &Network::Mainnet)
+        let height = block
+            .coinbase_height()
+            .expect("block test vectors have a coinbase height");
+        check::equihash_solution_is_valid(&block.header, &Network::Mainnet, &height)
             .expect("the equihash solution from a historical block should be valid");
     }
 

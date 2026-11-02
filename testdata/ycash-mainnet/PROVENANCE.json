@@ -1,0 +1,118 @@
+{
+  "peer": "lite.ycash.xyz:8833",
+  "peer_protocol_version": 270013,
+  "peer_user_agent": "/YcashCpp:4.5.0/",
+  "fetched_utc": "2026-11-02T01:12:05Z",
+  "hash_source": "P2P getheaders walk from the ycash6 mainnet checkpoints (src/chainparams.cpp at 65cb4ae0f: 525000 and 2250000), prev-hash linkage checked per header, passing the pinned hashes at 570000 (UPGRADE_YCASH.hashActivationBlock), 572760, 980000, 1035353 and 1575000",
+  "blocks": {
+    "569999": {
+      "hash": "00000000010a9ca077c0d28131861d0644befbb13f229e014c9f3e52d97e4650",
+      "size": 4770,
+      "header_size": 1487,
+      "sha256_of_block": "b3432a4df5753e8cf5404ac5834e18ddc8c11533d4207634acfc0988fd578c0c"
+    },
+    "570000": {
+      "hash": "0000014fbc5917ba8bcacf3336faf588d86b32443aa3a490a587af5750c77ec5",
+      "size": 4673,
+      "header_size": 543,
+      "sha256_of_block": "f1626faef08d6da704fa924bebb6752a51a0a74df361384a1ac81b6ea09324c1"
+    },
+    "570001": {
+      "hash": "00000050eaff1a1019cb0634ee8c082580a287a591ef333874d2f877ca179059",
+      "size": 687,
+      "header_size": 543,
+      "sha256_of_block": "c1368fce6a51321aae38cd9daa9414289f1b6a6f69eb197354b0147af53069d4"
+    },
+    "587916": {
+      "hash": "000000116da74fc4e666437e583d8437efcc99391cbe2d15578ea0d5ca122832",
+      "size": 3187,
+      "header_size": 543,
+      "sha256_of_block": "03bfdc4d7bf4bd3ee39ae658e2a1f4689bb6c3cf3933890c769409c1296117cb"
+    },
+    "587917": {
+      "hash": "000000178739f4e299c5e77df585328a825ef2409460f676ee70c15fd317dbd9",
+      "size": 1910,
+      "header_size": 543,
+      "sha256_of_block": "937c88d3c7074c3e46155535a553e8d87f0da6503977101a99a6e54a27d2821f"
+    },
+    "605834": {
+      "hash": "0000003685ac138a68372f156ffd36637fb6885c24972210bed3d17f38a76ede",
+      "size": 687,
+      "header_size": 543,
+      "sha256_of_block": "2b5e895e2351e7163e840030608a3621f15d85a6e140c6f992ce27d7af77b0d9"
+    },
+    "849999": {
+      "hash": "000004da39ab32f4ad10d5ebb1ef48b25ffb924995535616955c2c4b000d020a",
+      "size": 1260,
+      "header_size": 543,
+      "sha256_of_block": "e96608b04028621459bfeb902c4bb94a8f0ced12585592423f773d77463eabe9"
+    },
+    "850000": {
+      "hash": "00000125e638712689e2edec2c11ce92fadfc5a5b0f124467ae28c371e5ff2db",
+      "size": 687,
+      "header_size": 543,
+      "sha256_of_block": "3458148df629fcb56c6ee2c742b11616e28b36e25ef4f1859dc8905b31cefa8e"
+    },
+    "982091": {
+      "hash": "000003ac918a1df6b80ee18159f38e13266c15e77b1a1a95b72a0a074654b690",
+      "size": 926,
+      "header_size": 543,
+      "sha256_of_block": "fbd929393da66bc9caf05af6c1245a008e2654be5c17868753626a9edb307c4d"
+    },
+    "1100000": {
+      "hash": "0000011e6bf02795c76bdfd0ea456ae23a6963fc1d13ab0a236a64f557485514",
+      "size": 796,
+      "header_size": 543,
+      "sha256_of_block": "d40a95b0dee73a5e69482a2ff98ce43279ab833a263c9a87ca2f6c9a0a81bb94"
+    },
+    "1100005": {
+      "hash": "0000020609d27740c0d816cb170fae67186c63ed398a6c0e556a4f1ebded36dd",
+      "size": 715,
+      "header_size": 543,
+      "sha256_of_block": "d2953464690f5c140c340a98a7bf30387ae95aa7cd541fa0a83370717d6c1ff0"
+    },
+    "1100006": {
+      "hash": "00000388cfe0577f8f2264f001b8ae213f477571af4e873b7d27e54e612205d5",
+      "size": 715,
+      "header_size": 543,
+      "sha256_of_block": "2ba2765c3e32ef536872694b3398755997031a0aec8dec1c7acc05a4e6af51ad"
+    },
+    "1412099": {
+      "hash": "000000a46d3fc3f49ddc2de3330a24f19cdd51647e09d6cfc0e37a9fe4b8ccaf",
+      "size": 715,
+      "header_size": 543,
+      "sha256_of_block": "95363a01331914b939af0ff0778b7135c851e7e23a457c6e2ac18fef9b545ec0"
+    },
+    "1430016": {
+      "hash": "000002c0128b509cb96f473e96eb81ab0994219060c33fe0b21cc6d637fd3fbd",
+      "size": 696,
+      "header_size": 543,
+      "sha256_of_block": "e6a4f0f881c11cb6fcc4e03fe8f7fd10e85f01129055b6a9b19ea05a4d7bdfec"
+    },
+    "2272115": {
+      "hash": "000004c83bd0ed050a041f8ba97f94c7eea1ea1faed71ea3b59bfc7c7d01f736",
+      "size": 715,
+      "header_size": 543,
+      "sha256_of_block": "6a60cc345155f4274a7c827aef08fdb8ac21753f16dbdc445de45446419bbe5d"
+    },
+    "2274999": {
+      "hash": "000007a26024cbcb55448697d456279e515d90584607be9885f70afbbb486392",
+      "size": 2051,
+      "header_size": 543,
+      "sha256_of_block": "38b0f7dd10d3f3ff574c2820dea18353adea1161586316b1129f5adf3fd75775"
+    },
+    "2275000": {
+      "hash": "000006e55442b4075b60733b91132476f7d897ea34f9218f3ffb187f02c9183c",
+      "size": 687,
+      "header_size": 543,
+      "sha256_of_block": "d8900b9b47efeb2d600240dfbf289cab32bda489c77bfd7db8d1b892aeaa6ce3"
+    },
+    "2275001": {
+      "hash": "0000089a3abeb3949ea8a7bc18d54ebde812301951e08d857a1e29ce30d14a02",
+      "size": 1884,
+      "header_size": 543,
+      "sha256_of_block": "6b1b50722d5e33bdf383a288353988d067f084cf10bfe43dc12e9ba0db377241"
+    }
+  },
+  "note": "Ycash mainnet blocks fetched by the kogany W1-Y2/Y3 agent with P2P getdata (MSG_BLOCK) after a getheaders walk; each block's double-SHA256 header hash equals the walked hash. Test data for zakura-chain work/tests and zakura-consensus block tests."
+}

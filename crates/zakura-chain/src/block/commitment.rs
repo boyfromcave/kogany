@@ -115,7 +115,7 @@ impl Commitment {
 
         match NetworkUpgrade::current_with_activation_height(network, height) {
             (Genesis | BeforeOverwinter | Overwinter, _) => Ok(PreSaplingReserved(bytes)),
-            (Sapling | Blossom, _) => match sapling::tree::Root::try_from(bytes) {
+            (Sapling | Ycash | Blossom, _) => match sapling::tree::Root::try_from(bytes) {
                 Ok(root) => Ok(FinalSaplingRoot(root)),
                 _ => Err(InvalidSapingRootBytes),
             },

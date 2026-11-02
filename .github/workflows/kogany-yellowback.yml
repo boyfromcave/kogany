@@ -14,8 +14,7 @@ name: kogany-yellowback
 #              dormancy             blocking: no upstream test function deleted
 #              workflows            blocking: every workflow classified in .github/kogany-workflows.txt
 #              The reports are the `kogany-audit` artifact and the step summary.
-#   build      the feature matrix: `ycash` off (blocking) and on. The `ycash` feature does not exist
-#              until W1-Y1 adds it, so that leg is continue-on-error until then.
+#   build      the feature matrix: `ycash` off and on, both blocking.
 #
 # Legs that start later (plan §5): (c) cross-line identity and (d) vault-params from W2, the
 # vectors from W2, kogany-regtest from W4, mixed-regtest from W1, sidecar/parity at W9/S5.
@@ -66,9 +65,6 @@ jobs:
     name: build (ycash feature ${{ matrix.ycash && 'on' || 'off' }})
     runs-on: ubuntu-24.04
     timeout-minutes: 90
-    # W1-Y1 adds the `ycash` feature (zakurad forwarding it to zakura-chain); until then the feature-on
-    # leg fails with "unknown feature" and must not block. W1-Y1 removes this continue-on-error.
-    continue-on-error: ${{ matrix.ycash }}
     permissions:
       contents: read
     strategy:

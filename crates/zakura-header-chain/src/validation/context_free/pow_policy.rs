@@ -66,11 +66,18 @@ impl PowPolicy {
 
     /// Validate solution shape, network parameters, and proof unless this exact custom network
     /// has an authenticated disabled-PoW configuration.
-    pub fn validate_solution(&self, header: &block::Header) -> Result<(), equihash::Error> {
+    ///
+    /// The Equihash parameters are those the bound network requires at the header's `height`
+    /// (Ycash changes them at its upgrade), never the ones the solution length suggests.
+    pub fn validate_solution(
+        &self,
+        header: &block::Header,
+        height: block::Height,
+    ) -> Result<(), equihash::Error> {
         match self.kind {
-            PowPolicyKind::Validate => header.solution.check(header, &self.network),
+            PowPolicyKind::Validate => header.solution.check(header, &self.network, height),
             PowPolicyKind::AuthenticatedCustomWaiver => {
-                header.solution.validate_shape(&self.network)
+                header.solution.validate_shape(&self.network, height)
             }
         }
     }

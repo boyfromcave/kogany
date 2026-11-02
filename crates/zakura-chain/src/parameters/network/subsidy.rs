@@ -26,6 +26,8 @@ use crate::{
     transparent,
 };
 
+// The `ycash` profile derives the first halving, so it does not read `testnet::FIRST_HALVING`.
+#[cfg_attr(feature = "ycash", allow(unused_imports))]
 use constants::{
     mainnet, testnet, BLOSSOM_POW_TARGET_SPACING_RATIO, FUNDING_STREAM_RECEIVER_DENOMINATOR,
     FUNDING_STREAM_SPECIFICATION, LOCKBOX_SPECIFICATION, MAX_BLOCK_SUBSIDY,
@@ -267,6 +269,9 @@ pub trait ParameterSubsidy {
 /// Network methods related to Block Subsidy and Funding Streams
 impl ParameterSubsidy for Network {
     fn height_for_first_halving(&self) -> Height {
+        // On Ycash the first halving is pre-Blossom and unrelated to Canopy (850,000 on mainnet,
+        // lane B §1 row 5), so every Ycash network derives it.
+        //
         // First halving on Mainnet is at Canopy
         // while in Testnet is at block constant height of `1_116_000`
         // <https://zips.z.cash/protocol/protocol.pdf#zip214fundingstreams>
@@ -274,9 +279,13 @@ impl ParameterSubsidy for Network {
         // Regtest and configured testnets derive it, because their target
         // spacings, including the 25 second spacing after NU7, set the height.
         match self {
+            #[cfg(feature = "ycash")]
+            _ => height_for_halving(1, self).expect("first halving height should be available"),
+            #[cfg(not(feature = "ycash"))]
             Network::Mainnet => NetworkUpgrade::Canopy
                 .activation_height(self)
                 .expect("canopy activation height should be available"),
+            #[cfg(not(feature = "ycash"))]
             Network::Testnet(params) => {
                 if params.is_default_testnet() {
                     testnet::FIRST_HALVING
@@ -993,6 +1002,11 @@ pub fn miner_subsidy(
 ) -> Result<Amount<NonNegative>, amount::Error> {
     let founders_reward = founders_reward(network, height);
 
+    // Ycash pays the YDF out of the block subsidy instead (W1-Y3).
+    #[cfg(feature = "ycash")]
+    let founders_reward =
+        (founders_reward + crate::parameters::ycash::ydf::ydf_reward(network, height))?;
+
     let funding_streams_sum = funding_stream_values(height, network, expected_block_subsidy)?
         .values()
         .sum::<Result<Amount<NonNegative>, _>>()?;
@@ -1047,6 +1061,13 @@ pub fn founders_reward(net: &Network, height: Height) -> Amount<NonNegative> {
     // On custom testnets, the first halving can occur later than Canopy, which causes an
     // inconsistency in the definition of the founders reward, which should occur only before
     // Canopy, so we check if Canopy is active as well.
+    // On Ycash the founders' reward ends at the Ycash upgrade, where the YDF replaces it
+    // (`ycash6 src/main.cpp:6248-6286`).
+    #[cfg(feature = "ycash")]
+    if crate::parameters::ycash::ydf::is_ycash_active(net, height) {
+        return Amount::zero();
+    }
+
     if halving(height, net) < 1 && NetworkUpgrade::current(net, height) < NetworkUpgrade::Canopy {
         // The founders reward ends at the first halving, which is long before ZIP 234
         // starts, so the halving schedule is the whole subsidy here.

@@ -6,7 +6,7 @@ use std::{fmt, io};
 use hex::{FromHex, FromHexError, ToHex};
 
 use crate::{
-    block::Header,
+    block::{self, Header},
     parameters::Network,
     serialization::{
         CompactSize64, CompactSizeMessage, SerializationError, ZcashDeserialize, ZcashSerialize,
@@ -46,6 +46,18 @@ pub(crate) const SOLUTION_SIZE: usize = 1344;
 /// The size of an Equihash solution in bytes on Regtest (always 36).
 pub(crate) const REGTEST_SOLUTION_SIZE: usize = 36;
 
+/// The size of an Equihash `(192, 7)` solution in bytes: Ycash mainnet and testnet from the Ycash
+/// upgrade on (`ycash6 src/consensus/upgrades.cpp:37-43`). Only a `ycash` build parses one.
+pub(crate) const YCASH_SOLUTION_SIZE: usize = 400;
+
+/// The Equihash `N` parameter from the Ycash upgrade on.
+#[cfg(feature = "ycash")]
+const YCASH_N: u32 = 192;
+
+/// The Equihash `K` parameter from the Ycash upgrade on.
+#[cfg(feature = "ycash")]
+const YCASH_K: u32 = 7;
+
 /// The Equihash `N` parameter on Regtest, matching zcashd's regtest chain parameters.
 const REGTEST_N: u32 = 48;
 
@@ -70,6 +82,76 @@ pub enum Solution {
     Regtest(
         #[serde(with = "crate::serialization::serde_adapters::bytes")] [u8; REGTEST_SOLUTION_SIZE],
     ),
+    /// Equihash `(192, 7)` solution on Ycash mainnet and testnet from the Ycash upgrade on.
+    ///
+    /// Present in every build so matches compile identically; only a `ycash` build parses or
+    /// accepts one.
+    Ycash(#[serde(with = "crate::serialization::serde_adapters::bytes")] [u8; YCASH_SOLUTION_SIZE]),
+}
+
+/// The Equihash parameter set that `network` requires at a height. Never derived from a
+/// solution's length.
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+enum EquihashParameters {
+    /// `(200, 9)`, a 1344-byte [`Solution::Common`].
+    Common,
+    /// `(48, 5)`, a 36-byte [`Solution::Regtest`].
+    Regtest,
+    /// `(192, 7)`, a 400-byte [`Solution::Ycash`].
+    #[cfg(feature = "ycash")]
+    Ycash,
+}
+
+impl EquihashParameters {
+    /// Selects the parameters from the authenticated network and the block's height.
+    ///
+    /// Regtest is `(48, 5)` under every upgrade, as on ycashd. In a `ycash` build, Ycash mainnet
+    /// and testnet switch from `(200, 9)` to `(192, 7)` at the Ycash upgrade and keep it for every
+    /// later upgrade (`ycash6 src/consensus/upgrades.cpp:37-43`, `EquihashN/K(nHeight)`). The
+    /// ordinal `>= Ycash` is the profile's rule (kogany plan §2.2).
+    #[cfg_attr(not(feature = "ycash"), allow(unused_variables))]
+    fn for_height(network: &Network, height: block::Height) -> Self {
+        if network.is_regtest() {
+            return Self::Regtest;
+        }
+
+        #[cfg(feature = "ycash")]
+        if crate::parameters::NetworkUpgrade::current(network, height)
+            >= crate::parameters::NetworkUpgrade::Ycash
+        {
+            return Self::Ycash;
+        }
+
+        Self::Common
+    }
+
+    /// The `(n, k)` pair.
+    fn n_k(self) -> (u32, u32) {
+        match self {
+            Self::Common => (200, 9),
+            Self::Regtest => (REGTEST_N, REGTEST_K),
+            #[cfg(feature = "ycash")]
+            Self::Ycash => (YCASH_N, YCASH_K),
+        }
+    }
+
+    /// Returns true if `solution` has the shape these parameters require.
+    fn fits(self, solution: &Solution) -> bool {
+        matches!(
+            (self, solution),
+            (Self::Common, Solution::Common(_)) | (Self::Regtest, Solution::Regtest(_))
+        ) || self.fits_ycash(solution)
+    }
+
+    #[cfg(feature = "ycash")]
+    fn fits_ycash(self, solution: &Solution) -> bool {
+        matches!((self, solution), (Self::Ycash, Solution::Ycash(_)))
+    }
+
+    #[cfg(not(feature = "ycash"))]
+    fn fits_ycash(self, _solution: &Solution) -> bool {
+        false
+    }
 }
 
 impl Solution {
@@ -85,52 +167,52 @@ impl Solution {
         match self {
             Solution::Common(solution) => solution.as_slice(),
             Solution::Regtest(solution) => solution.as_slice(),
+            Solution::Ycash(solution) => solution.as_slice(),
         }
     }
 
     /// Returns `Ok(())` if this solution is a valid Equihash solution for
-    /// `header` under the Equihash parameters required by `network`.
+    /// `header` under the Equihash parameters required by `network` at `height`.
     ///
-    /// The `(n, k)` Equihash parameters are chosen from `network`, never from
-    /// the attacker-controlled solution length. A solution whose variant does
-    /// not match the parameters `network` requires is rejected: Mainnet and
-    /// Testnet require the memory-hard `(200, 9)` [`Solution::Common`]
-    /// solution, while Regtest requires the toy `(48, 5)`
-    /// [`Solution::Regtest`] solution. This prevents a peer from changing the
-    /// proof-of-work parameters by choosing the on-wire solution length.
+    /// The `(n, k)` Equihash parameters are chosen from `network` and the block's
+    /// `height`, never from the attacker-controlled solution length. A solution
+    /// whose variant does not match the parameters required there is rejected:
+    /// Mainnet and Testnet require the memory-hard `(200, 9)`
+    /// [`Solution::Common`] solution, while Regtest requires the toy `(48, 5)`
+    /// [`Solution::Regtest`] solution. In a `ycash` build, Ycash mainnet and
+    /// testnet require the `(192, 7)` [`Solution::Ycash`] solution from the Ycash
+    /// upgrade on. This prevents a peer from changing the proof-of-work
+    /// parameters by choosing the on-wire solution length.
     #[allow(clippy::unwrap_in_result)]
-    pub fn check(&self, header: &Header, network: &Network) -> Result<(), Error> {
-        self.validate_shape(network)?;
+    pub fn check(
+        &self,
+        header: &Header,
+        network: &Network,
+        height: block::Height,
+    ) -> Result<(), Error> {
+        self.validate_shape(network, height)?;
 
         // TODO:
         // - Add Equihash parameters field to `testnet::Parameters`
         // - Update `Solution::Regtest` variant to hold a `Vec` to support arbitrary parameters - rename to `Other`
-        let (n, k) = if network.is_regtest() {
-            (REGTEST_N, REGTEST_K)
-        } else {
-            (200, 9)
-        };
+        let (n, k) = EquihashParameters::for_height(network, height).n_k();
 
         self.check_equihash(header, n, k)
     }
 
-    /// Validate only the solution's encoded shape against the authenticated network parameters.
-    pub fn validate_shape(&self, network: &Network) -> Result<(), Error> {
-        match (network.is_regtest(), self) {
-            // Mainnet and Testnet require the memory-hard (200, 9) parameters,
-            // encoded as a 1344-byte `Common` solution.
-            (false, Solution::Common(_)) => Ok(()),
-            // Regtest requires the toy (48, 5) parameters used by zcashd.
-            (true, Solution::Regtest(_)) => Ok(()),
-            // Reject a solution variant that does not match the active
-            // network before selecting parameters. Otherwise the
-            // attacker-controlled solution length could change the PoW
-            // parameter set.
-            (false, Solution::Regtest(_)) | (true, Solution::Common(_)) => {
-                Err(Error::InvalidSolutionSize {
-                    network: network.clone(),
-                })
-            }
+    /// Validate only the solution's encoded shape against the authenticated network parameters
+    /// at the block's `height`.
+    pub fn validate_shape(&self, network: &Network, height: block::Height) -> Result<(), Error> {
+        // Reject a solution variant that does not match the parameters the
+        // network requires at this height before selecting parameters.
+        // Otherwise the attacker-controlled solution length could change the
+        // PoW parameter set.
+        if EquihashParameters::for_height(network, height).fits(self) {
+            Ok(())
+        } else {
+            Err(Error::InvalidSolutionSize {
+                network: network.clone(),
+            })
         }
     }
 
@@ -174,6 +256,12 @@ impl Solution {
                 bytes.copy_from_slice(solution);
                 Ok(Self::Regtest(bytes))
             }
+            #[cfg(feature = "ycash")]
+            YCASH_SOLUTION_SIZE => {
+                let mut bytes = [0; YCASH_SOLUTION_SIZE];
+                bytes.copy_from_slice(solution);
+                Ok(Self::Ycash(bytes))
+            }
             _unexpected_len => Err(SerializationError::Parse(
                 "incorrect equihash solution size",
             )),
@@ -186,9 +274,14 @@ impl Solution {
     }
 
     /// Returns a null [`Solution`] to be used in block proposals on `network`.
+    ///
+    /// In a `ycash` build a proposal on Ycash mainnet or testnet is for a block above the Ycash
+    /// upgrade, so it has the `(192, 7)` shape.
     pub fn for_proposal_for_network(network: &Network) -> Self {
         if network.is_regtest() {
             Self::Regtest([0; REGTEST_SOLUTION_SIZE])
+        } else if cfg!(feature = "ycash") {
+            Self::Ycash([0; YCASH_SOLUTION_SIZE])
         } else {
             Self::for_proposal()
         }
@@ -356,7 +449,8 @@ impl ZcashDeserialize for Solution {
         let len: CompactSizeMessage = reader.read_value()?;
         let len: usize = len.into();
 
-        if !matches!(len, SOLUTION_SIZE | REGTEST_SOLUTION_SIZE) {
+        let is_ycash_size = cfg!(feature = "ycash") && len == YCASH_SOLUTION_SIZE;
+        if !matches!(len, SOLUTION_SIZE | REGTEST_SOLUTION_SIZE) && !is_ycash_size {
             return Err(SerializationError::Parse(
                 "incorrect equihash solution size",
             ));

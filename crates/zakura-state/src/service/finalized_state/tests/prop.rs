@@ -300,6 +300,7 @@ fn v4_transaction_with_interstitial_anchor(old_anchor_tree: &SproutTree) -> Arc<
 fn vct_test_network() -> Network {
     ParametersBuilder::default()
         .with_activation_heights(ConfiguredActivationHeights {
+            ycash: None,
             before_overwinter: Some(1),
             overwinter: Some(10),
             sapling: Some(15),
@@ -420,6 +421,7 @@ fn all_upgrades_and_wrong_commitments_with_fake_activation_heights() -> Result<(
 
     let network = ParametersBuilder::default()
         .with_activation_heights(ConfiguredActivationHeights {
+            ycash: None,
             // These fixture values place NU5 within the generated chains.
             // The test fails if a generated chain does not cross NU5.
             before_overwinter: Some(1),

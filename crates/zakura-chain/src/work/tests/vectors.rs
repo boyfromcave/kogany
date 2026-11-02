@@ -30,19 +30,21 @@ fn validate_shape_checks_the_solution_against_the_network() {
     let regtest = Network::new_regtest(Default::default());
 
     Solution::for_proposal_for_network(&regtest)
-        .validate_shape(&regtest)
+        .validate_shape(&regtest, crate::block::Height(1))
         .expect("Regtest keeps its own (48, 5) solution shape");
 
-    assert!(Solution::for_proposal().validate_shape(&regtest).is_err());
+    assert!(Solution::for_proposal()
+        .validate_shape(&regtest, crate::block::Height(1))
+        .is_err());
 
     let mainnet = Network::Mainnet;
 
     Solution::for_proposal()
-        .validate_shape(&mainnet)
+        .validate_shape(&mainnet, crate::block::Height(1))
         .expect("Mainnet keeps the common (200, 9) solution shape");
 
     assert!(Solution::for_proposal_for_network(&regtest)
-        .validate_shape(&mainnet)
+        .validate_shape(&mainnet, crate::block::Height(1))
         .is_err());
 }
 
@@ -75,10 +77,13 @@ fn equihash_solution_test_vectors_are_valid() -> eyre::Result<()> {
         let block =
             Block::zcash_deserialize(&block[..]).expect("block test vector should deserialize");
 
-        block
-            .header
-            .solution
-            .check(&block.header, &Network::Mainnet)?;
+        block.header.solution.check(
+            &block.header,
+            &Network::Mainnet,
+            block
+                .coinbase_height()
+                .expect("block test vectors have a coinbase height"),
+        )?;
     }
 
     Ok(())
@@ -120,7 +125,7 @@ fn equihash_solver_reproduces_a_historical_solution() {
         assert_eq!(header.nonce, block.header.nonce);
         header
             .solution
-            .check(header, &Network::Mainnet)
+            .check(header, &Network::Mainnet, crate::block::Height(1))
             .expect("mined solutions must pass the block verifier");
         assert!(header.hash() <= header.difficulty_threshold.to_expanded().unwrap());
     }
@@ -223,7 +228,9 @@ fn regtest_solution_is_rejected_off_regtest() {
     for network in [Network::Mainnet, Network::new_default_testnet()] {
         assert!(
             matches!(
-                header.solution.check(&header, &network),
+                header
+                    .solution
+                    .check(&header, &network, crate::block::Height(1)),
                 Err(Error::InvalidSolutionSize { .. }),
             ),
             "a 36-byte Regtest solution must be rejected on {network}",
@@ -236,9 +243,11 @@ fn regtest_solution_is_rejected_off_regtest() {
     // particular not `InvalidSolutionSize`.)
     assert!(
         !matches!(
-            header
-                .solution
-                .check(&header, &Network::new_regtest(Default::default())),
+            header.solution.check(
+                &header,
+                &Network::new_regtest(Default::default()),
+                crate::block::Height(1)
+            ),
             Err(Error::InvalidSolutionSize { .. }),
         ),
         "a Regtest solution must be accepted for verification on Regtest",
@@ -255,13 +264,15 @@ fn real_regtest_solution_is_bound_to_regtest_parameters() {
 
     header
         .solution
-        .check(header, &regtest)
+        .check(header, &regtest, crate::block::Height(1))
         .expect("the hard-coded Regtest genesis solution must verify on Regtest");
 
     for network in [Network::Mainnet, Network::new_default_testnet()] {
         assert!(
             matches!(
-                header.solution.check(header, &network),
+                header
+                    .solution
+                    .check(header, &network, crate::block::Height(1)),
                 Err(Error::InvalidSolutionSize { .. }),
             ),
             "a real Regtest proof must not verify on {network}",
@@ -284,12 +295,14 @@ fn real_common_solution_is_rejected_on_regtest() {
 
     header
         .solution
-        .check(header, &Network::Mainnet)
+        .check(header, &Network::Mainnet, crate::block::Height(1))
         .expect("the hard-coded Mainnet solution must verify on Mainnet");
 
     assert!(
         matches!(
-            header.solution.check(header, &regtest),
+            header
+                .solution
+                .check(header, &regtest, crate::block::Height(1)),
             Err(Error::InvalidSolutionSize { .. }),
         ),
         "a real Common proof must not verify on Regtest",

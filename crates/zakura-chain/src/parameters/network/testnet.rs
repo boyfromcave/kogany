@@ -6,6 +6,8 @@ use std::{
     sync::{Arc, OnceLock},
 };
 
+// kogany: the `ycash` profile reads neither the Zcash mainnet funding streams nor its founders.
+#[cfg_attr(feature = "ycash", allow(unused_imports))]
 use crate::{
     amount::{Amount, NonNegative, MAX_MONEY},
     block::{self, Height, HeightDiff},
@@ -186,6 +188,7 @@ impl From<&BTreeMap<Height, NetworkUpgrade>> for ConfiguredActivationHeights {
                 }
                 NetworkUpgrade::Overwinter => &mut configured_activation_heights.overwinter,
                 NetworkUpgrade::Sapling => &mut configured_activation_heights.sapling,
+                NetworkUpgrade::Ycash => &mut configured_activation_heights.ycash,
                 NetworkUpgrade::Blossom => &mut configured_activation_heights.blossom,
                 NetworkUpgrade::Heartwood => &mut configured_activation_heights.heartwood,
                 NetworkUpgrade::Canopy => &mut configured_activation_heights.canopy,
@@ -553,6 +556,9 @@ pub struct ConfiguredActivationHeights {
     pub overwinter: Option<u32>,
     /// Activation height for `Sapling` network upgrade.
     pub sapling: Option<u32>,
+    /// Activation height for the `Ycash` network upgrade. Only a `ycash` build accepts one.
+    #[serde(rename = "Ycash", default, skip_serializing_if = "Option::is_none")]
+    pub ycash: Option<u32>,
     /// Activation height for `Blossom` network upgrade.
     pub blossom: Option<u32>,
     /// Activation height for `Heartwood` network upgrade.
@@ -591,6 +597,7 @@ impl ConfiguredActivationHeights {
             before_overwinter,
             overwinter,
             sapling,
+            ycash,
             blossom,
             heartwood,
             canopy,
@@ -614,6 +621,7 @@ impl ConfiguredActivationHeights {
             before_overwinter,
             overwinter,
             sapling,
+            ycash,
             blossom,
             heartwood,
             canopy,
@@ -634,6 +642,7 @@ impl ConfiguredActivationHeights {
             self.before_overwinter,
             self.overwinter,
             self.sapling,
+            self.ycash,
             self.blossom,
             self.heartwood,
             self.canopy,
@@ -657,6 +666,7 @@ impl ConfiguredActivationHeights {
             before_overwinter: self.before_overwinter.or(base.before_overwinter),
             overwinter: self.overwinter.or(base.overwinter),
             sapling: self.sapling.or(base.sapling),
+            ycash: self.ycash.or(base.ycash),
             blossom: self.blossom.or(base.blossom),
             heartwood: self.heartwood.or(base.heartwood),
             canopy: self.canopy.or(base.canopy),
@@ -790,7 +800,11 @@ impl Default for ParametersBuilder {
     fn default() -> Self {
         Self {
             network_name: "UnknownTestnet".to_string(),
+            #[cfg(not(feature = "ycash"))]
             network_magic: magics::TESTNET,
+            // The `ycash` profile's default testnet is the re-forked testnet's `fast` profile.
+            #[cfg(feature = "ycash")]
+            network_magic: crate::parameters::ycash::magics::TESTNET_FAST,
             // # Correctness
             //
             // `Genesis` network upgrade activation height must always be 0
@@ -810,20 +824,35 @@ impl Default for ParametersBuilder {
                 .expect("difficulty limits are valid expanded values"),
             disable_pow: false,
             max_block_time_start_height: None,
+            // Ycash has no ZIP 207/214 funding streams (lane B §1 row 6).
+            #[cfg(not(feature = "ycash"))]
             funding_streams: testnet::FUNDING_STREAMS.clone(),
+            #[cfg(not(feature = "ycash"))]
             inherited_funding_stream_ranges: vec![true; testnet::FUNDING_STREAMS.len()],
+            #[cfg(feature = "ycash")]
+            funding_streams: Vec::new(),
+            #[cfg(feature = "ycash")]
+            inherited_funding_stream_ranges: Vec::new(),
             should_lock_funding_stream_address_period: false,
             pre_blossom_halving_interval: PRE_BLOSSOM_HALVING_INTERVAL,
             post_blossom_halving_interval: POST_BLOSSOM_HALVING_INTERVAL,
             should_allow_unshielded_coinbase_spends: false,
+            #[cfg(not(feature = "ycash"))]
             lockbox_disbursements: testnet::NU6_1_LOCKBOX_DISBURSEMENTS
                 .iter()
                 .map(|(addr, amount)| (addr.to_string(), *amount))
                 .collect(),
+            // Ycash has no NU6.1 lockbox.
+            #[cfg(feature = "ycash")]
+            lockbox_disbursements: Vec::new(),
             checkpoints: TESTNET_CHECKPOINT_LIST.clone(),
+            #[cfg(not(feature = "ycash"))]
             temporary_orchard_disabling_soft_fork_height: Some(
                 super::TESTNET_TEMPORARY_ORCHARD_DISABLING_SOFT_FORK_HEIGHT,
             ),
+            // The Ycash testnet never had this Zcash soft fork.
+            #[cfg(feature = "ycash")]
+            temporary_orchard_disabling_soft_fork_height: None,
             #[cfg(any(test, feature = "proptest-impl"))]
             test_nsm_reissuance_height: None,
             // Configured networks derive their seed unless an override is supplied.
@@ -902,6 +931,7 @@ impl ParametersBuilder {
             before_overwinter,
             overwinter,
             sapling,
+            ycash,
             blossom,
             heartwood,
             canopy,
@@ -921,6 +951,12 @@ impl ParametersBuilder {
             return Err(ParametersBuilderError::LockFundingStreams);
         }
 
+        // A Zcash build never schedules the Ycash upgrade (kogany plan §2.3).
+        #[cfg(not(feature = "ycash"))]
+        if ycash.is_some() {
+            return Err(ParametersBuilderError::YcashUpgradeNeedsYcashBuild);
+        }
+
         // # Correctness
         //
         // These must be in order so that later network upgrades overwrite prior ones
@@ -931,6 +967,7 @@ impl ParametersBuilder {
                 .map(|h| (h, BeforeOverwinter))
                 .chain(overwinter.into_iter().map(|h| (h, Overwinter)))
                 .chain(sapling.into_iter().map(|h| (h, Sapling)))
+                .chain(ycash.into_iter().map(|h| (h, Ycash)))
                 .chain(blossom.into_iter().map(|h| (h, Blossom)))
                 .chain(heartwood.into_iter().map(|h| (h, Heartwood)))
                 .chain(canopy.into_iter().map(|h| (h, Canopy)))
@@ -1806,6 +1843,13 @@ impl Network {
         if let Self::Testnet(params) = self {
             params.funding_streams()
         } else {
+            // Ycash mainnet has no ZIP 207/214 funding streams (lane B §1 row 6).
+            #[cfg(feature = "ycash")]
+            {
+                static YCASH_MAINNET_FUNDING_STREAMS: Vec<FundingStreams> = Vec::new();
+                &YCASH_MAINNET_FUNDING_STREAMS
+            }
+            #[cfg(not(feature = "ycash"))]
             &mainnet::FUNDING_STREAMS
         }
     }
@@ -1823,7 +1867,15 @@ impl Network {
     /// Returns the list of founders' reward addresses for this network.
     pub fn founder_address_list(&self) -> &[&str] {
         match self {
+            // The same founders' scripts, encoded under the Ycash prefixes the `ycash` profile
+            // parses (`KeyIO::ZecToYec`, `ycash6 src/chainparams.cpp:1009-1024`).
+            #[cfg(feature = "ycash")]
+            Network::Mainnet => &crate::parameters::ycash::ydf::MAINNET_FOUNDER_ADDRESSES,
+            #[cfg(feature = "ycash")]
+            Network::Testnet(_) => &crate::parameters::ycash::ydf::TESTNET_FOUNDER_ADDRESSES,
+            #[cfg(not(feature = "ycash"))]
             Network::Mainnet => &mainnet::FOUNDER_ADDRESS_LIST,
+            #[cfg(not(feature = "ycash"))]
             Network::Testnet(_) => &testnet::FOUNDER_ADDRESS_LIST,
         }
     }

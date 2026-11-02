@@ -90,6 +90,9 @@ x86_64-asm = ["dep:orchard", "orchard/x86_64-asm"]
 
 # Production features that activate extra dependencies, or extra features in dependencies
 
+# The Ycash network profile (kogany): build a Ycash node instead of a Zcash one.
+ycash = ["zakura-chain/ycash", "zakura-consensus/ycash", "zakura-header-chain/ycash"]
+
 # The indexer gRPC server, started when `rpc.indexer_listen_addr` is configured
 indexer-rpc = ["zakura-rpc/indexer-rpc"]
 

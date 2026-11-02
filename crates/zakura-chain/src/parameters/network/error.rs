@@ -56,6 +56,10 @@ pub enum ParametersBuilderError {
     #[non_exhaustive]
     OutOfOrderUpgrades,
 
+    #[error("the Ycash network upgrade can only be scheduled in a `ycash` build")]
+    #[non_exhaustive]
+    YcashUpgradeNeedsYcashBuild,
+
     #[error("difficulty limits are valid expanded values")]
     #[non_exhaustive]
     InvaildDifficultyLimits,

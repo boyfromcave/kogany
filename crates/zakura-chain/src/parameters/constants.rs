@@ -77,6 +77,7 @@ pub mod activation_heights {
         pub const NU6_3: Height = Height(4_134_000);
         /// The block height at which [`NU7`](crate::parameters::NetworkUpgrade::Nu7)
         /// activates on Testnet.
+        #[cfg_attr(feature = "ycash", allow(dead_code))]
         pub(in crate::parameters) const NU7: Height = Height(4_465_026);
     }
 
@@ -108,6 +109,7 @@ pub mod activation_heights {
         pub const NU6_3: Height = Height(3_428_143);
         /// The block height at which [`NU7`](crate::parameters::NetworkUpgrade::Nu7)
         /// activates on Mainnet, assigned by [ZIP 259](https://zips.z.cash/zip-0259).
+        #[cfg_attr(feature = "ycash", allow(dead_code))]
         pub(in crate::parameters) const NU7: Height = Height(3_543_405);
     }
 }
