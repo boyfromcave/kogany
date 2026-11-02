@@ -694,6 +694,23 @@ pub fn tx_transparent_coinbase_spends_maturity(
     Ok(())
 }
 
+/// kogany (W3-d): BIP68 relative lock-times, height-based only, for a mempool transaction
+/// evaluated at `height`, the next block's height (ycash6 `AcceptToMemoryPool`'s
+/// `ContextualCheckSequenceLocks(tx, view, nextBlockHeight, state, true)`). `spent_utxos` carries
+/// each spent output's height; an output of a mempool parent is at `height`, so a lock of 0 on it
+/// is satisfied and a lock of 1 waits. Ok wherever the Vault upgrade is not active at `height`.
+pub fn tx_transparent_sequence_locks(
+    network: &Network,
+    tx: &Transaction,
+    height: Height,
+    spent_utxos: &HashMap<transparent::OutPoint, transparent::Utxo>,
+) -> Result<(), TransactionError> {
+    zakura_state::check::transparent_sequence_locks(network, tx, height, |outpoint| {
+        spent_utxos.get(outpoint).map(|utxo| utxo.height)
+    })?;
+    Ok(())
+}
+
 /// The maximum number of signature operations in the redeem script of a standard P2SH input.
 ///
 /// This is zcashd's `MAX_P2SH_SIGOPS` standardness (policy) constant:

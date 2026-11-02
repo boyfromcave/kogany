@@ -32,6 +32,8 @@ use crate::service::non_finalized_state::Chain;
 pub(crate) mod anchors;
 pub(crate) mod difficulty;
 pub(crate) mod nullifier;
+// kogany (W3-d): BIP68 relative lock-times from the Vault upgrade.
+pub mod sequence_locks;
 pub(crate) mod utxo;
 
 #[cfg(feature = "internal-bench")]
@@ -39,6 +41,7 @@ pub(crate) mod utxo;
 pub use utxo::remaining_transaction_value;
 
 pub use utxo::transparent_coinbase_spend;
+pub use sequence_locks::transparent_sequence_locks;
 
 #[cfg(test)]
 mod tests;
