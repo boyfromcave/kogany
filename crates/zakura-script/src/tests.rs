@@ -1,4 +1,6 @@
 #![allow(clippy::unwrap_in_result)]
+// kogany: the Zcash Mainnet fixture tests are not built with `ycash`, leaving their helpers unused.
+#![cfg_attr(feature = "ycash", allow(unused_imports, dead_code))]
 
 use hex::FromHex;
 use std::sync::{Arc, LazyLock};
@@ -38,6 +40,8 @@ fn verify_valid_script(nu: NetworkUpgrade, tx: &[u8], amount: u64, pubkey: &[u8]
 }
 
 #[test]
+// kogany: Zcash Mainnet fixtures (Zcash-signed transactions, the NU5 height); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn verify_valid_script_v4() -> Result<()> {
     let _init_guard = zakura_test::init();
 
@@ -87,6 +91,8 @@ fn fail_invalid_script() -> Result<()> {
 }
 
 #[test]
+// kogany: Zcash Mainnet fixtures (Zcash-signed transactions, the NU5 height); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn reuse_script_verifier_pass_pass() -> Result<()> {
     let _init_guard = zakura_test::init();
 
@@ -115,6 +121,8 @@ fn reuse_script_verifier_pass_pass() -> Result<()> {
 }
 
 #[test]
+// kogany: Zcash Mainnet fixtures (Zcash-signed transactions, the NU5 height); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn reuse_script_verifier_pass_fail() -> Result<()> {
     let _init_guard = zakura_test::init();
 
@@ -145,6 +153,8 @@ fn reuse_script_verifier_pass_fail() -> Result<()> {
 }
 
 #[test]
+// kogany: Zcash Mainnet fixtures (Zcash-signed transactions, the NU5 height); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn reuse_script_verifier_fail_pass() -> Result<()> {
     let _init_guard = zakura_test::init();
 
@@ -208,6 +218,8 @@ fn reuse_script_verifier_fail_fail() -> Result<()> {
 }
 
 #[test]
+// kogany: Zcash Mainnet fixtures (Zcash-signed transactions, the NU5 height); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn p2sh() -> Result<()> {
     let _init_guard = zakura_test::init();
 
@@ -964,6 +976,8 @@ fn sighash_divergence_from_bits_canonicalization() {
 ///
 /// [GHSA-jv4h-j224-23cc]: https://github.com/ZcashFoundation/zebra/security/advisories/GHSA-jv4h-j224-23cc
 #[test]
+// kogany: Zcash Mainnet fixtures (Zcash-signed transactions, the NU5 height); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn count_coinbase_legacy_sigops_includes_coinbase_script() -> Result<()> {
     let _init_guard = zakura_test::init();
 
@@ -1204,6 +1218,8 @@ fn p2sh_sigop_count_matches_zcashd_when_redeem_script_contains_disabled_opcode()
 ///
 /// [`GetP2SHSigOpCount()`]: https://github.com/zcash/zcash/blob/bad7f7eadbbb3466bebe3354266c7f69f607fcfd/src/main.cpp#L770-L772
 #[test]
+// kogany: Zcash Mainnet fixtures (Zcash-signed transactions, the NU5 height); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn p2sh_sigop_count_is_zero_for_non_p2sh_and_coinbase() -> Result<()> {
     let _init_guard = zakura_test::init();
 
@@ -1289,6 +1305,8 @@ fn p2sh_sigop_count_is_zero_for_non_p2sh_and_coinbase() -> Result<()> {
 ///
 /// [GHSA-jv4h-j224-23cc]: https://github.com/ZcashFoundation/zebra/security/advisories/GHSA-jv4h-j224-23cc
 #[test]
+// kogany: Zcash Mainnet fixtures (Zcash-signed transactions, the NU5 height); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn block_sigop_total_includes_coinbase_and_p2sh() -> Result<()> {
     let _init_guard = zakura_test::init();
 

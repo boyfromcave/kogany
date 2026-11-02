@@ -1411,10 +1411,10 @@
   "x-kogany": {
     "contracts": {
       "doc/vault-rpc-contract.json": {
-        "sha256": "86dd150a52d043211d19833b4b28bcd650b4afeb50c44e72d7003116ed1bf14f"
+        "sha256": "bd31d4259e4027d1c1170841a408c29819d214b9b0f10efec407d872f1f2954e"
       },
       "doc/yellowback-rpc-contract.json": {
-        "sha256": "766af89864f7f364293d2325057dd8c4ea368b43394ddbfad0f900015db3fe3c"
+        "sha256": "039de3182e7d27031764fc89d01986f34fde8e7bf0298fec06dd529fd4320c4b"
       }
     },
     "rpcversion": 8,
