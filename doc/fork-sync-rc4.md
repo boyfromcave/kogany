@@ -127,5 +127,5 @@ Trial (scratch, nothing committed): upstream Zakura `b44ec121d` with the patch b
 5. `qa/supply-chain/config.toml`: take upstream's rc.4 version (its Common exemptions move from
    `5.0.0-rc.2` to `5.0.0-rc.4`). kogany's copy carries no entry for the fork's git sources today;
    this chunk adds none.
-6. Gates: `cargo check --locked -p zakura --features ycash`, `cargo test --locked -p
+6. Gates: `cargo check --locked -p kogany --features ycash`, `cargo test --locked -p
    zakura-chain --lib`, `qa/kogany_audit.py all`, then the sync-zakura gates of rule 7.

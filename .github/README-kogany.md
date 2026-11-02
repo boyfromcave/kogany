@@ -106,7 +106,7 @@ re-runs its consumers.
 | | `audit workflows` | classification, placement, the trigger policy | yes | yes | 1 min |
 | | `audit cross-line (c)` | `qa/yellowback-cross-line.py --this-line kogany` against ycash6 at `YCASH6_REV` (and `testdata/yellowback/PIN` naming that commit) | yes | yes | 1 min |
 | | `audit vault-params (d)` | `cargo run -p zakura-chain --features ycash --example kogany_vault_params`, ycash6's `qa/yellowback-vault-params.py extract` at `YCASH6_REV`, `qa/kogany_vault_params.py compare` | yes | yes | 15 / 5 min |
-| `kogany-build` | `check (ycash feature off)`, `check (… on)` | `cargo check -p zakura --all-targets` | yes | each | 25 / 8 min |
+| `kogany-build` | `check (ycash feature off)`, `check (… on)` | `cargo check -p kogany --all-targets` | yes | each | 25 / 8 min |
 | | `clippy kogany-pure`, `kogany-rpc`, `zakura-chain`, `zakura-consensus`, `zakura-state`, `zakura-rpc-network`, `zakurad` | `cargo clippy --all-targets -D warnings`, ycash feature on (feature off is `lint.yml`'s) | yes | each | 5–35 / 3–10 min |
 | | `rustfmt (kogany crates)` | `cargo fmt --check` over `kogany-*` | yes | yes | 1 min |
 | `kogany-tests` | `kogany crates (dev / release / ci-tests)` | `kogany-pq`, `kogany-vault`, `kogany-yellowback` | yes | each | 5 / 2 min |
@@ -145,7 +145,7 @@ What kogany publishes and consumes (the workspace's `docs/plans/kogany/ci-design
   one), on dispatch, and called by `kogany-client-legs.yml` and `kogany-mixed.yml`. Artifact
   `koganyd-bin` holding `koganyd-bin.tgz`: `koganyd` and `koganyd-bin.json` (`repository`,
   `commit`, `binary`, `features: ["ycash"]`, `profile: "dev"`, `runner`, `librocksdb`, `rustc`,
-  `producer`), built by `cargo build --locked -p zakura --bin koganyd --features ycash` on
+  `producer`), built by `cargo build --locked -p kogany --bin koganyd --features ycash` on
   ubuntu-24.04 (it links the runner's librocksdb: run it on ubuntu-24.04 with `librocksdb-dev`).
   Retention 30 days. Consumers (ycash6's `zakurad` job, yolo's kogany entry) search every
   workflow's push, schedule or dispatch runs at their pinned kogany commit and fall back to a

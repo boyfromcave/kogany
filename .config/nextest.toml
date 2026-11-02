@@ -63,7 +63,7 @@ retries = 2
 # sleeps and timeouts, so they flake under the same load conditions. The override above
 # only matches `zakura-network`, so retry this package's driver tests as well.
 [[profile.all-tests.overrides]]
-filter = 'package(zakura) and test(~zakura_header_sync_driver_tests)'
+filter = 'package(kogany) and test(~zakura_header_sync_driver_tests)'
 retries = 2
 
 # --- Full Tests profile ---
@@ -85,7 +85,7 @@ retries = 2
 # The `zakura` binary's header/block-sync driver tests flake under the same load (see the
 # matching `all-tests` override above).
 [[profile.full-tests.overrides]]
-filter = 'package(zakura) and test(~zakura_header_sync_driver_tests)'
+filter = 'package(kogany) and test(~zakura_header_sync_driver_tests)'
 retries = 2
 
 # --- Individual Test Profiles ---
@@ -96,19 +96,19 @@ default-filter = 'test(check_no_git_dependencies)'
 [profile.zakura-config]
 test-threads = 1
 failure-output = "immediate"
-default-filter = 'package(zakura) and test(=config_tests)'
+default-filter = 'package(kogany) and test(=config_tests)'
 
 [profile.zakura-network-dependent]
 test-threads = 1
 retries = 2
 slow-timeout = { period = "5m", terminate-after = 1 }
 failure-output = "immediate"
-default-filter = 'package(zakura) and test(=restart_stop_at_height)'
+default-filter = 'package(kogany) and test(=restart_stop_at_height)'
 
 [profile.zakura-pruned-storage]
 slow-timeout = { period = "15m", terminate-after = 1 }
 failure-output = "immediate"
-default-filter = 'package(zakura) and (test(=pruned_storage_mode_prunes_during_regtest_sync) or test(=pruned_checkpoint_sync_mines_without_transparent_indexes))'
+default-filter = 'package(kogany) and (test(=pruned_storage_mode_prunes_during_regtest_sync) or test(=pruned_checkpoint_sync_mines_without_transparent_indexes))'
 
 [profile.zakura-integration]
 fail-fast = false
@@ -128,17 +128,17 @@ default-filter = 'package(zakura-network) and test(~zakura::testkit::blocksync_f
 test-threads = 1
 slow-timeout = { period = "15m", terminate-after = 1 }
 failure-output = "immediate"
-default-filter = 'package(zakura) and test(=sync_checkpoints_local)'
+default-filter = 'package(kogany) and test(=sync_checkpoints_local)'
 
 [profile.sync-full-mainnet]
 slow-timeout = { period = "30000m", terminate-after = 1 }
 success-output = "immediate"
-default-filter = 'package(zakura) and test(=sync_full_mainnet)'
+default-filter = 'package(kogany) and test(=sync_full_mainnet)'
 
 [profile.sync-full-testnet]
 slow-timeout = { period = "1500m", terminate-after = 1 }
 success-output = "immediate"
-default-filter = 'package(zakura) and test(=sync_full_testnet)'
+default-filter = 'package(kogany) and test(=sync_full_testnet)'
 
 # kogany W1-Y8: the Ycash network-sync gate. Run with `--features ycash`, where `Mainnet` is Ycash
 # mainnet and the default testnet the re-forked Ycash testnet, and with
@@ -147,77 +147,77 @@ default-filter = 'package(zakura) and test(=sync_full_testnet)'
 [profile.ycash-sync]
 slow-timeout = { period = "30000m", terminate-after = 1 }
 success-output = "immediate"
-default-filter = 'package(zakura) and (test(=sync_full_mainnet) or test(=sync_full_testnet))'
+default-filter = 'package(kogany) and (test(=sync_full_mainnet) or test(=sync_full_testnet))'
 
 [profile.sync-to-mandatory-checkpoint-mainnet]
 slow-timeout = { period = "1500m", terminate-after = 1 }
 success-output = "immediate"
-default-filter = 'package(zakura) and test(=sync_to_mandatory_checkpoint_mainnet)'
+default-filter = 'package(kogany) and test(=sync_to_mandatory_checkpoint_mainnet)'
 
 [profile.sync-to-mandatory-checkpoint-testnet]
 slow-timeout = { period = "1500m", terminate-after = 1 }
 success-output = "immediate"
-default-filter = 'package(zakura) and test(=sync_to_mandatory_checkpoint_testnet)'
+default-filter = 'package(kogany) and test(=sync_to_mandatory_checkpoint_testnet)'
 
 [profile.sync-update-mainnet]
 slow-timeout = { period = "30m", terminate-after = 2 }
 success-output = "immediate"
-default-filter = 'package(zakura) and test(=sync_update_mainnet)'
+default-filter = 'package(kogany) and test(=sync_update_mainnet)'
 
 [profile.sync-past-mandatory-checkpoint-mainnet]
 slow-timeout = { period = "60m", terminate-after = 2 }
-default-filter = 'package(zakura) and test(=sync_past_mandatory_checkpoint_mainnet)'
+default-filter = 'package(kogany) and test(=sync_past_mandatory_checkpoint_mainnet)'
 
 [profile.sync-past-mandatory-checkpoint-testnet]
 slow-timeout = { period = "60m", terminate-after = 2 }
-default-filter = 'package(zakura) and test(=sync_past_mandatory_checkpoint_testnet)'
+default-filter = 'package(kogany) and test(=sync_past_mandatory_checkpoint_testnet)'
 
 [profile.generate-checkpoints-mainnet]
 slow-timeout = { period = "90m", terminate-after = 1 }
 success-output = "immediate"
-default-filter = 'package(zakura) and test(=generate_checkpoints_mainnet)'
+default-filter = 'package(kogany) and test(=generate_checkpoints_mainnet)'
 
 [profile.generate-checkpoints-testnet]
 slow-timeout = { period = "90m", terminate-after = 1 }
 success-output = "immediate"
-default-filter = 'package(zakura) and test(=generate_checkpoints_testnet)'
+default-filter = 'package(kogany) and test(=generate_checkpoints_testnet)'
 
 [profile.rpc-get-block-template]
 slow-timeout = { period = "30m", terminate-after = 2 }
-default-filter = 'package(zakura) and test(=rpc_get_block_template)'
+default-filter = 'package(kogany) and test(=rpc_get_block_template)'
 
 [profile.rpc-submit-block]
 slow-timeout = { period = "30m", terminate-after = 2 }
-default-filter = 'package(zakura) and test(=rpc_submit_block)'
+default-filter = 'package(kogany) and test(=rpc_submit_block)'
 
 [profile.indexer-has-spending-transaction-ids]
 slow-timeout = { period = "30m", terminate-after = 2 }
-default-filter = 'package(zakura) and test(=has_spending_transaction_ids)'
+default-filter = 'package(kogany) and test(=has_spending_transaction_ids)'
 
 [profile.rpc-z-getsubtreesbyindex-snapshot]
 slow-timeout = { period = "30m", terminate-after = 2 }
-default-filter = 'package(zakura) and test(=fully_synced_rpc_z_getsubtreesbyindex_snapshot_test)'
+default-filter = 'package(kogany) and test(=fully_synced_rpc_z_getsubtreesbyindex_snapshot_test)'
 
 [profile.zcashd-compat-integration]
 # Run zcashd-compat tests one at a time to avoid port conflicts and resource exhaustion.
 test-threads = 1
 slow-timeout = { period = "15m", terminate-after = 2 }
 failure-output = "immediate"
-default-filter = 'package(zakura) and test(~zcashd_compat)'
+default-filter = 'package(kogany) and test(~zcashd_compat)'
 
 [profile.zcashd-compat-nu7]
 # Only the NU7 activation tests, on regtest.
 test-threads = 1
 slow-timeout = { period = "15m", terminate-after = 2 }
 failure-output = "immediate"
-default-filter = 'package(zakura) and test(~zcashd_compat_nu7)'
+default-filter = 'package(kogany) and test(~zcashd_compat_nu7)'
 
 [profile.zcashd-compat-soak]
 # Long-running local soak for the reorg churn stress test.
 test-threads = 1
 slow-timeout = { period = "4h", terminate-after = 1 }
 failure-output = "immediate"
-default-filter = 'package(zakura) and test(=zcashd_compat_reorg_churn)'
+default-filter = 'package(kogany) and test(=zcashd_compat_reorg_churn)'
 
 [profile.zcashd-compat-external]
 # External mode: connect to pre-running mainnet/testnet zakurad + zcashd.
@@ -227,17 +227,17 @@ default-filter = 'package(zakura) and test(=zcashd_compat_reorg_churn)'
 test-threads = 1
 slow-timeout = { period = "5m", terminate-after = 2 }
 failure-output = "immediate"
-default-filter = 'package(zakura) and test(~zcashd_compat)'
+default-filter = 'package(kogany) and test(~zcashd_compat)'
 
 # kogany (plan docs/plans/kogany/kogany-yellowback-plan.md W4-e, §5 leg kogany-regtest): Vault
 # activation, a vault built from the pinned vector keys and its set-signed spend through
 # sendrawtransaction, invalidateblock/reconsiderblock and a restart, each on a running koganyd on a
 # Ycash regtest. The test binary is empty without the feature, so run it as
-# `cargo nextest run --profile kogany-regtest -p zakura --features ycash`.
+# `cargo nextest run --profile kogany-regtest -p kogany --features ycash`.
 [profile.kogany-regtest]
 failure-output = "immediate"
 slow-timeout = { period = "5m", terminate-after = 2 }
-default-filter = 'package(zakura) and binary(kogany_regtest)'
+default-filter = 'package(kogany) and binary(kogany_regtest)'
 
 # kogany (plan §5; .github/workflows/kogany-tests.yml `ycash`): the ycash-feature subset of one
 # crate, run as `cargo nextest run --profile kogany-ycash -p <crate> --features <crate>/ycash`. It

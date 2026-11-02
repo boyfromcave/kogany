@@ -135,7 +135,7 @@ preparation owns them.
 
 ## Release assembly
 
-After the `zakura` package version is bumped on the release branch, run:
+After the `kogany` package version is bumped on the release branch, run:
 
 ```sh
 make prepare-release-changelog RELEASE_TAG=vX.Y.Z

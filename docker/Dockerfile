@@ -102,7 +102,7 @@ COPY --link --chown=${UID}:${GID} ./ ${HOME}
 # This also copies the necessary binaries to /usr/local/bin.
 RUN [ -n "${SHORT_SHA}" ] && export SHORT_SHA="${SHORT_SHA}" || true; \
     case ",${FEATURES// /,}," in *,ycash,*) NODE_BIN=koganyd ;; *) NODE_BIN=zakurad ;; esac; \
-    cargo build --locked --release --features "${FEATURES}" --package zakura --bin "${NODE_BIN}" --bin zakura-rollback-state --bin zakura-prune-state && \
+    cargo build --locked --release --features "${FEATURES}" --package kogany --bin "${NODE_BIN}" --bin zakura-rollback-state --bin zakura-prune-state && \
     cargo nextest run --locked --release --no-run --features "${FEATURES}" && \
     # Copy binaries to standard location
     cp "${CARGO_TARGET_DIR}/release/${NODE_BIN}" /usr/local/bin && \
@@ -178,7 +178,7 @@ RUN --mount=type=bind,source=crates/xtask,target=crates/xtask \
     [ -n "${SHORT_SHA}" ] && export SHORT_SHA="${SHORT_SHA}" || true; \
     if [ -n "${CARGO_BUILD_JOBS}" ]; then export CARGO_BUILD_JOBS; else unset CARGO_BUILD_JOBS; fi; \
     case ",${FEATURES// /,}," in *,ycash,*) NODE_BIN=koganyd ;; *) NODE_BIN=zakurad ;; esac; \
-    cargo build --locked --release --features "${FEATURES}" --package zakura --bin "${NODE_BIN}" --bin zakura-rollback-state --bin zakura-prune-state && \
+    cargo build --locked --release --features "${FEATURES}" --package kogany --bin "${NODE_BIN}" --bin zakura-rollback-state --bin zakura-prune-state && \
     mkdir -p /opt/node-bin && \
     cp "${CARGO_TARGET_DIR}/release/${NODE_BIN}" /opt/node-bin/ && \
     cp ${CARGO_TARGET_DIR}/release/zakura-rollback-state /usr/local/bin && \

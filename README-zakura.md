@@ -116,7 +116,7 @@ Standard x86-64 builds enable Pasta field assembly through the default
 `RUSTFLAGS` is not needed:
 
 ```sh
-cargo build --locked --release --package zakura
+cargo build --locked --release --package kogany
 ```
 
 This selects assembly at build time, with no CPU detection in arithmetic calls.
@@ -127,7 +127,7 @@ use the same default. AArch64 assembly selection is unchanged.
 For an older x86-64 CPU, enable the `portable` override:
 
 ```sh
-cargo build --locked --release --package zakura --features portable
+cargo build --locked --release --package kogany --features portable
 ```
 
 The `portable` feature wins when both Cargo features are enabled, including

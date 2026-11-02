@@ -128,15 +128,15 @@ Choose a release level for `zakurad`. Release levels are based on user-visible c
 
 **This step is mandatory for every release, including release candidates.**
 Release binaries are built without `.git`, so `zakurad --version` reports the
-`zakura` package version, not the tag — v1.0.0-rc1 was tagged without this bump
+`kogany` package version, not the tag — v1.0.0-rc1 was tagged without this bump
 and its binaries self-report `1.0.0-rc0`. The `release-binaries.yml` workflow
 refuses to build or publish assets for a tag that does not match the package
 version.
 
-- [ ] Bump the `zakura` package version to the release version:
+- [ ] Bump the `kogany` package version to the release version:
 
 ```sh
-cargo release version --verbose --execute --allow-branch '*' -p zakura patch # [ major | minor ]
+cargo release version --verbose --execute --allow-branch '*' -p kogany patch # [ major | minor ]
 ```
 
 The preparation workflow rejects a requested tag below the conservative
@@ -222,14 +222,14 @@ Check that the release will work:
 ```sh
 cargo release version --verbose --execute --allow-branch '*' -p <crate> patch # [ major | minor ]
 # zakura only
-cargo release replace --verbose --execute --allow-branch '*' -p zakura
+cargo release replace --verbose --execute --allow-branch '*' -p kogany
 ```
 
 - [ ] Commit and push the above version changes to the release branch.
 
 ## Assemble and Verify the Change Log
 
-- [ ] Assemble the fragments after the `zakura` package version bump is final:
+- [ ] Assemble the fragments after the `kogany` package version bump is final:
 
 ```sh
 make prepare-release-changelog RELEASE_TAG=v<version>
@@ -303,7 +303,7 @@ is a manual release judgment.
 Manual fallback: run the
 [Create release workflow](https://github.com/zakura-core/zakura/actions/workflows/create-release.yml)
 from `main`, entering the exact version tag, for example `v1.0.0-rc2`.
-The workflow verifies that the tag matches the `zakura` package version,
+The workflow verifies that the tag matches the `kogany` package version,
 then builds and verifies the assets without creating a tag.
 
 - [ ] Wait for the build and no-push Docker checks to pass, then approve the

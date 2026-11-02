@@ -459,7 +459,7 @@ def build_commit(root: Path, sha: str, *, force: bool = False, exporter: bool = 
     run(["git", "worktree", "add", "--detach", str(work), sha], cwd=root)
     try:
         package_args = (["-p", "zakura-utils", "--features", "zakura-checkpoints-offline",
-                         "--bin", "zakura-checkpoints"] if exporter else ["-p", "zakura"])
+                         "--bin", "zakura-checkpoints"] if exporter else ["-p", "kogany"])
         if features:
             package_args += ["--features", ",".join(sorted(features))]
         print(f"[build] {binary} ({sha[:9]}) ...")

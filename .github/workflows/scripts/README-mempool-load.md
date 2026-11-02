@@ -33,7 +33,7 @@ the blocks that let the workload drain, and `prometheus` exposes the mempool
 backpressure counters, which exist nowhere else.
 
 ```bash
-cargo build --release --features internal-miner,prometheus --package zakura --bin zakurad
+cargo build --release --features internal-miner,prometheus --package kogany --bin zakurad
 
 # Kresko builds against the zakura crates directly; no patch needed.
 git clone https://github.com/valargroup/kresko /tmp/kresko

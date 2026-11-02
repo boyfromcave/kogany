@@ -72,7 +72,7 @@ class BuildCacheTests(unittest.TestCase):
                 self.assertEqual(deploy.build_commit(root, sha), target)
 
             self.assertEqual(target.read_text(), "rebuilt")
-            self.assertIn(["cargo", "build", "--release", "--locked", "-p", "zakura"], calls)
+            self.assertIn(["cargo", "build", "--release", "--locked", "-p", "kogany"], calls)
 
     def test_force_rebuild_skips_cached_binary_check(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -126,7 +126,7 @@ class BuildCacheTests(unittest.TestCase):
             self.assertEqual(built, cache_dir / f"zakurad-{sha}-internal-miner")
             self.assertEqual(built.read_text(), "miner")
             self.assertEqual((cache_dir / f"zakurad-{sha}").read_text(), "stock")
-            self.assertIn(["cargo", "build", "--release", "--locked", "-p", "zakura",
+            self.assertIn(["cargo", "build", "--release", "--locked", "-p", "kogany",
                            "--features", "internal-miner"], calls)
 
     def test_prune_cached_binaries_keeps_current_and_recent(self):
