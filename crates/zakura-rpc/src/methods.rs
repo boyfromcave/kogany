@@ -2537,6 +2537,16 @@ where
             }
 
             let tx_ids_response = futs.next().await.expect("`futs` should not be empty");
+            // Ycash: a pruned body is ycashd's pruned refusal at every verbosity.
+            #[cfg(feature = "ycash")]
+            if matches!(
+                tx_ids_response,
+                Ok(zakura_state::ReadResponse::TransactionIdsForBlock(None))
+                    | Ok(zakura_state::ReadResponse::BlockAndSize(None))
+            ) && types::ycash::block_body_pruned(self.read_state.clone(), hash_or_height).await
+            {
+                return Err(types::ycash::PRUNED_BLOCK).map_error(ErrorCode::InternalError);
+            }
             let (tx, size): (Vec<_>, Option<usize>) = match tx_ids_response? {
                 zakura_state::ReadResponse::TransactionIdsForBlock(tx_ids) => (
                     tx_ids
@@ -2547,13 +2557,6 @@ where
                     None,
                 ),
                 zakura_state::ReadResponse::BlockAndSize(block_and_size) => {
-                    #[cfg(feature = "ycash")]
-                    if block_and_size.is_none()
-                        && types::ycash::block_body_pruned(self.read_state.clone(), hash_or_height)
-                            .await
-                    {
-                        return Err(types::ycash::PRUNED_BLOCK).map_error(ErrorCode::InternalError);
-                    }
                     let (block, size) = block_and_size.ok_or_misc_error("Block not found")?;
                     let block_time = block.header.time;
                     let transactions = block

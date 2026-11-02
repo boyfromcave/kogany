@@ -541,11 +541,7 @@ where
     /// whose transaction a pruned node no longer stores is [`YedError::pruned`], not the
     /// index-only row (`carrierVin` -1, no reference height), which would read as a different
     /// answer.
-    async fn tx_info(
-        &self,
-        s: &YedSnapshot,
-        txid: &Hash32,
-    ) -> Result<Option<TxInfoRow>, YedError> {
+    async fn tx_info(&self, s: &YedSnapshot, txid: &Hash32) -> Result<Option<TxInfoRow>, YedError> {
         let tx = match self
             .read_state
             .clone()
@@ -847,12 +843,8 @@ mod pruned_tests {
         header_height: u32,
     ) -> LiveYedState<
         NoChainTip,
-        impl Service<
-                ReadRequest,
-                Response = ReadResponse,
-                Error = BoxError,
-                Future = impl Send,
-            > + Clone
+        impl Service<ReadRequest, Response = ReadResponse, Error = BoxError, Future = impl Send>
+            + Clone
             + Send
             + Sync
             + 'static,
@@ -902,7 +894,8 @@ mod pruned_tests {
             Err(YedError::pruned())
         );
         assert_eq!(
-            s.block(HashOrHeight::Hash(block::Hash([8; 32])), true).await,
+            s.block(HashOrHeight::Hash(block::Hash([8; 32])), true)
+                .await,
             Ok(None)
         );
         assert!(s.body_pruned_at(999).await.unwrap());

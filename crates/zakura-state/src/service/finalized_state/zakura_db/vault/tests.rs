@@ -720,9 +720,17 @@ fn pruned_reorg_at_the_retention_edge_equals_archive_and_ycash6() {
 
             // The deepest reorg: the fork point is the finalized tip.
             let edge = fx.blocks[split].block.hash();
-            nfs.invalidate_block(edge).expect("the edge block is non-finalized");
-            assert!(nfs.best_chain().is_none(), "{name}: back to the finalized tip");
-            assert_eq!(tip_hash(&nfs), at_finalized, "{name}: the state at the fork point");
+            nfs.invalidate_block(edge)
+                .expect("the edge block is non-finalized");
+            assert!(
+                nfs.best_chain().is_none(),
+                "{name}: back to the finalized tip"
+            );
+            assert_eq!(
+                tip_hash(&nfs),
+                at_finalized,
+                "{name}: the state at the fork point"
+            );
             nfs.reconsider_block(edge, &state.db)
                 .expect("the edge block is reconsidered");
             assert_eq!(tip_hash(&nfs), at_tip, "{name}: forward again");
@@ -731,7 +739,12 @@ fn pruned_reorg_at_the_retention_edge_equals_archive_and_ycash6() {
             nfs.invalidate_block(fx.blocks[mid].block.hash())
                 .expect("a middle block is non-finalized");
             if let Some(w) = want(mid - 1) {
-                assert_eq!(tip_hash(&nfs), w, "{name}: after popping to {:?}", fx.blocks[mid - 1].height);
+                assert_eq!(
+                    tip_hash(&nfs),
+                    w,
+                    "{name}: after popping to {:?}",
+                    fx.blocks[mid - 1].height
+                );
             }
             nfs.reconsider_block(fx.blocks[mid].block.hash(), &state.db)
                 .expect("the middle block is reconsidered");
@@ -747,10 +760,7 @@ fn pruned_reorg_at_the_retention_edge_equals_archive_and_ycash6() {
             let end = hex(&finalized_vault_snapshot(&state.db).state_hash());
             assert_eq!(end, at_tip, "{name}: finalizing keeps the tip's state");
             assert_eq!(Some(end), fx.blocks.last().unwrap().statehash.clone());
-            let body_at_activation = state
-                .db
-                .block(fx.params.activation_height.into())
-                .is_some();
+            let body_at_activation = state.db.block(fx.params.activation_height.into()).is_some();
             (
                 state.db.lowest_retained_height(),
                 body_at_activation,
@@ -776,7 +786,10 @@ fn pruned_reorg_at_the_retention_edge_equals_archive_and_ycash6() {
             finalized_tip.0 - RETENTION + 1 > fx.params.activation_height.0,
             "{name}: the edge reorg's fork point is above pruned Vault-epoch blocks"
         );
-        assert!(!pruned_body, "{name}: the activation block's body was pruned");
+        assert!(
+            !pruned_body,
+            "{name}: the activation block's body was pruned"
+        );
         assert_eq!(
             pruned_entries, archive_entries,
             "{name}: the pruned database holds the archive's vault state"

@@ -86,7 +86,11 @@ pub trait YedReadState: Send + Sync + 'static {
     /// `yed_getnotice`'s lookup of the vault `txid:0` in `snapshot`. The default reads the index
     /// alone; a node that can read blocks names the notice transaction, and answers
     /// [`YedError::pruned`] when the block at the notice's height was pruned.
-    async fn notice(&self, snapshot: &YedSnapshot, txid: &Hash32) -> Result<NoticeLookup, YedError> {
+    async fn notice(
+        &self,
+        snapshot: &YedSnapshot,
+        txid: &Hash32,
+    ) -> Result<NoticeLookup, YedError> {
         Ok(snapshot.index.notice(txid))
     }
 
@@ -129,7 +133,11 @@ impl<S: YedReadState + ?Sized> YedReadState for Arc<S> {
     ) -> Result<Option<TxInfoRow>, YedError> {
         (**self).tx_info(snapshot, txid).await
     }
-    async fn notice(&self, snapshot: &YedSnapshot, txid: &Hash32) -> Result<NoticeLookup, YedError> {
+    async fn notice(
+        &self,
+        snapshot: &YedSnapshot,
+        txid: &Hash32,
+    ) -> Result<NoticeLookup, YedError> {
         (**self).notice(snapshot, txid).await
     }
     async fn set_audit(&self) -> (Vec<String>, Vec<SetAudit>) {
