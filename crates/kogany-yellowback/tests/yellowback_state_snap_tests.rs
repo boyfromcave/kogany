@@ -790,16 +790,13 @@ fn mempoolcheck_bench() {
     let t0 = std::time::Instant::now();
     let ev = evaluate_block(&f.state, &f.p, &block, h, &fake_hash(h), SUBSIDY, None);
     let elapsed = t0.elapsed().as_micros();
-    println!(
-        "EvaluateBlock over {} transactions ({bytes} bytes): {elapsed} us",
-        block.len()
-    );
     assert!(!ev.block_invalid);
     assert!(ev.txlogs.is_empty()); // nothing created or spent: no TxLog entry (N7)
     let budget = 200_000 * bench_budget_scale();
     assert!(
         elapsed < budget,
-        "EvaluateBlock took {elapsed} us (budget {budget} us)"
+        "EvaluateBlock over {} transactions ({bytes} bytes) took {elapsed} us (budget {budget} us)",
+        block.len()
     );
     // The mempool half: plain transactions (no payload, no YED input or output) are irrelevant.
     let plain: Vec<VaultTx> = (0..10_000)
