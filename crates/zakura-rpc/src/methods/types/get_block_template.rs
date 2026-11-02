@@ -7,6 +7,10 @@ pub mod parameters;
 pub mod proposal;
 pub mod zip317;
 
+// kogany W8: the Ycash coinbase tag, health refusal, sigops and template filter.
+#[cfg(feature = "ycash")]
+pub mod ycash;
+
 #[cfg(test)]
 mod tests;
 
@@ -456,6 +460,24 @@ pub struct BlockTemplateResponse {
     #[serde(rename = "submitold")]
     #[getset(get_copy = "pub")]
     pub(crate) submit_old: Option<bool>,
+
+    /// Ycash (W8-b): the coinbase flags (the Yellowback tag), sent while Yellowback is live
+    /// (`ycash6 src/rpc/mining.cpp:830-832`).
+    #[cfg(feature = "ycash")]
+    #[serde(
+        rename = "coinbaseaux",
+        skip_serializing_if = "Option::is_none",
+        default
+    )]
+    #[new(default)]
+    pub(crate) coinbase_aux: Option<ycash::CoinbaseAux>,
+
+    /// Ycash (W8-b): the template's Yellowback tag and miner status, sent while Yellowback is
+    /// live (`ycash6 src/rpc/mining.cpp:847`).
+    #[cfg(feature = "ycash")]
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    #[new(default)]
+    pub(crate) yellowback: Option<ycash::YellowbackTemplateInfo>,
 }
 
 impl fmt::Debug for BlockTemplateResponse {
@@ -586,6 +608,17 @@ impl BlockTemplateResponse {
             )?,
         };
 
+        // Ycash (W8-b): the coinbase fields while Yellowback is live, read back from the coinbase.
+        #[cfg(feature = "ycash")]
+        let ycash_fields = miner_params.yellowback().map(|miner| {
+            ycash::template_fields(
+                net,
+                height,
+                &ycash::coinbase_script_sig(&coinbase_txn).unwrap_or_default(),
+                miner,
+            )
+        });
+
         let default_roots = DefaultRoots::from_coinbase(
             net,
             height,
@@ -607,6 +640,14 @@ impl BlockTemplateResponse {
         // Convert default values
         let capabilities: Vec<String> = Self::all_capabilities();
         let mutable: Vec<String> = MUTABLE_FIELD.iter().map(ToString::to_string).collect();
+        #[cfg(feature = "ycash")]
+        let mutable = {
+            let mut mutable = mutable;
+            if ycash_fields.is_some() {
+                mutable.push(ycash::MUTABLE_COINBASE_APPEND.to_string());
+            }
+            mutable
+        };
 
         tracing::debug!(
             selected_txs = ?mempool_txs
@@ -656,6 +697,12 @@ impl BlockTemplateResponse {
             work_id: new_work_id(),
 
             submit_old,
+
+            #[cfg(feature = "ycash")]
+            coinbase_aux: ycash_fields.as_ref().map(|(aux, _)| aux.clone()),
+
+            #[cfg(feature = "ycash")]
+            yellowback: ycash_fields.map(|(_, info)| info),
         })
     }
 }
@@ -700,6 +747,11 @@ pub struct MinerParams {
     ///
     /// Applies only if [`Self::addr`] contains a shielded component.
     memo: Option<MemoBytes>,
+
+    /// Ycash (W8-b): the miner's Yellowback state for this template, `None` while Yellowback is
+    /// not live. Its tag is appended to the coinbase input script.
+    #[cfg(feature = "ycash")]
+    yellowback: Option<ycash::YellowbackMiner>,
 }
 
 /// Builds the coinbase input data for a block Zakura constructs.
@@ -741,7 +793,13 @@ impl MinerParams {
             .map(|memo| MemoBytes::from_bytes(memo.as_bytes()))
             .transpose()?;
 
-        Ok(Self { addr, data, memo })
+        Ok(Self {
+            addr,
+            data,
+            memo,
+            #[cfg(feature = "ycash")]
+            yellowback: None,
+        })
     }
 
     /// Returns the miner address.
@@ -757,6 +815,19 @@ impl MinerParams {
     /// Returns the miner memo.
     pub fn memo(&self) -> Option<&MemoBytes> {
         self.memo.as_ref()
+    }
+
+    /// Ycash (W8-b): the miner's Yellowback state, `None` while Yellowback is not live.
+    #[cfg(feature = "ycash")]
+    pub fn yellowback(&self) -> Option<&ycash::YellowbackMiner> {
+        self.yellowback.as_ref()
+    }
+
+    /// Ycash (W8-b): these parameters with the miner's Yellowback state for one template.
+    #[cfg(feature = "ycash")]
+    pub fn with_yellowback(mut self, yellowback: Option<ycash::YellowbackMiner>) -> Self {
+        self.yellowback = yellowback;
+        self
     }
 
     /// Randomizes the memo.
@@ -780,6 +851,8 @@ impl From<MinerAddress> for MinerParams {
             addr,
             data: None,
             memo: None,
+            #[cfg(feature = "ycash")]
+            yellowback: None,
         }
     }
 }
