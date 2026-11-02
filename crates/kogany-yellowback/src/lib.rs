@@ -16,6 +16,7 @@
 //! | [`codecs`] | `payload`, `script`, `address`, `tag` (+ `base58.cpp`, `MatchPQChannel`) | W5-b | done |
 //! | [`attest`] | `attest`, `bundle`; the attestor parts of `state`, `view`, `module` | W5-c | done |
 //! | [`state`] | `view`, `state`, `index` (`MempoolCheckInner`) | W5-d1/d2 | done |
+//! | [`module`] | `module`, `index.h` `LruSigCache` | W5-f | done |
 //!
 //! Every layer is pure: no chain, clock, network, configuration or floating point, and no
 //! dependency on the `zakura-*` crates (the hook chunks W5-e/f wire it into the node). Consensus
@@ -41,5 +42,6 @@
 pub mod attest;
 pub mod codecs;
 pub mod math;
+pub mod module;
 pub mod params;
 pub mod state;
