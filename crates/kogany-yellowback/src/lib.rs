@@ -14,7 +14,7 @@
 //! | [`math`] | `src/yellowback/math.h`, `src/arith_uint256.h` | W5-a | done |
 //! | [`params`] | `src/yellowback/params.{h,cpp}`, `src/amount.h` | W5-a | done |
 //! | [`codecs`] | `payload`, `script`, `address`, `tag` (+ `base58.cpp`, `MatchPQChannel`) | W5-b | done |
-//! | [`attest`] | `attest`, `bundle` | W5-c | stub |
+//! | [`attest`] | `attest`, `bundle`; the attestor parts of `state`, `view`, `module` | W5-c | done |
 //! | [`state`] | `view`, `state` | W5-d1/d2 | stub |
 //!
 //! Every layer is pure: no chain, clock, network, configuration or floating point, and no
