@@ -613,7 +613,17 @@ async fn json_rpc_requests() {
         ),
     ];
 
+    #[cfg(not(feature = "ycash"))]
     insta::assert_snapshot!(transcript(addr, &cases, None).await);
+    // kogany: on Ycash the regtest `tm` address does not validate and `getblocksubsidy` reports
+    // the founders' reward, so the Ycash transcript is its own snapshot (`@ycash`).
+    #[cfg(feature = "ycash")]
+    {
+        let transcript = transcript(addr, &cases, None).await;
+        insta::with_settings!({ snapshot_suffix => "ycash" }, {
+            insta::assert_snapshot!(transcript);
+        });
+    }
 }
 
 #[tokio::test]

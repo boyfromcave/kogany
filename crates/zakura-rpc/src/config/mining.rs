@@ -296,7 +296,11 @@ mod tests {
 
     #[test]
     fn miner_address_preserves_string_encoding_and_optional_defaults() {
+        #[cfg(not(feature = "ycash"))]
         let encoded = "t1bmMa1wJDFdbc2TiURQP5BbBz6jHjUBuHq";
+        // kogany: a Ycash Mainnet transparent address (a Zcash `t1` address does not parse).
+        #[cfg(feature = "ycash")]
+        let encoded = "s1WUAp94K9NPDh2S1GAYtWDRg7bzUSmZCNP";
         let config: Config = toml::from_str(&format!("miner_address = {encoded:?}")).unwrap();
         assert_eq!(config.miner_address.as_ref().unwrap().to_string(), encoded);
         let serialized = toml::to_string(&config).unwrap();
