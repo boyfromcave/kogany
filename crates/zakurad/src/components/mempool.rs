@@ -1172,7 +1172,11 @@ impl Service<Request> for Mempool {
                 if let Some(evictions) = self.tip_recheck.poll_evictions(cx, *last_seen_tip_hash) {
                     let evicted = storage.evict_after_tip_recheck(evictions);
                     if !evicted.is_empty() {
-                        tracing::debug!(?evicted, "evicted mempool transactions at the new tip");
+                        info!(
+                            transactions = evicted.len(),
+                            ?evicted,
+                            "evicted mempool transactions the new tip makes invalid"
+                        );
                         send_to_peers_ids.retain(|id| !evicted.contains(id));
                         invalidated_ids.extend(evicted);
                     }

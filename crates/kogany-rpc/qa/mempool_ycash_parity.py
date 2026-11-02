@@ -35,6 +35,17 @@ three policy modes, each a restart of both nodes:
   rules on dummy spends (the `s + p + 2` push count, the 9,000-byte scriptSig bound, the
   template selector shapes). A dummy spend at the boundary fails its script (reject-consensus
   on both) and one past it fails standardness first (reject-policy on both).
+- `tip` (W6-c): a third chain with the Vault upgrade at height 1 and ycashd's miner limited to
+  fully paid transactions (`-blockunpaidactionlimit=0`), for what happens to the mempool after
+  admission when the tip moves: admit, mine or invalidate on both nodes, compare the sets. A
+  low-fee transaction expiring at height E stays in both mempools at tip E and leaves both at
+  E + 1 (ycashd's `removeExpired`); two `SET_JOIN`s for the last seat of an open set are both
+  admitted, the block mines one, and the re-check at the new tip evicts the other on both nodes
+  (`vault::RecheckMempool`, `bad-vault-act-seats`); a BIP68 spend admitted for the next block
+  leaves both mempools when `invalidateblock` drops the tip below its lock (`removeForReorg`'s
+  `CheckSequenceLocks`, kogany's re-verification after the reset); and a spend failing only its
+  coin's `OP_CHECKLOCKTIMEVERIFY` is policy on both (ycashd's mempool retry drops
+  `STANDARD_NOT_MANDATORY_VERIFY_FLAGS`, CLTV included; W6-a finding F-4).
 
 Every mode also offers a P2PKH spend whose public key is pushed non-minimally: valid in a block,
 refused by `STANDARD_SCRIPT_VERIFY_FLAGS` (`MINIMALDATA`) in every mempool, regtest included.
@@ -137,16 +148,33 @@ ACCEPTED = [
      'unchanged (W6-a finding F-3): a transaction with a non-standard output and a failing script is '
      'reject-policy on ycashd, reject-consensus on kogany; moving the output rules into the verifier '
      'breaks upstream verifier tests whose mock outputs are non-standard', []),
-    ('open', 'CHECKLOCKTIMEVERIFY failures in the mempool',
+    ('ported', 'CHECKLOCKTIMEVERIFY failures in the mempool',
      'main.cpp ContextualCheckInputs: the retry drops STANDARD_NOT_MANDATORY_VERIFY_FLAGS, CLTV included, '
      'so a CLTV failure is non-mandatory-script-verify-flag (reject-policy)',
-     'CLTV is a consensus flag of every script check', 'unchanged (W6-a finding F-4): reject-consensus on '
-     'kogany; W6-c (the verifier\'s error scoring)', []),
+     'CLTV is a consensus flag of every script check',
+     'W6-c (W6-a finding F-4): vault_mempool::non_mandatory_script_failure retries the first failing input '
+     'with ScriptContext::with_mempool_mandatory_flags (no CLTV): TransactionError::NonMandatoryScriptFlag',
+     ['tip/cltv-fails']),
     ('open', 'absurd fee', 'rpc/rawtransaction.cpp:1346 fRejectAbsurdFee: maxTxFee 0.1 YEC unless allowhighfees',
      'allow_high_fees ignored (methods.rs send_raw_transaction)', 'unchanged: an RPC rule, W7-e', []),
-    ('open', 'expiry eviction at the tip', 'txmempool.cpp:785-805 removeExpired(h): expiry < h',
-     'storage.rs remove_expired: expiry <= tip', 'unchanged: ycashd keeps a transaction whose expiry is '
-     'the tip for one more block, though no block can mine it; W6-c (tip-recheck)', []),
+    ('ported', 'expiry eviction at the tip', 'txmempool.cpp:785-805 removeExpired(h): expiry < h',
+     'storage.rs remove_expired: expiry <= tip', 'W6-c: storage.rs remove_expired keeps a transaction whose '
+     'expiry is the tip for one more block (ycash); the template\'s FullTransactions leaves it out',
+     ['tip/expiry-at-tip/mempool-set', 'tip/expiry-past-tip/mempool-set']),
+    ('open', 'expiry at the tip across a reset', 'txmempool.cpp removeExpired(h) after a reorg: expiry < h',
+     'a Reset re-verifies every stored transaction for tip + 1 (retry_after_tip_reset)',
+     'unchanged (W6-c finding F-2): after a reorg, or several blocks between two mempool polls, kogany '
+     'refuses a stored transaction whose expiry is the new tip one block before ycashd drops it; no block '
+     'can mine it either way', []),
+    ('ported', 'the re-check after the tip grows', 'main.cpp ConnectTip: RemoveInvalidVaultSpends, '
+     'vault::RecheckMempool(tip + 1) (CheckTx and the template scripts at the new set state)',
+     'nothing re-checks a stored transaction on Grow (mempool.rs TipAction::Grow)',
+     'W6-c: mempool::tip_recheck re-verifies the vault-relevant transactions and sweeps the YED check; '
+     'the failures are evicted with their descendants',
+     ['tip/join-2/mempool-set', 'tip/join-after-block/mempool-set']),
+    ('ported', 'BIP68 eviction on a reorg', 'txmempool.cpp removeForReorg: CheckSequenceLocks at the new tip',
+     'no BIP68', 'W3-d + W6-c: a Reset re-verifies every transaction at the new height',
+     ['tip/bip68-admitted/mempool-set', 'tip/bip68-after-invalidate/mempool-set']),
     ('open', 'template selection of low-fee transactions', 'miner.cpp:304 -blockunpaidactionlimit SIZE_MAX',
      'zip317.rs BLOCK_UNPAID_ACTION_LIMIT 0 in getblocktemplate', 'unchanged: kogany accepts a default-fee '
      'spend but its own template may leave it out; W8 (mining)', []),
@@ -478,8 +506,16 @@ class Verdicts:
         return [r for r in self.rows if not r[6]]
 
 
-def mempool_point(chain, verdicts, label):
-    a, b = set(chain.y.ok('getrawmempool')), set(chain.z.ok('getrawmempool'))
+def mempool_point(chain, verdicts, label, timeout=30):
+    """`getrawmempool` set equality. kogany evicts what a new tip makes invalid in the
+    background (W6-c's re-check, as ycashd's `ConnectTip` does synchronously), so the sets are
+    compared until they agree or `timeout` seconds pass, as the mixed-line harness does."""
+    deadline = time.time() + timeout
+    while True:
+        a, b = set(chain.y.ok('getrawmempool')), set(chain.z.ok('getrawmempool'))
+        if a == b or time.time() > deadline:
+            break
+        time.sleep(0.25)
     ok = a == b
     verdicts.rows.append(('%s/mempool-set' % label, 'equal' if ok else 'differ', '', None,
                           sorted(a - b), sorted(b - a), ok, ''))
@@ -747,11 +783,89 @@ def cases_vault(chain, v):
     v.record('%s/vault_ownerspend' % mode, None, z.call('sendrawtransaction', raw)[1], ACCEPT)
 
 
+def cases_tip(chain, v):
+    """After admission, when the tip moves (W6-c): see the module documentation, mode `tip`."""
+    y, z = chain.y, chain.z
+    mode = 'tip'
+
+    # 1. Expiry: ycashd keeps a transaction whose expiry height is the tip, and drops it once the
+    #    tip passes it. A fee below the conventional one keeps it out of ycashd's blocks.
+    expiry = chain.tip() + 1 + 4      # not expiring soon (TX_EXPIRING_SOON_THRESHOLD = 3)
+    low = chain.build([], 400, expiry=expiry)   # 0 paid actions at ycashd's 500-zatoshi marginal fee
+    v.offer(chain, '%s/expiry-low-fee' % mode, low, ACCEPT)
+    mempool_point(chain, v, '%s/expiry-admitted' % mode)
+    # One block at a time, each seen by kogany's mempool as a `Grow`: a `Reset` (a reorg, or
+    # several blocks between two mempool polls) re-verifies every stored transaction for the next
+    # block, which refuses one whose expiry is the tip (finding W6-c/F-2, an open row).
+    while chain.tip() < expiry:
+        chain.mine()
+        chain.z.ok('getrawmempool')
+    mempool_point(chain, v, '%s/expiry-at-tip' % mode)
+    chain.mine()
+    mempool_point(chain, v, '%s/expiry-past-tip' % mode)
+
+    # 2. Two SET_JOINs for the one seat of an open set: both valid at the tip, so both are
+    #    admitted; the block takes one, and the re-check at the new tip evicts the other.
+    created = y.ok('set_create', {'seats': 1, 'unlockthreshold': 1, 'open': True})
+    offer_wallet_tx(chain, v, '%s/set_create' % mode, created['txid'])
+    chain.mine()
+    joins = []
+    for i in range(2):
+        joined = y.ok('set_join', created['setid'], 1, chain.tip() + 500)
+        if 'txid' not in joined:
+            raise base.RpcError('set_join did not complete: %r' % joined)
+        offer_wallet_tx(chain, v, '%s/join-%d' % (mode, i + 1), joined['txid'])
+        joins.append(joined['txid'])
+    mempool_point(chain, v, '%s/join-2' % mode)
+    chain.mine()
+    left = set(y.ok('getrawmempool')) & set(joins)
+    print('    after the block: ycashd keeps %d of the two joins' % len(left))
+    mempool_point(chain, v, '%s/join-after-block' % mode)
+
+    # 3. BIP68 across a reorg: a coin at H, an empty block H + 1, then a spend locked for 2
+    #    blocks (valid at H + 2, the next block); invalidating H + 1 makes the next block H + 1.
+    coin_hex = chain.build([(100000000, chain.change_script)], 20000)
+    coin_txid = y.ok('decoderawtransaction', coin_hex)['txid']
+    v.offer(chain, '%s/bip68-coin' % mode, coin_hex, ACCEPT)
+    chain.mine()
+    n, value = output_index(chain, coin_txid, chain.change_script)
+    chain.mine()       # H + 1, empty: invalidating it returns no transaction to either mempool
+    locked = chain.build([], 20000, sequence=2, coin=(coin_txid, n, value))
+    v.offer(chain, '%s/bip68-locked-2' % mode, locked, ACCEPT)
+    mempool_point(chain, v, '%s/bip68-admitted' % mode)
+    tip_hash = y.ok('getbestblockhash')
+    for node in (y, z):
+        node.ok('invalidateblock', tip_hash)
+    deadline = time.time() + 60
+    while z.ok('getbestblockhash') != y.ok('getbestblockhash'):
+        if time.time() > deadline:
+            raise base.RpcError('kogany did not follow the invalidation')
+        time.sleep(0.2)
+    time.sleep(2)      # kogany re-verifies its mempool after the reset
+    mempool_point(chain, v, '%s/bip68-after-invalidate' % mode)
+    for node in (y, z):
+        node.ok('reconsiderblock', tip_hash)
+    chain.catch_up()
+    mempool_point(chain, v, '%s/bip68-reconsidered' % mode)
+
+    # 4. A spend that fails only its coin's OP_CHECKLOCKTIMEVERIFY (W6-a F-4): policy on both.
+    cltv_script = push(bytes([0xf4, 0x01])) + bytes([0xb1, 0x75, 0x51])   # 500 CLTV DROP TRUE
+    cltv_hex = chain.build([(100000000, cltv_script)], 20000)
+    cltv_txid = y.ok('decoderawtransaction', cltv_hex)['txid']
+    v.offer(chain, '%s/cltv-coin' % mode, cltv_hex, ACCEPT)
+    chain.mine()
+    cn, cvalue = output_index(chain, cltv_txid, cltv_script)
+    v.offer(chain, '%s/cltv-fails' % mode, dummy_spend(chain, (cltv_txid, cn, cvalue), b'', lock_time=0),
+            REJECT_POLICY)
+    mempool_point(chain, v, mode)
+
+
 MODES = {
     'default': ([], []),
     'standard': (['-acceptnonstdtxn=0'], ['accept_non_standard = false']),
     'zip317': (['-txunpaidactionlimit=0'], ['tx_unpaid_action_limit = 0']),
     'vault': (['-acceptnonstdtxn=0'], ['accept_non_standard = false']),
+    'tip': (['-blockunpaidactionlimit=0'], []),
 }
 
 # The modes whose ycashd applies IsStandardTx / AreInputsStandard (`-acceptnonstdtxn=0`).
@@ -802,7 +916,7 @@ def run(args):
         miner = y.ok('getnewaddress')
         chain = Chain(y, z)
         first = True
-        for mode in [m for m in args.modes if m != 'vault']:
+        for mode in [m for m in args.modes if m not in ('vault', 'tip')]:
             yextra, zextra = MODES[mode]
             for k in list(procs):
                 base.stop(procs.pop(k))
@@ -834,6 +948,10 @@ def run(args):
             base.stop(procs.pop(k))
         if 'vault' in args.modes:
             run_vault(args, v, os.path.join(workdir, 'vault'), procs)
+        for k in list(procs):
+            base.stop(procs.pop(k))
+        if 'tip' in args.modes:
+            run_vault(args, v, os.path.join(workdir, 'tip'), procs, mode='tip')
     finally:
         for k in list(procs):
             base.stop(procs.pop(k))
@@ -842,13 +960,14 @@ def run(args):
     return v, workdir
 
 
-def run_vault(args, v, workdir, procs):
-    """The `vault` mode on its own chain: Vault at height 1 on both nodes, standardness on."""
+def run_vault(args, v, workdir, procs, mode='vault'):
+    """The `vault` mode on its own chain: Vault at height 1 on both nodes, standardness on; or
+    the `tip` mode (W6-c) on a third chain, Vault at height 1 and ycashd's regtest policy."""
     os.makedirs(workdir, exist_ok=True)
-    p = args.port_base + 30
+    p = args.port_base + (30 if mode == 'vault' else 60)
     y = base.Node('ycash6', p + 1, 'u:p')
     z = base.Node('kogany', p + 11)
-    yextra, zextra = MODES['vault']
+    yextra, zextra = MODES[mode]
     procs['y'] = start_ycashd(args.ycash6_bin, workdir, p, p + 1, None, [], vault=True)
     base.wait_up(y, procs['y'], 'ycashd')
     miner = y.ok('getnewaddress')
@@ -857,8 +976,8 @@ def run_vault(args, v, workdir, procs):
     base.wait_up(y, procs['y'], 'ycashd')
     procs['z'] = base.start_zakurad(args.zakurad, workdir, kogany_toml(workdir, p, miner, zextra, vault=True))
     base.wait_up(z, procs['z'], 'zakurad')
-    print('\n== mode vault: ycashd %s -nuparams=%s:1, kogany [mempool] %s, Vault = 1'
-          % (yextra, VAULT_BRANCH_ID, zextra))
+    print('\n== mode %s: ycashd %s -nuparams=%s:1, kogany [mempool] %s, Vault = 1'
+          % (mode, yextra, VAULT_BRANCH_ID, zextra))
     chain = Chain(y, z)
     chain.mine(1)
     chain.mine(200)
@@ -866,6 +985,12 @@ def run_vault(args, v, workdir, procs):
     raw = y.ok('getrawtransaction', y.ok('getblock', y.ok('getblockhash', 1), 1)['tx'][0], 0)
     chain.group = bytes.fromhex(raw)[4:8]
     chain.change_script = bytes.fromhex(y.ok('validateaddress', miner)['scriptPubKey'])
+    if mode == 'tip':
+        mempool_point(chain, v, 'tip/start')
+        cases_tip(chain, v)
+        chain.mine()
+        mempool_point(chain, v, 'tip/after-block')
+        return
     mempool_point(chain, v, 'vault/start')
     cases_common(chain, v, 'vault')
     mempool_point(chain, v, 'vault/common')
@@ -891,7 +1016,7 @@ def main(argv=None):
     ap.add_argument('--workdir', help='keep the datadirs here (default: a temporary directory)')
     ap.add_argument('--keep', action='store_true', help='keep the temporary directory')
     ap.add_argument('--port-base', type=int, default=28700)
-    ap.add_argument('--modes', default='default,standard,zip317,vault', help='comma-separated: ' + ', '.join(MODES))
+    ap.add_argument('--modes', default='default,standard,zip317,vault,tip', help='comma-separated: ' + ', '.join(MODES))
     ap.add_argument('--no-sapling', action='store_true', help='skip the z_sendmany cases')
     ap.add_argument('--json', help='write the verdict table here')
     args = ap.parse_args(argv)
