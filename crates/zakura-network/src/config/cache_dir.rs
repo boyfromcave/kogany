@@ -9,7 +9,14 @@ use zakura_chain::{
 
 /// The directory, relative to the user's home directory, where Zebra stores
 /// long-term network identity secrets.
+#[cfg(not(feature = "ycash"))]
 const DEFAULT_NETWORK_IDENTITY_DIR: &str = ".zakura";
+
+/// kogany: `~/.kogany`, never Zakura's `~/.zakura`
+/// (`zakura_chain::parameters::ycash::dirs::NETWORK_IDENTITY_DIR`).
+#[cfg(feature = "ycash")]
+const DEFAULT_NETWORK_IDENTITY_DIR: &str =
+    zakura_chain::parameters::ycash::dirs::NETWORK_IDENTITY_DIR;
 
 /// A cache directory config field.
 ///

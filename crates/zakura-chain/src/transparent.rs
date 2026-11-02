@@ -23,6 +23,8 @@ use crate::{
     transaction,
 };
 
+#[cfg(all(feature = "ycash", test))]
+pub(crate) use address::plain_pq_address_version;
 pub use address::Address;
 #[cfg(feature = "ycash")]
 pub use destination::{Destination, PqKeyId};

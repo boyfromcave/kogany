@@ -39,6 +39,16 @@ name = "zakurad"
 path = "src/bin/zakurad/main.rs"
 test = false
 
+# kogany: the Ycash node's binary (the Yellowback lead architect, 2026-11-02). The same entry point
+# as `zakurad`, built only with `--features ycash`; in that build the `zakurad` binary refuses to
+# run (`src/bin/zakurad/main.rs`), so a Ycash node never runs, or installs, under Zcash's name.
+# The package stays `zakura` so upstream syncs stay cheap.
+[[bin]]
+name = "koganyd"
+path = "src/bin/koganyd/main.rs"
+required-features = ["ycash"]
+test = false
+
 [[bin]]
 name = "zakura-prune-state"
 path = "src/bin/zakura-prune-state/main.rs"

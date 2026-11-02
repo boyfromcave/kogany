@@ -7,7 +7,7 @@
 on one chain with a real attestor set, three seated attestors, an armed attestation layer, a
 quoting pool and a mint.
 
-    python crates/kogany-rpc/qa/yed_live_rig.py --zakurad Z --ycashd Y --ycash6 TREE --dir D [--keep]
+    python crates/kogany-rpc/qa/yed_live_rig.py --koganyd Z --ycashd Y --ycash6 TREE --dir D [--keep]
 
 kogany is wallet-less (plan K-3), so the sidecar (`ycashd`, `connect=` kogany) holds the wallet and
 mines. The YED attestor set must exist before Yellowback starts (U-22): the sidecar first runs
@@ -340,7 +340,7 @@ class LiveRig:
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split('\n\n')[0])
-    ap.add_argument('--zakurad', required=True)
+    ap.add_argument('--koganyd', '--zakurad', dest='zakurad', required=True)
     ap.add_argument('--ycashd', required=True)
     ap.add_argument('--ycash6', required=True, help='a ycash6 tree (its qa/rpc-tests test framework)')
     ap.add_argument('--dir', required=True)

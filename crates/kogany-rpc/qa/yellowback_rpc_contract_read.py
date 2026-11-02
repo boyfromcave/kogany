@@ -20,7 +20,7 @@ provoked, and every OP_RETURN payload and raw transaction of the pinned golden c
 (`testdata/yellowback/yellowback_golden.json`) is decoded. The report ends with the contract
 cases that pass against the mock and those that need the real index (plan W5-e/W5-f).
 
-With `--live DIR --zakurad Z --ycashd Y` (plan W7-b's exit gate) it brings up a live regtest
+With `--live DIR --koganyd Z --ycashd Y` (plan W7-b's exit gate) it brings up a live regtest
 (`yed_live_rig.py`: kogany and a ycash6 sidecar on one chain, a real YED attestor set, three seated
 attestors, an ARMED layer, a quoting pool, an armed mint, a TX_PQPKH payment) and checks every
 node-context method on kogany against the contract AND against the sidecar's answer to the same
@@ -431,7 +431,7 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split('\n\n')[0])
     ap.add_argument('--url', help='kogany JSON-RPC URL, with credentials if any (mock / not-live modes)')
     ap.add_argument('--live', metavar='DIR', help='bring up the live regtest (yed_live_rig.py) in DIR and compare with ycash6')
-    ap.add_argument('--zakurad', help='--live: kogany zakurad (--features ycash)')
+    ap.add_argument('--koganyd', '--zakurad', dest='zakurad', help='--live: koganyd (--features ycash)')
     ap.add_argument('--ycashd', help='--live: ycash6 ycashd')
     ap.add_argument('--keep', action='store_true', help='--live: leave the nodes running')
     ap.add_argument('--ycash6', required=True, help='a ycash6 tree (its contract and checker)')

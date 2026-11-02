@@ -9,7 +9,7 @@
 //! - the protocol version table: ycashd's per-upgrade `nProtocolVersion` values and its
 //!   `MIN_PEER_PROTO_VERSION` floor of 270013, so a Zcash peer is refused at the handshake;
 //! - the version kogany advertises, ycash6's Vault-era 270200;
-//! - the user agent, `/kogany:<version>/`;
+//! - the user agent, `/koganyd:<version>/`;
 //! - the inventory filter: `MSG_WTX` (ZIP 239) is never sent and is refused on receipt, as
 //!   ycash6 pins `CINV_WTX_VERSION` to an unreachable sentinel;
 //! - the default seeds and listen port;
@@ -48,13 +48,13 @@ pub const CURRENT_PROTOCOL_VERSION: u32 = 270_200;
 /// `ycash6 src/chainparams.cpp:161`): kogany refuses to run past such an upgrade.
 const UNREACHABLE_PROTOCOL_VERSION: u32 = 0x7FFF_FFFF;
 
-/// The name kogany advertises in its BIP 14 user agent, `/kogany:<version>/`.
+/// The name kogany advertises in its BIP 14 user agent, `/koganyd:<version>/`.
 ///
 /// ycashd (`/YcashCpp:<version>/`, `ycash6 src/clientversion.cpp:23`) sanitizes a peer's user
 /// agent and never filters on it (`ycash6 src/main.cpp:8378-8379`).
-pub const USER_AGENT_NAME: &str = "kogany";
+pub const USER_AGENT_NAME: &str = "koganyd";
 
-/// Returns kogany's BIP 14 user agent for `release_version`: `/kogany:<release_version>/`.
+/// Returns kogany's BIP 14 user agent for `release_version`: `/koganyd:<release_version>/`.
 pub fn user_agent(release_version: impl std::fmt::Display) -> String {
     format!("/{USER_AGENT_NAME}:{release_version}/")
 }
@@ -141,6 +141,35 @@ pub(crate) const MSG_WTX_REFUSED: &str = "MSG_WTX inventory is not used on Ycash
 /// (`nDefaultPort`, `ycash6 src/chainparams.cpp:228`).
 pub(crate) fn default_listen_addr() -> std::net::SocketAddr {
     std::net::SocketAddr::from((std::net::Ipv6Addr::UNSPECIFIED, profile::ports::MAINNET))
+}
+
+/// The default P2P ports of the Ycash networks kogany runs: mainnet, the `fast` and `slow` testnet
+/// profiles and regtest (`nDefaultPort`, `ycash6 src/chainparams.cpp:228,648,669,822`). A peer
+/// on one of them is preferred, as Zakura prefers Zcash's ports; one on another Ycash network's
+/// port is refused, as Zakura refuses the other Zcash network's.
+pub const P2P_PORTS: [u16; 4] = [
+    profile::ports::MAINNET,
+    profile::ports::TESTNET_FAST,
+    profile::ports::TESTNET_SLOW,
+    profile::ports::REGTEST,
+];
+
+/// Zcash's default P2P and RPC ports (`zcashd` `src/chainparams.cpp`, `chainparamsbase.cpp`;
+/// Zakura's `Network::default_port` and RPC documentation): mainnet 8233/8232, testnet
+/// 18233/18232.
+pub const ZCASH_PORTS: [u16; 4] = [8233, 8232, 18233, 18232];
+
+/// Returns why a peer on `port` is refused because the port is Zcash's, or `None`.
+///
+/// Ycash shares Zcash's mainnet and regtest magics, so a Zcash node at a gossiped address
+/// completes the version exchange's framing and is refused only by its protocol version
+/// ([`MIN_PEER_PROTO_VERSION`]). Zakura refuses ZClassic and Flux by port for the same reason
+/// (`peer/priority.rs`); kogany refuses Zcash's ports the same way, so it never spends an
+/// outbound slot on one.
+pub fn zcash_port_refusal(port: u16) -> Option<&'static str> {
+    ZCASH_PORTS
+        .contains(&port)
+        .then_some("invalid peer port: port is for Zcash, which shares Ycash's network magic")
 }
 
 /// The default initial mainnet peers: ycashd's DNS seeders (`vSeeds`,

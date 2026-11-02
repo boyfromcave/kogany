@@ -141,7 +141,7 @@ jobs:
         run: cargo test --locked -p zakura-consensus --features ycash --test vault_fuzz_verdicts
 
   kogany-regtest:
-    # Plan W4-e: crates/zakurad/tests/kogany_regtest.rs on a running zakurad (Vault activation, a
+    # Plan W4-e: crates/zakurad/tests/kogany_regtest.rs on a running koganyd (Vault activation, a
     # set-signed vault spend, invalidateblock/reconsiderblock, a restart). Report-only until the
     # coordinator makes it the W4 gate: drop continue-on-error then.
     name: kogany-regtest (report-only)

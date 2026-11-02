@@ -243,7 +243,7 @@ fn zcash_versions_are_below_the_floor() {
 
 #[test]
 fn user_agent_is_kogany() {
-    assert_eq!(user_agent("1.8.0-rc0"), "/kogany:1.8.0-rc0/");
+    assert_eq!(user_agent("1.8.0-rc0"), "/koganyd:1.8.0-rc0/");
     // `MAX_SUBVERSION_LENGTH` (ycashd) and `MAX_USER_AGENT_LENGTH` (Zakura) are both 256.
     assert!(user_agent("1.8.0-rc0").len() <= 256);
 }
@@ -414,4 +414,74 @@ fn configuring_p2p_v2_is_refused() {
         let config = toml::from_str::<Config>(stack).expect("a legacy stack is accepted");
         assert!(config.legacy_p2p() && !config.v2_p2p());
     }
+}
+
+/// The kogany identity table's network leg (`zakura-chain` `parameters::ycash::identity_tests`):
+/// a kogany node's peer cache, network identity and v2 bootstrap defaults never name Zakura's
+/// directories or Zcash's nodes, and its peer filter refuses Zcash's ports and the other Ycash
+/// networks' ports, as Zakura's refuses the other Zcash network's.
+#[test]
+fn kogany_network_defaults_never_name_zakura_or_zcash() {
+    let config = Config::default();
+
+    let peers = config
+        .cache_dir
+        .peer_cache_file_path(&Network::Mainnet)
+        .expect("the peer cache is on by default");
+    assert!(
+        peers.ends_with("kogany/network/mainnet.peers"),
+        "{}",
+        peers.display()
+    );
+    assert!(config.identity_dir.ends_with(".kogany"));
+    assert_eq!(
+        crate::config::default_network_identity_dir().file_name(),
+        Some(std::ffi::OsStr::new(".kogany"))
+    );
+
+    assert!(config.zakura.bootstrap_peers.is_empty());
+    for network in [
+        Network::Mainnet,
+        Network::new_default_testnet(),
+        Network::new_regtest(Default::default()),
+    ] {
+        assert!(
+            crate::zakura::ZakuraConfig::default_bootstrap_peers_for_network(&network).is_empty()
+        );
+    }
+}
+
+#[test]
+fn peer_ports_of_zcash_and_other_ycash_networks_are_refused() {
+    use crate::peer::address_is_valid_for_inbound_listeners as valid;
+    use std::net::{Ipv4Addr, SocketAddr};
+
+    let addr = |port| SocketAddr::from((Ipv4Addr::new(203, 0, 113, 7), port));
+    let fast = Network::new_default_testnet();
+    let regtest = Network::new_regtest(Default::default());
+
+    for (network, own) in [
+        (Network::Mainnet, 8833),
+        (fast.clone(), 18833),
+        (Network::new_ycash_testnet_slow(), 18933),
+        (regtest.clone(), 18344),
+    ] {
+        assert_eq!(valid(addr(own), network.clone()), Ok(()));
+        for other in P2P_PORTS.into_iter().filter(|port| *port != own) {
+            assert!(
+                valid(addr(other), network.clone()).is_err(),
+                "{own}: {other}"
+            );
+        }
+        for zcash in ZCASH_PORTS {
+            assert!(
+                valid(addr(zcash), network.clone()).is_err(),
+                "{own}: {zcash}"
+            );
+        }
+    }
+    // Without a network, Zcash's ports are still refused; any other port is not.
+    assert!(valid(addr(8233), None).is_err());
+    assert_eq!(valid(addr(8833), None), Ok(()));
+    assert_eq!(valid(addr(46_000), regtest), Ok(()));
 }

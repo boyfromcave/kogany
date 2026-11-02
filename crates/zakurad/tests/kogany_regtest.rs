@@ -4,7 +4,7 @@
 //!
 //! Copyright (c) 2026 The Ycash developers. Distributed under the MIT software license.
 //!
-//! Each test starts a `zakurad` built with `--features ycash` on a Ycash regtest (every Ycash
+//! Each test starts a `koganyd` (the `--features ycash` build) on a Ycash regtest (every Ycash
 //! upgrade through Canopy at height 1, Vault at [`VAULT_HEIGHT`]) the way Zakura's acceptance
 //! tests do (`common::launch`, `common::config`), mines through `generate` (kogany's regtest checks
 //! the Equihash solution shape only, K-16), and drives it over JSON-RPC only:
@@ -88,7 +88,7 @@ const OP_TRUE: u8 = 0x51;
 // ---------------------------------------------------------------------------------------------
 // The node
 
-/// A running `zakurad` and its RPC client.
+/// A running `koganyd` and its RPC client.
 struct Node {
     child: TestChild<tempfile::TempDir>,
     client: RpcRequestClient,
@@ -510,7 +510,7 @@ fn upgrade_status(info: &Value, branch: &str) -> Result<(u64, String)> {
     ))
 }
 
-/// Vault activates at its configured height on a running zakurad.
+/// Vault activates at its configured height on a running koganyd.
 #[tokio::test(flavor = "multi_thread")]
 async fn kogany_regtest_vault_activation() -> Result<()> {
     let _init_guard = zakura_test::init();
@@ -577,7 +577,7 @@ async fn kogany_regtest_vault_activation() -> Result<()> {
     node.kill()
 }
 
-/// The vault lifecycle on a running zakurad: set, members, lock, set-signed UNLOCK, undo by
+/// The vault lifecycle on a running koganyd: set, members, lock, set-signed UNLOCK, undo by
 /// `invalidateblock`, redo by `reconsiderblock`, restart.
 #[tokio::test(flavor = "multi_thread")]
 async fn kogany_regtest_vault_spend_reorg_restart() -> Result<()> {

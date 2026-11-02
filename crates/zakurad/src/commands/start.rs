@@ -1470,8 +1470,27 @@ impl StartCmd {
         config.rpc.validate().map_err(config_error)?;
         #[cfg(feature = "ycash")]
         config.mempool.yed_node_policy().map_err(config_error)?;
+        #[cfg(feature = "ycash")]
+        Self::separate_default_cookie_dir(&mut config);
 
         Ok(config)
+    }
+
+    /// kogany: gives each test network its own default RPC cookie directory,
+    /// `<cache>/kogany/<network>/`, as ycashd writes its cookie into the network's datadir
+    /// (`<datadir>/regtest/.cookie`: `GetAuthCookieFile`, `ycash6 src/rpc/protocol.cpp:73-80`).
+    /// Zakura writes every network's cookie to `<cache>/zakura/.cookie`, so a mainnet and a
+    /// testnet node on one host overwrote each other's cookie, and the first to stop deleted the
+    /// other's. Mainnet keeps `<cache>/kogany/.cookie`; a configured `rpc.cookie_dir` other than
+    /// the default is kept.
+    #[cfg(feature = "ycash")]
+    fn separate_default_cookie_dir(config: &mut ZakuradConfig) {
+        let network = &config.network.network;
+        if network.is_a_test_network()
+            && config.rpc.cookie_dir == zakura_chain::common::default_cache_dir()
+        {
+            config.rpc.cookie_dir = config.rpc.cookie_dir.join(network.lowercase_name());
+        }
     }
 }
 
@@ -1487,6 +1506,44 @@ mod tests {
     use zakura_network::types::PeerServices;
     use zakura_network::P2pStack;
     use zakura_state::{PruningConfig, StorageMode};
+
+    /// kogany: each Ycash test network's default RPC cookie is in its own directory, mainnet's
+    /// stays at the cache root, and a configured directory is kept.
+    #[cfg(feature = "ycash")]
+    #[test]
+    fn ycash_default_cookie_dir_is_per_network() {
+        use zakura_chain::{common::default_cache_dir, parameters::Network};
+
+        let cookie_dir = |network: Network, configured: Option<&str>| {
+            let mut config = ZakuradConfig::default();
+            config.network.network = network;
+            if let Some(dir) = configured {
+                config.rpc.cookie_dir = dir.into();
+            }
+            StartCmd::separate_default_cookie_dir(&mut config);
+            config.rpc.cookie_dir
+        };
+
+        let cache = default_cache_dir();
+        assert!(cache.ends_with("kogany"));
+        assert_eq!(cookie_dir(Network::Mainnet, None), cache);
+        assert_eq!(
+            cookie_dir(Network::new_default_testnet(), None),
+            cache.join("testnet")
+        );
+        assert_eq!(
+            cookie_dir(Network::new_ycash_testnet_slow(), None),
+            cache.join("testnetslow")
+        );
+        assert_eq!(
+            cookie_dir(Network::new_regtest(Default::default()), None),
+            cache.join("regtest")
+        );
+        assert_eq!(
+            cookie_dir(Network::new_regtest(Default::default()), Some("/srv/rpc")),
+            std::path::PathBuf::from("/srv/rpc")
+        );
+    }
 
     #[tokio::test]
     async fn shutdown_cannot_mask_a_ready_writer_failure() {

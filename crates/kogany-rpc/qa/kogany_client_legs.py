@@ -6,7 +6,7 @@
 """The lightwalletd-dd and chain-viz client legs against a regtest kogany (plan W7-d, W9-c; report-only).
 
     python crates/kogany-rpc/qa/kogany_client_legs.py \\
-        --zakurad target/debug/zakurad --ycashd YCASHD --ycash6 TREE \\
+        --koganyd target/debug/koganyd --ycashd YCASHD --ycash6 TREE \\
         --lightwalletd BIN --lwdinfo BIN --chain-viz BIN \\
         [--miner-address ADDR] [--blocks 25] [--out DIR] [--port-base N] [--strict]
 
@@ -373,7 +373,7 @@ def run_scenario(args, scenario, port_base, report):
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split('\n\n')[0])
-    ap.add_argument('--zakurad', required=True)
+    ap.add_argument('--koganyd', '--zakurad', dest='zakurad', required=True)
     ap.add_argument('--ycashd', help='ycash6 ycashd: the live scenario\'s sidecar')
     ap.add_argument('--ycash6', help='a ycash6 tree: the live scenario\'s test framework')
     ap.add_argument('--lightwalletd', help='lightwalletd-dd binary (omit to skip the leg)')

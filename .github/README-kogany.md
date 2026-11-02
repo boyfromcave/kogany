@@ -92,7 +92,7 @@ everywhere.
 
 **Compartments.** No job of one check `needs:` another check, so a failure never skips an
 unrelated job, and "Re-run failed jobs" re-runs exactly the failed ones. A matrix entry is its own
-job. The only `needs:` are on a binary a job runs (`zakurad-bin`, `ycash6-node-bin`): re-running
+job. The only `needs:` are on a binary a job runs (`koganyd-bin`, `ycash6-node-bin`): re-running
 a failed consumer reuses that run's artifact and does not rebuild it; re-running a failed build
 re-runs its consumers.
 
@@ -114,10 +114,10 @@ re-runs its consumers.
 | | `<crate> (ycash)` for `zakura-chain`, `-header-chain`, `-consensus`, `-network`, `-rpc`, `kogany-rpc`, `zakura` | nextest profile `kogany-ycash` (the Ycash-gated tests: `.config/nextest.toml`) | yes | each | 20–50 / 8–20 min |
 | | `vault fuzz verdicts` | the 3,735 ycash6 verdicts (W3-e) | yes | yes | 15 / 5 min |
 | | `kogany-regtest (report-only)` | nextest profile `kogany-regtest` (W4-e) | no, until the W4 gate | yes | 40 / 15 min |
-| `kogany-bin` | `zakurad-bin (ycash, dev)` | the `zakurad-bin` artifact (cross-line contract) | — | yes | 35 / 10 min |
-| `kogany-client-legs` | `zakurad / zakurad-bin` (called `kogany-bin`) | this run's `zakurad-bin` | — | yes | 35 / 10 min |
-| | `lightwalletd-dd`, `chain-viz`, `yolo` (each report-only) | the client unmodified at its pin against this run's zakurad (`crates/kogany-rpc/qa/kogany_client_legs.py`; yolo's `tests/regtest.rs` kogany mode with ycash6's node-bin) | no, until the lead architect flips one | each | 10–40 min |
-| `kogany-mixed` | `zakurad / zakurad-bin`, `ycash6 node-bin` | the two binaries | — | each | 35 / 1 min |
+| `kogany-bin` | `koganyd-bin (ycash, dev)` | the `koganyd-bin` artifact (cross-line contract) | — | yes | 35 / 10 min |
+| `kogany-client-legs` | `koganyd / koganyd-bin` (called `kogany-bin`) | this run's `koganyd-bin` | — | yes | 35 / 10 min |
+| | `lightwalletd-dd`, `chain-viz`, `yolo` (each report-only) | the client unmodified at its pin against this run's koganyd (`crates/kogany-rpc/qa/kogany_client_legs.py`; yolo's `tests/regtest.rs` kogany mode with ycash6's node-bin) | no, until the lead architect flips one | each | 10–40 min |
+| `kogany-mixed` | `koganyd / koganyd-bin`, `ycash6 node-bin` | the two binaries | — | each | 35 / 1 min |
 | | `mixed node`, `vault`, `yed`, `fees`, `attest` | ycash6's `qa/kogany_mixed_shards.py run <group>`: `gate` scripts block, `report` scripts never fail the job (all `report` today) | its `gate` scripts | each | 30–120 min |
 
 Blocking means a candidate for a required status check (see "Turning Actions on"); a
@@ -140,16 +140,20 @@ run is a finding for the coordinator, not a reason to widen the filter.
 
 What kogany publishes and consumes (the workspace's `docs/plans/kogany/ci-design.md` §3, §5):
 
-- **`zakurad-bin` (published).** `kogany-bin.yml`, a job of its own, on pushes to
+- **`koganyd-bin` (published; `zakurad-bin` until 2026-11-02).** `kogany-bin.yml`, a job of its own, on pushes to
   `upgrade/vault` and `vaults/**`, weekly (Saturday, so the default branch always has an unexpired
   one), on dispatch, and called by `kogany-client-legs.yml` and `kogany-mixed.yml`. Artifact
-  `zakurad-bin` holding `zakurad-bin.tgz`: `zakurad` and `zakurad-bin.json` (`repository`,
+  `koganyd-bin` holding `koganyd-bin.tgz`: `koganyd` and `koganyd-bin.json` (`repository`,
   `commit`, `binary`, `features: ["ycash"]`, `profile: "dev"`, `runner`, `librocksdb`, `rustc`,
-  `producer`), built by `cargo build --locked -p zakura --bin zakurad --features ycash` on
+  `producer`), built by `cargo build --locked -p zakura --bin koganyd --features ycash` on
   ubuntu-24.04 (it links the runner's librocksdb: run it on ubuntu-24.04 with `librocksdb-dev`).
   Retention 30 days. Consumers (ycash6's `zakurad` job, yolo's kogany entry) search every
   workflow's push, schedule or dispatch runs at their pinned kogany commit and fall back to a
-  build there.
+  build there. The rename is the one breaking change of the contract (the Yellowback lead
+  architect, 2026-11-02: the Ycash node's binary is `koganyd`): a consumer downloads
+  `koganyd-bin` and runs `koganyd` from a kogany pin at or after the rename, `zakurad-bin` and
+  `zakurad` from an older one. A `--features ycash` build also produces a `zakurad` binary, which
+  refuses to run (exit 2), so a consumer that builds at a new pin must run `target/debug/koganyd`.
 - **`ycash6-node-bin` (consumed).** From a push, schedule or dispatch run of ycash6's
   `yellowback-tests.yml` at the commit kogany pins: artifact `ycash6-node-bin` (else its current
   name `node-bin`) holding `node-bin.tgz` with `src/ycashd` and `src/ycash-cli` at its root.
@@ -179,7 +183,7 @@ Nothing has to be disabled first: the off set cannot run. When turning them on:
 2. Settings → Actions → General: allow GitHub Actions and the actions the workflows use (every
    `uses:` is SHA-pinned, so "require full-length commit SHA" can be on); workflow permissions
    "Read repository contents"; require approval for outside contributors' pull requests;
-   artifact and log retention at least 30 days (the `zakurad-bin` contract).
+   artifact and log retention at least 30 days (the `koganyd-bin` contract).
 3. Settings → Code security: enable code scanning (the SARIF uploads) and Dependabot security
    updates. For `semgrep.yml`'s `sync` job, allow GitHub Actions to create pull requests
    (optionally the `SEMGREP_PR_TOKEN` secret, see `contrib/semgrep/README.md`).
@@ -191,7 +195,7 @@ Nothing has to be disabled first: the off set cannot run. When turning them on:
    `check`, every `clippy`, `rustfmt (kogany crates)`, every `kogany crates`, `(feature off)` and
    `(ycash)` job, `vault fuzz verdicts`) and upstream's `test success` and lint checks. Add
    `kogany-regtest` at the W4 gate and a `mixed <group>` when its first script becomes `gate`.
-6. Confirm one push run of `kogany-bin` published `zakurad-bin`, then set ycash6's repository
+6. Confirm one push run of `kogany-bin` published `koganyd-bin`, then set ycash6's repository
    variable `KOGANY_MIXED` (ci-design.md §9).
 
 ## Security CI

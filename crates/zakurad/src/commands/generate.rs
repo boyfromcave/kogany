@@ -1,4 +1,4 @@
-//! `generate` subcommand - generates a default `zakura.toml` config.
+//! `generate` subcommand - generates a default `zakura.toml` config (kogany: `kogany.toml`).
 
 use crate::config::ZakuradConfig;
 use clap::Parser;
@@ -51,7 +51,12 @@ impl GenerateCmd {
 /// The generated config, written by hand so `zakurad` does not carry a TOML
 /// serializer for this one command. A unit test checks it against
 /// `ZakuradConfig::default()`.
+#[cfg(not(feature = "ycash"))]
 const DEFAULT_CONFIG_TEMPLATE: &str = include_str!("default_config.toml");
+
+/// kogany: the generated `kogany.toml`, with Ycash's seeds, ports and comments.
+#[cfg(feature = "ycash")]
+const DEFAULT_CONFIG_TEMPLATE: &str = include_str!("default_config_ycash.toml");
 
 /// Fill the template's platform-dependent default paths.
 fn default_config_toml(config: &ZakuradConfig) -> String {
