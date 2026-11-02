@@ -60,6 +60,14 @@ pub enum ParametersBuilderError {
     #[non_exhaustive]
     YcashUpgradeNeedsYcashBuild,
 
+    #[error("the Vault upgrade requires Sapling active at or below its height")]
+    #[non_exhaustive]
+    VaultWithoutSapling,
+
+    #[error("NU5 and later upgrades cannot be scheduled together with the Vault upgrade")]
+    #[non_exhaustive]
+    VaultWithNu5OrLater,
+
     #[error("difficulty limits are valid expanded values")]
     #[non_exhaustive]
     InvaildDifficultyLimits,

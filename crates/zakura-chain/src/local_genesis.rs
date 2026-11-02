@@ -424,6 +424,9 @@ fn configured_activation_heights(
         blossom: (latest_network_upgrade >= Blossom).then_some(activation_height),
         heartwood: (latest_network_upgrade >= Heartwood).then_some(activation_height),
         canopy: (latest_network_upgrade >= Canopy).then_some(activation_height),
+        // Vault is scheduled only explicitly (kogany plan §2.2), never as a later upgrade's
+        // implicit predecessor.
+        vault: (latest_network_upgrade == Vault).then_some(activation_height),
         nu5: (latest_network_upgrade >= Nu5).then_some(activation_height),
         nu6: (latest_network_upgrade >= Nu6).then_some(activation_height),
         nu6_1: (latest_network_upgrade >= Nu6_1).then_some(activation_height),

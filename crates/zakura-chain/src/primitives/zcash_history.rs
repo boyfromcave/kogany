@@ -438,6 +438,7 @@ impl Version for zakura_mmr_tree::V1 {
             // since the V1::NodeData is included inside the V2::NodeData.
             NetworkUpgrade::Heartwood
             | NetworkUpgrade::Canopy
+            | NetworkUpgrade::Vault
             | NetworkUpgrade::Nu5
             | NetworkUpgrade::Nu6
             | NetworkUpgrade::Nu6_1

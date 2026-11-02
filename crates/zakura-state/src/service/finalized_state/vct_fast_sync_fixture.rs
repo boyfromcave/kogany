@@ -111,6 +111,7 @@ impl VctFastSyncedChain {
         let network = ParametersBuilder::default()
             .with_activation_heights(ConfiguredActivationHeights {
                 ycash: None,
+                vault: None,
                 before_overwinter: Some(1),
                 overwinter: Some(10),
                 sapling: Some(15),

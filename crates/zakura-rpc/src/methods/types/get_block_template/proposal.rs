@@ -204,7 +204,10 @@ pub fn proposal_block_from_template(
     }
 
     let commitment_bytes = match NetworkUpgrade::current(net, height) {
-        NetworkUpgrade::Canopy => chain_history_root.bytes_in_serialized_order(),
+        // kogany: Vault keeps Canopy's ZIP-221 chain history root (kogany plan §2.1).
+        NetworkUpgrade::Canopy | NetworkUpgrade::Vault => {
+            chain_history_root.bytes_in_serialized_order()
+        }
         NetworkUpgrade::Nu5
         | NetworkUpgrade::Nu6
         | NetworkUpgrade::Nu6_1

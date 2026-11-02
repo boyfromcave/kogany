@@ -957,6 +957,7 @@ fn modern_rollback_network() -> Network {
     TestnetParameters::build()
         .with_activation_heights(ConfiguredActivationHeights {
             ycash: None,
+            vault: None,
             before_overwinter: Some(1),
             overwinter: Some(2),
             sapling: Some(3),

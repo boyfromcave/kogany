@@ -139,7 +139,7 @@ impl NonEmptyHistoryTree {
             _ if network_upgrade.branch_id().is_none() => {
                 return Err(HistoryTreeError::MissingBranchId { network_upgrade });
             }
-            NetworkUpgrade::Heartwood | NetworkUpgrade::Canopy => {
+            NetworkUpgrade::Heartwood | NetworkUpgrade::Canopy | NetworkUpgrade::Vault => {
                 let tree = Tree::<PreOrchard>::new_from_cache(
                     network,
                     network_upgrade,
@@ -238,7 +238,7 @@ impl NonEmptyHistoryTree {
             _ if network_upgrade.branch_id().is_none() => {
                 return Err(HistoryTreeError::MissingBranchId { network_upgrade });
             }
-            NetworkUpgrade::Heartwood | NetworkUpgrade::Canopy => {
+            NetworkUpgrade::Heartwood | NetworkUpgrade::Canopy | NetworkUpgrade::Vault => {
                 let (tree, entry) = Tree::<PreOrchard>::new_from_parts(
                     network,
                     HistoryTreeBlockParts {

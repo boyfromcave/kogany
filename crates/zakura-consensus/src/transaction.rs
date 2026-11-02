@@ -1073,6 +1073,7 @@ where
             | NetworkUpgrade::Blossom
             | NetworkUpgrade::Heartwood
             | NetworkUpgrade::Canopy
+            | NetworkUpgrade::Vault
             | NetworkUpgrade::Nu5
             | NetworkUpgrade::Nu6
             | NetworkUpgrade::Nu6_1
@@ -1185,7 +1186,9 @@ where
             | NetworkUpgrade::Ycash
             | NetworkUpgrade::Blossom
             | NetworkUpgrade::Heartwood
-            | NetworkUpgrade::Canopy => Err(TransactionError::UnsupportedByNetworkUpgrade(
+            | NetworkUpgrade::Canopy
+            // kogany: v4 only under Vault (U-26, ycash6 `bad-vault-tx-version-group-id`).
+            | NetworkUpgrade::Vault => Err(TransactionError::UnsupportedByNetworkUpgrade(
                 transaction.version(),
                 network_upgrade,
             )),
