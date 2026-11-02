@@ -192,6 +192,7 @@ impl From<&BTreeMap<Height, NetworkUpgrade>> for ConfiguredActivationHeights {
                 NetworkUpgrade::Blossom => &mut configured_activation_heights.blossom,
                 NetworkUpgrade::Heartwood => &mut configured_activation_heights.heartwood,
                 NetworkUpgrade::Canopy => &mut configured_activation_heights.canopy,
+                NetworkUpgrade::Vault => &mut configured_activation_heights.vault,
                 NetworkUpgrade::Nu5 => &mut configured_activation_heights.nu5,
                 NetworkUpgrade::Nu6 => &mut configured_activation_heights.nu6,
                 NetworkUpgrade::Nu6_1 => &mut configured_activation_heights.nu6_1,
@@ -546,6 +547,35 @@ fn check_founders_reward_is_exact(network: &Network) -> Result<(), ParametersBui
     Ok(())
 }
 
+/// kogany: the Vault upgrade's schedule refusals, ycashd's start-up check
+/// (`ycash6 src/init.cpp:1541-1565`, upgrade plan U-26 / quantum spec R-A3).
+///
+/// With Vault scheduled, Sapling must be active at or below it (the vault opcodes are defined
+/// over the ZIP-243 sighash of v4 transactions), and no upgrade from NU5 on may be scheduled at
+/// all (v5 is invalid under Vault, and Vault's history-tree leaves are V1). The second rule also
+/// means Vault can never be collapsed into a later upgrade at the same height (kogany plan §2.2).
+///
+/// Sapling's height is its own, else the first of the upgrades from Sapling to Canopy that is
+/// scheduled: Zakura's implicit activation, and ycashd's `-nuparams` back-fill, which fills
+/// Sapling from any higher upgrade except Vault (`ycash6 src/init.cpp:1529-1537`).
+fn check_vault_schedule(
+    vault: Option<u32>,
+    sapling_to_canopy: &[Option<u32>],
+    nu5_and_later: &[Option<u32>],
+) -> Result<(), ParametersBuilderError> {
+    let Some(vault) = vault else {
+        return Ok(());
+    };
+    let sapling = sapling_to_canopy.iter().find_map(|&height| height);
+    if !sapling.is_some_and(|sapling| sapling <= vault) {
+        return Err(ParametersBuilderError::VaultWithoutSapling);
+    }
+    if nu5_and_later.iter().any(Option::is_some) {
+        return Err(ParametersBuilderError::VaultWithNu5OrLater);
+    }
+    Ok(())
+}
+
 /// Configurable activation heights for Regtest and configured Testnets.
 #[derive(Serialize, Deserialize, Default, Clone, Copy, Debug, PartialEq)]
 #[serde(rename_all = "PascalCase", deny_unknown_fields)]
@@ -565,6 +595,10 @@ pub struct ConfiguredActivationHeights {
     pub heartwood: Option<u32>,
     /// Activation height for `Canopy` network upgrade.
     pub canopy: Option<u32>,
+    /// Activation height for the Ycash `Vault` network upgrade (branch ID `0x6d5b7a31`, ycashd's
+    /// `-nuparams=6d5b7a31:<h>`). Default `None`: Regtest never back-fills it.
+    #[serde(rename = "Vault", default, skip_serializing_if = "Option::is_none")]
+    pub vault: Option<u32>,
     /// Activation height for `NU5` network upgrade.
     #[serde(rename = "NU5")]
     pub nu5: Option<u32>,
@@ -601,6 +635,7 @@ impl ConfiguredActivationHeights {
             blossom,
             heartwood,
             canopy,
+            vault,
             nu5,
             nu6,
             nu6_1,
@@ -625,6 +660,7 @@ impl ConfiguredActivationHeights {
             blossom,
             heartwood,
             canopy,
+            vault,
             nu5,
             nu6,
             nu6_1,
@@ -646,6 +682,7 @@ impl ConfiguredActivationHeights {
             self.blossom,
             self.heartwood,
             self.canopy,
+            self.vault,
             self.nu5,
             self.nu6,
             self.nu6_1,
@@ -670,6 +707,7 @@ impl ConfiguredActivationHeights {
             blossom: self.blossom.or(base.blossom),
             heartwood: self.heartwood.or(base.heartwood),
             canopy: self.canopy.or(base.canopy),
+            vault: self.vault.or(base.vault),
             nu5: self.nu5.or(base.nu5),
             nu6: self.nu6.or(base.nu6),
             nu6_1: self.nu6_1.or(base.nu6_1),
@@ -935,6 +973,7 @@ impl ParametersBuilder {
             blossom,
             heartwood,
             canopy,
+            vault,
             nu5,
             nu6,
             nu6_1,
@@ -957,6 +996,22 @@ impl ParametersBuilder {
             return Err(ParametersBuilderError::YcashUpgradeNeedsYcashBuild);
         }
 
+        // kogany: Vault's start-up refusals (U-26), before any upgrade can be collapsed away.
+        check_vault_schedule(
+            vault,
+            &[sapling, ycash, blossom, heartwood, canopy],
+            &[
+                nu5,
+                nu6,
+                nu6_1,
+                nu6_2,
+                nu6_3,
+                nu7,
+                #[cfg(zcash_unstable = "zfuture")]
+                zfuture,
+            ],
+        )?;
+
         // # Correctness
         //
         // These must be in order so that later network upgrades overwrite prior ones
@@ -971,6 +1026,7 @@ impl ParametersBuilder {
                 .chain(blossom.into_iter().map(|h| (h, Blossom)))
                 .chain(heartwood.into_iter().map(|h| (h, Heartwood)))
                 .chain(canopy.into_iter().map(|h| (h, Canopy)))
+                .chain(vault.into_iter().map(|h| (h, Vault)))
                 .chain(nu5.into_iter().map(|h| (h, Nu5)))
                 .chain(nu6.into_iter().map(|h| (h, Nu6)))
                 .chain(nu6_1.into_iter().map(|h| (h, Nu6_1)))

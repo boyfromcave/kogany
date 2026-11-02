@@ -8,7 +8,7 @@
 //!
 //! - the protocol version table: ycashd's per-upgrade `nProtocolVersion` values and its
 //!   `MIN_PEER_PROTO_VERSION` floor of 270013, so a Zcash peer is refused at the handshake;
-//! - the version kogany advertises, 270013, until the Vault upgrade raises it (W2-b);
+//! - the version kogany advertises, ycash6's Vault-era 270200;
 //! - the user agent, `/kogany:<version>/`;
 //! - the inventory filter: `MSG_WTX` (ZIP 239) is never sent and is refused on receipt, as
 //!   ycash6 pins `CINV_WTX_VERSION` to an unreachable sentinel;
@@ -33,15 +33,16 @@ use crate::protocol::external::{InventoryHash, Version};
 /// above every Zcash protocol version, so a Zcash peer with the shared magic is refused.
 pub const MIN_PEER_PROTO_VERSION: Version = Version(270_013);
 
-/// The protocol version kogany advertises in its `version` message.
+/// The protocol version kogany advertises in its `version` message: ycash6's `PROTOCOL_VERSION`,
+/// the Vault-era 270200 (`ycash6 src/version.h:14-22`).
 ///
-/// 270013 is the Canopy-era version that ycashd 4.5.0 advertises (`ref/ycash src/version.h`),
-/// the highest epoch kogany implements today. ycash6 advertises 270200 (`ycash6 src/version.h:22`),
-/// the Vault-era version, which kogany may only claim once it implements Vault.
-///
-/// **Vault (W2-b, the `vault-epoch` chunk):** raise this to 270200 together with the `Vault` row
-/// of [`min_specified_for_upgrade`].
-pub const CURRENT_PROTOCOL_VERSION: u32 = 270_013;
+/// It must be at least the version of every upgrade kogany schedules
+/// ([`min_specified_for_upgrade`]): Zakura refuses to run below its own minimum, and ycashd
+/// disconnects a peer below the current epoch's version, so after Vault activates a node that
+/// advertised the Canopy-era 270013 (ycashd 4.5.0's) would lose every ycash6 peer. Before Vault
+/// activates it gates nobody: peers are held to the [`MIN_PEER_PROTO_VERSION`] floor, as ycash6
+/// holds them.
+pub const CURRENT_PROTOCOL_VERSION: u32 = 270_200;
 
 /// The version ycashd gives an upgrade it never schedules (`UPGRADE_ZFUTURE.nProtocolVersion`,
 /// `ycash6 src/chainparams.cpp:161`): kogany refuses to run past such an upgrade.
@@ -98,8 +99,9 @@ pub(crate) fn min_specified_for_upgrade(
         (Mainnet, Nu6_1) => 270_140,
         (Testnet(_), Nu6_1) => 270_130,
         (_, Nu6_2) => 270_150,
-        // Vault (W2-b, the `vault-epoch` chunk): `(_, Vault) => 270_200` on every network
-        // (`ycash6 src/chainparams.cpp:154,463,766`), with CURRENT_PROTOCOL_VERSION raised to match.
+        // `UPGRADE_VAULT.nProtocolVersion` on every network (`ycash6 src/chainparams.cpp:154,463,
+        // 766`), as the W2-b row of the upstream table says.
+        (_, Vault) => 270_200,
         (_, Nu6_3) | (_, Nu7) => UNREACHABLE_PROTOCOL_VERSION,
 
         #[cfg(zcash_unstable = "zfuture")]

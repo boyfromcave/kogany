@@ -480,6 +480,10 @@ pub struct ContextuallyVerifiedBlock {
     pub(crate) chain_value_pool_change: ValueBalance<NegativeAllowed>,
     /// Original verifier receipt order, retained through forks and reconsideration.
     pub(crate) receipt_order: Option<u64>,
+
+    /// kogany (W4-c): the block's Vault set-state change set over its parent's state (empty
+    /// before the Vault activation height). Pushed onto and reverted from the chain's overlay.
+    pub(crate) vault_delta: Arc<crate::service::non_finalized_state::VaultDelta>,
 }
 
 /// Wraps note commitment trees and the history tree together.
@@ -680,6 +684,7 @@ impl ContextuallyVerifiedBlock {
             transaction_hashes,
             chain_value_pool_change,
             receipt_order,
+            vault_delta: Default::default(),
         })
     }
 }

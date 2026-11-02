@@ -116,6 +116,10 @@ impl Version {
             (Mainnet, Heartwood) => 170_011,
             (Testnet(_), Canopy) => 170_012,
             (Mainnet, Canopy) => 170_013,
+            // ycashd's `UPGRADE_VAULT.nProtocolVersion` on every network
+            // (`ycash6 src/chainparams.cpp:154,463,766`). Only a network that schedules Vault
+            // reaches it; W1-Y5 owns the rest of this table.
+            (_, Vault) => 270_200,
             (Testnet(_), Nu5) => 170_050,
             (Mainnet, Nu5) => 170_100,
             (Testnet(_), Nu6) => 170_110,
@@ -370,5 +374,40 @@ mod test {
         let decoded =
             PeerServices::from_bits_truncate(PeerServices::NODE_NETWORK.bits() | (1 << 25));
         assert_eq!(decoded, PeerServices::NODE_NETWORK);
+    }
+
+    /// kogany: ycashd's Vault-era protocol version, 270200, from the Vault activation height on
+    /// a network that schedules Vault, and never on one that does not (W2-b).
+    #[test]
+    fn vault_protocol_version_is_ycashd_s() {
+        let _init_guard = zakura_test::init();
+
+        let network = Network::new_regtest(
+            zakura_chain::parameters::testnet::ConfiguredActivationHeights {
+                vault: Some(10),
+                ..Default::default()
+            }
+            .into(),
+        );
+        assert_eq!(
+            Version::min_specified_for_upgrade(&network, Vault),
+            Version(270_200)
+        );
+        assert_eq!(
+            Version::min_specified_for_height(&network, block::Height(9)),
+            Version::min_specified_for_upgrade(&network, Canopy)
+        );
+        for height in [10, 11, u32::MAX >> 1] {
+            assert_eq!(
+                Version::min_specified_for_height(&network, block::Height(height)),
+                Version(270_200)
+            );
+        }
+        for network in [Mainnet, Network::new_regtest(Default::default())] {
+            assert_ne!(
+                Version::min_specified_for_height(&network, block::Height::MAX),
+                Version(270_200)
+            );
+        }
     }
 }

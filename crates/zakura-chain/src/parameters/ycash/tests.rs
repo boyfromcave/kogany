@@ -20,7 +20,7 @@ const MAINNET_BANDS: &[(u32, u32)] = &[
     (1_100_006, 0x19bd2d2f),
 ];
 
-/// As [`MAINNET_BANDS`], for the re-forked Ycash testnet (`ycash6 src/chainparams.cpp:429-459`).
+/// As [`MAINNET_BANDS`], for the re-forked Ycash testnet's `slow` profile (`ycash6 src/chainparams.cpp:429-459`).
 const TESTNET_BANDS: &[(u32, u32)] = &[
     (0, 0),
     (207_500, 0x5ba81b19),
@@ -60,14 +60,27 @@ fn mainnet_branch_ids_match_ycashd_bands() {
     );
 }
 
+/// The `fast` profile adds the Vault band at 510,400 (`CTestNetFastParams`,
+/// `ycash6 src/chainparams.cpp:640`); the `slow` profile has none (W2-b).
+const TESTNET_FAST_BANDS: &[(u32, u32)] = &[
+    (0, 0),
+    (207_500, 0x5ba81b19),
+    (280_000, 0x76b809bb),
+    (510_248, 0x374d694f),
+    (510_250, 0x8e471bd6),
+    (510_252, 0x66314da3),
+    (510_254, 0x19bd2d2f),
+    (510_400, 0x6d5b7a31),
+];
+
 #[test]
 fn testnet_profiles_branch_ids_match_ycashd_bands() {
-    for network in [
-        Network::new_default_testnet(),
-        Network::new_ycash_testnet_slow(),
-    ] {
-        assert_bands(&network, TESTNET_BANDS, 2_000_000);
-    }
+    assert_bands(
+        &Network::new_default_testnet(),
+        TESTNET_FAST_BANDS,
+        2_000_000,
+    );
+    assert_bands(&Network::new_ycash_testnet_slow(), TESTNET_BANDS, 2_000_000);
 }
 
 #[test]

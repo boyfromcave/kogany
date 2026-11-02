@@ -32,6 +32,7 @@ const YCASHD_PROTOCOL_VERSIONS: &[(NetworkUpgrade, u32, u32, u32)] = &[
     (NetworkUpgrade::Blossom, 270_009, 270_008, 170_008),
     (NetworkUpgrade::Heartwood, 270_011, 270_010, 170_010),
     (NetworkUpgrade::Canopy, 270_013, 270_012, 170_012),
+    (NetworkUpgrade::Vault, 270_200, 270_200, 270_200),
     (NetworkUpgrade::Nu5, 270_015, 270_014, 170_050),
     (NetworkUpgrade::Nu6, 270_120, 270_110, 270_110),
     (NetworkUpgrade::Nu6_1, 270_140, 270_130, 270_130),
@@ -96,13 +97,74 @@ fn upgrades_ycashd_never_schedules_are_unreachable() {
 }
 
 #[test]
-fn kogany_advertises_the_canopy_era_version() {
-    assert_eq!(CURRENT_NETWORK_PROTOCOL_VERSION, Version(270_013));
+fn kogany_advertises_ycash6s_vault_era_version() {
+    assert_eq!(CURRENT_NETWORK_PROTOCOL_VERSION, Version(270_200));
     assert_eq!(
         CURRENT_NETWORK_PROTOCOL_VERSION,
         Version(CURRENT_PROTOCOL_VERSION)
     );
     assert!(CURRENT_NETWORK_PROTOCOL_VERSION >= MIN_PEER_PROTO_VERSION);
+}
+
+fn vault_regtest(vault: u32) -> Network {
+    Network::new_regtest(RegtestParameters {
+        activation_heights: ConfiguredActivationHeights {
+            overwinter: Some(1),
+            sapling: Some(1),
+            ycash: Some(1),
+            blossom: Some(1),
+            heartwood: Some(1),
+            canopy: Some(1),
+            vault: Some(vault),
+            ..Default::default()
+        },
+        ..Default::default()
+    })
+}
+
+/// `Version::min_remote_for_height` panics if kogany's own version is below the minimum it
+/// demands, so the advertised version must cover every scheduled upgrade on every Ycash network.
+#[test]
+fn minimum_peer_version_never_exceeds_the_advertised_version() {
+    let networks = [
+        Network::Mainnet,
+        Network::new_default_testnet(),
+        Network::new_ycash_testnet_slow(),
+        regtest(),
+        vault_regtest(1),
+        vault_regtest(103),
+    ];
+    for network in networks {
+        let mut heights: Vec<u32> = (0..1_200).collect();
+        heights.extend(
+            [
+                347_500, 419_200, 510_248, 510_254, 570_000, 1_100_000, 1_100_006, 2_275_000,
+                3_000_000,
+            ]
+            .iter()
+            .flat_map(|&h| [h - 1, h, h + 1]),
+        );
+        heights.push(Height::MAX.0);
+        for height in heights {
+            let minimum = Version::min_remote_for_height(&network, Height(height));
+            assert!(
+                minimum <= CURRENT_NETWORK_PROTOCOL_VERSION,
+                "{minimum:?} above the advertised version at {height} on {network:?}",
+            );
+            assert!(minimum >= MIN_PEER_PROTO_VERSION);
+        }
+    }
+
+    // From Vault on, a ycashd 4.5.0-era peer (270013) is refused and ycash6 (270200) is not.
+    let network = vault_regtest(103);
+    assert_eq!(
+        Version::min_remote_for_height(&network, Height(102)),
+        MIN_PEER_PROTO_VERSION
+    );
+    assert_eq!(
+        Version::min_remote_for_height(&network, Height(103)),
+        Version(270_200)
+    );
 }
 
 #[test]
@@ -118,14 +180,31 @@ fn minimum_peer_version_is_the_ycash_floor_in_every_band() {
         );
     }
 
+    // Before Vault both testnet profiles hold peers to the floor; the `fast` profile schedules
+    // Vault at 510,400 (`zakura_chain::parameters::ycash::testnet::VAULT_FAST`), the `slow` one
+    // has no Vault height.
     let testnet_band_starts = [
-        0, 207_500, 280_000, 510_248, 510_250, 510_252, 510_254, 2_000_000,
+        0, 207_500, 280_000, 510_248, 510_250, 510_252, 510_254, 510_399,
     ];
+    for height in testnet_band_starts.into_iter().chain([510_400, 2_000_000]) {
+        assert_eq!(
+            Version::min_remote_for_height(&Network::new_ycash_testnet_slow(), Height(height)),
+            MIN_PEER_PROTO_VERSION,
+            "slow testnet height {height}",
+        );
+    }
     for height in testnet_band_starts {
         assert_eq!(
             Version::min_remote_for_height(&Network::new_default_testnet(), Height(height)),
             MIN_PEER_PROTO_VERSION,
             "testnet height {height}",
+        );
+    }
+    for height in [510_400, 2_000_000] {
+        assert_eq!(
+            Version::min_remote_for_height(&Network::new_default_testnet(), Height(height)),
+            Version(270_200),
+            "testnet height {height}, Vault active",
         );
     }
 

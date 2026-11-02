@@ -54,6 +54,8 @@ use super::{check, Request, Verifier};
 
 #[cfg(test)]
 mod prop;
+// kogany: the Vault epoch (W2-b).
+mod vault;
 
 /// Returns the timeout duration for tests, extended when running under coverage
 /// instrumentation to account for the performance overhead.
@@ -4533,6 +4535,7 @@ fn configured_network_with_nu7(nu7: Option<Height>) -> Network {
     Parameters::build()
         .with_activation_heights(ConfiguredActivationHeights {
             ycash: None,
+            vault: None,
             before_overwinter: Some(1),
             overwinter: Some(2),
             sapling: Some(3),

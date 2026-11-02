@@ -789,7 +789,10 @@ fn check_full_activation_list() {
         .expect("failed to build configured network");
 
     // We expect the first 11 network upgrades to be included, up to and including NU6.3
-    let expected_network_upgrades = NetworkUpgrade::iter().take(11);
+    // kogany: Ycash's own upgrades are listed only where scheduled.
+    let expected_network_upgrades = NetworkUpgrade::iter()
+        .filter(|&nu| network.is_kogany_upgrade_scheduled(nu))
+        .take(11);
     let full_activation_list_network_upgrades: Vec<_> = network
         .full_activation_list()
         .into_iter()
