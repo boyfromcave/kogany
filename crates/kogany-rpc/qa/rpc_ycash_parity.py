@@ -112,6 +112,9 @@ ACCEPTED = [
     ('getrawtransaction', r'\.(in_active_chain|orchard)$', 'zakura', 'Zakura extensions'),
     ('getrawtransaction', r'\.vin\[\d+\]\.(value|valueZat|valueSat|address)$', 'zakura',
      'zcashd -insightexplorer spent-output fields Zakura does not serve'),
+    ('getrawtransaction|getblock', r'\.vout\[\d+\]\.(spentTxId|spentIndex|spentHeight)$', 'zakura',
+     'zcashd -insightexplorer spent-index fields on a spent output (rawtransaction.cpp TxToJSON); '
+     'Zakura does not serve them and lightwalletd-dd does not read them'),
     # gettxout
     ('gettxout', r'\.(version|coinbase)$', 'zakura', 'zcashd fields Zakura does not serve'),
     # z_gettreestate: lightwalletd-dd reads height, hash, time, sapling (common.go:103-113).
