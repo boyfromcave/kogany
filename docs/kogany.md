@@ -41,3 +41,12 @@ behaviours follow ycashd's there, each against Zakura's own:
   `DisconnectTip` resurrects them; the mempool keeps the last 100 best-chain blocks' transactions
   for this. The non-finalized blocks are written to the backup directory before each tip update,
   so a stopped node restarts at the tip it reported.
+- **Templates.** `getblocktemplate` has no limit on unpaid ZIP-317 actions, as ycashd's
+  `-blockunpaidactionlimit` default (`SIZE_MAX`): a transaction that pays the relay fee but less
+  than the conventional fee, such as a post-quantum owner spend, is mined.
+- **The YED payout key.** A transparent P2PKH `mining.miner_address` is also the Yellowback payout
+  key the coinbase tag names, as ycashd takes `-mineraddress` when no `-yellowbackpayoutaddress`
+  is set. `mining.yellowback_payout_default = false` (ycashd `-yellowbackpayoutdefault=0`, default
+  on) leaves the node without a payout key: it emits no tag and `yed_setquote` refuses
+  `no-payout-address`, as a ycashd mining to its wallet does. A Yellowback-live node can then mine
+  to a transparent address without naming a payout key.

@@ -67,6 +67,22 @@ pub struct Config {
     /// Advertise prepared mined block hashes after expected-work validation and state admission,
     /// but before contextual commit completes.
     pub optimistic_block_inventory: bool,
+
+    /// Ycash: whether a transparent P2PKH [`Self::miner_address`] is also the node's Ycash
+    /// Yellowback (YED) payout key, the key the coinbase tag names for pool fees (ycashd
+    /// MINER-2's default, `-yellowbackpayoutdefault`, default on).
+    ///
+    /// With `false` the miner address names no payout key: the node emits no tag and
+    /// `yed_setquote` refuses `no-payout-address`, as a ycashd that mines to its wallet, or that
+    /// runs with `-yellowbackpayoutdefault=0` (kogany finding F-S5-9).
+    #[cfg(feature = "ycash")]
+    #[serde(skip_serializing_if = "is_true")]
+    pub yellowback_payout_default: bool,
+}
+
+#[cfg(feature = "ycash")]
+fn is_true(value: &bool) -> bool {
+    *value
 }
 
 mod miner_address {
@@ -119,6 +135,8 @@ impl Default for Config {
             miner_memo: None,
             internal_miner: false,
             optimistic_block_inventory: true,
+            #[cfg(feature = "ycash")]
+            yellowback_payout_default: true,
         }
     }
 }
@@ -289,5 +307,22 @@ mod tests {
         }
         assert!(toml::from_str::<Config>("miner_address = 'invalid'").is_err());
         assert!(toml::from_str::<Config>("miner_address = 42").is_err());
+    }
+
+    /// kogany F-S5-9: `yellowback_payout_default` defaults on (ycashd's MINER-2 default) and is
+    /// written only when off.
+    #[cfg(feature = "ycash")]
+    #[test]
+    fn ycash_yellowback_payout_default_parses_and_defaults_on() {
+        assert!(Config::default().yellowback_payout_default);
+        assert!(!toml::to_string(&Config::default())
+            .unwrap()
+            .contains("yellowback_payout_default"));
+        let config: Config = toml::from_str("yellowback_payout_default = false").unwrap();
+        assert!(!config.yellowback_payout_default);
+        assert_eq!(
+            toml::from_str::<Config>(&toml::to_string(&config).unwrap()).unwrap(),
+            config
+        );
     }
 }

@@ -3525,6 +3525,8 @@ async fn zip234_mining_rpcs_include_the_reissuance_bonus() {
                     miner_memo: None,
                     internal_miner: true,
                     optimistic_block_inventory: true,
+                    #[cfg(feature = "ycash")]
+                    yellowback_payout_default: true,
                 },
                 Default::default(),
                 "0.0.1",
@@ -3822,6 +3824,8 @@ async fn gbt_with(net: Network, addr: ZcashAddress) {
         miner_memo: None,
         internal_miner: true,
         optimistic_block_inventory: true,
+        #[cfg(feature = "ycash")]
+        yellowback_payout_default: true,
     };
 
     // nu5 block height
@@ -4848,6 +4852,8 @@ async fn rpc_getdifficulty() {
         miner_memo: None,
         internal_miner: true,
         optimistic_block_inventory: true,
+        #[cfg(feature = "ycash")]
+        yellowback_payout_default: true,
     };
 
     // nu5 block height
