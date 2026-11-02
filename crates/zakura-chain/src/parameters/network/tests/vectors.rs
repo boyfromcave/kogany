@@ -1,4 +1,6 @@
 //! Fixed test vectors for the network consensus parameters.
+// kogany: the Zcash-fixture tests are not built with `ycash`, leaving their helpers unused.
+#![cfg_attr(feature = "ycash", allow(unused_imports, dead_code))]
 
 use zcash_protocol::consensus::{self as zp_consensus, NetworkConstants as _, Parameters};
 
@@ -104,6 +106,9 @@ fn check_parameters_impl() {
 
 /// Pins the public-network NU6.3 boundary and branch ID to librustzcash's consensus parameters.
 #[test]
+// kogany: Zcash funding streams, lockbox, NU6.3/NU7 and ZIP 218/234 schedules (a Ycash network
+// rejects NU5 with Vault); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn nu6_3_public_consensus_boundary_matches_librustzcash() {
     assert_eq!(
         NetworkUpgrade::from(zp_consensus::NetworkUpgrade::Nu6_3),
@@ -193,6 +198,9 @@ fn nu7_branch_id_matches_zip_259_and_librustzcash() {
 
 /// Mainnet selects NU7 and its timing rules at Common's ZIP 259 activation height.
 #[test]
+// kogany: Zcash funding streams, lockbox, NU6.3/NU7 and ZIP 218/234 schedules (a Ycash network
+// rejects NU5 with Vault); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn nu7_mainnet_activation_matches_common() {
     let activation_height = zp_consensus::MAIN_NETWORK
         .activation_height(zp_consensus::NetworkUpgrade::Nu7)
@@ -252,6 +260,9 @@ fn nu7_remains_unscheduled_on_regtest() {
 
 /// Default Testnet selects NU7 and its timing rules at Common's activation height.
 #[test]
+// kogany: Zcash funding streams, lockbox, NU6.3/NU7 and ZIP 218/234 schedules (a Ycash network
+// rejects NU5 with Vault); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn nu7_default_testnet_activation_matches_common() {
     let activation_height = zp_consensus::TEST_NETWORK
         .activation_height(zp_consensus::NetworkUpgrade::Nu7)
@@ -319,6 +330,9 @@ fn nu7_default_testnet_activation_matches_common() {
 
 /// NU6.3 does not change the post-Blossom timing rules used by difficulty validation.
 #[test]
+// kogany: Zcash funding streams, lockbox, NU6.3/NU7 and ZIP 218/234 schedules (a Ycash network
+// rejects NU5 with Vault); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn nu6_3_keeps_post_blossom_timing_rules() {
     assert_eq!(NetworkUpgrade::Nu6_3.target_spacing().num_seconds(), 75);
     assert_eq!(
@@ -545,6 +559,9 @@ fn configured_nu6_3_activation_preserves_upgrade_order() {
 }
 
 #[test]
+// kogany: Zcash Mainnet/Testnet schedules (halvings, subsidies, activation list, value pools); not
+// run on Ycash, whose schedule tests are parameters/ycash/tests.rs.
+#[cfg(not(feature = "ycash"))]
 fn configured_max_block_time_policy_is_local() {
     let public_testnet = Network::new_default_testnet();
     assert!(!public_testnet.is_max_block_time_enforced(Height(653_605)));
@@ -810,6 +827,9 @@ fn check_full_activation_list() {
 /// Tests that a set of constraints are enforced when building Testnet parameters,
 /// and that funding stream configurations that should be valid can be built.
 #[test]
+// kogany: Zcash funding streams, lockbox, NU6.3/NU7 and ZIP 218/234 schedules (a Ycash network
+// rejects NU5 with Vault); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn check_configured_funding_stream_constraints() {
     let configured_funding_streams = [
         Default::default(),
@@ -970,6 +990,9 @@ fn check_configured_funding_stream_constraints() {
 /// Checks that funding stream numerators which sum to a multiple of `2^64` are rejected,
 /// instead of wrapping to a value inside the valid range.
 #[test]
+// kogany: Zcash funding streams, lockbox, NU6.3/NU7 and ZIP 218/234 schedules (a Ycash network
+// rejects NU5 with Vault); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn check_configured_funding_stream_numerator_sum_does_not_wrap() {
     std::panic::set_hook(Box::new(|_| {}));
 
@@ -1022,6 +1045,9 @@ fn check_configured_funding_stream_numerator_sum_does_not_wrap() {
 /// Checks that funding stream recipient addresses which are not P2SH are rejected when the
 /// network is configured, rather than panicking in block validation at the activation height.
 #[test]
+// kogany: Zcash funding streams, lockbox, NU6.3/NU7 and ZIP 218/234 schedules (a Ycash network
+// rejects NU5 with Vault); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn check_configured_funding_stream_addresses_are_p2sh() {
     // A valid Testnet address that is P2PKH instead of P2SH.
     const TESTNET_P2PKH_ADDRESS: &str = "tmWbBGi7TjExNmLZyMcFpxVh3ZPbGrpbX3H";
@@ -1115,6 +1141,9 @@ fn check_configured_slow_start_interval_keeps_founders_reward_exact() {
 /// network is configured, rather than panicking in block validation at the NU6.1 activation
 /// height.
 #[test]
+// kogany: Zcash funding streams, lockbox, NU6.3/NU7 and ZIP 218/234 schedules (a Ycash network
+// rejects NU5 with Vault); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn check_configured_lockbox_disbursement_addresses_are_p2sh() {
     // A valid Testnet address that is P2PKH instead of P2SH.
     const TESTNET_P2PKH_ADDRESS: &str = "tmWbBGi7TjExNmLZyMcFpxVh3ZPbGrpbX3H";
@@ -1174,6 +1203,9 @@ fn check_configured_lockbox_disbursement_addresses_parse() {
 /// rejected when the network is configured, rather than panicking when the deferred pool
 /// balance is calculated during sync.
 #[test]
+// kogany: Zcash funding streams, lockbox, NU6.3/NU7 and ZIP 218/234 schedules (a Ycash network
+// rejects NU5 with Vault); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn check_configured_lockbox_disbursement_total_is_valid() {
     // A valid Testnet P2SH address, so the amounts are what fails the check.
     const TESTNET_P2SH_ADDRESS: &str = "t2RnBRiqrN1nW4ecZs1Fj3WWjNdnSs4kiX8";
@@ -1200,6 +1232,9 @@ fn check_configured_lockbox_disbursement_total_is_valid() {
 
 /// Check that `new_regtest()` constructs a network with the provided funding streams.
 #[test]
+// kogany: Zcash funding streams, lockbox, NU6.3/NU7 and ZIP 218/234 schedules (a Ycash network
+// rejects NU5 with Vault); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn check_configured_funding_stream_regtest() {
     let default_testnet = Network::new_default_testnet();
 
@@ -1243,6 +1278,9 @@ fn check_configured_funding_stream_regtest() {
 }
 
 #[test]
+// kogany: Zcash funding streams, lockbox, NU6.3/NU7 and ZIP 218/234 schedules (a Ycash network
+// rejects NU5 with Vault); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn sum_of_one_time_lockbox_disbursements_is_correct() {
     let mut configured_activation_heights: ConfiguredActivationHeights =
         Network::new_default_testnet().activation_list().into();
@@ -1322,6 +1360,9 @@ fn lockbox_input_value(network: &Network, height: Height) -> Amount<NonNegative>
 }
 
 #[test]
+// kogany: Zcash funding streams, lockbox, NU6.3/NU7 and ZIP 218/234 schedules (a Ycash network
+// rejects NU5 with Vault); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn funding_streams_default_values() {
     let _init_guard = zakura_test::init();
 
@@ -1396,6 +1437,9 @@ fn funding_streams_default_values() {
 /// Checks the temporary Orchard-disabling soft fork height accessors, including the
 /// activation-height boundary used to trigger a mempool reset.
 #[test]
+// kogany: Zcash Mainnet/Testnet schedules (halvings, subsidies, activation list, value pools); not
+// run on Ycash, whose schedule tests are parameters/ycash/tests.rs.
+#[cfg(not(feature = "ycash"))]
 fn temporary_orchard_disabling_soft_fork_heights() {
     let _init_guard = zakura_test::init();
 

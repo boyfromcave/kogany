@@ -1,3 +1,5 @@
+// kogany: the Zcash-fixture tests are not built with `ycash`, leaving their helpers unused.
+#![cfg_attr(feature = "ycash", allow(unused_imports, dead_code))]
 use std::sync::Arc;
 
 use crate::{
@@ -181,6 +183,9 @@ proptest! {
 }
 
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, Equihash (200, 9), Zcash
+// Mainnet heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn get_transparent_output_address() -> Result<()> {
     let _init_guard = zakura_test::init();
 
@@ -219,6 +224,9 @@ fn get_transparent_output_address() -> Result<()> {
 }
 
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, Equihash (200, 9), Zcash
+// Mainnet heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn get_transparent_output_address_with_blocks() {
     let _init_guard = zakura_test::init();
     for network in Network::iter() {

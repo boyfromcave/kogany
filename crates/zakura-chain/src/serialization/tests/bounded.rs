@@ -211,6 +211,9 @@ fn bounded_transaction_minimum_is_a_codec_bound() {
 }
 
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, Equihash (200, 9), Zcash
+// Mainnet heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn bounded_blocks_match_streaming_fixtures_and_preserve_trailing_input() {
     for &encoded in zakura_test::vectors::BLOCKS.iter() {
         let expected = Block::zcash_deserialize(encoded).unwrap();

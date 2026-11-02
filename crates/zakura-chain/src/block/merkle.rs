@@ -407,6 +407,9 @@ mod tests {
     use crate::{block::Block, serialization::ZcashDeserialize, transaction::AuthDigest};
 
     #[test]
+    // kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, Equihash (200, 9),
+    // Zcash Mainnet heights); not run on Ycash.
+    #[cfg(not(feature = "ycash"))]
     fn block_test_vectors() {
         for block_bytes in zakura_test::vectors::BLOCKS.iter() {
             let block = Block::zcash_deserialize(&**block_bytes).unwrap();
@@ -427,6 +430,9 @@ mod tests {
     }
 
     #[test]
+    // kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, Equihash (200, 9),
+    // Zcash Mainnet heights); not run on Ycash.
+    #[cfg(not(feature = "ycash"))]
     fn auth_digest() {
         for block_bytes in zakura_test::vectors::BLOCKS.iter() {
             let block = Block::zcash_deserialize(&**block_bytes).unwrap();

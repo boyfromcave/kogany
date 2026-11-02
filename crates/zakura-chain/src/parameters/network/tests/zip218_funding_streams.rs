@@ -4,6 +4,8 @@
 //! The Mainnet NU7 height below is the ZIP 259 consensus parameter; the Testnet
 //! NU7 height is a zakura#1059 estimate. The expected halving heights also follow
 //! from the closed forms below.
+// kogany: the Zcash-fixture tests are not built with `ycash`, leaving their helpers unused.
+#![cfg_attr(feature = "ycash", allow(unused_imports, dead_code))]
 
 use std::collections::HashMap;
 
@@ -94,6 +96,9 @@ fn mainnet_schedule_with_test_stream() -> Network {
 }
 
 #[test]
+// kogany: Zcash funding streams, lockbox, NU6.3/NU7 and ZIP 218/234 schedules (a Ycash network
+// rejects NU5 with Vault); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn mainnet_nu7_boundaries_match_fixed_oracle() {
     let _init_guard = zakura_test::init();
 
@@ -222,6 +227,9 @@ fn required_addresses(height_range: &std::ops::Range<Height>, network: &Network)
 }
 
 #[test]
+// kogany: Zcash funding streams, lockbox, NU6.3/NU7 and ZIP 218/234 schedules (a Ycash network
+// rejects NU5 with Vault); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn zip_218_third_and_fourth_halving_heights() {
     let _init_guard = zakura_test::init();
 
@@ -323,6 +331,9 @@ fn nu7_adjusted_funding_stream_height_cases() {
 }
 
 #[test]
+// kogany: Zcash funding streams, lockbox, NU6.3/NU7 and ZIP 218/234 schedules (a Ycash network
+// rejects NU5 with Vault); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn revision_2_funding_streams_end_at_the_zip_218_third_halving() {
     let _init_guard = zakura_test::init();
 
@@ -420,6 +431,9 @@ fn revision_2_funding_streams_end_at_the_zip_218_third_halving() {
 }
 
 #[test]
+// kogany: Zcash funding streams, lockbox, NU6.3/NU7 and ZIP 218/234 schedules (a Ycash network
+// rejects NU5 with Vault); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn revision_2_funding_streams_apply_until_the_zip_218_third_halving() {
     let _init_guard = zakura_test::init();
 
@@ -450,6 +464,9 @@ fn revision_2_funding_streams_apply_until_the_zip_218_third_halving() {
 }
 
 #[test]
+// kogany: Zcash funding streams, lockbox, NU6.3/NU7 and ZIP 218/234 schedules (a Ycash network
+// rejects NU5 with Vault); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn funding_stream_address_period_after_nu7() {
     let _init_guard = zakura_test::init();
 
@@ -509,6 +526,9 @@ fn funding_stream_address_period_after_nu7() {
 }
 
 #[test]
+// kogany: Zcash funding streams, lockbox, NU6.3/NU7 and ZIP 218/234 schedules (a Ycash network
+// rejects NU5 with Vault); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn moved_heights_keep_their_address_period() {
     let _init_guard = zakura_test::init();
 
@@ -594,6 +614,9 @@ fn configured_streams(revision_2: ConfiguredFundingStreams) -> Vec<ConfiguredFun
 }
 
 #[test]
+// kogany: Zcash funding streams, lockbox, NU6.3/NU7 and ZIP 218/234 schedules (a Ycash network
+// rejects NU5 with Vault); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn configured_funding_stream_ranges_after_nu7() {
     let _init_guard = zakura_test::init();
 
@@ -663,6 +686,9 @@ fn configured_funding_stream_ranges_after_nu7() {
 }
 
 #[test]
+// kogany: Zcash funding streams, lockbox, NU6.3/NU7 and ZIP 218/234 schedules (a Ycash network
+// rejects NU5 with Vault); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn moved_revision_2_range_must_not_shadow_a_later_configured_stream() {
     let _init_guard = zakura_test::init();
 
@@ -705,6 +731,9 @@ fn moved_revision_2_range_must_not_shadow_a_later_configured_stream() {
 }
 
 #[test]
+// kogany: Zcash funding streams, lockbox, NU6.3/NU7 and ZIP 218/234 schedules (a Ycash network
+// rejects NU5 with Vault); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn moved_revision_2_range_needs_exactly_the_built_in_addresses() {
     let _init_guard = zakura_test::init();
 
@@ -731,6 +760,9 @@ fn moved_revision_2_range_needs_exactly_the_built_in_addresses() {
 }
 
 #[test]
+// kogany: Zcash funding streams, lockbox, NU6.3/NU7 and ZIP 218/234 schedules (a Ycash network
+// rejects NU5 with Vault); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn moved_funding_streams_round_trip_through_configuration() {
     let _init_guard = zakura_test::init();
 
@@ -759,6 +791,9 @@ fn moved_funding_streams_round_trip_through_configuration() {
 }
 
 #[test]
+// kogany: Zcash funding streams, lockbox, NU6.3/NU7 and ZIP 218/234 schedules (a Ycash network
+// rejects NU5 with Vault); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn funding_stream_values_before_and_after_the_zip_218_third_halving() {
     let _init_guard = zakura_test::init();
 
@@ -796,6 +831,9 @@ proptest! {
     /// `h` before ZIP 218 and the height `A + 3 · (h − A)` after it have the same period, so
     /// each period keeps its wall-clock length, including the period that contains NU7.
     #[test]
+    // kogany: Zcash funding streams, lockbox, NU6.3/NU7 and ZIP 218/234 schedules (a Ycash network
+    // rejects NU5 with Vault); not run on Ycash.
+    #[cfg(not(feature = "ycash"))]
     fn address_period_keeps_its_length_for_any_nu7_height(
         nu7 in activation_heights::testnet::NU6_3.0 + 1..=TESTNET_THIRD_HALVING + 200_000,
         before in 1u32..=activation_heights::testnet::NU6_3.0,
@@ -859,6 +897,9 @@ proptest! {
     /// addresses. The earlier streams do not move. NU7 at or after the old third halving
     /// does not reactivate the streams.
     #[test]
+    // kogany: Zcash funding streams, lockbox, NU6.3/NU7 and ZIP 218/234 schedules (a Ycash network
+    // rejects NU5 with Vault); not run on Ycash.
+    #[cfg(not(feature = "ycash"))]
     fn revision_2_streams_fit_their_addresses_for_any_nu7_height(
         testnet_nu7 in activation_heights::testnet::NU6_3.0 + 1..=TESTNET_THIRD_HALVING + 200_000,
         mainnet_nu7 in activation_heights::mainnet::NU6_3.0 + 1..=MAINNET_THIRD_HALVING + 200_000,

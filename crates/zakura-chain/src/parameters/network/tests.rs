@@ -1,4 +1,6 @@
 #![allow(clippy::unwrap_in_result)]
+// kogany: the Zcash-fixture tests are not built with `ycash`, leaving their helpers unused.
+#![cfg_attr(feature = "ycash", allow(unused_imports, dead_code))]
 
 mod prop;
 mod vectors;
@@ -134,6 +136,9 @@ fn regtest_first_halving_follows_the_target_spacing() {
 }
 
 #[test]
+// kogany: Zcash Mainnet/Testnet schedules (halvings, subsidies, activation list, value pools); not
+// run on Ycash, whose schedule tests are parameters/ycash/tests.rs.
+#[cfg(not(feature = "ycash"))]
 fn halving_test() -> Result<(), Report> {
     let _init_guard = zakura_test::init();
     // Exercise the historical two-era schedule, using the Mainnet heights without
@@ -267,6 +272,9 @@ fn halving_for_network(network: &Network) -> Result<(), Report> {
 }
 
 #[test]
+// kogany: Zcash Mainnet/Testnet schedules (halvings, subsidies, activation list, value pools); not
+// run on Ycash, whose schedule tests are parameters/ycash/tests.rs.
+#[cfg(not(feature = "ycash"))]
 fn block_subsidy_test() -> Result<(), Report> {
     let _init_guard = zakura_test::init();
 
@@ -774,6 +782,9 @@ fn nsm_reissuance_requires_nu7_and_a_crossing() {
 
 /// Default Testnet derives NSM reissuance from its real NU7 schedule.
 #[test]
+// kogany: Zcash funding streams, lockbox, NU6.3/NU7 and ZIP 218/234 schedules (a Ycash network
+// rejects NU5 with Vault); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn default_testnet_nsm_reissuance_boundary() {
     use crate::parameters::subsidy::{
         block_subsidy, halving_block_subsidy, height_for_halving, is_zip234_active,
@@ -825,6 +836,9 @@ fn default_testnet_nsm_reissuance_boundary() {
 
 /// Artificial test fixtures still respect NU7 gating.
 #[test]
+// kogany: Zcash funding streams, lockbox, NU6.3/NU7 and ZIP 218/234 schedules (a Ycash network
+// rejects NU5 with Vault); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn test_nsm_reissuance_fixture_respects_nu7() {
     use crate::parameters::subsidy::{is_zip234_active, nsm_reissuance_height};
 
@@ -872,6 +886,9 @@ fn test_nsm_reissuance_fixture_respects_nu7() {
 
 /// Derived activation reaches the subsidy path, without requiring an explicit height.
 #[test]
+// kogany: Zcash funding streams, lockbox, NU6.3/NU7 and ZIP 218/234 schedules (a Ycash network
+// rejects NU5 with Vault); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn derived_nsm_crossing_activates_block_subsidy() {
     use crate::parameters::subsidy::{
         block_subsidy, halving_block_subsidy, is_zip234_active, nsm_reissuance_crossing_height,
@@ -920,6 +937,9 @@ fn derived_nsm_crossing_activates_block_subsidy() {
 
 /// NU7 inside the third era can cross immediately; its fourth-halving boundary is excluded.
 #[test]
+// kogany: Zcash funding streams, lockbox, NU6.3/NU7 and ZIP 218/234 schedules (a Ycash network
+// rejects NU5 with Vault); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn nsm_crossing_respects_network_search_boundaries() {
     use crate::parameters::subsidy::{nsm_reissuance_crossing_height, nsm_reissuance_height};
 
@@ -987,6 +1007,9 @@ fn nsm_crossing_includes_only_the_permitted_run() {
 proptest::proptest! {
     /// Check the full network wrapper over NU7 dates before, within, and after the third era.
     #[test]
+    // kogany: Zcash funding streams, lockbox, NU6.3/NU7 and ZIP 218/234 schedules (a Ycash network
+    // rejects NU5 with Vault); not run on Ycash.
+    #[cfg(not(feature = "ycash"))]
     fn derived_nsm_crossing_matches_network_inequality(nu7 in 4_200_000u32..8_000_000) {
         use crate::{amount::MAX_MONEY, parameters::subsidy::{
             halving_block_subsidy, nsm_reissuance_height, scheduled_issuance_zatoshis,
@@ -1022,6 +1045,9 @@ proptest::proptest! {
 
 /// The direct crossing uses the spacing-aware halving and scheduled-supply rules.
 #[test]
+// kogany: Zcash funding streams, lockbox, NU6.3/NU7 and ZIP 218/234 schedules (a Ycash network
+// rejects NU5 with Vault); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn nsm_reissuance_crossing_uses_the_post_nu7_schedule() {
     use crate::{
         amount::MAX_MONEY,
@@ -1098,6 +1124,9 @@ fn nsm_reissuance_crossing_uses_the_post_nu7_schedule() {
 /// timestamp is still the estimate from the 2026-09-17 NU7 timeline. This test
 /// checks the calendar interpretation of the spacing-aware equation.
 #[test]
+// kogany: Zcash funding streams, lockbox, NU6.3/NU7 and ZIP 218/234 schedules (a Ycash network
+// rejects NU5 with Vault); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn mainnet_nsm_crossing_estimated_for_february_2031() {
     use chrono::{Datelike, Duration, TimeZone, Utc};
 
@@ -1922,6 +1951,9 @@ fn reissuance_bonus_oracle(balance: i64, numerator: i128) -> i128 {
 
 /// Preserve the measured seed checks from the merged accounting layer.
 #[test]
+// kogany: Zcash Mainnet/Testnet schedules (halvings, subsidies, activation list, value pools); not
+// run on Ycash, whose schedule tests are parameters/ycash/tests.rs.
+#[cfg(not(feature = "ycash"))]
 fn initial_nsm_value_balances_match_pre_nu6_chain_value_pools() {
     use crate::parameters::subsidy::scheduled_issuance_zatoshis;
 

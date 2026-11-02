@@ -1,3 +1,5 @@
+// kogany: the Zcash-fixture tests are not built with `ycash`, leaving their helpers unused.
+#![cfg_attr(feature = "ycash", allow(unused_imports, dead_code))]
 use std::sync::Arc;
 
 use crate::{
@@ -25,6 +27,9 @@ use eyre::Result;
 /// zakura-chain/src/primitives/zcash_history/tests/vectors.rs, but with the
 /// higher level API.
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, Equihash (200, 9), Zcash
+// Mainnet heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn push_and_prune() -> Result<()> {
     for network in Network::iter() {
         push_and_prune_for_network_upgrade(network.clone(), NetworkUpgrade::Heartwood)?;
@@ -115,6 +120,9 @@ fn push_and_prune_for_network_upgrade(
 
 /// Test that the parts API builds the same tree as the full-block API.
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, Equihash (200, 9), Zcash
+// Mainnet heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn parts_api_matches_block_api() -> Result<()> {
     for network in Network::iter() {
         parts_api_matches_block_api_for_network(network)?;
@@ -1191,6 +1199,9 @@ fn history_tree_push_wrapper_matches_parts_across_nu6_3_activation() -> Result<(
 /// Test the history tree works during a network upgrade using the block
 /// of a network upgrade and the previous block from the previous upgrade.
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, Equihash (200, 9), Zcash
+// Mainnet heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn upgrade() -> Result<()> {
     // The history tree only exists Hearwood-onward, and the only upgrade for which
     // we have vectors since then is Canopy. Therefore, only test the Heartwood->Canopy upgrade.
