@@ -1,6 +1,6 @@
 [package]
 name = "zakura-rpc"
-version = "13.0.1-rc0"
+version = "13.0.1-rc1"
 authors.workspace = true
 description = "The Zakura node's JSON Remote Procedure Call (JSON-RPC) interface. Internal crate, published to support cargo install zakura"
 license.workspace = true
@@ -119,7 +119,7 @@ zakura-consensus = { path = "../zakura-consensus", version = "12.0.0-rc0" }
 zakura-network = { path = "../zakura-network", version = "11.0.0-rc0" }
 zakura-node-services = { path = "../zakura-node-services", version = "5.0.1-rc0" }
 zakura-script = { path = "../zakura-script", version = "5.0.1-rc0" }
-zakura-state = { path = "../zakura-state", version = "11.1.0-rc0" }
+zakura-state = { path = "../zakura-state", version = "12.0.0-rc0" }
 
 # kogany W7-c (`ycash` feature): the post-quantum address codec and TX_PQPKH script for
 # `validateaddress`; W8: the coinbase tag codec and the vault state machine.
@@ -155,7 +155,7 @@ zakura-consensus = { path = "../zakura-consensus", version = "12.0.0-rc0", featu
 zakura-network = { path = "../zakura-network", version = "11.0.0-rc0", features = [
     "proptest-impl",
 ] }
-zakura-state = { path = "../zakura-state", version = "11.1.0-rc0", features = [
+zakura-state = { path = "../zakura-state", version = "12.0.0-rc0", features = [
     "proptest-impl",
 ] }
 
