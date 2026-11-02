@@ -212,4 +212,9 @@ pub enum Error {
 
     #[error("Minimum fee could not be calculated")]
     InvalidMinFee,
+
+    /// The Ycash per-Sapling-output floor (kogany W1-Y9, `super::ycash_relay`).
+    #[cfg(feature = "ycash")]
+    #[error("Transaction fee is below the per-Sapling-output floor")]
+    PerSaplingOutputFee,
 }

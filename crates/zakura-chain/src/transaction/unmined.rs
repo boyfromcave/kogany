@@ -34,6 +34,9 @@ use proptest_derive::Arbitrary;
 
 pub mod zip317;
 
+#[cfg(feature = "ycash")]
+pub mod ycash_relay;
+
 /// The minimum cost value for a transaction in the mempool.
 ///
 /// The mempool limits its size by the total cost of its transactions, and ranks eviction
@@ -440,7 +443,11 @@ impl VerifiedUnminedTx {
         let conventional_actions = zip317::conventional_actions(&transaction.transaction);
         let unpaid_actions = zip317::unpaid_actions(&transaction, miner_fee);
 
+        #[cfg(not(feature = "ycash"))]
         zip317::mempool_checks(unpaid_actions, miner_fee, transaction.size)?;
+        // A Ycash network has no ZIP-317 relay rule: its own fee rules replace it (W1-Y9).
+        #[cfg(feature = "ycash")]
+        ycash_relay::mempool_checks(&transaction, miner_fee)?;
 
         Ok(Self {
             transaction,
@@ -499,6 +506,7 @@ mod tests {
         transaction::{LockTime, Transaction},
     };
 
+    #[cfg_attr(feature = "ycash", ignore = "Ycash has no ZIP-317 relay rule (W1-Y9)")]
     #[test]
     fn verified_unmined_tx_rejects_insufficient_zip317_fee() {
         let transaction = UnminedTx::from(Transaction::V5 {
