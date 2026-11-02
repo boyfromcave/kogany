@@ -37,7 +37,9 @@ fn assert_pins(network: &Network, pins: &[(u32, &str)]) {
 
 /// No list reaches the Vault epoch (M24-14): checkpoints never cover vault or YED state.
 fn assert_below_vault(network: &Network) {
-    if let Some(vault) = NetworkUpgrade::Vault.activation_height(network) {
+    // Vault's explicit height only (never the fallback), per the is_vault_active rule.
+    if let Some(vault) = network.vault_activation_height() {
+        assert!(!network.is_vault_active(network.checkpoint_list().max_height()));
         assert!(network.checkpoint_list().max_height() < vault);
     }
 }
