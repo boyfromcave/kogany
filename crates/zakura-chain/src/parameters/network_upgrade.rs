@@ -716,10 +716,7 @@ impl From<zcash_protocol::consensus::NetworkUpgrade> for NetworkUpgrade {
         match nu {
             zcash_protocol::consensus::NetworkUpgrade::Overwinter => Self::Overwinter,
             zcash_protocol::consensus::NetworkUpgrade::Sapling => Self::Sapling,
-            // Ycash: zakura-protocol's Ycash fork upgrade has no Zakura upgrade
-            // yet (the ycash profile, W1-Y1, adds one). Never scheduled here:
-            // `Parameters::activation_height` answers `None` before converting.
-            zcash_protocol::consensus::NetworkUpgrade::Ycash => Self::Sapling,
+            zcash_protocol::consensus::NetworkUpgrade::Ycash => Self::Ycash,
             zcash_protocol::consensus::NetworkUpgrade::Blossom => Self::Blossom,
             zcash_protocol::consensus::NetworkUpgrade::Heartwood => Self::Heartwood,
             zcash_protocol::consensus::NetworkUpgrade::Canopy => Self::Canopy,

@@ -20,7 +20,12 @@ default = []
 # The Ycash network profile (kogany): Ycash mainnet, testnet profiles and regtest replace the Zcash
 # networks, and the forked librustzcash crates switch to their Ycash values. Off, this crate is
 # upstream Zakura with the Ycash upgrade present as an inert variant.
-ycash = []
+ycash = [
+    "zcash_protocol/ycash",
+    "zcash_primitives/ycash",
+    "zcash_address/ycash",
+    "zcash_transparent/ycash",
+]
 
 # Production features that activate extra functionality
 

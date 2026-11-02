@@ -195,3 +195,31 @@ fn ycash_spacing_and_window_are_pre_blossom() {
         75
     );
 }
+
+#[test]
+fn ycash_branch_ids_convert_to_the_common_fork() {
+    // Lane B trap T1: every scheduled Ycash epoch's branch ID must be one the forked
+    // `zcash_protocol` (feature `ycash`) accepts, with the same meaning.
+    for nu in [Overwinter, Sapling, Ycash, Blossom, Heartwood, Canopy, Nu5] {
+        let id = nu.branch_id().expect("these upgrades have branch IDs");
+        let converted = zcash_protocol::consensus::BranchId::try_from(id)
+            .unwrap_or_else(|_| panic!("the common fork rejects {nu:?} {id}"));
+        assert_eq!(u32::from(converted), u32::from(id), "{nu:?}");
+    }
+    assert_eq!(
+        NetworkUpgrade::from(zcash_protocol::consensus::NetworkUpgrade::Ycash),
+        Ycash
+    );
+
+    // The library's view of the network heights, through `Parameters for Network`.
+    use zcash_protocol::consensus::{BlockHeight, NetworkUpgrade as Lib, Parameters};
+    assert_eq!(
+        Network::Mainnet.activation_height(Lib::Ycash),
+        Some(BlockHeight::from_u32(570_000))
+    );
+    assert_eq!(
+        Network::new_default_testnet().activation_height(Lib::Canopy),
+        Some(BlockHeight::from_u32(510_254))
+    );
+    assert_eq!(Network::Mainnet.activation_height(Lib::Nu5), None);
+}
