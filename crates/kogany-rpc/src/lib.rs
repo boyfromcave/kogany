@@ -70,10 +70,11 @@ where
         + Send
         + Sync
         + 'static,
-    R::Future: Send,
+    R::Future: Send + 'static,
 {
     yed::live::set_network(network);
     let yed = yed_state(tip.clone(), read_state.clone());
+    let insight_read_state = read_state.clone();
     let state: Arc<dyn VaultReadState> =
         if std::env::var(mock::MOCK_ENV).is_ok_and(|value| value == "1") {
             tracing::warn!(
@@ -88,7 +89,13 @@ where
         .into_extension()
         .and(yed::extension(yed, network))
         .and(regtest::RegtestRpcImpl::new(network.clone()).into_extension())
-        .and(insight::InsightRpcImpl::new(network.clone()).into_extension())
+        .and(
+            insight::InsightRpcImpl::new(
+                network.clone(),
+                Some(tower::util::BoxCloneSyncService::new(insight_read_state)),
+            )
+            .into_extension(),
+        )
 }
 
 /// The `getblocktemplate` hooks `zakurad` installs on a Ycash node (plan W8-b): over the same

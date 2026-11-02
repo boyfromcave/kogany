@@ -1,4 +1,5 @@
-//! `getaddressmempool`, ycashd's insight-explorer mempool read (S5 parity, `wallet_pq_address`).
+//! `getaddressmempool` and `getaddressdeltas`, ycashd's insight-explorer reads that Zakura does
+//! not serve (S5 parity, `wallet_pq_address`).
 //!
 //! Copyright (c) 2026 The Ycash developers. Distributed under the MIT software license.
 //!
@@ -9,12 +10,25 @@
 //! address index; kogany has no mempool address index, so this one scans the mempool's verified
 //! set (`crate::mempool`), whose entries carry the outputs their inputs spend. Like Zakura's
 //! `getaddressbalance`, it is always on (ycashd needs `-insightexplorer` or `-lightwalletd`).
+//!
+//! `getaddressdeltas` (ycash6 `src/rpc/misc.cpp`): every confirmed delta of the named addresses
+//! in a height range, per address in the order named, then by height, position in the block,
+//! txid, index and spending. It reads Zakura's address transaction index
+//! (`ReadRequest::TransactionIdsByAddresses`) and each transaction (and, for an input, the
+//! transaction whose output it spends) from the read state: no index is added.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use serde_json::{json, Value};
-use zakura_chain::{parameters::Network, transaction::VerifiedUnminedTx, transparent::Address};
+use tower::{util::BoxCloneSyncService, ServiceExt};
+use zakura_chain::{
+    block::Height, parameters::Network, transaction::VerifiedUnminedTx, transparent::Address,
+};
 use zakura_rpc::server::jsonrpc::{ErrorObject, RpcResult};
+use zakura_state::{BoxError, ReadRequest, ReadResponse};
+
+/// The read state service the insight reads use.
+pub type ReadStateService = BoxCloneSyncService<ReadRequest, ReadResponse, BoxError>;
 
 crate::kogany_rpc_trait! {
     /// ycashd's insight-explorer reads that Zakura does not serve.
@@ -22,20 +36,68 @@ crate::kogany_rpc_trait! {
         /// Every mempool delta of `{"addresses": [...]}` (or one address string).
         #[method(name = "getaddressmempool", access = Unauthenticated)]
         async fn getaddressmempool(&self, addresses: Value) -> RpcResult<Vec<Value>>;
+
+        /// Every confirmed delta of `{"addresses": [...], "start", "end", "chainInfo"}` (or one
+        /// address string).
+        #[method(name = "getaddressdeltas", access = Unauthenticated)]
+        async fn getaddressdeltas(&self, request: Value) -> RpcResult<Value>;
     }
     dispatch = InsightRpcDispatch;
 }
 
 /// [`InsightRpc`] on a network.
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct InsightRpcImpl {
     network: Network,
+    read_state: Option<ReadStateService>,
 }
 
 impl InsightRpcImpl {
-    /// The insight reads on `network`.
-    pub fn new(network: Network) -> Self {
-        Self { network }
+    /// The insight reads on `network` over `read_state` (`None`: the confirmed reads answer
+    /// nothing).
+    pub fn new(network: Network, read_state: Option<ReadStateService>) -> Self {
+        Self {
+            network,
+            read_state,
+        }
+    }
+
+    async fn read(&self, request: ReadRequest) -> RpcResult<ReadResponse> {
+        let Some(state) = self.read_state.clone() else {
+            return Err(ErrorObject::new(-32603, "no chain state"));
+        };
+        state
+            .oneshot(request)
+            .await
+            .map_err(|e| ErrorObject::new(-32603, e.to_string()))
+    }
+
+    async fn tip_height(&self) -> RpcResult<i64> {
+        match self.read(ReadRequest::Tip).await? {
+            ReadResponse::Tip(tip) => Ok(tip.map_or(-1, |(h, _)| i64::from(h.0))),
+            _ => Err(ErrorObject::new(-32603, "unexpected tip response")),
+        }
+    }
+
+    async fn transaction(
+        &self,
+        hash: zakura_chain::transaction::Hash,
+    ) -> RpcResult<Option<std::sync::Arc<zakura_chain::transaction::Transaction>>> {
+        match self.read(ReadRequest::Transaction(hash)).await? {
+            ReadResponse::Transaction(tx) => Ok(tx.map(|m| m.tx)),
+            _ => Err(ErrorObject::new(-32603, "unexpected transaction response")),
+        }
+    }
+
+    async fn block_hash(&self, height: i64) -> RpcResult<String> {
+        let height = u32::try_from(height).map_err(|_| invalid_range("out of range"))?;
+        match self
+            .read(ReadRequest::BestChainBlockHash(Height(height)))
+            .await?
+        {
+            ReadResponse::BlockHash(Some(hash)) => Ok(hash.to_string()),
+            _ => Err(invalid_range("Start or end is outside chain range")),
+        }
     }
 
     /// These methods as a server extension.
@@ -47,6 +109,51 @@ impl InsightRpcImpl {
 /// ycashd's `RPC_INVALID_ADDRESS_OR_KEY` "Invalid address" (`getAddressesFromParams`).
 fn invalid_address() -> ErrorObject {
     ErrorObject::new(-5, "Invalid address")
+}
+
+/// ycashd's `RPC_INVALID_ADDRESS_OR_KEY` with `text` (`getHeightRange`).
+fn invalid_range(text: &str) -> ErrorObject {
+    ErrorObject::new(-5, text.to_owned())
+}
+
+/// `getHeightRange`: `start`/`end` of the request object (0 when absent), clamped to the tip;
+/// `end` 0 is the tip.
+pub fn height_range(params: &Value, tip: i64) -> RpcResult<(i64, i64)> {
+    let field = |name: &str, negative: &str| -> RpcResult<i64> {
+        match params.get(name) {
+            None | Some(Value::Null) => Ok(0),
+            Some(v) => {
+                let n = v
+                    .as_i64()
+                    .ok_or_else(|| ErrorObject::new(-1, "JSON value is not an integer as expected"))?;
+                if n < 0 {
+                    Err(invalid_range(negative))
+                } else {
+                    Ok(n)
+                }
+            }
+        }
+    };
+    let (mut start, mut end) = if params.is_object() {
+        (
+            field("start", "Start height must be nonnegative")?,
+            field("end", "End height must be nonnegative")?,
+        )
+    } else {
+        (0, 0)
+    };
+    if start > tip {
+        start = tip;
+    }
+    if end == 0 || end > tip {
+        end = tip;
+    }
+    if start > end {
+        return Err(invalid_range(
+            "End value is expected to be greater than or equal to start",
+        ));
+    }
+    Ok((start, end))
 }
 
 /// `getAddressesFromParams`: one address string, or `{"addresses": [string, ...]}`; each named
@@ -152,6 +259,101 @@ impl InsightRpc for InsightRpcImpl {
             &crate::mempool::transactions().await,
             &addresses,
         ))
+    }
+
+    async fn getaddressdeltas(&self, request: Value) -> RpcResult<Value> {
+        let tip = self.tip_height().await?;
+        let (start, end) = height_range(&request, tip)?;
+        let addresses = parse_addresses(&request)?;
+        let include_chain_info = match request.get("chainInfo") {
+            None | Some(Value::Null) => false,
+            Some(v) => v
+                .as_bool()
+                .ok_or_else(|| ErrorObject::new(-1, "JSON value is not a boolean as expected"))?,
+        };
+        let mut deltas = Vec::new();
+        let mut seen = HashSet::new();
+        for (address, name) in &addresses {
+            if !seen.insert(*address) || tip < 0 {
+                continue;
+            }
+            let range = Height(u32::try_from(start).unwrap_or(0))
+                ..=Height(u32::try_from(end).unwrap_or(0));
+            let ReadResponse::AddressesTransactionIds(txids) = self
+                .read(ReadRequest::TransactionIdsByAddresses {
+                    addresses: HashSet::from([*address]),
+                    height_range: range,
+                })
+                .await?
+            else {
+                return Err(ErrorObject::new(-32603, "unexpected address index response"));
+            };
+            // (height, blockindex, txid, index, spending, delta)
+            let mut rows: Vec<(u32, u16, [u8; 32], u32, bool, Value)> = Vec::new();
+            for (location, txid) in txids {
+                let Some(tx) = self.transaction(txid).await? else {
+                    continue;
+                };
+                let row = |index: usize, satoshis: i64| {
+                    json!({
+                        "address": name,
+                        "blockindex": location.index.index(),
+                        "height": location.height.0,
+                        "index": index,
+                        "satoshis": satoshis,
+                        "txid": txid.to_string(),
+                    })
+                };
+                for (index, output) in tx.outputs().iter().enumerate() {
+                    if output.address(&self.network).as_ref() == Some(address) {
+                        let i = u32::try_from(index).unwrap_or(u32::MAX);
+                        rows.push((
+                            location.height.0,
+                            location.index.index(),
+                            txid.0,
+                            i,
+                            false,
+                            row(index, i64::from(output.value)),
+                        ));
+                    }
+                }
+                for (index, input) in tx.inputs().iter().enumerate() {
+                    let Some(outpoint) = input.outpoint() else {
+                        continue;
+                    };
+                    let Some(prev) = self.transaction(outpoint.hash).await? else {
+                        continue;
+                    };
+                    let Some(spent) = prev.outputs().get(outpoint.index as usize) else {
+                        continue;
+                    };
+                    if spent.address(&self.network).as_ref() == Some(address) {
+                        let i = u32::try_from(index).unwrap_or(u32::MAX);
+                        rows.push((
+                            location.height.0,
+                            location.index.index(),
+                            txid.0,
+                            i,
+                            true,
+                            row(index, -i64::from(spent.value)),
+                        ));
+                    }
+                }
+            }
+            rows.sort_by(|a, b| (a.0, a.1, a.2, a.3, a.4).cmp(&(b.0, b.1, b.2, b.3, b.4)));
+            deltas.extend(rows.into_iter().map(|row| row.5));
+        }
+        if !(include_chain_info && start > 0 && end > 0) {
+            return Ok(Value::Array(deltas));
+        }
+        if start > tip || end > tip {
+            return Err(invalid_range("Start or end is outside chain range"));
+        }
+        Ok(json!({
+            "deltas": deltas,
+            "start": { "hash": self.block_hash(start).await?, "height": start },
+            "end": { "hash": self.block_hash(end).await?, "height": end },
+        }))
     }
 }
 
@@ -280,5 +482,27 @@ mod tests {
         }
         // Nothing named, nothing answered.
         assert!(address_deltas(&network, &pool, &[]).is_empty());
+    }
+
+    /// `getHeightRange`: absent or 0 bounds are the whole chain, a start past the tip is the tip,
+    /// and ycashd's -5 refusals.
+    #[test]
+    fn height_range_is_ycashds() {
+        assert_eq!(height_range(&json!("addr"), 50).expect("ok"), (0, 50));
+        assert_eq!(height_range(&json!({}), 50).expect("ok"), (0, 50));
+        assert_eq!(height_range(&json!({"start": 10, "end": 20}), 50).expect("ok"), (10, 20));
+        assert_eq!(height_range(&json!({"start": 60}), 50).expect("ok"), (50, 50));
+        assert_eq!(height_range(&json!({"end": 99}), 50).expect("ok"), (0, 50));
+        for (bad, text) in [
+            (json!({"start": -1}), "Start height must be nonnegative"),
+            (json!({"end": -1}), "End height must be nonnegative"),
+            (
+                json!({"start": 30, "end": 20}),
+                "End value is expected to be greater than or equal to start",
+            ),
+        ] {
+            let e = height_range(&bad, 50).expect_err("refused");
+            assert_eq!((e.code(), e.message()), (-5, text));
+        }
     }
 }
