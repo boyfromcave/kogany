@@ -1,0 +1,63 @@
+# Which GitHub Actions workflows run on kogany (decision K-15, plan
+# docs/plans/kogany/kogany-yellowback-plan.md §0 and §5; .github/README-kogany.md says why).
+#
+#   <state> <file under .github/workflows/>  <reason>
+#
+#   kept    an upstream Zakura workflow K-15 keeps, trimmed in place (each edit carries a
+#           "kogany (2026-11-01)" comment); enabled
+#   called  an upstream reusable workflow (workflow_call only) a kept one calls; nothing to disable
+#   off     an upstream workflow K-15 turns off. The file stays byte for byte as upstream has it, so
+#           an upstream sync never conflicts on it; it is disabled in the repository's Actions
+#           settings instead (`qa/kogany_audit.py workflows --print-disable` prints the commands)
+#   kogany  a workflow of ours; enabled
+#
+# `qa/kogany_audit.py workflows` (kogany-yellowback.yml, blocking) fails when a workflow file is
+# not listed here, so a workflow an upstream sync adds cannot run unclassified.
+
+kept    lint.yml                       K-15: clippy, rustfmt, cargo deny/vet, zizmor; without the nightly unused-deps run
+kept    tests-unit.yml                 K-15: build + 3-shard nextest; without the nightly release run, its issue, and the crates.io publish-graph check
+kept    zakura-e2e.yml                 K-15: the regtest pr-gate on PRs; the long four-node modes and block-sync fuzz weekly
+kept    docs-check.yml                 K-15: markdownlint, codespell, lychee
+kept    test-crates.yml                K-15: per-crate feature builds, weekly
+kept    header-fuzz.yml                K-15: header-chain fuzzing, weekly (the Sunday campaign)
+kept    rpc-fuzz.yml                   K-15: RPC fuzzing, weekly (the Sunday campaign)
+called  zakura-cluster.yml             reusable: the testkit cluster job tests-unit.yml and zakura-e2e.yml call
+
+off     ci-alerts.yml                  K-15: Slack notifier (needs a Slack webhook secret)
+off     coverage.yml                   K-15: Codecov upload (needs a Codecov token)
+off     benchmarks.yml                 K-15: publishes to gh-pages
+off     legacy-pages.yml               K-15: upstream's Pages redirect
+off     build-zakura-mac-cranelift.yml K-15: the cranelift pair (self-hosted macOS runner)
+off     zakura-mac-cranelift.yml       K-15: the cranelift pair (self-hosted macOS runner)
+off     cross-platform.yml             K-15: upstream's release-target matrix
+off     history-growth.yml             K-15: upstream's history-growth report
+off     test-docker.yml                K-15: upstream's release image
+off     zcashd-compat-regtest.yml      K-15: downloads a Zcash zcashd; replaced by the sidecar leg (W9)
+off     changelog.yml                  upstream's changelog-fragment policy for its release notes
+off     semver-checks.yml              upstream's crates.io semver policy; kogany publishes no crate
+off     create-release.yml             K-15: release pipeline
+off     release-binaries.yml           K-15: release pipeline (Depot builders, Docker Hub)
+off     release-drafter.yml            K-15: release pipeline
+off     release-pr-readiness.yml       K-15: release pipeline (pull_request_target)
+off     release-ai-review.yml          K-15: release pipeline (external review endpoint secrets)
+off     release-ai-review-request.yml  K-15: release pipeline
+off     prepare-release-pr.yml         K-15: release pipeline (release GitHub App)
+off     publish-crates.yml             K-15: release pipeline (crates.io publishing)
+off     adopt-release-state.yml        K-15: release pipeline (Mainnet release-state bundle)
+off     update-release-state.yml       K-15: release pipeline (Mainnet release-state bundle)
+off     zakura-mainnet-deploy.yml      K-15: DigitalOcean fleet (self-hosted deployer runner)
+off     zakura-testnet-deploy.yml      K-15: DigitalOcean fleet (self-hosted deployer runner)
+off     zakura-mainnet-rollback.yml    K-15: DigitalOcean fleet (self-hosted deployer runner)
+off     zakura-continuous-sync.yml     K-15: DigitalOcean fleet (continuous genesis-sync hosts)
+off     zakura-pr-node.yml             K-15: DigitalOcean fleet (ephemeral PR droplets)
+off     zakura-pr-node-bake.yml        K-15: DigitalOcean fleet (image bake)
+off     zakura-pr-node-reaper.yml      K-15: DigitalOcean fleet (resource reaper)
+off     zakura-vct-handoff-canary.yml  K-15: DigitalOcean fleet (Mainnet VCT canary)
+off     zakura-mempool-gossip.yml      K-15: DigitalOcean fleet (mempool experiments)
+off     zakura-mempool-load.yml        K-15: DigitalOcean fleet (mempool experiments)
+
+kogany  kogany-yellowback.yml          plan §5: audit legs (a) (b) (e), the dormancy check, the build matrix
+kogany  semgrep.yml                    security CI (ycash6/SECURITY-CI.md)
+kogany  codeql.yml                     security CI
+kogany  secops.yml                     security CI: zizmor, gitleaks, OSV-Scanner, cargo-deny
+kogany  code-scanning.yml              security CI: code-scanning triage

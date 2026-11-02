@@ -3,8 +3,9 @@ name: Header-chain fuzzing
 on:
   # Run the normative budgets Monday through Saturday.
   # Run the longer campaign on Sunday.
+  # kogany (2026-11-01): weekly, the Sunday campaign only (K-15).
   schedule:
-    - cron: "13 5 * * 1-6"
+    # - cron: "13 5 * * 1-6"
     - cron: "13 5 * * 0"
   workflow_dispatch:
 

@@ -1,0 +1,14 @@
+# Paths Semgrep never scans (contrib/semgrep/README.md). Semgrep scans git-tracked files only; this file
+# replaces its built-in ignore list, so the usual build and vendor directories are named here too.
+# Generated code (the gRPC bindings `cargo xtask generate-rpc-artifacts` writes): fixed by regenerating.
+crates/zakura-rpc/proto/__generated__/
+# Fixed test data: snapshots, proptest regressions and the cross-line vectors pinned from ycash6.
+**/snapshots/
+**/proptest-regressions/
+testdata/
+# The scanner's own rules, test inputs and ledgers.
+contrib/semgrep/
+# Build output and caches.
+target/
+.cargo/
+node_modules/

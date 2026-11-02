@@ -1,0 +1,90 @@
+# gitleaks accepted findings (the `gitleaks` job of .github/workflows/secops.yml; .github/README-kogany.md).
+# One fingerprint per line (commit:file:rule:line, as gitleaks prints it), under the reason it is not a
+# secret. Triaged 2026-11-01: every entry is in upstream Zebra/Zakura history at or before kogany-legacy
+# (2b062412c5), found by the full-history scan the nightly run does. A real secret is never accepted.
+
+# Upstream Zebra/Zakura RPC and indexer TLS test fixtures: throwaway self-signed keys generated for the TLS handshake tests (server/tests, indexer/tests); they protect nothing and no node loads them.
+04abd2a767e1d6c4051f346a36953c9d94a31b9f:zakura-rpc/src/server/tests/tls.rs:private-key:18
+0b2d75eafa9918a84276762bbb723346a36ae1a9:crates/zakura-rpc/src/indexer/tests/certs.rs:private-key:28
+0b2d75eafa9918a84276762bbb723346a36ae1a9:crates/zakura-rpc/src/indexer/tests/certs.rs:private-key:47
+0b2d75eafa9918a84276762bbb723346a36ae1a9:crates/zakura-rpc/src/indexer/tests/certs.rs:private-key:69
+757d4687797e8595ac30ce7552fdc2cff6feeee4:crates/zakura-rpc/src/server/tests/handshake-key.pem:private-key:1
+89aa2ab73532cd89b66d1db415d1092710ac3390:zakura-rpc/src/server/tests/tls.rs:private-key:18
+
+# Cargo.lock checksums (sha256 of a crates.io package), matched as generic-api-key: public registry hashes, not credentials.
+00a1447e637fe590bcf243fcff6eba219a6b68de:Cargo.lock:generic-api-key:1399
+0402330c9d08f65a06a6fbda6d5b5dc5adb5ef11:fuzz/header-chain/Cargo.lock:generic-api-key:756
+1fb900203304e2cafd993ae0967e8292968b6885:fuzz/header-chain/Cargo.lock:generic-api-key:756
+208aef86e5d74811b4884e52a1165c5815c07815:fuzz/header-chain/Cargo.lock:generic-api-key:756
+2293c9c333e2a97934602d6e0ad5be22b6b2b8e7:fuzz/handshake/Cargo.lock:generic-api-key:697
+257936d5138e0f1e7f2aeb956dba69fbe1737315:fuzz/header-chain/Cargo.lock:generic-api-key:756
+3da188dd08883cbac36eca15e467c4afb4283b4b:fuzz/header-chain/Cargo.lock:generic-api-key:756
+5221e94155ab43f0113461d897670206d26383e9:fuzz/header-chain/Cargo.lock:generic-api-key:756
+7664a9ac72d6ed0ddc96321e0585b5dc080fb32e:fuzz/header-chain/Cargo.lock:generic-api-key:756
+9ac861792faefdbed233664d5d0203ffaf213a69:fuzz/header-chain/Cargo.lock:generic-api-key:756
+a05b0a1fd721843a28f91985121328c7c7662918:fuzz/header-chain/Cargo.lock:generic-api-key:756
+c4ef9847466b2778159c77d0045c71190c089b54:fuzz/header-chain/Cargo.lock:generic-api-key:756
+caf9d2a7e569fba6e769c8189b712b6d420f78ac:fuzz/header-chain/Cargo.lock:generic-api-key:756
+e373571d0ef808b6b69c81c45cc46dc6634a4d11:fuzz/header-chain/Cargo.lock:generic-api-key:759
+f3243d71a0d3a6f81cecc1de87001aea2fa3f671:fuzz/header-chain/Cargo.lock:generic-api-key:756
+fbcda1b24e52213a78ce902781cdf17cce59f066:fuzz/header-chain/Cargo.lock:generic-api-key:756
+
+# Upstream test snapshots and vectors: block hashes, merkle roots, commitments and transaction ids of public Zcash mainnet/testnet blocks, matched as generic-api-key.
+6c86c8dd0dffd1e1a74e82f45fa78c006a30156c:zebra-chain/src/transaction/tests/vectors.rs:generic-api-key:56
+78fd2d51d060105c34135d2044ba9587e5eb704f:zebra-rpc/src/methods/tests/snapshots/get_block_template_basic@mainnet_10.snap:generic-api-key:17
+78fd2d51d060105c34135d2044ba9587e5eb704f:zebra-rpc/src/methods/tests/snapshots/get_block_template_basic@mainnet_10.snap:generic-api-key:24
+78fd2d51d060105c34135d2044ba9587e5eb704f:zebra-rpc/src/methods/tests/snapshots/get_block_template_basic@testnet_10.snap:generic-api-key:17
+78fd2d51d060105c34135d2044ba9587e5eb704f:zebra-rpc/src/methods/tests/snapshots/get_block_template_basic@testnet_10.snap:generic-api-key:24
+78fd2d51d060105c34135d2044ba9587e5eb704f:zebra-rpc/src/methods/tests/snapshots/get_block_template_long_poll@mainnet_10.snap:generic-api-key:17
+78fd2d51d060105c34135d2044ba9587e5eb704f:zebra-rpc/src/methods/tests/snapshots/get_block_template_long_poll@mainnet_10.snap:generic-api-key:24
+78fd2d51d060105c34135d2044ba9587e5eb704f:zebra-rpc/src/methods/tests/snapshots/get_block_template_long_poll@testnet_10.snap:generic-api-key:17
+78fd2d51d060105c34135d2044ba9587e5eb704f:zebra-rpc/src/methods/tests/snapshots/get_block_template_long_poll@testnet_10.snap:generic-api-key:24
+7c4d8f09bcc8e6d9170edf2b1e9456adacb933b0:zebra-rpc/tests/vectors/getblock_response_2.json:generic-api-key:809
+7c4d8f09bcc8e6d9170edf2b1e9456adacb933b0:zebra-rpc/tests/vectors/getrawtransaction_response_true.json:generic-api-key:4
+7e1367719704531658b7af073b1faa8fcc53d78d:zebra-rpc/src/methods/tests/snapshot/snapshots/get_block_template@mainnet_10.snap:generic-api-key:15
+7e1367719704531658b7af073b1faa8fcc53d78d:zebra-rpc/src/methods/tests/snapshot/snapshots/get_block_template@mainnet_10.snap:generic-api-key:22
+7e1367719704531658b7af073b1faa8fcc53d78d:zebra-rpc/src/methods/tests/snapshot/snapshots/get_block_template@testnet_10.snap:generic-api-key:15
+7e1367719704531658b7af073b1faa8fcc53d78d:zebra-rpc/src/methods/tests/snapshot/snapshots/get_block_template@testnet_10.snap:generic-api-key:22
+80a6d3cdab2a9dc68e27ecfa729ba864394becb4:zebra-rpc/src/methods/tests/snapshot/snapshots/get_block_template_long_poll@mainnet_10.snap:generic-api-key:15
+80a6d3cdab2a9dc68e27ecfa729ba864394becb4:zebra-rpc/src/methods/tests/snapshot/snapshots/get_block_template_long_poll@mainnet_10.snap:generic-api-key:22
+80a6d3cdab2a9dc68e27ecfa729ba864394becb4:zebra-rpc/src/methods/tests/snapshot/snapshots/get_block_template_long_poll@testnet_10.snap:generic-api-key:15
+80a6d3cdab2a9dc68e27ecfa729ba864394becb4:zebra-rpc/src/methods/tests/snapshot/snapshots/get_block_template_long_poll@testnet_10.snap:generic-api-key:22
+b721a569e0f01f405dd2acebf6c6cf03390209c2:zebra-rpc/src/methods/tests/snapshots/get_block_template_basic@mainnet_10.snap:generic-api-key:17
+b721a569e0f01f405dd2acebf6c6cf03390209c2:zebra-rpc/src/methods/tests/snapshots/get_block_template_basic@mainnet_10.snap:generic-api-key:24
+b721a569e0f01f405dd2acebf6c6cf03390209c2:zebra-rpc/src/methods/tests/snapshots/get_block_template_basic@testnet_10.snap:generic-api-key:17
+b721a569e0f01f405dd2acebf6c6cf03390209c2:zebra-rpc/src/methods/tests/snapshots/get_block_template_basic@testnet_10.snap:generic-api-key:24
+b721a569e0f01f405dd2acebf6c6cf03390209c2:zebra-rpc/src/methods/tests/snapshots/get_block_template_long_poll@mainnet_10.snap:generic-api-key:17
+b721a569e0f01f405dd2acebf6c6cf03390209c2:zebra-rpc/src/methods/tests/snapshots/get_block_template_long_poll@mainnet_10.snap:generic-api-key:24
+b721a569e0f01f405dd2acebf6c6cf03390209c2:zebra-rpc/src/methods/tests/snapshots/get_block_template_long_poll@testnet_10.snap:generic-api-key:17
+b721a569e0f01f405dd2acebf6c6cf03390209c2:zebra-rpc/src/methods/tests/snapshots/get_block_template_long_poll@testnet_10.snap:generic-api-key:24
+c5ed9d8b90ed9faafdfbccc1cca259a3337f8699:zebra-rpc/tests/vectors/getblock_response_2.json:generic-api-key:100
+c5ed9d8b90ed9faafdfbccc1cca259a3337f8699:zebra-rpc/tests/vectors/getblock_response_2.json:generic-api-key:9
+f2abb65d6744b750675c5c815ad0075e568d3f23:zebra-rpc/src/methods/tests/snapshots/get_block_template_basic@mainnet_10.snap:generic-api-key:17
+f2abb65d6744b750675c5c815ad0075e568d3f23:zebra-rpc/src/methods/tests/snapshots/get_block_template_basic@mainnet_10.snap:generic-api-key:24
+f2abb65d6744b750675c5c815ad0075e568d3f23:zebra-rpc/src/methods/tests/snapshots/get_block_template_basic@testnet_10.snap:generic-api-key:17
+f2abb65d6744b750675c5c815ad0075e568d3f23:zebra-rpc/src/methods/tests/snapshots/get_block_template_basic@testnet_10.snap:generic-api-key:24
+f2abb65d6744b750675c5c815ad0075e568d3f23:zebra-rpc/src/methods/tests/snapshots/get_block_template_long_poll@mainnet_10.snap:generic-api-key:17
+f2abb65d6744b750675c5c815ad0075e568d3f23:zebra-rpc/src/methods/tests/snapshots/get_block_template_long_poll@mainnet_10.snap:generic-api-key:24
+f2abb65d6744b750675c5c815ad0075e568d3f23:zebra-rpc/src/methods/tests/snapshots/get_block_template_long_poll@testnet_10.snap:generic-api-key:17
+f2abb65d6744b750675c5c815ad0075e568d3f23:zebra-rpc/src/methods/tests/snapshots/get_block_template_long_poll@testnet_10.snap:generic-api-key:24
+f748d3781cb68d5a1d6b49e9eb42506467668125:zebra-rpc/tests/vectors/getblock_response_2.json:generic-api-key:773
+f748d3781cb68d5a1d6b49e9eb42506467668125:zebra-rpc/tests/vectors/getblock_response_2.json:generic-api-key:780
+f748d3781cb68d5a1d6b49e9eb42506467668125:zebra-rpc/tests/vectors/getblock_response_2.json:generic-api-key:788
+f748d3781cb68d5a1d6b49e9eb42506467668125:zebra-rpc/tests/vectors/getrawtransaction_response_true.json:generic-api-key:687
+f748d3781cb68d5a1d6b49e9eb42506467668125:zebra-rpc/tests/vectors/getrawtransaction_response_true.json:generic-api-key:694
+f748d3781cb68d5a1d6b49e9eb42506467668125:zebra-rpc/tests/vectors/getrawtransaction_response_true.json:generic-api-key:702
+
+# zakura-consensus halo2 primitives: the verifier statics and their metric names (VERIFYING_KEY_..., "halo2_..."), identifiers matched as generic-api-key.
+8a5e70d69ae5fce2858e84cb8b2cf4f1484269a4:crates/zakura-consensus/src/primitives/halo2.rs:generic-api-key:357
+a81924b0e0013dd222869a9cbc99a814c29a3480:crates/zakura-consensus/src/primitives/halo2.rs:generic-api-key:379
+
+# Upstream Zebra QA fixture (zebra-rpc/qa/zallet-datadir): the age identity of a throwaway regtest wallet datadir used by the zallet interop test; it guards no funds, and the file was removed upstream.
+e09bf5d10682f08507fc24a8924265111af92ddc:zebra-rpc/qa/zallet-datadir/identity.txt:age-secret-key:3
+e09bf5d10682f08507fc24a8924265111af92ddc:zebra-rpc/qa/zallet-datadir/identity.txt:generic-api-key:2
+
+# Upstream Zebra (2020-2021) Sprout key/address and transaction test values (protocol test vectors, auth digests): public test data.
+e83cddf4c6e889edb31c18d3304e7740b13fd0c1:zebra-chain/src/keys/sprout.rs:generic-api-key:140
+fae9da7dd9e7ecb75934ecb240bc8f9affaa1afe:zebra-chain/src/addresses/sprout.rs:generic-api-key:55
+
+# Upstream Zebra book (book/src/user/mining.md): example getblocktemplate output (merkle, history and auth-data roots of a public block).
+e40a84c6ebc8e308ce25e22549ff724e904c4553:book/src/user/mining.md:generic-api-key:110
