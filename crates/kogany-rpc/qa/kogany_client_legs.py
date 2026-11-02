@@ -23,8 +23,9 @@ its public interface only:
 lightwalletd-dd (`--yellowback`): its startup probe (`common/yellowback.go` ProbeYellowback) must
 start the YellowbackStreamer service on `live` (rpcversion 8) and not on `not-live`; its own probe
 tool `testtools/lwdinfo -yellowback` must answer GetLightdInfo at the node's height and, on
-`live`, every Yellowback method "ok" except the four whose harmless inputs the node refuses
-(GetTxInfo, GetVault, GetNotice: an unknown txid; ValidateRawTransaction: not a transaction),
+`live`, every Yellowback method "ok" except the seven whose harmless inputs the node refuses
+(GetTxInfo, GetVault, GetNotice: an unknown txid; ValidateRawTransaction: not a transaction;
+BuildBundle, GetFeePayee, GetSelection: a refHeight outside the chain),
 which must carry the node's own error as FailedPrecondition; on `not-live` every method is
 Unimplemented, as against the baseline server.
 
@@ -63,6 +64,11 @@ REFUSED_INPUTS = {
     'GetVault': 'vault-not-found',
     'GetNotice': 'vault-not-found',
     'ValidateRawTransaction': 'TX decode failed',
+    # lwdinfo's refHeight is outside the live chain's [startHeight, tip] (ycash6 refuses it alike;
+    # the fixture accepted any)
+    'BuildBundle': 'refHeight must be between',
+    'GetFeePayee': 'refHeight out of range',
+    'GetSelection': 'refHeight must be between',
 }
 LWD_STARTED = 'Yellowback service started (node rpcversion 8'
 LWD_NOT_STARTED = 'Yellowback service not started: the node has no yed_* commands'
