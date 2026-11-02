@@ -18,7 +18,12 @@ calls of the two clients that read kogany through stock RPC (plan W1-Y6, survey 
   `z_gettreestate`, `getaddresstxids`, `getaddressbalance`, `getaddressutxos`;
 - yolo: `getblocktemplate`, `submitblock`, `validateaddress`, `getblockchaininfo`;
 
-and `getblocksubsidy`, and `z_validateaddress` for the Ycash address kinds. Every kogany template is also checked by ycashd in proposal mode (consensus
+and `getblocksubsidy`, and `z_validateaddress` for the Ycash address kinds.
+
+`--pruned` (workspace pruning assessment KP-1) runs the pruned pair instead: ycashd with `-prune=550`
+(allowed where Vault has no height; it refuses `-txindex`) and zakurad in Pruned storage mode at the
+regtest floor (`tx_retention = 1001`), a few blocks, and `getblockchaininfo` compared with `pruned`
+and `pruneheight` strict: both report a pruning node that has deleted nothing yet (`true`, 0). Every kogany template is also checked by ycashd in proposal mode (consensus
 validity without proof of work), and its coinbase outputs, amounts and scripts, are compared with
 ycashd's own template's.
 
@@ -167,7 +172,8 @@ ACCEPTED = [
 # on, as full-path patterns: a difference here fails the run even where an ACCEPTED row matches.
 CLIENT_FIELDS = {
     # chainwork: chain-viz reads it (chain-viz src/rpc.rs BlockchainInfo, plan W7-c F1).
-    'getblockchaininfo': r'\.(chain|testnetprofile|chainwork|blocks|bestblockhash|upgrades(\.[0-9a-f]{8}(\.(name|activationheight|status))?)?|consensus(\.\w+)?)$',
+    # pruned / pruneheight: ycashd's pruning report (KP-1), compared in both modes.
+    'getblockchaininfo': r'\.(chain|testnetprofile|chainwork|blocks|bestblockhash|pruned|pruneheight|upgrades(\.[0-9a-f]{8}(\.(name|activationheight|status))?)?|consensus(\.\w+)?)$',
     'getblock': r'\.(hash|height|time|bits|previousblockhash|finalsaplingroot|tx(\[\d+\](\.(txid|hex))?)?)$|=answer$',
     'getrawtransaction': r'\.(hex|height|txid|version|expiryheight|vout(\[\d+\]\.(value|valueZat|n|scriptPubKey(\.\w+)?))?)$|=answer$',
     'z_gettreestate': r'\.(height|hash|time|sapling(\.commitments(\.finalState)?|\.skipHash)?)$',
@@ -417,15 +423,16 @@ class Report:
 
 # The run.
 
-def start_ycashd(bindir, workdir, port, rpcport, mineraddress=None):
+def start_ycashd(bindir, workdir, port, rpcport, mineraddress=None, pruned=False):
     datadir = os.path.join(workdir, 'ycashd')
     os.makedirs(datadir, exist_ok=True)
     with open(os.path.join(datadir, 'ycash.conf'), 'w') as f:
         f.write('regtest=1\nshowmetrics=0\nrpcuser=u\nrpcpassword=p\nport=%d\nrpcport=%d\nlistenonion=0\n'
                 % (port, rpcport))
     args = [os.path.join(bindir, 'ycashd'), '-datadir=' + datadir, '-discover=0', '-listen=0',
-            '-txindex', '-insightexplorer', '-experimentalfeatures',
             '-i-am-aware-zcashd-will-be-replaced-by-zebrad-and-zallet-in-2025']
+    # -prune refuses -txindex (and so the insight index): the pruned pair compares the pruning report only
+    args += ['-prune=550'] if pruned else ['-txindex', '-insightexplorer', '-experimentalfeatures']
     # -lightwalletd alone crashes ycash6 at the first block (CInsightExplorerDB is created only
     # under -insightexplorer, init.cpp:2016,2080; reported in the W1-Y6 findings).
     args += ['-nuparams=%s:1' % b for b in NUPARAMS]
@@ -435,9 +442,11 @@ def start_ycashd(bindir, workdir, port, rpcport, mineraddress=None):
     return subprocess.Popen(args, stdout=log, stderr=subprocess.STDOUT)
 
 
-def zakurad_toml(workdir, p2p, rpc, v2, miner_address):
+def zakurad_toml(workdir, p2p, rpc, v2, miner_address, pruned=False):
     root = os.path.join(workdir, 'zakurad')
     heights = '\n'.join('%s = 1' % k for k in ACTIVATION_KEYS)
+    # Zakura's Pruned mode at its regtest floor (MAX_BLOCK_REORG_HEIGHT + 1)
+    storage = '\n[state.storage_mode.pruned]\ntx_retention = 1001\n' if pruned else ''
     return '''[network]
 listen_addr = "127.0.0.1:{p2p}"
 initial_testnet_peers = []
@@ -462,7 +471,7 @@ cookie_dir = "{root}/rpc"
 [state]
 cache_dir = "{root}/state"
 ephemeral = false
-
+{storage}
 [mempool]
 debug_enable_at_height = 0
 
@@ -473,7 +482,7 @@ miner_address = "{miner}"
 [tracing]
 use_color = false
 filter = "info"
-'''.format(p2p=p2p, rpc=rpc, v2=v2, root=root, heights=heights, miner=miner_address)
+'''.format(p2p=p2p, rpc=rpc, v2=v2, root=root, heights=heights, miner=miner_address, storage=storage)
 
 
 def start_zakurad(binary, workdir, toml):
@@ -564,7 +573,42 @@ def spend_with_zip317_fee(y, address):
     return y.ok('sendrawtransaction', signed['hex'], True)
 
 
+def run_pruned(args):
+    """KP-1: the pruned pair's getblockchaininfo (pruned, pruneheight strict)."""
+    report = Report()
+    workdir = args.workdir or tempfile.mkdtemp(prefix='rpc-ycash-parity-pruned-')
+    os.makedirs(workdir, exist_ok=True)
+    base = args.port_base
+    y = Node('ycash6', base + 1, 'u:p')
+    z = Node('kogany', base + 11)
+    procs = []
+    try:
+        procs.append(start_ycashd(args.ycash6_bin, workdir, base, base + 1, pruned=True))
+        wait_up(y, procs[-1], 'ycashd')
+        miner = y.ok('getnewaddress')
+        procs.append(start_zakurad(args.zakurad, workdir,
+                                   zakurad_toml(workdir, base + 10, base + 11, base + 12, miner, pruned=True)))
+        wait_up(z, procs[-1], 'zakurad')
+        r = Run(y, z, report)
+        r.both('getblockchaininfo')
+        r.mine(3)
+        r.both('getblockchaininfo')
+        for node in (y, z):
+            info = node.ok('getblockchaininfo')
+            if info.get('pruned') is not True or info.get('pruneheight') != 0:
+                report.add('getblockchaininfo', 'pruned pair', '.pruned/.pruneheight(%s)' % node.name,
+                           'not a pruning node', None, (info.get('pruned'), info.get('pruneheight')))
+    finally:
+        for p in reversed(procs):
+            stop(p)
+        if not args.keep and not args.workdir:
+            shutil.rmtree(workdir, ignore_errors=True)
+    return report, workdir
+
+
 def run(args):
+    if args.pruned:
+        return run_pruned(args)
     report = Report()
     workdir = args.workdir or tempfile.mkdtemp(prefix='rpc-ycash-parity-')
     os.makedirs(workdir, exist_ok=True)
@@ -699,6 +743,8 @@ def main(argv=None):
     ap.add_argument('--keep', action='store_true', help='keep the temporary directory')
     ap.add_argument('--port-base', type=int, default=28500)
     ap.add_argument('--json', help='write the difference table here')
+    ap.add_argument('--pruned', action='store_true',
+                    help='the pruned pair: ycashd -prune=550, zakurad Pruned mode (KP-1)')
     args = ap.parse_args(argv)
     if not args.zakurad:
         ap.error('--zakurad (or KOGANY_BIN) is required')
