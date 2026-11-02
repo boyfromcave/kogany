@@ -2754,7 +2754,19 @@ where
                     root.reverse();
                     root
                 } else {
-                    [0; 32]
+                    // kogany (Y8): below Sapling ycashd answers the header's hashFinalSaplingRoot
+                    // field (on Ycash mainnet those blocks carry the empty Sapling root).
+                    #[cfg(feature = "ycash")]
+                    {
+                        match header.commitment(&network, height) {
+                            Ok(Commitment::PreSaplingReserved(bytes)) => bytes,
+                            _ => [0; 32],
+                        }
+                    }
+                    #[cfg(not(feature = "ycash"))]
+                    {
+                        [0; 32]
+                    }
                 };
 
             let difficulty = header.difficulty_threshold.relative_to_network(&network);
