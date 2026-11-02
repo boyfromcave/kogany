@@ -646,7 +646,7 @@ jobs:
     # Path-gated on PRs and pushes. Always runs in the merge queue and
     # nightly so a docs-only merge cannot land on top of a broken graph.
     # kogany (2026-11-01): upstream's repository only (K-15): kogany publishes no crate, so the
-    # crates.io index pins this checks are upstream's, not kogany's.
+    # crates.io index pins this job checks are upstream's, not kogany's.
     if: >
       github.repository == 'zakura-core/zakura' && (
       needs.changes.outputs.publish_graph == 'true'

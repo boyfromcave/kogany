@@ -1,5 +1,15 @@
 {
   "_comment": "Accepted Semgrep findings (contrib/semgrep/README.md, 'Accepting a finding'). findings: fingerprint -> {rule, path, reason, by, date}. rule_paths: [{rule (glob), paths (globs), reason, by, date}]. Every entry needs a reason a reviewer can check.",
   "findings": {},
-  "rule_paths": []
+  "rule_paths": [
+    {
+      "rule": "python.lang.security.audit.dangerous-subprocess-use-audit",
+      "paths": [
+        "contrib/secops/code-scanning-triage.py"
+      ],
+      "reason": "ycash6's code-scanning triage script, accepted there for the same reason (2026-10-24): its one subprocess call runs `gh api` with an argv list (no shell) built from constants and the workflow-supplied repository name, only in code-scanning.yml with that job's own token. A subprocess call anywhere else is still reported.",
+      "by": "secops triage",
+      "date": "2026-11-01"
+    }
+  ]
 }
