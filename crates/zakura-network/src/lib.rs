@@ -169,6 +169,9 @@ mod peer_set;
 mod protocol;
 pub mod zakura;
 
+#[cfg(feature = "ycash")]
+pub mod ycash;
+
 #[cfg(any(test, feature = "proptest-impl"))]
 pub use crate::{
     isolated::connect_isolated_with_inbound,
