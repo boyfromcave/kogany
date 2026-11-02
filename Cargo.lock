@@ -3435,8 +3435,11 @@ name = "zakura-script"
 version = "5.0.1-rc0"
 dependencies = [
  "hex",
+ "kogany-pq",
+ "kogany-vault",
  "ripemd",
  "secp256k1",
+ "serde_json",
  "sha2",
  "thiserror",
  "zakura-chain",
