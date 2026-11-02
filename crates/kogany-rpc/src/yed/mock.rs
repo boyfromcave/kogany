@@ -238,6 +238,10 @@ impl<T: ChainTip + Send + Sync + 'static> YedReadState for MockYedState<T> {
                     quote_age_seconds: quote.map(|_| 0),
                     registered: true,
                     eligible: true,
+                    quote: quote.filter(|q| q.0 != 0).map(|q| HeldQuote {
+                        price_micro_usd: q.0,
+                        source_mask: q.1,
+                    }),
                 },
                 network_fees: NetworkFees {
                     price_micro_usd: Some(400_000),

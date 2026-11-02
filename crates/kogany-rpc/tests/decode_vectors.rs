@@ -129,8 +129,10 @@ fn bonds_decode_with_their_p2sh() {
         assert_eq!(d["locktime"], case["locktime"]);
         assert_eq!(d["memberkey"], case["memberKey"]);
         assert_eq!(d["scriptpubkey"], case["spk"]);
-        // Regtest P2SH addresses (Zcash regtest at this stage: `t2…`).
-        assert!(d["address"].as_str().unwrap().starts_with("t2"), "{d}");
+        // Regtest P2SH addresses: Zcash regtest's `t2…`, or with the `ycash` feature Ycash
+        // regtest's `s2…`.
+        let prefix = if cfg!(feature = "ycash") { "s2" } else { "t2" };
+        assert!(d["address"].as_str().unwrap().starts_with(prefix), "{d}");
     }
 }
 
