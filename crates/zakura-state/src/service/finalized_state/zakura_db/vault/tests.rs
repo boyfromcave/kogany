@@ -476,7 +476,7 @@ fn overlay_memory_at_the_reorg_window() {
                 .sum();
             max_delta_bytes = max_delta_bytes.max(bytes);
         }
-        eprintln!(
+        tracing::info!(
             "K-13 {name}: {} blocks, overlay {} entries / {} bytes",
             pushed.len(),
             chain.vault_overlay().len(),
@@ -513,7 +513,7 @@ fn overlay_memory_at_the_reorg_window() {
         overlay.push(&delta);
     }
     let bytes = overlay.approx_bytes();
-    eprintln!(
+    tracing::info!(
         "K-13 synthetic: 1,000 blocks x 1 member record: overlay {} entries / {bytes} bytes; \
          fixture max per-block delta {max_delta_bytes} bytes (x1,000 = {} bytes)",
         overlay.len(),
