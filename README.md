@@ -60,23 +60,23 @@ docker run --rm --entrypoint koganyd koganyd --version
 
 ## Versioning
 
-The package is `kogany` (cargo prints `Compiling kogany v1.8.0-rc0`); its directory,
+The package is `kogany` (cargo prints `Compiling kogany v1.8.0-rc1`); its directory,
 `crates/zakurad`, and its library name, `zakurad`, stay upstream's so upstream syncs keep merging.
 The version line is Zakura's: the package version is the Zakura version kogany tracks
-(`1.8.0-rc0` now). The build metadata is kogany's own, counted from the tag
+(`1.8.0-rc1` now). The build metadata is kogany's own, counted from the tag
 `kogany-ycash-baseline`, never from an upstream `v*` tag; for example:
 
 ```text
 $ koganyd --version
-koganyd 1.8.0-rc0+kogany.26.gf96338437a7e
+koganyd 1.8.0-rc1+kogany.31.g4e67df4e3a1b
 ```
 
-`26` is the number of commits since `kogany-ycash-baseline`
+`31` is the number of commits since `kogany-ycash-baseline`
 (`git describe --tags --match kogany-ycash-baseline --long`), `g…` the commit, and `.modified` is
 appended for uncommitted changes. A build without `.git` (the Docker image) has no count and
-prints `koganyd 1.8.0-rc0+kogany.g<commit>` from the commit it was given (`SHORT_SHA`). The same
+prints `koganyd 1.8.0-rc1+kogany.g<commit>` from the commit it was given (`SHORT_SHA`). The same
 version is in the startup diagnostics and the `kogany.build.info` metric. The user agent carries
-the package version only, `/koganyd:1.8.0-rc0/`: ycashd keeps only `[A-Za-z0-9 .-/:]` of a peer's
+the package version only, `/koganyd:1.8.0-rc1/`: ycashd keeps only `[A-Za-z0-9 .-/:]` of a peer's
 subversion, so a `+` would be dropped. Upstream's `zakurad` (built without the `ycash` feature)
 keeps Zakura's scheme.
 
@@ -98,7 +98,7 @@ with a Zcash network's on one host.
 - Ycash mainnet and regtest share Zcash's magic. A Zcash peer is refused by its protocol version
   (Ycash peers advertise at least 270013) and by its port (8233, 18233), and the Zakura P2P v2
   overlay, which identifies a chain by its genesis hash, is off (decision K-11).
-- User agent: `/koganyd:<package version>/`, e.g. `/koganyd:1.8.0-rc0/` ([Versioning](#versioning)).
+- User agent: `/koganyd:<package version>/`, e.g. `/koganyd:1.8.0-rc1/` ([Versioning](#versioning)).
 - Addresses: transparent `s1…`/`s3…` on mainnet, `sm…` on the testnets and regtest; Sapling
   `ys…`, `ytestsapling…`, `yregtestsapling…`; post-quantum `sq…`, `tq…`, `rq…`; Yellowback (YED)
   `yb…`, `yt…`, `yr…`. Coin type 347 on mainnet.
