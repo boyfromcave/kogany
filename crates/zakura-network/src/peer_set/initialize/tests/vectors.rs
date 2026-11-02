@@ -524,8 +524,14 @@ async fn written_peer_cache_is_automatically_read_on_startup() {
 
 /// Adds a recent gossiped peer that is eligible for the disk cache.
 fn add_cacheable_peer(address_book: &Arc<std::sync::Mutex<AddressBook>>) -> PeerSocketAddr {
-    // kogany: the network's default port (Ycash refuses Zcash's 8233 as a peer port).
-    let peer = format!("127.0.0.1:{}", Mainnet.default_port())
+    // kogany: the network's default port (Ycash refuses Zcash's 8233 as a peer port); with
+    // `ycash` a routable host, since the book drops a gossiped loopback address (F-S5-6).
+    let host = if cfg!(feature = "ycash") {
+        "1.0.0.1"
+    } else {
+        "127.0.0.1"
+    };
+    let peer = format!("{host}:{}", Mainnet.default_port())
         .parse()
         .expect("valid test peer address");
     let change =
@@ -1934,11 +1940,15 @@ async fn self_connections_should_fail() {
         // Set a fake listener to get past the check for adding our own address
         unlocked_address_book.set_local_listener("192.168.0.0:1".parse().unwrap());
 
-        let updated_addr = unlocked_address_book.update(
-            real_self_listener
-                .new_gossiped_change()
-                .expect("change is valid"),
-        );
+        // kogany (F-S5-6): with `ycash` the book drops a gossiped loopback address, so the
+        // loopback listener goes in as an operator's (initial) peer.
+        #[cfg(feature = "ycash")]
+        let change = MetaAddr::new_initial_peer(real_self_listener.addr());
+        #[cfg(not(feature = "ycash"))]
+        let change = real_self_listener
+            .new_gossiped_change()
+            .expect("change is valid");
+        let updated_addr = unlocked_address_book.update(change);
 
         std::mem::drop(unlocked_address_book);
 
@@ -2407,8 +2417,13 @@ async fn spawn_replenishment_crawler_with(
     for address_number in 0..candidate_count {
         let address_number =
             u32::try_from(address_number).expect("small replenishment test address count fits u32");
-        let ip =
-            Ipv4Addr::from(u32::from(Ipv4Addr::new(127, 2, 0, 0)).saturating_add(address_number));
+        // kogany (F-S5-6): with `ycash` the book drops gossiped loopback addresses; the dials are fake.
+        let base = if cfg!(feature = "ycash") {
+            Ipv4Addr::new(1, 2, 0, 0)
+        } else {
+            Ipv4Addr::new(127, 2, 0, 0)
+        };
+        let ip = Ipv4Addr::from(u32::from(base).saturating_add(address_number));
         // kogany: the network's default port (Ycash refuses Zcash's 8233 as a peer port).
         let addr = MetaAddr::new_gossiped_meta_addr(
             SocketAddr::new(ip.into(), config.network.default_port()).into(),
@@ -2650,9 +2665,14 @@ async fn spawn_boxed_crawler_with_peer_limit(
 
     // Add enough fake peers to go over the limit, even if the limit is zero.
     let over_limit_peers = config.peerset_outbound_connection_limit() * 2 + 1;
+    // kogany (F-S5-6): with `ycash` the book drops gossiped loopback addresses; the dials are fake.
+    let first_octet = if cfg!(feature = "ycash") { 1 } else { 127 };
     let mut fake_peer = None;
     for address_number in 0..over_limit_peers {
-        let addr = SocketAddr::new(Ipv4Addr::new(127, 1, 1, address_number as _).into(), 1);
+        let addr = SocketAddr::new(
+            Ipv4Addr::new(first_octet, 1, 1, address_number as _).into(),
+            1,
+        );
         let addr = MetaAddr::new_gossiped_meta_addr(
             addr.into(),
             PeerServices::NODE_NETWORK,
