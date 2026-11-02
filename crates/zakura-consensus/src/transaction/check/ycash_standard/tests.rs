@@ -293,7 +293,8 @@ fn act_op_return_size() {
     assert!(act.len() > MAX_OP_RETURN_RELAY);
     assert!(act.len() <= MAX_VAULT_ACT_BYTES);
     let t = tx_out(vec![(0, act.clone())]);
-    assert_eq!(reason(std_tx(&t, &network, 9)), "scriptpubkey"); // ordinary data before activation
+    // ordinary data before activation
+    assert_eq!(reason(std_tx(&t, &network, 9)), "scriptpubkey");
     assert_eq!(reason(std_tx(&t, &network, 10)), "");
 
     // At most MAX_VAULT_ACT_BYTES (18 signatures do not fit).
@@ -394,10 +395,7 @@ fn pq_scriptsig_limits() {
     // Before the upgrade the 1,650-byte limit stands (IsStandardTx).
     assert_eq!(reason(std_tx(&spend(&slh), &network, 9)), "scriptsig-size");
     // The exact count per scheme (A-14): one push more or fewer is non-standard.
-    assert!(!ais(
-        &pq_args(PQ_SCHEME_SLH_DSA_SHA2_128S, None, 1),
-        &p_slh
-    ));
+    assert!(!ais(&pq_args(PQ_SCHEME_SLH_DSA_SHA2_128S, None, 1), &p_slh));
     // a Falcon-shaped stack against an SLH key is the wrong count
     assert!(!ais(&pq_args(PQ_SCHEME_FN_DSA_512, None, 0), &p_slh));
     // A Falcon PQPKH spend: 1,577 bytes, 6 pushes.
@@ -409,9 +407,15 @@ fn pq_scriptsig_limits() {
     // Above MAX_STANDARD_PQ_SCRIPTSIG: refused by IsStandardTx (and by AreInputsStandard for a
     // PQ prevout).
     let mut huge = slh.clone();
-    push(&mut huge, &vec![0x01; MAX_STANDARD_PQ_SCRIPTSIG - slh.len() + 1 - 3]);
+    push(
+        &mut huge,
+        &vec![0x01; MAX_STANDARD_PQ_SCRIPTSIG - slh.len() + 1 - 3],
+    );
     assert!(huge.len() > MAX_STANDARD_PQ_SCRIPTSIG);
-    assert_eq!(reason(std_tx(&spend(&huge), &network, 12)), "scriptsig-size");
+    assert_eq!(
+        reason(std_tx(&spend(&huge), &network, 12)),
+        "scriptsig-size"
+    );
     assert!(!ais(&huge, &p_slh));
 
     // A P2PKH input whose scriptSig passes IsStandardTx's relaxed bound is caught by
@@ -472,12 +476,16 @@ fn template_scriptsig_shapes() {
     // Audit 01/V-4: a template input's scriptSig carries no more than its selector's branch
     // consumes. The extra pushes are outside every signature (OP_CHECKSETSIG pops exactly k;
     // CLEANSTACK is policy, not consensus): consensus-valid in a block, non-standard for relay.
-    let vp = params1(); // unlock set 0x11, cancel set 0x22, SLH-DSA owner
+    // unlock set 0x11, cancel set 0x22, SLH-DSA owner
+    let vp = params1();
     let p_v = output(100_000, &vault_script(&vp));
     let p_i = output(100_000, &intent_script(&vp));
     let state = two_sets(&vp);
     let snap: &dyn StateRead = &state;
-    assert_eq!(snap.threshold(&vp.set_id, kogany_vault::template::ROLE_UNLOCK), Some(2));
+    assert_eq!(
+        snap.threshold(&vp.set_id, kogany_vault::template::ROLE_UNLOCK),
+        Some(2)
+    );
     let ais = |ss: Vec<u8>, prev: &transparent::Output, st: Option<&dyn StateRead>| {
         let t = tx(vec![(u256(0x71), ss)], vec![(1000, p2pkh(4))]);
         are_inputs_standard(&t, std::slice::from_ref(prev), st)
@@ -592,16 +600,19 @@ fn mempool_set_state_failure_classification() {
     assert_eq!(find(&[Some(&p2), Some(&p2)]), None);
     assert_eq!(find(&[Some(&p2), Some(&vspk)]), Some(1));
     assert_eq!(find(&[Some(&ispk), Some(&p2)]), Some(0));
-    assert_eq!(find(&[None]), None); // missing coin
+    // missing coin
+    assert_eq!(find(&[None]), None);
     // a MALFORMED V-shaped coin (delay 0, out of range) is no template, as in vault::CheckTx's
     // count
     let mut malformed = vspk.clone();
-    assert_eq!(malformed[38], 0x55); // <tag:4> <cancelSetId:32> <delay> (OP_5)
+    // <tag:4> <cancelSetId:32> <delay> (OP_5)
+    assert_eq!(malformed[38], 0x55);
     malformed[38] = 0x00;
     assert!(matches!(match_vault(&malformed), Shape::Malformed));
     assert_eq!(find(&[Some(&malformed), Some(&p2)]), None);
     assert_eq!(find(&[Some(&malformed), Some(&vspk)]), Some(1));
 
+    // shape only
     let owner_sig = script_of(&[&[7; 64]]);
     let owner_sig = {
         let mut s = owner_sig;
@@ -609,7 +620,7 @@ fn mempool_set_state_failure_classification() {
         push(&mut s, &[8; 32]);
         s.push(op_n(1));
         s
-    }; // shape only
+    };
     let with_sel = |mut s: Vec<u8>, n: usize| {
         s.push(op_n(n));
         s
@@ -621,13 +632,29 @@ fn mempool_set_state_failure_classification() {
     push(&mut sel3data, &[3]);
     // OP_CHECKSETSIG's error: state-dependent whatever the selector
     for ss in [&sel1, &sel2, &sel3] {
-        assert!(is_vault_set_state_script_error(ss, &interpreter::Error::SetSig));
+        assert!(is_vault_set_state_script_error(
+            ss,
+            &interpreter::Error::SetSig
+        ));
     }
     // OP_VERIFY: only the OWNER-RELEASED branch, whose one OP_VERIFY follows OP_CHECKSETDORMANT
-    assert!(is_vault_set_state_script_error(&sel3, &interpreter::Error::Verify));
-    assert!(!is_vault_set_state_script_error(&sel1, &interpreter::Error::Verify));
-    assert!(!is_vault_set_state_script_error(&sel2, &interpreter::Error::Verify));
-    assert!(!is_vault_set_state_script_error(&sel3data, &interpreter::Error::Verify)); // not a canonical selector
+    assert!(is_vault_set_state_script_error(
+        &sel3,
+        &interpreter::Error::Verify
+    ));
+    assert!(!is_vault_set_state_script_error(
+        &sel1,
+        &interpreter::Error::Verify
+    ));
+    assert!(!is_vault_set_state_script_error(
+        &sel2,
+        &interpreter::Error::Verify
+    ));
+    // not a canonical selector
+    assert!(!is_vault_set_state_script_error(
+        &sel3data,
+        &interpreter::Error::Verify
+    ));
     // never state-dependent: a template runs one OP_CHECKSETSIG; signatures, sizes, locktimes,
     // stack shape (the forked interpreter has no distinct EQUALVERIFY / CHECKSIGVERIFY codes,
     // and SCRIPT_ERR_EVAL_FALSE / SCRIPT_ERR_OK are not interpreter errors there)
@@ -691,7 +718,10 @@ fn mempool_set_state_previous_branch() {
     // ... whatever else the previous branch ID yields
     assert!(check(&sel1, PREV, set_sig.clone(), eval_false.clone()).0);
     // no previous epoch (prev == cur): one run
-    assert_eq!(check(&sel1, CUR, set_sig.clone(), Ok(())), (true, vec![CUR]));
+    assert_eq!(
+        check(&sel1, CUR, set_sig.clone(), Ok(())),
+        (true, vec![CUR])
+    );
     // success or a state-independent error: one run, stock route
     for e in [
         Ok(()),
@@ -724,13 +754,19 @@ fn pre_vault_standardness_kept() {
         reason(std_tx(&tx_out(vec![(53, p2pkh(1))]), &network, 5)),
         "dust"
     );
-    assert_eq!(reason(std_tx(&tx_out(vec![(54, p2pkh(1))]), &network, 5)), "");
+    assert_eq!(
+        reason(std_tx(&tx_out(vec![(54, p2pkh(1))]), &network, 5)),
+        ""
+    );
     // 1-of-2 bare multisig: standard on ycashd by default
     let mut ms = vec![op_n(1)];
     push(&mut ms, &key(1).0);
     push(&mut ms, &key(2).0);
     ms.extend_from_slice(&[op_n(2), 0xae]);
-    assert_eq!(reason(std_tx(&tx_out(vec![(10_000, ms.clone())]), &network, 5)), "");
+    assert_eq!(
+        reason(std_tx(&tx_out(vec![(10_000, ms.clone())]), &network, 5)),
+        ""
+    );
     let off = RelayPolicy {
         permit_bare_multisig: false,
         ..RelayPolicy::default()
@@ -769,10 +805,17 @@ fn push_only_stack_is_eval_script() {
         vec![(u256(1), script_of(&[&[1; 521], &[2; 33]]))],
         vec![(1000, p2pkh(4))],
     );
-    assert!(!are_inputs_standard(&spend, &[output(100_000, &p2pkh(5))], None));
+    assert!(!are_inputs_standard(
+        &spend,
+        &[output(100_000, &p2pkh(5))],
+        None
+    ));
     // and the P2SH redeem script's OP_CHECKPQSIG costs 20 policy sigops
     let redeem = [0xc2u8];
-    let p2sh_spend = tx(vec![(u256(1), script_of(&[&redeem]))], vec![(1000, p2pkh(4))]);
+    let p2sh_spend = tx(
+        vec![(u256(1), script_of(&[&redeem]))],
+        vec![(1000, p2pkh(4))],
+    );
     assert!(!are_inputs_standard(
         &p2sh_spend,
         &[output(100_000, &p2sh_of(&redeem))],

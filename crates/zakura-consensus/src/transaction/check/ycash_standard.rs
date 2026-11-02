@@ -177,7 +177,10 @@ fn get_op(script: &[u8], pos: usize) -> Option<(u8, &[u8], usize)> {
         OP_PUSHDATA1 => (usize::from(*script.get(pos)?), pos.checked_add(1)?),
         OP_PUSHDATA2 => {
             let b = script.get(pos..pos.checked_add(2)?)?;
-            (usize::from(u16::from_le_bytes([b[0], b[1]])), pos.checked_add(2)?)
+            (
+                usize::from(u16::from_le_bytes([b[0], b[1]])),
+                pos.checked_add(2)?,
+            )
         }
         OP_PUSHDATA4 => {
             let b = script.get(pos..pos.checked_add(4)?)?;
@@ -548,8 +551,7 @@ fn is_standard_output_script(
             }
         }
         TxOutType::Solver(solver::ScriptKind::NullData { .. }) => {
-            if !policy.accept_datacarrier
-                || spk.as_raw_bytes().len() > policy.max_datacarrier_bytes
+            if !policy.accept_datacarrier || spk.as_raw_bytes().len() > policy.max_datacarrier_bytes
             {
                 return Err(NonStandardReason::DataCarrier);
             }
@@ -563,9 +565,7 @@ fn is_standard_output_script(
 fn is_relayable_act(spk: &[u8]) -> bool {
     is_act_output(spk)
         && spk.len() <= MAX_VAULT_ACT_BYTES
-        && spk
-            .get(1..)
-            .is_some_and(kogany_vault::script::is_push_only)
+        && spk.get(1..).is_some_and(kogany_vault::script::is_push_only)
 }
 
 /// `IsStandardTx(tx, reason, chainparams, height)` without its version rules (Zakura's
@@ -824,15 +824,12 @@ pub fn mempool_standard_checks(
         return Err(match reason {
             NonStandardReason::ScriptSigSize => TransactionError::NonStandardScriptSigSize {
                 input_index,
-                size: tx
-                    .inputs()
-                    .get(input_index)
-                    .map_or(0, |input| match input {
-                        transparent::Input::PrevOut { unlock_script, .. } => {
-                            unlock_script.as_raw_bytes().len()
-                        }
-                        transparent::Input::Coinbase { .. } => 0,
-                    }),
+                size: tx.inputs().get(input_index).map_or(0, |input| match input {
+                    transparent::Input::PrevOut { unlock_script, .. } => {
+                        unlock_script.as_raw_bytes().len()
+                    }
+                    transparent::Input::Coinbase { .. } => 0,
+                }),
             },
             _ => TransactionError::NonStandardScriptSigNotPushOnly { input_index },
         });
@@ -866,8 +863,8 @@ pub fn standard_script_check(
     let inputs = tx.inputs().len();
     let cached = zakura_script::CachedFfiTransaction::new(tx, spent_outputs, nu)
         .map_err(|error| (0, error))?;
-    let context = zakura_script::ScriptContext::new(network.clone(), height, None)
-        .with_standard_policy();
+    let context =
+        zakura_script::ScriptContext::new(network.clone(), height, None).with_standard_policy();
     for input_index in 0..inputs {
         cached
             .is_valid_in(input_index, &context)
