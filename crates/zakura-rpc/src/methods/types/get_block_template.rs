@@ -594,9 +594,13 @@ impl BlockTemplateResponse {
             &mempool_txs,
         );
 
+        let expected_difficulty = chain_info.expected_difficulty;
+        // Ycash (W1-Y6): ycashd's regtest never adjusts the difficulty.
+        #[cfg(feature = "ycash")]
+        let expected_difficulty = super::ycash::expected_difficulty(net, expected_difficulty);
+
         // Convert difficulty
-        let target = chain_info
-            .expected_difficulty
+        let target = expected_difficulty
             .to_expanded()
             .expect("state always returns a valid difficulty value");
 
@@ -643,7 +647,7 @@ impl BlockTemplateResponse {
 
             cur_time: chain_info.cur_time,
 
-            bits: chain_info.expected_difficulty,
+            bits: expected_difficulty,
 
             height: height.0,
 

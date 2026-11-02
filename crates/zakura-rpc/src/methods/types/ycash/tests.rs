@@ -4,6 +4,7 @@ use zakura_chain::{
     amount::{Amount, NonNegative},
     block::Height,
     parameters::{subsidy::block_subsidy, ycash::ydf, Network},
+    work::difficulty::ParameterDifficulty,
 };
 
 use super::*;
@@ -56,6 +57,13 @@ fn regtest_ydf_shares_match_ycashd() {
     assert_eq!(subsidy(&regtest, 17_918), zat(0));
     assert_eq!(ydf_output(&regtest, Height(17_918), zat(0)), None);
 
+    // ycashd's regtest bits never move from the genesis 0x200f0f0f.
+    let limit = expected_difficulty(
+        &regtest,
+        Network::Mainnet.target_difficulty_limit().to_compact(),
+    );
+    assert_eq!(serde_json::to_value(limit).unwrap(), 0x200f_0f0f_u32);
+
     assert_eq!(chain_name(&regtest), "regtest");
     assert!(!is_testnet_field(&regtest));
     assert!(is_pre_nu5(&regtest, Height(1)));
@@ -98,6 +106,8 @@ fn mainnet_shares_match_ycashd() {
     assert_eq!(chain_name(&main), "main");
     assert!(!is_testnet_field(&main));
     assert!(is_pre_nu5(&main, Height(2_275_000)));
+    let computed = Network::Mainnet.target_difficulty_limit().to_compact();
+    assert_eq!(expected_difficulty(&main, computed), computed);
 
     assert_eq!(chain_name(&Network::new_default_testnet()), "test");
     assert!(is_testnet_field(&Network::new_default_testnet()));

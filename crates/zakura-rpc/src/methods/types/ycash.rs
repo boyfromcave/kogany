@@ -14,6 +14,7 @@ use zakura_chain::{
         Network, NetworkUpgrade,
     },
     transparent,
+    work::difficulty::{CompactDifficulty, ParameterDifficulty},
 };
 
 /// The largest YDF share, in percent, a miner may pay voluntarily after the mandate ends, and the
@@ -139,6 +140,19 @@ pub fn template_founders_reward(
     }
     let reward = founders_share(network, height, block_subsidy);
     (is_ycash_active(network, height) || reward != Amount::<NonNegative>::zero()).then_some(reward)
+}
+
+/// The difficulty of the next block as ycashd computes it: on Regtest always the proof-of-work
+/// limit, because ycashd's regtest turns the adjustment off in both directions
+/// (`nPowMaxAdjustDown = nPowMaxAdjustUp = 0`, `ycash6 src/chainparams.cpp:719-720`), so the
+/// averaging window's mean target stays the genesis target. Zakura disables proof of work on
+/// Regtest and keeps adjusting, which ycashd refuses as `bad-diffbits`. Elsewhere `computed`.
+pub fn expected_difficulty(network: &Network, computed: CompactDifficulty) -> CompactDifficulty {
+    if network.is_regtest() {
+        network.target_difficulty_limit().to_compact()
+    } else {
+        computed
+    }
 }
 
 /// True if `height` is below NU5. From Heartwood until NU5 the header's `hashBlockCommitments`

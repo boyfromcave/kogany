@@ -6239,7 +6239,11 @@ where
 
     // Get expanded difficulties (256 bits), these are the inverse of the work
     let pow_limit: U256 = network.target_difficulty_limit().into();
-    let Some(difficulty) = chain_info.expected_difficulty.to_expanded() else {
+    let expected_difficulty = chain_info.expected_difficulty;
+    // Ycash (W1-Y6): ycashd's regtest never adjusts the difficulty.
+    #[cfg(feature = "ycash")]
+    let expected_difficulty = types::ycash::expected_difficulty(&network, expected_difficulty);
+    let Some(difficulty) = expected_difficulty.to_expanded() else {
         return Ok(0.0);
     };
 
