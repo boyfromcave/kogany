@@ -52,7 +52,7 @@ pub struct Rules<'a> {
     pub block_hashes: Option<BlockHashFn<'a>>,
 }
 
-impl<'a> Rules<'a> {
+impl Rules<'static> {
     /// Rules over the registered module table, with no block-hash provider.
     pub fn new(activation_height: i64, min_set_maturity: u32) -> Rules<'static> {
         Rules {

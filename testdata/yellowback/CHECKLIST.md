@@ -121,3 +121,18 @@ first.
 Also from ycash6 `src/vault/act.cpp`, not a schema key: `act_carrier_edges` (more than
 `MAX_ACT_SIGS` signatures → `bad-vault-act-sigs`, exactly `MAX_ACT_SIGS` decodes, the `"YV"` carrier
 test, a header-27 signature decodes but fails the field rules).
+
+## Vault set state and `statehash` (W4-b)
+
+Consumer: `crates/kogany-vault` `state` (W4-b). C++: ycash6 `src/test/vault_state_tests.cpp` at
+`65cb4ae0f` (40 cases; each is a Rust test of the same name in
+`crates/kogany-vault/tests/vault_state.rs`, with the part that belongs to another layer named in
+the test's comment), and `vault::StateHash` (`src/vault/node.cpp:505`).
+
+| key | Rust test |
+|---|---|
+| `vault_vectors.json` | **no state key**: the file pins templates, acts and signatures (W4-a, above); no `statehash` |
+| `yellowback_golden.json` `stateHash` | not consumed here: it is `yed_getstatehash` (the YED module's `StateView`, `src/yellowback/view.cpp:458`), W5-d2/W5-e; the chain's vault acts replay there |
+| `yellowback_pq_vectors.json` `chain.stateHash` | not consumed here: YED, as above |
+| vault `statehash` (`vault_getinfo`) | `crates/kogany-vault/tests/ycash6_statehash.rs` (`statehash_equals_ycash6_vault_rpc`, `statehash_equals_ycash6_vault_slashing`): every block of two regtest chains recorded once from ycashd 6.22.0-rc1 at `65cb4ae0f` running `qa/rpc-tests/vault_rpc.py` and `vault_slashing.py` unmodified (`crates/kogany-vault/tests/data/ycash6_statehash_*.json`, recorder `tests/data/record_statehash.py`; outside the nine-file PIN); the statehash after each of 52 / 53 heights from activation equals ycashd's, then every delta reverts to the empty state |
+| `statehash` preimage | `vault_state.rs` `state_hash_preimage` (CompactSize ‖ key ‖ CompactSize ‖ value, key byte order, SHA256d; the empty state) |

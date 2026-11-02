@@ -10,7 +10,9 @@
 //! - [`act`]: the `YV` OP_RETURN act codec, the two signed messages (`actMsg`, `setSigMsg`)
 //!   and strict recoverable-signature recovery.
 //! - [`bytes`]: the crate's own fixed-size byte types and their canonical encodings.
-//! - [`state`]: the boundary reserved for the set state machine (W4-b); empty here.
+//! - [`state`]: the set state machine (W4-b): records, `ApplyTx` / `ApplyBlock` as a
+//!   per-block [`state::Delta`], the snapshot queries, the module table and the canonical
+//!   `statehash`.
 //!
 //! The crate depends on no zakura crate: it reads and writes bytes only, so it can be checked
 //! against the pinned cross-line vectors (`testdata/yellowback/vault_vectors.json`) on its own.
