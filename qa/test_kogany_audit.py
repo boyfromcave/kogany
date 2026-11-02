@@ -83,6 +83,94 @@ class ListTest(unittest.TestCase):
         self.assertIn('version = "5.0.0-rc.2"', found["zakura-protocol"][0])
 
 
+GOOD_WORKFLOW = """name: Lint
+on:
+  push:
+    branches: [upgrade/vault, "vaults/**"]
+    paths:
+      - "**/*.rs"
+  pull_request:
+    branches:
+      - upgrade/vault
+      - 'vaults/**'
+      - kc/**  # stacked PRs
+  schedule:
+    - cron: "0 8 * * 0"
+  workflow_dispatch:
+    inputs:
+      tier:
+        type: string
+        default: all
+jobs: {}
+"""
+
+
+class TriggerParserTest(unittest.TestCase):
+    def test_block_mapping_lists_and_comments(self):
+        t = audit.workflow_triggers(GOOD_WORKFLOW)
+        self.assertEqual(t["push"]["branches"], ["upgrade/vault", "vaults/**"])
+        self.assertEqual(t["pull_request"]["branches"], ["upgrade/vault", "vaults/**", "kc/**"])
+        self.assertEqual(t["schedule"], [{"cron": "0 8 * * 0"}])
+        self.assertEqual(t["workflow_dispatch"]["inputs"]["tier"]["default"], "all")
+
+    def test_scalar_and_flow_forms(self):
+        self.assertEqual(audit.workflow_triggers("on: push\n"), {"push": None})
+        self.assertEqual(audit.workflow_triggers("'on': [push, delete]\n"), {"push": None, "delete": None})
+
+    def test_unreadable_fails_closed(self):
+        with self.assertRaises(audit.AuditError):
+            audit.workflow_triggers("name: x\n")
+
+
+class TriggerPolicyTest(unittest.TestCase):
+    """The lead architect's policy, and the branch cleanup's preconditions (no create/delete)."""
+
+    def problems(self, text):
+        return audit.trigger_problems("w.yml", audit.workflow_triggers(text))
+
+    def test_the_good_workflow_complies(self):
+        self.assertEqual(self.problems(GOOD_WORKFLOW), [])
+
+    def test_create_and_delete_events_fail(self):
+        for event in ("create", "delete"):
+            self.assertTrue(self.problems("on:\n  %s:\n  workflow_dispatch:\n" % event), event)
+            self.assertTrue(self.problems("on: [%s]\n" % event), event)
+
+    def test_other_events_fail(self):
+        for event in ("merge_group", "pull_request_target", "workflow_run", "repository_dispatch", "release"):
+            self.assertTrue(self.problems("on:\n  %s:\n" % event), event)
+
+    def test_a_bare_push_or_pull_request_fails(self):
+        self.assertTrue(self.problems("on: push\n"))
+        self.assertTrue(self.problems("on: [push, pull_request]\n"))
+        self.assertTrue(self.problems("on:\n  push:\n  pull_request:\n"))
+        self.assertTrue(self.problems("on:\n  push:\n    paths: ['**/*.rs']\n"))
+
+    def test_wide_or_foreign_branches_fail(self):
+        for branches in ("['**']", "['*']", "[main]", "['feat/**']", "['kc/**']"):
+            self.assertTrue(self.problems("on:\n  push:\n    branches: %s\n" % branches), branches)
+        self.assertTrue(self.problems("on:\n  pull_request:\n    branches: ['**']\n"))
+        self.assertTrue(self.problems("on:\n  push:\n    branches-ignore: ['semgrep/**']\n"))
+        self.assertTrue(self.problems("on:\n  push:\n    branches: [upgrade/vault]\n    tags: ['v*']\n"))
+
+    def test_a_named_branch_under_ours_complies(self):
+        self.assertEqual(self.problems("on:\n  push:\n    branches: ['vaults/kogany-compat']\n"), [])
+
+
+class ThisRepositoryTest(unittest.TestCase):
+    def test_every_workflow_here_complies(self):
+        repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        with tempfile.TemporaryDirectory() as out, open(os.devnull, "w") as null:
+            stdout, sys.stdout = sys.stdout, null
+            try:
+                rc = audit.leg_workflows(repo, "HEAD", "HEAD", out, None)
+            finally:
+                sys.stdout = stdout
+            with open(os.path.join(out, "workflows.md"), encoding="utf-8") as f:
+                report = f.read()
+        self.assertEqual(rc, 0, report)
+
+
 class RepositoryTest(unittest.TestCase):
     """The legs against a throwaway repository with a `kogany-legacy` branch."""
 
@@ -97,7 +185,7 @@ class RepositoryTest(unittest.TestCase):
         self.write("qa/kogany-consensus-paths.txt", "crates/zakura-chain/src/orchard.rs\nlock: zakura-protocol\n")
         self.write("qa/kogany-frozen-files.txt", "crates/zakura-chain/src/orchard.rs\n")
         self.write(".github/kogany-workflows.txt", "kept lint.yml reason\n")
-        self.write(".github/workflows/lint.yml", "name: Lint\n")
+        self.write(".github/workflows/lint.yml", GOOD_WORKFLOW)
         self.git("add", "-A")
         self.git("commit", "-q", "-m", "upstream")
         self.git("checkout", "-q", "-b", "work")
@@ -153,7 +241,31 @@ class RepositoryTest(unittest.TestCase):
         self.assertEqual(self.run_legs("greps"), 1)
 
     def test_an_unclassified_workflow_fails(self):
-        self.write(".github/workflows/new.yml", "name: New\n")
+        self.write(".github/workflows/new.yml", GOOD_WORKFLOW)
+        self.assertEqual(self.run_legs("workflows"), 1)
+
+    def test_an_off_workflow_lives_in_workflows_off(self):
+        self.write(".github/kogany-workflows.txt", "kept lint.yml reason\noff deploy.yml reason\n")
+        self.write(".github/workflows/deploy.yml", "name: Deploy\non:\n  workflow_dispatch:\n")
+        self.assertEqual(self.run_legs("workflows"), 1)
+        os.makedirs(os.path.join(self.repo, ".github/workflows-off"))
+        os.rename(os.path.join(self.repo, ".github/workflows/deploy.yml"),
+                  os.path.join(self.repo, ".github/workflows-off/deploy.yml"))
+        self.assertEqual(self.run_legs("workflows"), 0)
+
+    def test_a_kept_workflow_in_workflows_off_fails(self):
+        os.makedirs(os.path.join(self.repo, ".github/workflows-off"))
+        os.rename(os.path.join(self.repo, ".github/workflows/lint.yml"),
+                  os.path.join(self.repo, ".github/workflows-off/lint.yml"))
+        self.assertEqual(self.run_legs("workflows"), 1)
+
+    def test_an_off_workflow_is_not_checked_for_triggers(self):
+        self.write(".github/kogany-workflows.txt", "kept lint.yml reason\noff deploy.yml reason\n")
+        self.write(".github/workflows-off/deploy.yml", "name: Deploy\non:\n  delete:\n  push:\n")
+        self.assertEqual(self.run_legs("workflows"), 0)
+
+    def test_a_delete_trigger_fails(self):
+        self.write(".github/workflows/lint.yml", GOOD_WORKFLOW.replace("  workflow_dispatch:", "  delete:\n  workflow_dispatch:"))
         self.assertEqual(self.run_legs("workflows"), 1)
 
 

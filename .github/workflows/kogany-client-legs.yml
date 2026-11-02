@@ -1,0 +1,207 @@
+# Copyright (c) 2026 The Ycash developers
+# Distributed under the MIT software license, see the accompanying
+# file COPYING or https://www.opensource.org/licenses/mit-license.php .
+#
+name: kogany-client-legs
+
+# The client legs (plan §5, W7-d, W8-c; .github/README-kogany.md): each client, unmodified at its
+# pinned commit, against a regtest zakurad built once per run (`zakurad`, kogany-bin.yml). One job
+# per client: a failed client re-runs alone and reuses this run's zakurad-bin artifact. All three
+# are report-only (continue-on-error) until the lead architect flips one: drop its
+# continue-on-error and add `--strict` (lightwalletd-dd, chain-viz) then.
+on:
+  push:
+    branches: [upgrade/vault, "vaults/**"]
+  schedule:
+    - cron: '7 6 * * 0'
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CARGO_INCREMENTAL: '0'
+  CARGO_TERM_COLOR: always
+  # A Ycash regtest transparent address (prefix 0x1C95). Until plan W8 builds Ycash coinbases the
+  # node refuses to mine; kogany_client_legs.py records that and runs the legs at genesis.
+  MINER_ADDRESS: smD3WkZZgTMcQJSER9RsPkrDoKguaqPTbQt
+
+jobs:
+  zakurad:
+    uses: ./.github/workflows/kogany-bin.yml
+    permissions:
+      contents: read
+
+  lightwalletd-dd:
+    name: lightwalletd-dd (report-only)
+    needs: zakurad
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    continue-on-error: true
+    permissions:
+      contents: read
+    env:
+      LWD_REPO: https://github.com/boyfromcave/lightwalletd.git
+      LWD_REV: a1d141e37776dcfb0e4be023661d59508ab5b616        # lightwalletd-dd vaults/kogany-compat (W7-d)
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-zakura-build
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: zakurad-bin
+          path: ${{ runner.temp }}
+      - name: Unpack zakurad
+        run: mkdir -p "$RUNNER_TEMP/zk" && tar xzf "$RUNNER_TEMP/zakurad-bin.tgz" -C "$RUNNER_TEMP/zk" && "$RUNNER_TEMP/zk/zakurad" --version
+      - name: Fetch lightwalletd-dd at its pin
+        run: |
+          git init -q "$RUNNER_TEMP/lightwalletd"
+          git -C "$RUNNER_TEMP/lightwalletd" fetch -q --depth 1 "$LWD_REPO" "$LWD_REV"
+          git -C "$RUNNER_TEMP/lightwalletd" checkout -q FETCH_HEAD
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        with:
+          go-version-file: ${{ runner.temp }}/lightwalletd/go.mod
+          cache: false
+      - name: Build lightwalletd-dd and its probe tool
+        working-directory: ${{ runner.temp }}/lightwalletd
+        env:
+          CGO_ENABLED: '0'
+        run: |
+          go build -mod=vendor -o "$RUNNER_TEMP/bin/lightwalletd" .
+          go build -mod=vendor -o "$RUNNER_TEMP/bin/lwdinfo" ./testtools/lwdinfo
+      - name: lightwalletd-dd leg (report-only)
+        run: |
+          python3 crates/kogany-rpc/qa/kogany_client_legs.py --zakurad "$RUNNER_TEMP/zk/zakurad" \
+            --lightwalletd "$RUNNER_TEMP/bin/lightwalletd" --lwdinfo "$RUNNER_TEMP/bin/lwdinfo" \
+            --miner-address "$MINER_ADDRESS" --out kogany-client-legs
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: ${{ !cancelled() }}
+        with:
+          name: kogany-client-leg-lightwalletd-dd
+          path: kogany-client-legs
+          retention-days: 30
+          if-no-files-found: ignore
+
+  chain-viz:
+    name: chain-viz (report-only)
+    needs: zakurad
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    continue-on-error: true
+    permissions:
+      contents: read
+    env:
+      CHAINVIZ_REPO: https://github.com/boyfromcave/chain-viz.git
+      CHAINVIZ_REV: 0165934bd65b87fa880c1263536718c525d33dd9   # chain-viz vaults/kogany-compat
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-zakura-build
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: zakurad-bin
+          path: ${{ runner.temp }}
+      - name: Unpack zakurad
+        run: mkdir -p "$RUNNER_TEMP/zk" && tar xzf "$RUNNER_TEMP/zakurad-bin.tgz" -C "$RUNNER_TEMP/zk" && "$RUNNER_TEMP/zk/zakurad" --version
+      - name: Fetch chain-viz at its pin
+        run: |
+          git init -q "$RUNNER_TEMP/chain-viz"
+          git -C "$RUNNER_TEMP/chain-viz" fetch -q --depth 1 "$CHAINVIZ_REPO" "$CHAINVIZ_REV"
+          git -C "$RUNNER_TEMP/chain-viz" checkout -q FETCH_HEAD
+      - uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f #v2.0.0
+        with:
+          toolchain: stable
+          cache: false  # another repository's build; nothing saved in kogany's cache scope
+      - name: Build chain-viz
+        working-directory: ${{ runner.temp }}/chain-viz
+        run: |
+          cargo build --locked --release
+          mkdir -p "$RUNNER_TEMP/bin" && cp target/release/chain-viz "$RUNNER_TEMP/bin/chain-viz"
+      - name: chain-viz leg (report-only)
+        run: |
+          python3 crates/kogany-rpc/qa/kogany_client_legs.py --zakurad "$RUNNER_TEMP/zk/zakurad" \
+            --chain-viz "$RUNNER_TEMP/bin/chain-viz" \
+            --miner-address "$MINER_ADDRESS" --out kogany-client-legs
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: ${{ !cancelled() }}
+        with:
+          name: kogany-client-leg-chain-viz
+          path: kogany-client-legs
+          retention-days: 30
+          if-no-files-found: ignore
+
+  yolo:
+    # yolo serves kogany's templates (its tests/regtest.rs kogany mode, YOLO_REGTEST_KOGANY) with
+    # two ycash6 nodes holding the wallet and checking every block (plan W8-c). ycashd is ycash6's
+    # node-bin (the cross-line contract, README-kogany.md): the newest push, schedule or dispatch run
+    # of its yellowback-tests.yml on YCASH6_BRANCH.
+    name: yolo (report-only)
+    needs: zakurad
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    continue-on-error: true
+    permissions:
+      contents: read
+    env:
+      YOLO_REPO: boyfromcave/yolo
+      YOLO_REV: 576754ded6cf3cdf092874224c9d67cdc7059112      # yolo vaults/kogany-compat (W8-c)
+      YCASH6_REPO: boyfromcave/ycash6
+      YCASH6_BRANCH: vaults/kogany-compat
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          repository: ${{ env.YOLO_REPO }}
+          ref: ${{ env.YOLO_REV }}
+          persist-credentials: false
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          repository: ${{ env.YCASH6_REPO }}
+          ref: ${{ env.YCASH6_BRANCH }}
+          path: node
+          persist-credentials: false
+          sparse-checkout: |
+            contrib/yellowback/devnet
+            zcutil
+      - name: zakurad (this run's zakurad-bin) and librocksdb
+        run: sudo apt-get update -q && sudo apt-get install -y -q librocksdb-dev
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: zakurad-bin
+          path: ${{ runner.temp }}
+      - name: Unpack zakurad
+        run: mkdir -p "$RUNNER_TEMP/zk" && tar xzf "$RUNNER_TEMP/zakurad-bin.tgz" -C "$RUNNER_TEMP/zk" && "$RUNNER_TEMP/zk/zakurad" --version
+      - name: ycashd from ycash6's node-bin
+        env:
+          GH_TOKEN: ${{ secrets.YCASH6_ARTIFACT_TOKEN || github.token }}
+        run: |
+          set -euo pipefail
+          dst="$RUNNER_TEMP/node"; mkdir -p "$dst"
+          trusted='select(.event == "push" or .event == "schedule" or .event == "workflow_dispatch")'
+          runs=$(gh run list -R "$YCASH6_REPO" -w yellowback-tests.yml -b "$YCASH6_BRANCH" -L 20 --json databaseId,event -q ".[] | $trusted | .databaseId")
+          for r in $runs; do
+            for name in ycash6-node-bin node-bin; do
+              if gh run download "$r" -R "$YCASH6_REPO" -n "$name" -D "$RUNNER_TEMP/dl" 2>/dev/null; then
+                echo "ycashd: $YCASH6_REPO run $r, artifact $name" | tee -a "$GITHUB_STEP_SUMMARY"; break 2
+              fi
+            done
+          done
+          tar -xzf "$RUNNER_TEMP/dl/node-bin.tgz" -C "$dst" src/ycashd src/ycash-cli
+          test -x "$dst/src/ycashd"
+      - name: fetch zcash params
+        run: node/zcutil/fetch-params.sh
+      - uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f #v2.0.0
+        with:
+          toolchain: stable
+          cache: false  # another repository's build; nothing saved in kogany's cache scope
+      - name: yolo regtest, kogany mode (report-only)
+        run: |
+          export YCASHD="$RUNNER_TEMP/node/src/ycashd" PYTHON=python3
+          export STRATUM_MINER="$GITHUB_WORKSPACE/node/contrib/yellowback/devnet/stratum-miner"
+          export YOLO_REGTEST_SCRATCH="$RUNNER_TEMP/yolo-regtest"
+          export YOLO_REGTEST_VAULT=110 YOLO_REGTEST_KOGANY="$RUNNER_TEMP/zk/zakurad"
+          cargo test --locked --features regtest --test regtest -- --nocapture

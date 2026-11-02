@@ -6,13 +6,13 @@ on:
   # that touch no test-relevant files. This keeps the `test success` required
   # check reporting on every PR instead of sitting in "Expected" forever.
   pull_request:
-    # kogany (2026-11-01): also PRs into kogany's integration branches (K-15, .github/README-kogany.md).
-    branches: [main, "feat/**", "split/**", "adam/**", "release/**", upgrade/vault, "vaults/**"]
+    # kogany (2026-11-01): only PRs into kogany's branches (K-15, .github/README-kogany.md "Triggers").
+    branches: [upgrade/vault, "vaults/**", "kc/**"]
     types: [opened, synchronize, reopened, labeled, unlabeled]
 
   push:
-    # kogany (2026-11-01): also pushes to kogany's integration branches (K-15).
-    branches: [main, upgrade/vault, "vaults/**"]
+    # kogany (2026-11-01): only pushes to kogany's branches (K-15).
+    branches: [upgrade/vault, "vaults/**"]
     paths:
       - "**/*.rs"
       - "**/Cargo.toml"
@@ -37,7 +37,9 @@ on:
   # Run the full unit-test suite when a PR is queued so the merge queue validates
   # the merged result against the latest `main`. `merge_group` ignores path
   # filters, so this runs unconditionally on every queued entry.
-  merge_group:
+  # kogany (2026-11-01): no merge queue on kogany, and nothing runs outside its branches
+  # (.github/README-kogany.md "Triggers").
+  # merge_group:
 
   # kogany (2026-11-01): no nightly release-profile run and so no nightly-failure issue (K-15);
   # the release profile and the simulator jobs run on workflow_dispatch.

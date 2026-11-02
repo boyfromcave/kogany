@@ -1,0 +1,83 @@
+# Copyright (c) 2026 The Ycash developers
+# Distributed under the MIT software license, see the accompanying
+# file COPYING or https://www.opensource.org/licenses/mit-license.php .
+#
+name: kogany-bin
+
+# The zakurad binary other jobs and other repositories run (.github/README-kogany.md "Cross-line
+# contract"): `zakurad` built with --features ycash (dev profile) on ubuntu-24.04, uploaded as the
+# artifact `zakurad-bin` holding one `zakurad-bin.tgz` (`zakurad` and `zakurad-bin.json`, tar so the
+# executable bit survives). ycash6's mixed tier downloads it from a push, schedule or dispatch run
+# of this workflow at its pinned kogany commit; kogany-client-legs.yml and kogany-mixed.yml call it.
+# It publishes nothing anywhere else.
+on:
+  push:
+    branches: [upgrade/vault, "vaults/**"]
+  # Weekly, so the default branch always has an unexpired zakurad-bin (retention 30 days).
+  schedule:
+    - cron: '37 5 * * 6'
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      kogany_rev:
+        description: 'the kogany commit to build (empty: this run''s commit)'
+        type: string
+        default: ''
+
+permissions: {}
+
+concurrency:
+  # A called run shares its caller's group; give it its own key so caller and callee never wait
+  # on each other.
+  group: ${{ github.workflow }}-bin-${{ github.event_name }}-${{ github.ref }}-${{ inputs.kogany_rev }}
+  cancel-in-progress: false
+
+env:
+  CARGO_INCREMENTAL: '0'
+  CARGO_TERM_COLOR: always
+
+jobs:
+  zakurad-bin:
+    name: zakurad-bin (ycash, dev)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          repository: boyfromcave/kogany
+          ref: ${{ inputs.kogany_rev || github.sha }}
+          persist-credentials: false
+      - uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f #v2.0.0 # zizmor: ignore[cache-poisoning] -- a test binary for regtest jobs; never released
+        with:
+          toolchain: stable
+          cache-key: kogany-bin-zakurad
+          cache-on-failure: true
+          cache-save-if: ${{ github.repository == 'boyfromcave/kogany' && (github.ref == 'refs/heads/upgrade/vault' || startsWith(github.ref, 'refs/heads/vaults/')) }}
+      - uses: ./.github/actions/setup-zakura-build
+      - name: cargo build zakurad --features ycash
+        run: cargo build --locked -p zakura --bin zakurad --features ycash
+      - name: Pack zakurad-bin.tgz
+        env:
+          REPO: boyfromcave/kogany
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/pack" "$RUNNER_TEMP/out"
+          cp target/debug/zakurad "$RUNNER_TEMP/pack/"
+          rocksdb=$(dpkg-query -W -f='${Version}' librocksdb-dev)
+          python3 - "$RUNNER_TEMP/pack/zakurad-bin.json" "$REPO" "$(git rev-parse HEAD)" "$rocksdb" "$(rustc --version)" <<'PY'
+          import json, sys
+          path, repo, commit, rocksdb, rustc = sys.argv[1:]
+          json.dump({'repository': repo, 'commit': commit, 'binary': 'zakurad', 'features': ['ycash'],
+                     'profile': 'dev', 'runner': 'ubuntu-24.04', 'librocksdb': rocksdb, 'rustc': rustc,
+                     'producer': 'kogany kogany-bin.yml zakurad-bin'}, open(path, 'w'), indent=1)
+          PY
+          tar czf "$RUNNER_TEMP/out/zakurad-bin.tgz" -C "$RUNNER_TEMP/pack" zakurad zakurad-bin.json
+          cat "$RUNNER_TEMP/pack/zakurad-bin.json"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: zakurad-bin
+          path: ${{ runner.temp }}/out/zakurad-bin.tgz
+          retention-days: 30
+          if-no-files-found: error

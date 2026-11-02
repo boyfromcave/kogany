@@ -17,17 +17,20 @@ on:
   # - block-sync fuzz must run after every merge to `main`, even when
   #   the merged PR did not touch an obviously Zakura-specific path.
   pull_request:
-    # kogany (2026-11-01): also PRs into kogany's integration branches, for the pr-gate (K-15);
-    # pushes to them run nothing here.
-    branches: [main, "feat/**", "split/**", "adam/**", "release/**", upgrade/vault, "vaults/**"]
+    # kogany (2026-11-01): only PRs into kogany's branches, for the pr-gate (K-15,
+    # .github/README-kogany.md "Triggers").
+    branches: [upgrade/vault, "vaults/**", "kc/**"]
     types: [opened, synchronize, reopened, labeled, unlabeled]
 
-  push:
-    branches: [main, "feat/**", "release/**"]
+  # kogany (2026-11-01): pushes run nothing here (K-15).
+  # push:
+  #   branches: [main, "feat/**", "release/**"]
 
   # Always run in the merge queue, so a change that breaks Zakura sync
   # indirectly is still caught at landing.
-  merge_group:
+  # kogany (2026-11-01): no merge queue on kogany, and nothing runs outside its branches
+  # (.github/README-kogany.md "Triggers").
+  # merge_group:
 
   # Long four-node modes run nightly and on demand.
   # kogany (2026-11-01): weekly, Sunday, instead of nightly (K-15).
