@@ -308,12 +308,20 @@ pub(crate) static METHODS: &[(&str, openrpc::RpcMethod)] = &[
     deprecated: false,
 }),
 ("addnode", openrpc::RpcMethod {
-    description: "Add or remove a node from the address book.\n\n# Parameters\n\n- `addr`: (string, required) The address of the node to add or remove.\n- `command`: (string, required) The command to execute, either \"add\", \"onetry\", or \"remove\".\n\n# Notes\n\nOnly the \"add\" command is currently supported.\n\nzcashd reference: [`addnode`](https://zcash.github.io/rpc/addnode.html)\nmethod: post\ntags: network\n",
+    description: "Add or remove a node from the address book.\n\n# Parameters\n\n- `addr`: (string, required) The address of the node to add or remove.\n- `command`: (string, required) The command to execute, either \"add\", \"onetry\", or \"remove\".\n\n# Notes\n\nThe \"add\" and \"onetry\" commands are supported. kogany (F-S5-6): \"onetry\" dials a known\naddress now instead of after its reconnection delay, as ycashd's does.\n\nzcashd reference: [`addnode`](https://zcash.github.io/rpc/addnode.html)\nmethod: post\ntags: network\n",
     params: |_g| vec![
         _g.param::<PeerSocketAddr>("addr", crate::methods::PARAM_ADDR_DESC, true),
         _g.param::<AddNodeCommand>("command", crate::methods::PARAM_COMMAND_DESC, true),
     ],
     result: |g| g.result("addnode_result"),
+    deprecated: false,
+}),
+("disconnectnode", openrpc::RpcMethod {
+    description: "Immediately disconnects from the specified node.\n\n# Parameters\n\n- `node`: (string, required) The node's address, as `getpeerinfo` reports it (`ip:port`).\n\n# Notes\n\nkogany (finding F-S5-6): closes every connection to `node`, and keeps its address out of\nthe address book, so the node is not redialed, until `addnode` adds it again, as ycashd\nnever redials a node it disconnected that `addnode` does not name\n(`ycash6` `src/rpc/net.cpp:224-245`). Answers `-29` (\"Node not found in connected nodes\")\nwhen no connection to `node` is open; the address is kept out of the book then too.\n\nzcashd reference: [`disconnectnode`](https://zcash.github.io/rpc/disconnectnode.html)\nmethod: post\ntags: network\n",
+    params: |_g| vec![
+        _g.param::<String>("node", crate::methods::PARAM_NODE_DESC, true),
+    ],
+    result: |g| g.result("disconnectnode_result"),
     deprecated: false,
 }),
 ("rpc.discover", openrpc::RpcMethod {

@@ -1054,6 +1054,10 @@ pub async fn test_mining_rpcs<State, ReadState>(
         // TODO: Use default field values when optional features are enabled in tests #8183
         internal_miner: true,
         optimistic_block_inventory: true,
+        #[cfg(feature = "ycash")]
+        yellowback_payout_default: true,
+        #[cfg(feature = "ycash")]
+        block_unpaid_action_limit: None,
     };
 
     // nu5 block height

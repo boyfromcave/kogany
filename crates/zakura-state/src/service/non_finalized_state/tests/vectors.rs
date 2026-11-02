@@ -618,7 +618,7 @@ fn invalidate_root_block_removes_entire_chain_for_network(network: Network) -> R
 
     let invalidated_blocks = state
         .invalidated_blocks
-        .get(&block1.coinbase_height().expect("test block has a height"))
+        .get(&block1.hash())
         .expect("invalidated root block should be tracked");
 
     assert!(
@@ -1673,4 +1673,45 @@ fn receipt_fallback_and_backup_restore_ignore_replay_order() {
             .receipt_order
             .is_none()));
     }
+}
+
+/// kogany (S5, `vault_pq_reorg` case C): two blocks invalidated at one height are both recorded,
+/// keyed by hash, and each can be reconsidered; keyed by height the second record overwrote the
+/// first, so `reconsiderblock` of the first found nothing. ycashd keeps a failure flag per block.
+#[test]
+fn ycash_invalidations_at_one_height_are_kept_by_hash() -> Result<()> {
+    let _init_guard = zakura_test::init();
+
+    for network in Network::iter() {
+        let block1: Arc<Block> = Arc::new(network.test_block(653599, 583999).unwrap());
+        let first = block1.make_fake_child().set_work(10);
+        let second = block1.make_fake_child().set_work(5);
+        assert_ne!(first.hash(), second.hash());
+
+        let mut state = NonFinalizedState::new(&network);
+        let finalized_state = FinalizedState::new(&Config::ephemeral(), &network)
+            .expect("opening an ephemeral database should succeed");
+        finalized_state
+            .set_finalized_value_pool(ValueBalance::<NonNegative>::fake_populated_pool());
+
+        state.commit_new_chain(block1.clone().prepare(), &finalized_state)?;
+        state.commit_block(first.clone().prepare(), &finalized_state)?;
+        state.commit_block(second.clone().prepare(), &finalized_state)?;
+
+        state.invalidate_block(first.hash())?;
+        state.invalidate_block(second.hash())?;
+        assert_eq!(state.invalidated_blocks().len(), 2, "both records are kept");
+
+        state
+            .reconsider_block(first.hash(), &finalized_state.db)
+            .expect("the first invalidated block is reconsidered");
+        assert!(state.any_chain_contains(&first.hash()));
+        state
+            .reconsider_block(second.hash(), &finalized_state.db)
+            .expect("the second invalidated block is reconsidered");
+        assert!(state.any_chain_contains(&second.hash()));
+        assert!(state.invalidated_blocks().is_empty());
+    }
+
+    Ok(())
 }

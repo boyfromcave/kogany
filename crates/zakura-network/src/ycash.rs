@@ -201,5 +201,47 @@ pub(crate) fn default_initial_testnet_peers() -> indexmap::IndexSet<String> {
 pub(crate) const P2P_V2_REFUSED: &str = "the Zakura P2P v2 stack is off on Ycash (kogany plan \
      decision K-11): set network.p2p_stack = \"legacy\" or leave it unset";
 
+/// Returns `true` if `ip` is routable in ycashd's sense (`CNetAddr::IsRoutable`,
+/// `ycash6 src/netbase.cpp:798-810,854-857`): valid, and none of the loopback and `0/8` hosts,
+/// the RFC 1918, 2544, 3927, 4862, 6598, 5737, 4193 and 4843 ranges, or the RFC 3849 IPv6
+/// documentation range (`IsValid`).
+///
+/// ycashd's address manager keeps only routable addresses (`CAddrMan::Add_`,
+/// `ycash6 src/addrman.cpp:244-247`), so a gossiped loopback or private address is never dialled:
+/// on a regtest network, where every node listens on `127.0.0.1`, a node connects only to the
+/// nodes `addnode` names. kogany drops such a gossiped address the same way (finding F-S5-6: the
+/// harness's split halves met again through gossiped addresses). An operator's address
+/// (`addnode`, the initial peers, the disk cache) is kept whatever its range.
+pub fn is_routable(ip: std::net::IpAddr) -> bool {
+    use std::net::IpAddr;
+
+    match ip.to_canonical() {
+        IpAddr::V4(ip) => {
+            let [a, b, c, _] = ip.octets();
+            !(a == 0
+                || a == 127
+                || ip.is_broadcast()
+                || a == 10
+                || (a == 172 && (16..=31).contains(&b))
+                || (a == 192 && b == 168)
+                || (a == 198 && (b == 18 || b == 19))
+                || (a == 169 && b == 254)
+                || (a == 100 && (64..=127).contains(&b))
+                || (a == 192 && b == 0 && c == 2)
+                || (a == 198 && b == 51 && c == 100)
+                || (a == 203 && b == 0 && c == 113))
+        }
+        IpAddr::V6(ip) => {
+            let s = ip.segments();
+            !(ip.is_unspecified()
+                || ip.is_loopback()
+                || (s[0] == 0x2001 && s[1] == 0x0db8)
+                || (s[0] & 0xfe00) == 0xfc00
+                || (s[0] == 0xfe80 && s[1] == 0 && s[2] == 0 && s[3] == 0)
+                || (s[0] == 0x2001 && (s[1] & 0xfff0) == 0x0010))
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests;

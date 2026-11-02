@@ -22,3 +22,38 @@ Where these documents name a Zcash value, a `koganyd` uses Ycash's instead:
 
 [README.md](../README.md) has the full table, how to build and run each network, and the pointers
 to the Yellowback and vault RPC documents in [`doc/`](../doc/).
+
+## Where a `koganyd` behaves as ycashd does
+
+The Yellowback parity gate (S5) runs ycash6's functional scripts against kogany; these node
+behaviours follow ycashd's there, each against Zakura's own:
+
+- **Peers.** `disconnectnode "ip:port"` closes the connections to that node (`-29` "Node not found
+  in connected nodes" when there are none) and keeps its address out of the address book until
+  `addnode` names it again, so it is not redialled (also when no connection was open: an `addnode`
+  address stays in the book, where ycashd's `onetry` node is never redialled). `addnode "ip:port" onetry` dials a node now,
+  where `add` of a known address waits out its two-minute reconnection delay. A gossiped address
+  that ycashd's address manager refuses as not routable (loopback, RFC 1918 and the other reserved
+  ranges, `CNetAddr::IsRoutable`) is not kept, so a regtest node connects only to the nodes
+  `addnode` names; operator addresses (`addnode`, the initial peers, the disk cache) are kept
+  whatever their range.
+- **Reorgs and restarts.** The transactions of a block that leaves the best chain (a reorg, an
+  `invalidateblock`) return to the mempool and are verified at the new tip, as ycashd's
+  `DisconnectTip` resurrects them; the mempool keeps the last 100 best-chain blocks' transactions
+  for this. The non-finalized blocks are written to the backup directory before each tip update,
+  so a stopped node restarts at the tip it reported.
+- **Templates.** `getblocktemplate` has no limit on unpaid ZIP-317 actions by default, as ycashd's
+  `-blockunpaidactionlimit` default (`SIZE_MAX`): a transaction that pays the relay fee but less
+  than the conventional fee, such as a post-quantum owner spend, is mined.
+  `mining.block_unpaid_action_limit` sets the limit (`0`: Zakura's rule, ycashd
+  `-blockunpaidactionlimit=0`).
+- **The YED payout key.** A transparent P2PKH `mining.miner_address` is also the Yellowback payout
+  key the coinbase tag names, as ycashd takes `-mineraddress` when no `-yellowbackpayoutaddress`
+  is set. `mining.yellowback_payout_default = false` (ycashd `-yellowbackpayoutdefault=0`, default
+  on) leaves the node without a payout key: it emits no tag and `yed_setquote` refuses
+  `no-payout-address`, as a ycashd mining to its wallet does. A Yellowback-live node can then mine
+  to a transparent address without naming a payout key.
+- **Transaction relay.** An inv-announced transaction id the per-peer download cap
+  (`MAX_INBOUND_CONCURRENCY_PER_PEER`, 5) refuses is kept, bounded, and requested again when a
+  slot frees, as ycashd keeps every announced id in its request queue: a burst of announcements is
+  fully downloaded.

@@ -491,14 +491,21 @@ impl StateService {
             false
         };
         let backup_dir_path = config.non_finalized_state_backup_dir(network);
-        let skip_backup_task = config.debug_skip_non_finalized_state_backup_task;
+        // kogany (F-S5-7): on a Ycash network the non-finalized backup is written before each tip
+        // update, never by the 5-second task, so a block the node reported is on disk when it
+        // stops: ycashd writes a block to disk before it connects it (`ycash6` at `65cb4ae0f`,
+        // `src/main.cpp:6436,6535`, `AcceptBlock`'s `WriteBlockToDisk`), and a restarted ycashd
+        // is at its tip.
+        // With the task a node stopped within 5 seconds of its last blocks restarted below them.
+        let skip_backup_task =
+            config.debug_skip_non_finalized_state_backup_task || cfg!(feature = "ycash");
         let (non_finalized_state, non_finalized_state_sender, non_finalized_state_receiver) =
             NonFinalizedState::new(network)
                 .with_backup(
                     backup_dir_path.clone(),
                     &finalized_state.db,
                     is_finalized_tip_past_max_checkpoint,
-                    config.debug_skip_non_finalized_state_backup_task,
+                    skip_backup_task,
                 )
                 .await;
 

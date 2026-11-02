@@ -166,6 +166,12 @@ fn select_mempool_transactions_inner(
     #[cfg(feature = "ycash")]
     {
         limits.filter = filter;
+        // Ycash: ycashd's `-blockunpaidactionlimit`, no limit by default (`SIZE_MAX`,
+        // `ycash6` at `65cb4ae0f`, `src/zip317.h:42`, `src/miner.cpp:304,685-702`), where
+        // Zakura's limit is 0: a transaction that pays the size-based Ycash relay fee but less
+        // than the conventional fee, as a post-quantum owner spend whose large scriptSig counts
+        // as many logical actions, is mined.
+        limits.remaining_unpaid_actions = miner_params.block_unpaid_action_limit();
     }
     // > Repeat while there is any candidate transaction
     // > that pays at least the conventional fee:

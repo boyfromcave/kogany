@@ -135,8 +135,8 @@ fn node_config(net: &Network) -> Result<ZakuradConfig> {
     config.mempool.debug_enable_at_height = Some(0);
     config.mining.miner_address = Some(miner().to_string().parse()?);
     config.state.ephemeral = false;
-    // Write the non-finalized state at every block, so a restart restores all of it.
-    config.state.debug_skip_non_finalized_state_backup_task = true;
+    // A Ycash build writes the non-finalized state at every block (F-S5-7), so a restart restores
+    // all of it without `debug_skip_non_finalized_state_backup_task`.
     config.consensus.checkpoint_sync = false;
     Ok(config)
 }
@@ -752,10 +752,18 @@ async fn kogany_regtest_vault_spend_reorg_restart() -> Result<()> {
     let tip_before = node.best_hash().await?;
     let state_before = state_hash(&node.vault_info().await?);
     let parent = node.block(&undo_block).await?.header.previous_block_hash;
+    let undone = match &spend_block {
+        Some(_) => unlock.hash(),
+        None => lock.hash(),
+    }
+    .to_string();
     node.ok("invalidateblock", &format!(r#"["{undo_block}"]"#))
         .await?;
     wait_for(&node, |h| h == parent.to_string()).await?;
     assert_eq!(node.height().await?, undo_height - 1);
+    // F-S5-7: the disconnected block's transaction is back in the mempool (ycashd
+    // `DisconnectTip`), and leaves it again when the block is reconnected.
+    wait_for_mempool(&node, &undone, true).await?;
     if served {
         assert_eq!(
             state_hash(&node.vault_info().await?),
@@ -767,6 +775,7 @@ async fn kogany_regtest_vault_spend_reorg_restart() -> Result<()> {
     node.ok("reconsiderblock", &format!(r#"["{undo_block}"]"#))
         .await?;
     wait_for(&node, |h| h == tip_before).await?;
+    wait_for_mempool(&node, &undone, false).await?;
     assert_eq!(state_hash(&node.vault_info().await?), state_before);
     // S5 parity: ycashd's reconsiderblock of a known block it did not invalidate is a no-op, and
     // of an unknown hash -5 "Block not found".
@@ -815,6 +824,24 @@ async fn kogany_regtest_vault_spend_reorg_restart() -> Result<()> {
     assert_eq!(node.height().await?, height + 1);
 
     node.kill()
+}
+
+/// Waits until `getrawmempool` holds `txid` (`present`) or does not.
+async fn wait_for_mempool(node: &Node, txid: &str, present: bool) -> Result<()> {
+    for _ in 0..300 {
+        let pool = node.ok("getrawmempool", "[]").await?;
+        let holds = pool
+            .as_array()
+            .is_some_and(|ids| ids.iter().any(|id| id.as_str() == Some(txid)));
+        if holds == present {
+            return Ok(());
+        }
+        tokio::time::sleep(Duration::from_millis(200)).await;
+    }
+    Err(eyre!(
+        "the mempool {} {txid}",
+        if present { "never held" } else { "still holds" }
+    ))
 }
 
 /// Waits until `getbestblockhash` satisfies `done`.

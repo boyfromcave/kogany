@@ -105,8 +105,13 @@ pub struct NonFinalizedState {
     chain_set: BTreeSet<Arc<Chain>>,
 
     /// Blocks that have been invalidated in, and removed from, the non finalized
-    /// state.
-    invalidated_blocks: IndexMap<Height, Arc<Vec<ContextuallyVerifiedBlock>>>,
+    /// state: each invalidated branch, keyed by the hash of its root (the block `invalidateblock`
+    /// named), in invalidation order.
+    ///
+    /// kogany (S5, `vault_pq_reorg`): keyed by hash, not height, so two branches invalidated at one
+    /// height are both kept and each can be reconsidered, as ycashd keeps a failure flag per
+    /// block index entry; keyed by height the second record overwrote the first.
+    invalidated_blocks: IndexMap<block::Hash, Arc<Vec<ContextuallyVerifiedBlock>>>,
 
     /// The sequence of the latest `preciousblock` call, so later calls win equal-work ties.
     ///
@@ -451,7 +456,7 @@ impl NonFinalizedState {
 
         // Remove all invalidated_blocks at or below the finalized height
         self.invalidated_blocks
-            .retain(|height, _blocks| *height >= best_chain_root.height);
+            .retain(|_root, blocks| invalidated_height(blocks) >= best_chain_root.height);
         self.retain_precious_blocks();
 
         self.update_metrics_for_chains();
@@ -544,13 +549,13 @@ impl NonFinalizedState {
             invalidated_blocks
         };
 
-        // TODO: Allow for invalidating multiple block hashes at a given height (#9552).
+        // Keyed by the root's hash, so several blocks invalidated at one height are all kept
+        // (#9552).
         self.invalidated_blocks.insert(
             invalidated_blocks
                 .first()
                 .expect("should not be empty")
-                .clone()
-                .height,
+                .hash,
             Arc::new(invalidated_blocks),
         );
 
@@ -633,16 +638,10 @@ impl NonFinalizedState {
         // Locate the record but keep it live until replay succeeds, so a
         // recoverable error can't lose it; it is `shift_remove`d atomically with
         // the insert below.
-        let (height, invalidated_blocks) = self
+        let invalidated_blocks = self
             .invalidated_blocks
-            .iter()
-            .find_map(|(height, blocks)| {
-                if blocks.first()?.hash == block_hash {
-                    Some((*height, (**blocks).clone()))
-                } else {
-                    None
-                }
-            })
+            .get(&block_hash)
+            .map(|blocks| (**blocks).clone())
             .ok_or(ReconsiderError::MissingInvalidatedBlock(block_hash))?;
 
         let invalidated_block_hashes = invalidated_blocks
@@ -693,13 +692,13 @@ impl NonFinalizedState {
         // All fallible steps have succeeded; remove the invalidation record
         // atomically with installing the restored chain so a failed attempt
         // does not destroy the record.
-        self.invalidated_blocks.shift_remove(&height);
+        self.invalidated_blocks.shift_remove(&block_hash);
 
         // Only track invalidated_blocks that are not yet finalized. Once blocks are finalized (below the best_chain_root_height)
         // we can discard the block.
         if let Some(best_chain_root_height) = finalized_state.finalized_tip_height() {
             self.invalidated_blocks
-                .retain(|height, _blocks| *height >= best_chain_root_height);
+                .retain(|_root, blocks| invalidated_height(blocks) >= best_chain_root_height);
         }
 
         self.insert_with(Arc::new(modified_chain), |chain_set| {
@@ -1151,7 +1150,7 @@ impl NonFinalizedState {
     }
 
     /// Return the invalidated blocks.
-    pub fn invalidated_blocks(&self) -> IndexMap<Height, Arc<Vec<ContextuallyVerifiedBlock>>> {
+    pub fn invalidated_blocks(&self) -> IndexMap<block::Hash, Arc<Vec<ContextuallyVerifiedBlock>>> {
         self.invalidated_blocks.clone()
     }
 
@@ -1227,4 +1226,9 @@ impl Drop for NonFinalizedState {
     fn drop(&mut self) {
         self.disable_metrics();
     }
+}
+
+/// The height of an invalidated branch: its root's, the first block.
+fn invalidated_height(blocks: &[ContextuallyVerifiedBlock]) -> Height {
+    blocks.first().map_or(Height(0), |block| block.height)
 }
