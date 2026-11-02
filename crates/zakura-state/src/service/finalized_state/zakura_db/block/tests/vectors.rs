@@ -9,6 +9,8 @@
 //! including data activated in Overwinter and later network upgrades.
 //!
 //! Check transparent address indexes, UTXOs, etc.
+// kogany: the Zcash-fixture tests are not built with `ycash`, leaving their helpers unused.
+#![cfg_attr(feature = "ycash", allow(unused_imports, dead_code))]
 
 use std::{iter, sync::Arc};
 
@@ -37,6 +39,9 @@ use crate::{
 
 /// Storage round-trip test for block and transaction data in the finalized state database.
 #[test]
+// kogany: Zcash Mainnet and Testnet block vectors (NU5 branch IDs, Zcash Heartwood and NU5
+// heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn test_block_db_round_trip() {
     let mainnet_test_cases = MAINNET_BLOCKS
         .values()

@@ -542,6 +542,8 @@ mod tests {
 }
 
 #[cfg(test)]
+// kogany: the Zcash-fixture tests are not built with `ycash`.
+#[cfg_attr(feature = "ycash", allow(unused_imports, dead_code))]
 mod database_tests {
     use super::super::cancel_channel;
     use super::*;
@@ -1066,6 +1068,9 @@ mod database_tests {
     }
 
     #[test]
+    // kogany: Zcash funding streams, lockbox and NU7 deferred-pool schedules (Zcash t3 stream
+    // addresses); not run on Ycash.
+    #[cfg(not(feature = "ycash"))]
     fn pre_nu7_migration_with_large_tip_does_not_scan_history_or_write() {
         use zakura_chain::parameters::testnet::{
             self, ConfiguredFundingStreamRecipient, ConfiguredFundingStreams,
@@ -1206,6 +1211,9 @@ mod database_tests {
     }
 
     #[test]
+    // kogany: Zcash funding streams, lockbox and NU7 deferred-pool schedules (Zcash t3 stream
+    // addresses); not run on Ycash.
+    #[cfg(not(feature = "ycash"))]
     fn migration_accepts_healthy_slow_start_deferred_history() {
         for nu7 in [None, Some(20), Some(4)] {
             for pool_len in [40, 48] {
@@ -1237,6 +1245,9 @@ mod database_tests {
     }
 
     #[test]
+    // kogany: Zcash funding streams, lockbox and NU7 deferred-pool schedules (Zcash t3 stream
+    // addresses); not run on Ycash.
+    #[cfg(not(feature = "ycash"))]
     fn migration_accepts_first_deferred_payment_at_slow_start_end() {
         use zakura_chain::parameters::testnet::{
             self, ConfiguredFundingStreamRecipient, ConfiguredFundingStreams,
@@ -1284,6 +1295,9 @@ mod database_tests {
     }
 
     #[test]
+    // kogany: Zcash funding streams, lockbox and NU7 deferred-pool schedules (Zcash t3 stream
+    // addresses); not run on Ycash.
+    #[cfg(not(feature = "ycash"))]
     fn migration_only_needs_deferred_records_from_the_nu7_baseline() {
         let db = healthy_deferred_db(slow_start_deferred_network(Some(4)), 11, 48);
         let baseline_total = i64::from(
@@ -1314,6 +1328,9 @@ mod database_tests {
     }
 
     #[test]
+    // kogany: Zcash funding streams, lockbox and NU7 deferred-pool schedules (Zcash t3 stream
+    // addresses); not run on Ycash.
+    #[cfg(not(feature = "ycash"))]
     fn constant_historical_deferred_offset_does_not_change_the_deficit() {
         let network = slow_start_deferred_network(Some(4));
         let healthy = healthy_deferred_db(network.clone(), 11, 48);
@@ -1366,6 +1383,9 @@ mod database_tests {
     }
 
     #[test]
+    // kogany: Zcash funding streams, lockbox and NU7 deferred-pool schedules (Zcash t3 stream
+    // addresses); not run on Ycash.
+    #[cfg(not(feature = "ycash"))]
     fn migration_rejects_changing_deferred_offsets() {
         for bad_height in [3, 4, 7, 10] {
             let db = healthy_deferred_db(slow_start_deferred_network(Some(4)), 11, 48);
@@ -1400,6 +1420,9 @@ mod database_tests {
     }
 
     #[test]
+    // kogany: Zcash funding streams, lockbox and NU7 deferred-pool schedules (Zcash t3 stream
+    // addresses); not run on Ycash.
+    #[cfg(not(feature = "ycash"))]
     fn mixed_replay_and_commit_history_cannot_advance_format_version() {
         use super::super::DbFormatChange;
 
@@ -1463,6 +1486,9 @@ mod database_tests {
     }
 
     #[test]
+    // kogany: Zcash funding streams, lockbox and NU7 deferred-pool schedules (Zcash t3 stream
+    // addresses); not run on Ycash.
+    #[cfg(not(feature = "ycash"))]
     fn migration_accepts_a_deferred_disbursement_after_the_baseline() {
         let network = slow_start_deferred_network_with_disbursement(Some(3), 70_000_000);
         let db = healthy_deferred_db(network, 5, 48);
@@ -1484,6 +1510,9 @@ mod database_tests {
     }
 
     #[test]
+    // kogany: Zcash funding streams, lockbox and NU7 deferred-pool schedules (Zcash t3 stream
+    // addresses); not run on Ycash.
+    #[cfg(not(feature = "ycash"))]
     fn healthy_deferred_history_advances_format_version() {
         use super::super::DbFormatChange;
 

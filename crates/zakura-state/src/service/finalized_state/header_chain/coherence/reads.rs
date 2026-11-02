@@ -14,6 +14,9 @@ fn trunk_harness() -> Harness {
 }
 
 #[test]
+// kogany: generated Zcash Mainnet headers (Equihash (200, 9)) on the VCT and header-chain paths;
+// not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn selected_projection_node_disagreement_never_produces_a_hash_or_locator() {
     let _init_guard = zakura_test::init();
     let harness = trunk_harness();
@@ -26,6 +29,9 @@ fn selected_projection_node_disagreement_never_produces_a_hash_or_locator() {
 }
 
 #[test]
+// kogany: generated Zcash Mainnet headers (Equihash (200, 9)) on the VCT and header-chain paths;
+// not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn same_height_fork_sibling_never_enters_selected_reads() {
     let _init_guard = zakura_test::init();
     let mut harness = Harness::new();
@@ -55,6 +61,9 @@ fn same_height_fork_sibling_never_enters_selected_reads() {
 }
 
 #[test]
+// kogany: generated Zcash Mainnet headers (Equihash (200, 9)) on the VCT and header-chain paths;
+// not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn selected_projection_gap_within_published_bounds_is_incoherent() {
     let _init_guard = zakura_test::init();
     let harness = trunk_harness();
@@ -65,6 +74,9 @@ fn selected_projection_gap_within_published_bounds_is_incoherent() {
 }
 
 #[test]
+// kogany: generated Zcash Mainnet headers (Equihash (200, 9)) on the VCT and header-chain paths;
+// not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn missing_selected_successor_is_incoherent_instead_of_end_of_chain() {
     let _init_guard = zakura_test::init();
     let harness = trunk_harness();
@@ -76,6 +88,9 @@ fn missing_selected_successor_is_incoherent_instead_of_end_of_chain() {
 }
 
 #[test]
+// kogany: generated Zcash Mainnet headers (Equihash (200, 9)) on the VCT and header-chain paths;
+// not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn foreign_node_value_never_enters_a_validation_lease() {
     let _init_guard = zakura_test::init();
     let harness = trunk_harness();

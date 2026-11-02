@@ -1,4 +1,6 @@
 //! Model-based coherence checks for the durable fork-aware header store.
+// kogany: the Zcash-fixture tests are not built with `ycash`, leaving their helpers unused.
+#![cfg_attr(feature = "ycash", allow(unused_imports, dead_code))]
 
 #[path = "coherence/fabricate.rs"]
 mod fabricate;
@@ -12,6 +14,9 @@ mod reads;
 use harness::{Anchor, Harness, Op, Source};
 
 #[test]
+// kogany: generated Zcash Mainnet headers (Equihash (200, 9)) on the VCT and header-chain paths;
+// not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn fork_aware_write_path_upholds_invariants_across_forks_rejections_and_reopen() {
     let _init_guard = zakura_test::init();
     let mut harness = Harness::new();
@@ -80,6 +85,9 @@ fn fork_aware_write_path_upholds_invariants_across_forks_rejections_and_reopen()
 }
 
 #[test]
+// kogany: generated Zcash Mainnet headers (Equihash (200, 9)) on the VCT and header-chain paths;
+// not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn unlinked_anchor_range_upholds_invariants() {
     let _init_guard = zakura_test::init();
     let mut harness = Harness::new();
@@ -101,6 +109,9 @@ fn unlinked_anchor_range_upholds_invariants() {
 }
 
 #[test]
+// kogany: generated Zcash Mainnet headers (Equihash (200, 9)) on the VCT and header-chain paths;
+// not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn redelivery_over_verified_bodies_upholds_invariants() {
     let _init_guard = zakura_test::init();
     let mut harness = Harness::new();

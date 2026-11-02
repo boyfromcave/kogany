@@ -65,6 +65,9 @@ proptest! {
 
     /// Eight sequences, on every pull request.
     #[test]
+    // kogany: generated Zcash Mainnet headers (Equihash (200, 9)) on the VCT and header-chain
+    // paths; not run on Ycash.
+    #[cfg(not(feature = "ycash"))]
     fn random_fork_aware_writer_sequences_uphold_store_invariants(
         operations in operation_sequence_strategy(),
     ) {

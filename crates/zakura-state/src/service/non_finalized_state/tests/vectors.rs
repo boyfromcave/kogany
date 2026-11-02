@@ -1,4 +1,6 @@
 //! Fixed test vectors for the non-finalized state.
+// kogany: the Zcash-fixture tests are not built with `ycash`, leaving their helpers unused.
+#![cfg_attr(feature = "ycash", allow(unused_imports, dead_code))]
 
 use std::{sync::Arc, time::Duration};
 
@@ -125,6 +127,9 @@ fn ord_matches_work() -> Result<()> {
 }
 
 #[test]
+// kogany: Zcash Mainnet and Testnet block vectors (NU5 branch IDs, Zcash Heartwood and NU5
+// heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn best_chain_wins() -> Result<()> {
     let _init_guard = zakura_test::init();
 
@@ -160,6 +165,9 @@ fn best_chain_wins_for_network(network: Network) -> Result<()> {
 }
 
 #[test]
+// kogany: Zcash Mainnet and Testnet block vectors (NU5 branch IDs, Zcash Heartwood and NU5
+// heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn finalize_pops_from_best_chain() -> Result<()> {
     let _init_guard = zakura_test::init();
 
@@ -204,6 +212,9 @@ fn finalize_pops_from_best_chain_for_network(network: Network) -> Result<()> {
 
 /// Finalizing a shared root drops a side chain that contains only that root.
 #[test]
+// kogany: Zcash Mainnet and Testnet block vectors (NU5 branch IDs, Zcash Heartwood and NU5
+// heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn finalize_drops_empty_side_chain() -> Result<()> {
     let _init_guard = zakura_test::init();
 
@@ -252,6 +263,9 @@ fn finalize_drops_empty_side_chain_for_network(network: Network) -> Result<()> {
 }
 
 #[test]
+// kogany: Zcash Mainnet and Testnet block vectors (NU5 branch IDs, Zcash Heartwood and NU5
+// heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn invalidate_block_removes_block_and_descendants_from_chain() -> Result<()> {
     let _init_guard = zakura_test::init();
 
@@ -583,6 +597,9 @@ fn reconsider_block_preserves_record_when_parent_chain_missing() {
 }
 
 #[test]
+// kogany: Zcash Mainnet and Testnet block vectors (NU5 branch IDs, Zcash Heartwood and NU5
+// heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn invalidate_root_block_removes_entire_chain() -> Result<()> {
     let _init_guard = zakura_test::init();
 
@@ -644,6 +661,9 @@ fn invalidate_root_block_removes_entire_chain_for_network(network: Network) -> R
 }
 
 #[test]
+// kogany: Zcash Mainnet and Testnet block vectors (NU5 branch IDs, Zcash Heartwood and NU5
+// heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn reconsider_block_and_reconsider_chain_correctly_reconsiders_blocks_and_descendants() -> Result<()>
 {
     let _init_guard = zakura_test::init();
@@ -733,6 +753,9 @@ fn reconsider_block_inserts_block_and_descendants_into_chain_for_network(
 }
 
 #[test]
+// kogany: Zcash Mainnet and Testnet block vectors (NU5 branch IDs, Zcash Heartwood and NU5
+// heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 // This test gives full coverage for `take_chain_if`
 fn commit_block_extending_best_chain_doesnt_drop_worst_chains() -> Result<()> {
     let _init_guard = zakura_test::init();
@@ -777,6 +800,9 @@ fn commit_block_extending_best_chain_doesnt_drop_worst_chains_for_network(
 }
 
 #[test]
+// kogany: Zcash Mainnet and Testnet block vectors (NU5 branch IDs, Zcash Heartwood and NU5
+// heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn shorter_chain_can_be_best_chain() -> Result<()> {
     let _init_guard = zakura_test::init();
     for network in Network::iter() {
@@ -815,6 +841,9 @@ fn shorter_chain_can_be_best_chain_for_network(network: Network) -> Result<()> {
 }
 
 #[test]
+// kogany: Zcash Mainnet and Testnet block vectors (NU5 branch IDs, Zcash Heartwood and NU5
+// heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn longer_chain_with_more_work_wins() -> Result<()> {
     let _init_guard = zakura_test::init();
     for network in Network::iter() {
@@ -858,6 +887,9 @@ fn longer_chain_with_more_work_wins_for_network(network: Network) -> Result<()> 
 }
 
 #[test]
+// kogany: Zcash Mainnet and Testnet block vectors (NU5 branch IDs, Zcash Heartwood and NU5
+// heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn equal_length_goes_to_more_work() -> Result<()> {
     let _init_guard = zakura_test::init();
 
@@ -896,6 +928,9 @@ fn equal_length_goes_to_more_work_for_network(network: Network) -> Result<()> {
 }
 
 #[test]
+// kogany: Zcash Mainnet and Testnet block vectors (NU5 branch IDs, Zcash Heartwood and NU5
+// heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn history_tree_is_updated() -> Result<()> {
     for network in Network::iter() {
         history_tree_is_updated_for_network_upgrade(network, NetworkUpgrade::Heartwood)?;
@@ -997,6 +1032,9 @@ fn history_tree_is_updated_for_network_upgrade(
 }
 
 #[test]
+// kogany: Zcash Mainnet and Testnet block vectors (NU5 branch IDs, Zcash Heartwood and NU5
+// heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn commitment_is_validated() {
     for network in Network::iter() {
         commitment_is_validated_for_network_upgrade(network, NetworkUpgrade::Heartwood);
@@ -1077,6 +1115,9 @@ fn commitment_is_validated_for_network_upgrade(network: Network, network_upgrade
 }
 
 #[tokio::test]
+// kogany: Zcash Mainnet and Testnet block vectors (NU5 branch IDs, Zcash Heartwood and NU5
+// heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn non_finalized_state_writes_blocks_to_and_restores_blocks_from_backup_cache() {
     let network = Network::Mainnet;
 
@@ -1247,6 +1288,9 @@ fn commit_test_block(
 
 /// A precious tip beats the hash tie-break, and a later call wins.
 #[test]
+// kogany: Zcash Mainnet and Testnet block vectors (NU5 branch IDs, Zcash Heartwood and NU5
+// heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn precious_block_overrides_hash_order_and_later_calls_win() {
     let _init_guard = zakura_test::init();
     for network in Network::iter() {
@@ -1561,6 +1605,9 @@ fn precious_block_keeps_one_chain_per_tip() {
 
 /// Receipt order is independent of commit scheduling, hash order, and replay.
 #[test]
+// kogany: Zcash Mainnet and Testnet block vectors (NU5 branch IDs, Zcash Heartwood and NU5
+// heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn equal_work_prefers_first_receipt_through_forks_and_reconsideration() {
     let _init_guard = zakura_test::init();
     for network in Network::iter() {
