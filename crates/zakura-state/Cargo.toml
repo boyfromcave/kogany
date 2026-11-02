@@ -33,6 +33,10 @@ indexer = []
 # the timing has zero overhead in production builds; enable for perf investigations.
 commit-metrics = []
 
+# kogany: the Ycash network profile (decision K-12: Zcash-mainnet VCT, frontier-grid and
+# subtree artefacts are off on a Ycash network, `is_ycash_network`).
+ycash = ["zakura-chain/ycash"]
+
 # Test-only features
 header-fuzz = []
 proptest-impl = [
