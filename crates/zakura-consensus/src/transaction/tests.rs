@@ -117,6 +117,7 @@ fn block_lookup_fixture_from(
         known_utxos: Arc::new(known_utxos),
         height: Height(2),
         time: Utc::now(),
+        vault_snapshot: None,
     };
     (request, expected)
 }
@@ -1747,6 +1748,7 @@ async fn dont_skip_verification_of_block_transactions_in_mempool() {
         known_utxos: Arc::new(HashMap::new()),
         height,
         time: Utc::now(),
+        vault_snapshot: None,
     };
 
     // Both block requests go through full verification (no mempool bypass), so each
@@ -2162,6 +2164,7 @@ async fn v5_transaction_is_rejected_before_nu5_activation() {
                     known_outpoint_hashes: Arc::new(HashSet::new()),
                     height: sapling.activation_height(&net).expect("height"),
                     time: DateTime::<Utc>::MAX_UTC,
+                    vault_snapshot: None,
                 })
                 .await,
             Err(TransactionError::UnsupportedByNetworkUpgrade(5, sapling))
@@ -2189,6 +2192,7 @@ async fn v5_transaction_is_accepted_after_nu5_activation() {
                 known_outpoint_hashes: Arc::new(HashSet::new()),
                 height: tx_height,
                 time: DateTime::<Utc>::MAX_UTC,
+                vault_snapshot: None,
             })
             .await;
 
@@ -2243,6 +2247,7 @@ async fn v4_transaction_with_transparent_transfer_is_accepted() {
             known_outpoint_hashes: Arc::new(HashSet::new()),
             height: transaction_block_height,
             time: DateTime::<Utc>::MAX_UTC,
+            vault_snapshot: None,
         })
         .await;
 
@@ -2289,6 +2294,7 @@ async fn v4_transaction_with_last_valid_expiry_height() {
             known_outpoint_hashes: Arc::new(HashSet::new()),
             height: block_height,
             time: DateTime::<Utc>::MAX_UTC,
+            vault_snapshot: None,
         })
         .await;
 
@@ -2336,6 +2342,7 @@ async fn v4_coinbase_transaction_with_low_expiry_height() {
             known_outpoint_hashes: Arc::new(HashSet::new()),
             height: block_height,
             time: DateTime::<Utc>::MAX_UTC,
+            vault_snapshot: None,
         })
         .await;
 
@@ -2385,6 +2392,7 @@ async fn v4_transaction_with_too_low_expiry_height() {
             known_outpoint_hashes: Arc::new(HashSet::new()),
             height: block_height,
             time: DateTime::<Utc>::MAX_UTC,
+            vault_snapshot: None,
         })
         .await;
 
@@ -2437,6 +2445,7 @@ async fn v4_transaction_with_exceeding_expiry_height() {
             known_outpoint_hashes: Arc::new(HashSet::new()),
             height: block_height,
             time: DateTime::<Utc>::MAX_UTC,
+            vault_snapshot: None,
         })
         .await;
 
@@ -2492,6 +2501,7 @@ async fn v4_coinbase_transaction_with_exceeding_expiry_height() {
             known_outpoint_hashes: Arc::new(HashSet::new()),
             height: block_height,
             time: DateTime::<Utc>::MAX_UTC,
+            vault_snapshot: None,
         })
         .await;
 
@@ -2545,6 +2555,7 @@ async fn v4_coinbase_transaction_is_accepted() {
             known_outpoint_hashes: Arc::new(HashSet::new()),
             height: transaction_block_height,
             time: DateTime::<Utc>::MAX_UTC,
+            vault_snapshot: None,
         })
         .await;
 
@@ -2602,6 +2613,7 @@ async fn v4_transaction_with_transparent_transfer_is_rejected_by_the_script() {
             known_outpoint_hashes: Arc::new(HashSet::new()),
             height: transaction_block_height,
             time: DateTime::<Utc>::MAX_UTC,
+            vault_snapshot: None,
         })
         .await;
 
@@ -2658,6 +2670,7 @@ async fn v4_transaction_with_conflicting_transparent_spend_is_rejected() {
             known_outpoint_hashes: Arc::new(HashSet::new()),
             height: transaction_block_height,
             time: DateTime::<Utc>::MAX_UTC,
+            vault_snapshot: None,
         })
         .await;
 
@@ -2728,6 +2741,7 @@ fn v4_transaction_with_conflicting_sprout_nullifier_inside_joinsplit_is_rejected
                 known_outpoint_hashes: Arc::new(HashSet::new()),
                 height: transaction_block_height,
                 time: DateTime::<Utc>::MAX_UTC,
+                vault_snapshot: None,
             })
             .await;
 
@@ -2803,6 +2817,7 @@ fn v4_transaction_with_conflicting_sprout_nullifier_across_joinsplits_is_rejecte
                 known_outpoint_hashes: Arc::new(HashSet::new()),
                 height: transaction_block_height,
                 time: DateTime::<Utc>::MAX_UTC,
+                vault_snapshot: None,
             })
             .await;
 
@@ -2864,6 +2879,7 @@ async fn v5_transaction_with_transparent_transfer_is_accepted() {
             known_outpoint_hashes: Arc::new(HashSet::new()),
             height: transaction_block_height,
             time: DateTime::<Utc>::MAX_UTC,
+            vault_snapshot: None,
         })
         .await;
 
@@ -2912,6 +2928,7 @@ async fn v5_transaction_with_last_valid_expiry_height() {
             known_outpoint_hashes: Arc::new(HashSet::new()),
             height: block_height,
             time: DateTime::<Utc>::MAX_UTC,
+            vault_snapshot: None,
         })
         .await;
 
@@ -2960,6 +2977,7 @@ async fn v5_coinbase_transaction_expiry_height() {
             known_outpoint_hashes: Arc::new(HashSet::new()),
             height: block_height,
             time: DateTime::<Utc>::MAX_UTC,
+            vault_snapshot: None,
         })
         .await;
 
@@ -2983,6 +3001,7 @@ async fn v5_coinbase_transaction_expiry_height() {
             known_outpoint_hashes: Arc::new(HashSet::new()),
             height: block_height,
             time: DateTime::<Utc>::MAX_UTC,
+            vault_snapshot: None,
         })
         .await
         .map_err(|err| {
@@ -3014,6 +3033,7 @@ async fn v5_coinbase_transaction_expiry_height() {
             known_outpoint_hashes: Arc::new(HashSet::new()),
             height: block_height,
             time: DateTime::<Utc>::MAX_UTC,
+            vault_snapshot: None,
         })
         .await
         .map_err(|err| {
@@ -3054,6 +3074,7 @@ async fn v5_coinbase_transaction_expiry_height() {
             known_outpoint_hashes: Arc::new(HashSet::new()),
             height,
             time: DateTime::<Utc>::MAX_UTC,
+            vault_snapshot: None,
         })
         .await;
 
@@ -3107,6 +3128,7 @@ async fn v5_transaction_with_too_low_expiry_height() {
             known_outpoint_hashes: Arc::new(HashSet::new()),
             height: block_height,
             time: DateTime::<Utc>::MAX_UTC,
+            vault_snapshot: None,
         })
         .await;
 
@@ -3160,6 +3182,7 @@ async fn v5_transaction_with_exceeding_expiry_height() {
             known_outpoint_hashes: Arc::new(HashSet::new()),
             height: height_max,
             time: DateTime::<Utc>::MAX_UTC,
+            vault_snapshot: None,
         })
         .await;
 
@@ -3216,6 +3239,7 @@ async fn v5_coinbase_transaction_is_accepted() {
             known_outpoint_hashes: Arc::new(HashSet::new()),
             height: transaction_block_height,
             time: DateTime::<Utc>::MAX_UTC,
+            vault_snapshot: None,
         })
         .await;
 
@@ -3275,6 +3299,7 @@ async fn v5_transaction_with_transparent_transfer_is_rejected_by_the_script() {
             known_outpoint_hashes: Arc::new(HashSet::new()),
             height: transaction_block_height,
             time: DateTime::<Utc>::MAX_UTC,
+            vault_snapshot: None,
         })
         .await;
 
@@ -3324,6 +3349,7 @@ async fn v5_transaction_with_conflicting_transparent_spend_is_rejected() {
                 known_outpoint_hashes: Arc::new(HashSet::new()),
                 height,
                 time: DateTime::<Utc>::MAX_UTC,
+                vault_snapshot: None,
             })
             .await;
 
@@ -3369,6 +3395,7 @@ fn v4_with_signed_sprout_transfer_is_accepted() {
                 known_outpoint_hashes: Arc::new(HashSet::new()),
                 height,
                 time: DateTime::<Utc>::MAX_UTC,
+                vault_snapshot: None,
             })
             .await;
 
@@ -3457,6 +3484,7 @@ async fn v4_with_joinsplit_is_rejected_for_modification(
                 known_outpoint_hashes: Arc::new(HashSet::new()),
                 height,
                 time: DateTime::<Utc>::MAX_UTC,
+                vault_snapshot: None,
             })
             .await
             .map_err(|err| {
@@ -3509,6 +3537,7 @@ fn v4_and_v5_with_sapling_spends() {
                 known_outpoint_hashes: Arc::new(HashSet::new()),
                 height,
                 time: DateTime::<Utc>::MAX_UTC,
+                vault_snapshot: None,
             }),
         )
         .await
@@ -3549,6 +3578,7 @@ fn v4_and_v5_with_sapling_spends() {
                         known_outpoint_hashes: Arc::new(HashSet::new()),
                         height,
                         time: DateTime::<Utc>::MAX_UTC,
+                        vault_snapshot: None,
                     })
                 )
                 .await
@@ -3746,6 +3776,7 @@ fn v4_with_invalid_sapling_proof_returns_typed_error() {
                 known_outpoint_hashes,
                 height,
                 time: DateTime::<Utc>::MAX_UTC,
+                vault_snapshot: None,
             }),
         )
         .await
@@ -3852,6 +3883,7 @@ fn v4_with_duplicate_sapling_spends() {
                 known_outpoint_hashes: Arc::new(HashSet::new()),
                 height,
                 time: DateTime::<Utc>::MAX_UTC,
+                vault_snapshot: None,
             })
             .await;
 
@@ -3898,6 +3930,7 @@ fn v4_with_sapling_outputs_and_no_spends() {
                 known_outpoint_hashes: Arc::new(HashSet::new()),
                 height,
                 time: DateTime::<Utc>::MAX_UTC,
+                vault_snapshot: None,
             })
             .await;
 
@@ -3953,6 +3986,7 @@ fn sapling_output_with_invalid_ephemeral_key_is_rejected() {
                 known_outpoint_hashes: Arc::new(HashSet::new()),
                 height,
                 time: DateTime::<Utc>::MAX_UTC,
+                vault_snapshot: None,
             })
             .await;
 
@@ -4023,6 +4057,7 @@ fn sapling_v4_output_with_invalid_value_commitment_is_rejected_after_roundtrip()
                 known_outpoint_hashes: Arc::new(HashSet::new()),
                 height,
                 time: DateTime::<Utc>::MAX_UTC,
+                vault_snapshot: None,
             })
             .await;
 
@@ -4108,6 +4143,7 @@ fn sapling_spends_with_invalid_value_commitments_are_rejected_after_roundtrip() 
                     known_outpoint_hashes: Arc::new(HashSet::new()),
                     height,
                     time: DateTime::<Utc>::MAX_UTC,
+                    vault_snapshot: None,
                 })
                 .await;
 
@@ -4323,6 +4359,7 @@ async fn v5_with_duplicate_sapling_spends() {
                     known_outpoint_hashes: Arc::new(HashSet::new()),
                     height,
                     time: DateTime::<Utc>::MAX_UTC,
+                    vault_snapshot: None,
                 })
                 .await,
             Err(TransactionError::DuplicateSaplingNullifier(
@@ -4385,6 +4422,7 @@ async fn v5_with_duplicate_orchard_action() {
                     known_outpoint_hashes: Arc::new(HashSet::new()),
                     height,
                     time: DateTime::<Utc>::MAX_UTC,
+                    vault_snapshot: None,
                 })
                 .await,
             Err(TransactionError::DuplicateOrchardNullifier(
@@ -4692,6 +4730,7 @@ async fn orchard_disabling_soft_fork_rejects_orchard_actions_in_blocks_and_mempo
         known_outpoint_hashes: Arc::new(HashSet::new()),
         height,
         time: DateTime::<Utc>::MAX_UTC,
+        vault_snapshot: None,
     })
     .await;
 
@@ -4881,6 +4920,7 @@ fn orchard_disabling_soft_fork_accepts_orchard_actions_below_activation_height()
                 known_outpoint_hashes: Arc::new(HashSet::new()),
                 height,
                 time: DateTime::<Utc>::MAX_UTC,
+                vault_snapshot: None,
             })
             .await;
 
@@ -4907,6 +4947,7 @@ fn orchard_disabling_soft_fork_accepts_orchard_actions_below_activation_height()
             known_outpoint_hashes: Arc::new(HashSet::new()),
             height,
             time: DateTime::<Utc>::MAX_UTC,
+            vault_snapshot: None,
         })
         .await;
 
@@ -5044,6 +5085,7 @@ async fn v5_consensus_branch_ids() {
                     // The consensus branch ID of the tx is outdated for this height.
                     height,
                     time: DateTime::<Utc>::MAX_UTC,
+                    vault_snapshot: None,
                 })
                 .map_err(|err| *err.downcast().expect("`TransactionError` type"));
 
@@ -5112,6 +5154,7 @@ async fn v5_consensus_branch_ids() {
                     // The consensus branch ID of the tx is supported by this height.
                     height,
                     time: DateTime::<Utc>::MAX_UTC,
+                    vault_snapshot: None,
                 })
                 .map_ok(|rsp| rsp.tx_id())
                 .map_err(|e| format!("{e}"));
@@ -5171,6 +5214,7 @@ async fn v5_consensus_branch_ids() {
                     // The consensus branch ID of the tx is not supported by this height.
                     height,
                     time: DateTime::<Utc>::MAX_UTC,
+                    vault_snapshot: None,
                 })
                 .map_err(|err| *err.downcast().expect("`TransactionError` type"));
 
@@ -6138,6 +6182,7 @@ async fn block_with_garbage_orchard_proofs_is_rejected() {
             known_utxos: Arc::new(HashMap::new()),
             height,
             time: Utc::now(),
+            vault_snapshot: None,
         })
         .await;
 
@@ -6214,6 +6259,7 @@ async fn block_transaction_past_expiry_height_is_rejected() {
             known_utxos: Arc::new(HashMap::new()),
             height: expired_block_height,
             time: Utc::now(),
+            vault_snapshot: None,
         }),
     )
     .await
@@ -6669,6 +6715,7 @@ fn block_request(tx: &Transaction, height: block::Height) -> Request {
         known_utxos: Arc::new(HashMap::new()),
         height,
         time: Utc::now(),
+        vault_snapshot: None,
     }
 }
 

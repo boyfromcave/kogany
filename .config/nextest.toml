@@ -228,3 +228,13 @@ test-threads = 1
 slow-timeout = { period = "5m", terminate-after = 2 }
 failure-output = "immediate"
 default-filter = 'package(zakura) and test(~zcashd_compat)'
+
+# kogany (plan docs/plans/kogany/kogany-yellowback-plan.md W4-e, §5 leg kogany-regtest): Vault
+# activation, a vault built from the pinned vector keys and its set-signed spend through
+# sendrawtransaction, invalidateblock/reconsiderblock and a restart, each on a running zakurad on a
+# Ycash regtest. The test binary is empty without the feature, so run it as
+# `cargo nextest run --profile kogany-regtest -p zakura --features ycash`.
+[profile.kogany-regtest]
+failure-output = "immediate"
+slow-timeout = { period = "5m", terminate-after = 2 }
+default-filter = 'package(zakura) and binary(kogany_regtest)'

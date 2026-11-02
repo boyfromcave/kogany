@@ -110,7 +110,8 @@ const DATABASE_FORMAT_VERSION: u64 = 30;
 /// - changing the format of a column family in a compatible way, or
 /// - breaking changes with compatibility code in all supported Zebra versions.
 // kogany (W4-c): 1 adds the Vault upgrade's set-state column families.
-const DATABASE_FORMAT_MINOR_VERSION: u64 = 1;
+// kogany (W5-e): 2 adds the Yellowback (YED) index column families.
+const DATABASE_FORMAT_MINOR_VERSION: u64 = 2;
 
 /// The database format patch version, incremented each time the on-disk database format has a
 /// significant format compatibility fix.

@@ -48,6 +48,8 @@ pub use chain::{benchmark_height_map, HeightMapBenchmarkSample};
 pub(crate) use chain::{Chain, SpendingTransactionId};
 // kogany (W4-c)
 pub use chain::vault::{ChainVaultOverlay, ChainVaultView, VaultDelta};
+// kogany (W5-e)
+pub use chain::yed::{ChainYedOverlay, ChainYedView};
 pub(crate) use created_utxos::CreatedUtxos;
 pub(crate) use shared_map::SharedMap;
 
@@ -889,9 +891,18 @@ impl NonFinalizedState {
         );
         let mut contextual = contextual?;
 
-        // kogany (W4-c): the block's vault delta over the parent fork's set state, pushed onto the
-        // chain's overlay with the block. Total here; W4-d's `check::vault` rejects instead.
-        contextual.vault_delta = Arc::new(crate::service::vault::block_vault_delta_for_chain(
+        // kogany (W4-c, W4-d): the block's vault delta over the parent fork's set state, pushed
+        // onto the chain's overlay with the block; a vault rule violation rejects the block.
+        contextual.vault_delta = Arc::new(check::vault::block_vault_delta(
+            &self.network,
+            &new_chain,
+            finalized_state,
+            &contextual,
+        )?);
+
+        // kogany (W5-e): the block's YED effect over the parent fork's index state, pushed onto
+        // the chain's overlay with the block; stops the node when it cannot be evaluated (U-21).
+        contextual.yed_effect = Arc::new(crate::service::yed::block_yed_effect_for_chain(
             &self.network,
             &new_chain,
             finalized_state,

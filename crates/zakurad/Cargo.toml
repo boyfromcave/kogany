@@ -91,7 +91,7 @@ x86_64-asm = ["dep:orchard", "orchard/x86_64-asm"]
 # Production features that activate extra dependencies, or extra features in dependencies
 
 # The Ycash network profile (kogany): build a Ycash node instead of a Zcash one.
-ycash = ["zakura-chain/ycash", "zakura-consensus/ycash", "zakura-header-chain/ycash", "zakura-network/ycash", "zakura-rpc/ycash"]
+ycash = ["zakura-chain/ycash", "zakura-consensus/ycash", "zakura-header-chain/ycash", "zakura-network/ycash", "zakura-rpc/ycash", "kogany-rpc/ycash"]
 
 # The indexer gRPC server, started when `rpc.indexer_listen_addr` is configured
 indexer-rpc = ["zakura-rpc/indexer-rpc"]
@@ -245,6 +245,8 @@ zakura-state = { path = "../zakura-state", version = "11.1.0-rc0", features = ["
 zakura-rpc = { path = "../zakura-rpc", version = "13.0.1-rc0", default-features = false, features = ["proptest-impl"] }
 
 zakura-test = { path = "../zakura-test", version = "4.0.0-rc0" }
+# kogany (W4-e): the vault act and template builders for the kogany_regtest tests.
+kogany-vault = { path = "../kogany-vault" }
 # The simulator's engine-backed header port, compared against
 # HeaderChainServicePort in its tests. Path-only, with no version, because
 # zakura-storage is never published, so packaging drops it.

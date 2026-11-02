@@ -146,6 +146,12 @@ pub struct Config {
     #[serde(skip)]
     pub vct_fast_sync: bool,
 
+    /// kogany (W5-e): the node's Yellowback (YED) configuration. Users set it in `zakurad`'s
+    /// `[yellowback]` section, which `zakurad` mirrors here; the finalized write path and
+    /// contextual validation read it from the database's config.
+    #[serde(skip)]
+    pub yellowback: crate::service::yed::YellowbackConfig,
+
     /// Optional path to a frontier artifact used to anchor historical tree derivation.
     ///
     /// Mainnet's reviewed frontier grid is embedded in the binary, so the default `None` uses that
@@ -473,6 +479,7 @@ impl Default for Config {
             enable_zakura_header_seed_from_committed_blocks: false,
             checkpoint_sync: true,
             vct_fast_sync: true,
+            yellowback: Default::default(),
             historical_frontier_artifact: None,
             delete_old_database: true,
             storage_mode: StorageMode::default(),

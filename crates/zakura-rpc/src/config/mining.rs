@@ -90,10 +90,24 @@ mod miner_address {
     where
         D: Deserializer<'de>,
     {
-        Option::<String>::deserialize(deserializer)?
+        #[cfg(not(feature = "ycash"))]
+        return Option::<String>::deserialize(deserializer)?
             .map(|encoded| encoded.parse())
             .transpose()
-            .map_err(serde::de::Error::custom)
+            .map_err(serde::de::Error::custom);
+
+        // Ycash (W7-c): ycashd's refusal of an address it cannot parse, such as a Zcash `t1…` or
+        // `tm…` one (`ycash6 src/init.cpp:1680-1683`, `-mineraddress`).
+        #[cfg(feature = "ycash")]
+        Option::<String>::deserialize(deserializer)?
+            .map(|encoded| {
+                encoded.parse().map_err(|_| {
+                    serde::de::Error::custom(format!(
+                        "Invalid address for mining.miner_address: Unable to parse '{encoded}' as a Ycash address."
+                    ))
+                })
+            })
+            .transpose()
     }
 }
 
@@ -195,6 +209,7 @@ pub fn default_miner_address(kind: NetworkKind, addr_type: &MinerAddressType) ->
     MINER_ADDRESS[&kind][addr_type]
 }
 
+#[cfg(not(feature = "ycash"))]
 static MINER_ADDRESS: LazyLock<HashMap<NetworkKind, HashMap<MinerAddressType, &'static str>>> =
     LazyLock::new(|| {
         [
@@ -215,6 +230,34 @@ static MINER_ADDRESS: LazyLock<HashMap<NetworkKind, HashMap<MinerAddressType, &'
         // (MinerAddressType::Orchard, "uregtest1pszqlgxaf5w8mu2yd9uygg8cswp0ec4f7eejqnqc35tztw4tk0sxnt3pym2f3s2872cy2ruuc5n8y9cen5q6ngzlmzu8ztrjesv8zm9j"),
         (MinerAddressType::Sapling, "zregtestsapling1xl84ekz6stprmvrp39s77mf9t953nqjndwlcjtzfrr3cgjjez87639xm4u9pfuvylrhecx0c2j8"),
         (MinerAddressType::Transparent, "tmJymvcUCn1ctbghvTJpXBwHiMEB8P6wxNV"),
+    ].into()),
+].into()
+    });
+
+/// Ycash (W7-c): the same key's Ycash encodings, so the default miner address of every network,
+/// Regtest's above all, is one a Ycash node accepts: the transparent receiver re-encoded with
+/// ycashd's P2PKH prefixes (`s1…` `0x1C28`, `sm…` `0x1C95`) and the Sapling receiver with its
+/// HRPs (`ys`, `ytestsapling`, `yregtestsapling`; `ycash6 src/chainparams.cpp:171,186,478,493,
+/// 781`). Ycash has no NU5, so a unified miner address is the Sapling receiver's own address
+/// (ycashd takes a UA only for its receiver of the latest settled upgrade).
+#[cfg(feature = "ycash")]
+static MINER_ADDRESS: LazyLock<HashMap<NetworkKind, HashMap<MinerAddressType, &'static str>>> =
+    LazyLock::new(|| {
+        [
+    (NetworkKind::Mainnet, [
+        (MinerAddressType::Unified, "ys1xl84ekz6stprmvrp39s77mf9t953nqjndwlcjtzfrr3cgjjez87639xm4u9pfuvylrhec336jlf"),
+        (MinerAddressType::Sapling, "ys1xl84ekz6stprmvrp39s77mf9t953nqjndwlcjtzfrr3cgjjez87639xm4u9pfuvylrhec336jlf"),
+        (MinerAddressType::Transparent, "s1WUAp94K9NPDh2S1GAYtWDRg7bzUSmZCNP"),
+    ].into()),
+    (NetworkKind::Testnet, [
+        (MinerAddressType::Unified, "ytestsapling1xl84ekz6stprmvrp39s77mf9t953nqjndwlcjtzfrr3cgjjez87639xm4u9pfuvylrhecne5py3"),
+        (MinerAddressType::Sapling, "ytestsapling1xl84ekz6stprmvrp39s77mf9t953nqjndwlcjtzfrr3cgjjez87639xm4u9pfuvylrhecne5py3"),
+        (MinerAddressType::Transparent, "smNJv8yYiY2tiqGdSvtrdMt6Rib5HwQ7Xr5"),
+    ].into()),
+    (NetworkKind::Regtest, [
+        (MinerAddressType::Unified, "yregtestsapling1xl84ekz6stprmvrp39s77mf9t953nqjndwlcjtzfrr3cgjjez87639xm4u9pfuvylrhec7x0pw7"),
+        (MinerAddressType::Sapling, "yregtestsapling1xl84ekz6stprmvrp39s77mf9t953nqjndwlcjtzfrr3cgjjez87639xm4u9pfuvylrhec7x0pw7"),
+        (MinerAddressType::Transparent, "smNJv8yYiY2tiqGdSvtrdMt6Rib5HwQ7Xr5"),
     ].into()),
 ].into()
     });

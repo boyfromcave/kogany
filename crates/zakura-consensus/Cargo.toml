@@ -22,7 +22,7 @@ categories = ["asynchronous", "cryptography::cryptocurrencies"]
 default = []
 
 # The Ycash network profile (kogany), see zakura-chain's `ycash` feature.
-ycash = ["zakura-chain/ycash", "zakura-header-chain/ycash"]
+ycash = ["zakura-chain/ycash", "zakura-header-chain/ycash", "dep:kogany-vault", "dep:kogany-yellowback", "dep:kogany-pq"]
 
 # Legacy flags accepted for build compatibility; the progress display is removed.
 progress-bar = ["howudoin", "zakura-state/progress-bar"]
@@ -71,6 +71,12 @@ zakura-header-chain = { path = "../zakura-header-chain", version = "5.0.1-rc0" }
 
 zcash_protocol.workspace = true
 
+# Ycash (kogany) W6-a: the vault templates, the PQ channel and scheme sizes the relay
+# standardness reads (`transaction::check::ycash_standard`, `ycash` only).
+kogany-vault = { path = "../kogany-vault", optional = true }
+kogany-yellowback = { path = "../kogany-yellowback", optional = true }
+kogany-pq = { path = "../kogany-pq", optional = true }
+
 
 # Test-only dependencies
 proptest = { workspace = true, optional = true }
@@ -88,6 +94,9 @@ sha2 = { workspace = true }
 proptest = { workspace = true }
 proptest-derive = { workspace = true }
 toml = { workspace = true, features = ["display"] }
+# kogany W4-d: tests/vault_chain.rs reads the recorded ycash6 chains.
+serde_json = { workspace = true }
+tempfile = { workspace = true }
 
 tokio = { workspace = true, features = ["fs", "io-std", "io-util", "macros", "net", "process", "rt-multi-thread", "signal", "sync", "test-util", "time"] }
 

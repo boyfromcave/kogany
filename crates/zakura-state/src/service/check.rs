@@ -35,6 +35,8 @@ pub(crate) mod nullifier;
 // kogany (W3-d): BIP68 relative lock-times from the Vault upgrade.
 pub mod sequence_locks;
 pub(crate) mod utxo;
+// kogany (W4-d): the Vault upgrade's sequential act and template rules.
+pub mod vault;
 
 #[cfg(feature = "internal-bench")]
 #[doc(hidden)]

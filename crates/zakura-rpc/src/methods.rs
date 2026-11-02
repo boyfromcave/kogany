@@ -1076,6 +1076,10 @@ where
 
     /// Handler for the `getblocktemplate` RPC.
     gbt: GetBlockTemplateHandler<BlockVerifierRouter, SyncStatus>,
+
+    /// Ycash (W8): the node's Yellowback and vault hooks of `getblocktemplate`.
+    #[cfg(feature = "ycash")]
+    ycash_mining: Arc<dyn types::get_block_template::ycash::YcashMining>,
 }
 
 /// How long one mining template may take to pass proposal validation.
@@ -1427,6 +1431,8 @@ where
             address_book,
             last_warn_error_log_rx,
             gbt,
+            #[cfg(feature = "ycash")]
+            ycash_mining: Arc::new(types::get_block_template::ycash::NotLive),
         };
 
         // run the process queue
@@ -2260,6 +2266,8 @@ where
             chain: network.bip70_network_name(),
             #[cfg(feature = "ycash")]
             chain: types::ycash::chain_name(network),
+            #[cfg(feature = "ycash")]
+            testnet_profile: types::ycash::testnet_profile(network),
             blocks: tip_height,
             best_block_hash: tip_hash,
             estimated_height,
@@ -2273,6 +2281,14 @@ where
             verification_progress,
             // TODO: store work in the finalized state for each height (#7109)
             chain_work: 0,
+            #[cfg(feature = "ycash")]
+            chain_work_hex: types::ycash::chain_work(
+                self.read_state.clone(),
+                network,
+                tip_height,
+                tip_hash,
+            )
+            .await,
             pruned: is_pruned,
             prune_height,
             size_on_disk,
@@ -3400,10 +3416,21 @@ where
         &self,
         parameters: Option<GetBlockTemplateParameters>,
     ) -> Result<GetBlockTemplateResponse> {
+        #[cfg(not(feature = "ycash"))]
+        use types::get_block_template::zip317::select_mempool_transactions;
         use types::get_block_template::{
             check_parameters, check_synced_to_tip, fetch_chain_info, fetch_mempool_transactions,
-            validate_block_proposal, zip317::select_mempool_transactions,
+            validate_block_proposal,
         };
+
+        // Ycash (W8-b): ycashd refuses every getblocktemplate call while the YED index is
+        // unhealthy, and the miner's Yellowback state decides the coinbase tag.
+        #[cfg(feature = "ycash")]
+        let yellowback = self
+            .ycash_mining
+            .yellowback_miner()
+            .await
+            .map_err(|reason| types::get_block_template::ycash::unhealthy_error(&reason))?;
 
         // Clone Services
         let mempool = self.mempool.clone();
@@ -3439,6 +3466,10 @@ where
             .gbt
             .miner_params()
             .ok_or_error(0, "miner parameters are required for get_block_template")?;
+        #[cfg(feature = "ycash")]
+        let ycash_miner_params = miner_params.clone().with_yellowback(yellowback);
+        #[cfg(feature = "ycash")]
+        let miner_params = &ycash_miner_params;
 
         // A template can be superseded while it is being built: the tip moves (a new
         // block, or an equal-height reorg), a concurrent caller selects a newer parent,
@@ -3754,6 +3785,29 @@ where
             );
 
             let height = chain_info.tip_height.next().map_misc_error()?;
+
+            // Ycash (W8-a): the vault and YED template filter, asked about every candidate that
+            // fits the block limits; selection is otherwise Zakura's.
+            #[cfg(feature = "ycash")]
+            let template_filter = types::get_block_template::ycash::TemplateFilter::prepare(
+                &self.network,
+                height,
+                chain_info.tip_hash,
+                self.ycash_mining.as_ref(),
+            )
+            .await;
+            #[cfg(feature = "ycash")]
+            let select_mempool_transactions = |net, height, miner_params, nsm, txs, deps| {
+                types::get_block_template::zip317::select_mempool_transactions_filtered(
+                    net,
+                    height,
+                    miner_params,
+                    nsm,
+                    txs,
+                    deps,
+                    Some(template_filter),
+                )
+            };
 
             // Randomly select some mempool transactions.
             let mempool_txs = select_mempool_transactions(
@@ -4752,6 +4806,15 @@ pub struct GetBlockchainInfoResponse {
     #[getset(get = "pub")]
     chain: String,
 
+    /// Ycash (W7-c): the testnet profile, `fast` or `slow`, on the Ycash testnets only.
+    #[cfg(feature = "ycash")]
+    #[serde(
+        default,
+        rename = "testnetprofile",
+        skip_serializing_if = "Option::is_none"
+    )]
+    testnet_profile: Option<String>,
+
     /// The current number of blocks processed in the server, numeric
     #[getset(get_copy = "pub")]
     blocks: Height,
@@ -4771,9 +4834,17 @@ pub struct GetBlockchainInfoResponse {
     verification_progress: f64,
 
     /// The total amount of work in the best chain, hex-encoded.
-    #[serde(rename = "chainwork")]
+    #[cfg_attr(not(feature = "ycash"), serde(rename = "chainwork"))]
+    // Ycash (W7-c): `chainwork` is ycashd's hex string, `chain_work_hex`.
+    #[cfg_attr(feature = "ycash", serde(skip))]
     #[getset(get_copy = "pub")]
     chain_work: u64,
+
+    /// Ycash (W7-c): the total work of the best chain through the tip, as ycashd's 64-digit hex
+    /// string; omitted while kogany is still summing it (`types::ycash::chain_work`).
+    #[cfg(feature = "ycash")]
+    #[serde(default, rename = "chainwork", skip_serializing_if = "Option::is_none")]
+    chain_work_hex: Option<String>,
 
     /// Whether this node's blocks are subject to pruning, that is, whether it
     /// runs in pruned storage mode or has already pruned historical data.
@@ -5024,6 +5095,10 @@ impl Default for GetBlockchainInfoResponse {
             difficulty: 0.0,
             verification_progress: 0.0,
             chain_work: 0,
+            #[cfg(feature = "ycash")]
+            chain_work_hex: None,
+            #[cfg(feature = "ycash")]
+            testnet_profile: None,
             pruned: false,
             prune_height: None,
             size_on_disk: 0,
@@ -5072,6 +5147,10 @@ impl GetBlockchainInfoResponse {
             difficulty,
             verification_progress,
             chain_work,
+            #[cfg(feature = "ycash")]
+            chain_work_hex: None,
+            #[cfg(feature = "ycash")]
+            testnet_profile: None,
             pruned,
             prune_height,
             size_on_disk,

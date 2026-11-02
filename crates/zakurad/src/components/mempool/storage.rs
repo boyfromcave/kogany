@@ -202,6 +202,11 @@ pub enum NonStandardTransactionError {
     #[cfg(feature = "ycash")]
     #[error("transaction has more unpaid actions than the configured limit")]
     UnpaidActionLimit,
+    /// Ycash `non-mandatory-script-verify-flag`: the scripts pass the consensus flags but not
+    /// `STANDARD_SCRIPT_VERIFY_FLAGS` (kogany W6-a).
+    #[cfg(feature = "ycash")]
+    #[error("transaction scripts fail a standard script verification flag (non-mandatory-script-verify-flag): {0}")]
+    NonMandatoryScriptVerifyFlag(String),
 }
 
 /// Represents a set of transactions that have been removed from the mempool, either because
@@ -340,9 +345,10 @@ impl Storage {
     fn reject_if_non_standard_tx(&mut self, tx: &VerifiedUnminedTx) -> Result<(), MempoolError> {
         use zcash_script::script::{self, Evaluable as _};
 
-        // Ycash: `RequireStandard()` is false (regtest), kogany W1-Y9.
+        // Ycash: `RequireStandard()` is false (regtest), kogany W1-Y9; with a network, the
+        // Ycash rules in `ycash_policy::Policy::check` replace these (kogany W6-a).
         #[cfg(feature = "ycash")]
-        if self.ycash.accept_non_standard {
+        if self.ycash.accept_non_standard || self.ycash.replaces_standardness() {
             return Ok(());
         }
 
@@ -566,8 +572,8 @@ impl Storage {
             return (Err(MempoolError::InMempool), HashSet::new());
         }
 
-        // Ycash: the expiring-soon rule, the sigop limit and `-txunpaidactionlimit`, whether or
-        // not standardness is required (kogany W1-Y9).
+        // Ycash: the standardness rules where required, the expiring-soon rule, the sigop limit,
+        // `-txunpaidactionlimit` and the standard script flags (kogany W1-Y9, W6-a).
         #[cfg(feature = "ycash")]
         if let Err(rejection_error) = self.ycash.check(&tx, height) {
             if let Err(error) = self.reject_non_standard(&tx, rejection_error) {
