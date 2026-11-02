@@ -2,8 +2,8 @@ name: Docs Check
 
 on:
   push:
-    # kogany (2026-11-01): also pushes to kogany's integration branches (K-15).
-    branches: [main, upgrade/vault, "vaults/**"]
+    # kogany (2026-11-01): only pushes to kogany's branches (K-15, .github/README-kogany.md "Triggers").
+    branches: [upgrade/vault, "vaults/**"]
     paths:
       - "**.md"
       - ".github/lychee.toml"
@@ -11,6 +11,8 @@ on:
       - ".github/.markdownlint.yaml"
       - ".github/workflows/docs-check.yml"
   pull_request:
+    # kogany (2026-11-01): only PRs into kogany's branches (K-15).
+    branches: [upgrade/vault, "vaults/**", "kc/**"]
     paths:
       - "**.md"
       - ".github/lychee.toml"

@@ -31,10 +31,10 @@ use std::collections::BTreeMap;
 use std::sync::Mutex;
 
 use kogany_vault::act::SetJoinBody;
-use kogany_vault::state::{
-    Module, ModuleContext, ModuleEntry, VaultReject, VaultTx, YED_TAG,
+use kogany_vault::state::{Module, ModuleContext, ModuleEntry, VaultReject, VaultTx, YED_TAG};
+use kogany_vault::template::{
+    TemplateParams, TemplateSpend, VaultParams, SEL_RELEASED, SEL_UNLOCK,
 };
-use kogany_vault::template::{TemplateParams, TemplateSpend, VaultParams, SEL_RELEASED, SEL_UNLOCK};
 use kogany_vault::{Hash32, PubKeyBytes, SetId};
 
 use crate::attest::bundle::SigCache;
@@ -129,9 +129,7 @@ impl Module for YedModule<'_> {
     ) -> Result<(), VaultReject> {
         match spend.params {
             TemplateParams::Vault(_) if spend.selector == SEL_UNLOCK => reject(BAD_VAULT_UNLOCK),
-            TemplateParams::Intent(_) if spend.selector == SEL_RELEASED => {
-                reject(BAD_INTENT_OWNER)
-            }
+            TemplateParams::Intent(_) if spend.selector == SEL_RELEASED => reject(BAD_INTENT_OWNER),
             _ => Ok(()),
         }
     }

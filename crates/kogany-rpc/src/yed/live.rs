@@ -144,10 +144,7 @@ where
         let Some(params) = snap.params else {
             return Ok(None);
         };
-        let chain_height = self
-            .tip
-            .best_tip_height()
-            .map_or(-1, |h| i64::from(h.0));
+        let chain_height = self.tip.best_tip_height().map_or(-1, |h| i64::from(h.0));
         let index = LiveIndex { snap, params };
         let tip_height = index.tip().map_or(-1, |t| t.height);
         let quote = self.held_quote();
@@ -157,7 +154,8 @@ where
         let now = now_seconds();
         let payout = payout_key();
         let healthy = index.health().healthy;
-        let fresh = quote.is_some_and(|q| now.saturating_sub(q.received_at) <= QUOTE_MAX_AGE_SECONDS);
+        let fresh =
+            quote.is_some_and(|q| now.saturating_sub(q.received_at) <= QUOTE_MAX_AGE_SECONDS);
         let quote_kind = if healthy && payout.is_some() && fresh {
             "quote"
         } else {
@@ -328,7 +326,9 @@ impl YedIndexView for LiveIndex {
             stored,
             records: stored,
             sets: Vec::new(),
-            mismatches: vec!["the record re-derivation is not served by kogany yet (plan W7-b)".to_owned()],
+            mismatches: vec![
+                "the record re-derivation is not served by kogany yet (plan W7-b)".to_owned(),
+            ],
             rules_version: 1,
         }
     }

@@ -2,8 +2,8 @@ name: Lint
 
 on:
   pull_request:
-    # kogany (2026-11-01): also PRs into kogany's integration branches (K-15, .github/README-kogany.md).
-    branches: [main, "feat/**", "split/**", "adam/**", "release/**", upgrade/vault, "vaults/**"]
+    # kogany (2026-11-01): only PRs into kogany's branches (K-15, .github/README-kogany.md "Triggers").
+    branches: [upgrade/vault, "vaults/**", "kc/**"]
     paths:
       - "**/*.rs"
       - "**/Cargo.toml"
@@ -30,8 +30,8 @@ on:
       - ".github/release-review/**"
 
   push:
-    # kogany (2026-11-01): also pushes to kogany's integration branches (K-15).
-    branches: [main, "feat/**", "release/**", upgrade/vault, "vaults/**"]
+    # kogany (2026-11-01): only pushes to kogany's branches (K-15).
+    branches: [upgrade/vault, "vaults/**"]
     paths:
       - "**/*.rs"
       - "**/Cargo.toml"
@@ -60,7 +60,9 @@ on:
   # Run the full lint suite when a PR is queued so the merge queue validates the
   # merged result against the latest `main`. `merge_group` ignores path filters,
   # so this runs unconditionally on every queued entry.
-  merge_group:
+  # kogany (2026-11-01): no merge queue on kogany, and nothing runs outside its branches
+  # (.github/README-kogany.md "Triggers").
+  # merge_group:
 
   # Nightly run for the expensive, non-gating unused-deps lint that is
   # gated off the PR/merge path below.
@@ -209,6 +211,13 @@ jobs:
         # .github/workflows/scripts/*.sh included: those run on provisioned
         # droplets, where a shell bug costs a full provisioning cycle to find.
         run: shellcheck .github/actions/setup-zakura-build/*.sh scripts/*.sh scripts/lib/*.sh .github/workflows/scripts/*.sh deploy/release-state/deploy-archive-pair.sh scripts/tests/test_resolve_zcashd_compat_manifest.sh
+      # kogany (2026-11-01): the off workflows live in .github/workflows-off/ (K-15,
+      # .github/README-kogany.md); upstream's tests below read some of them from
+      # .github/workflows/ (ci-alerts, the deploy and PR-node workflows). Copy them back into
+      # this job's checkout only, so the tests run unchanged. Nothing is committed and no
+      # workflow can start from a runner's working tree.
+      - name: Off workflows in place for upstream's tests (kogany)
+        run: cp .github/workflows-off/*.yml .github/workflows/
       - name: Ubuntu package retry tests
         if: ${{ !cancelled() }}
         run: bash .github/actions/setup-zakura-build/test-install-ubuntu-packages.sh

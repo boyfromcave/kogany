@@ -92,10 +92,7 @@ where
 /// next template's coinbase tag carries. The vault half of the template filter reads the set
 /// state from `read_state`.
 #[cfg(feature = "ycash")]
-pub fn mining_hooks<T, R>(
-    tip: T,
-    read_state: R,
-) -> Arc<dyn zakura_rpc::ycash_mining::YcashMining>
+pub fn mining_hooks<T, R>(tip: T, read_state: R) -> Arc<dyn zakura_rpc::ycash_mining::YcashMining>
 where
     T: ChainTip + Clone + Send + Sync + 'static,
     R: tower::Service<ReadRequest, Response = ReadResponse, Error = BoxError>
@@ -125,8 +122,7 @@ where
         + 'static,
     R::Future: Send,
 {
-    static YED_STATE: std::sync::OnceLock<Arc<dyn yed::YedReadState>> =
-        std::sync::OnceLock::new();
+    static YED_STATE: std::sync::OnceLock<Arc<dyn yed::YedReadState>> = std::sync::OnceLock::new();
     YED_STATE
         .get_or_init(|| new_yed_state(tip, read_state))
         .clone()

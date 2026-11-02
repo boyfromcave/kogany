@@ -12,11 +12,11 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use kogany_vault::state::SetState;
-use tower::{Service, ServiceExt};
 use kogany_yellowback::{
     params::Params,
     state::{process_tx, Table, Writes, YedKey, YedRead, YedRecord},
 };
+use tower::{Service, ServiceExt};
 use zakura_chain::{block, transaction::VerifiedUnminedTx};
 use zakura_rpc::ycash_mining::{VaultModules, YcashMining, YedTemplateFilter, YellowbackMiner};
 use zakura_state::{BoxError, ReadRequest, ReadResponse};
@@ -108,7 +108,9 @@ where
         height: block::Height,
         parent: block::Hash,
     ) -> Option<Box<dyn YedTemplateFilter>> {
-        let Some(snapshot) = self.yed_snapshot(ReadRequest::YedSnapshot { hash: parent }).await
+        let Some(snapshot) = self
+            .yed_snapshot(ReadRequest::YedSnapshot { hash: parent })
+            .await
         else {
             // The index state after the parent is unknown: where the node runs Yellowback and
             // the template is in the YED epoch, keep nothing (fail closed).
@@ -157,8 +159,7 @@ where
     /// The YED index state `request` reads (`ReadRequest::YedSnapshot` or
     /// `BestChainYedSnapshot`), `None` when the state service does not know it.
     async fn yed_snapshot(&self, request: ReadRequest) -> Option<zakura_state::yed::YedSnapshot> {
-        match self.read_state.clone().oneshot(request).await
-        {
+        match self.read_state.clone().oneshot(request).await {
             Ok(ReadResponse::YedSnapshot(snapshot)) => snapshot,
             Ok(_) => None,
             Err(error) => {

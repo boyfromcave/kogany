@@ -611,5 +611,10 @@ pub fn finalized_yed_snapshot_below(
         }
         h = h.previous().ok()?;
     }
-    Some(YedSnapshot::new(db, Some((target, target_hash)), patch, None))
+    Some(YedSnapshot::new(
+        db,
+        Some((target, target_hash)),
+        patch,
+        None,
+    ))
 }

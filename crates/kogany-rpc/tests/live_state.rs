@@ -52,7 +52,9 @@ async fn vault_getinfo_reads_the_live_state() {
     let mut all: Vec<Arc<Block>> = vec![genesis];
     for b in blocks {
         let bytes = hex::decode(b["hex"].as_str().expect("hex")).expect("hex decodes");
-        all.push(Arc::new(bytes.zcash_deserialize_into().expect("block parses")));
+        all.push(Arc::new(
+            bytes.zcash_deserialize_into().expect("block parses"),
+        ));
     }
     // The checkpoint write path (the total transition in `prepare_block_batch`).
     for block in &all {
@@ -85,7 +87,10 @@ async fn vault_getinfo_reads_the_live_state() {
         .expect("a snapshot");
     let db = snapshot.db.expect("the database is open");
     assert_eq!(info.sets, Some(db.set_ids().len() as u64));
-    assert!(info.sets.expect("sets") > 0, "the recorded chain creates sets");
+    assert!(
+        info.sets.expect("sets") > 0,
+        "the recorded chain creates sets"
+    );
     let sets = rpc.set_list().await.expect("set_list answers");
     assert_eq!(sets.len() as u64, info.sets.expect("sets"));
     let outputs = rpc.vault_list(None).await.expect("vault_list answers");

@@ -2,98 +2,197 @@
 
 kogany is the Ycash developers' fork of Zakura: the third Ycash node line, carrying the vault
 network upgrade and the Ycash Yellowback (YED) rule module. This file says which GitHub Actions
-workflows run on it, why, and how the rest are kept off. The decision is K-15 of the kogany plan
-(`docs/plans/kogany/kogany-yellowback-plan.md` in the Yellowback workspace, §0 and §5).
-[`kogany-workflows.txt`](kogany-workflows.txt) is the authoritative list; `qa/kogany_audit.py
-workflows` fails when a workflow file is missing from it.
+workflows run on it, on which events, how the rest are kept from running, and which job re-runs
+what. The decision is K-15 of the kogany plan (`docs/plans/kogany/kogany-yellowback-plan.md` in
+the Yellowback workspace, §0 and §5); the cross-repository side is the workspace's
+`docs/plans/kogany/ci-design.md`. [`kogany-workflows.txt`](kogany-workflows.txt) is the
+authoritative list; `qa/kogany_audit.py workflows` enforces it.
+
+## Triggers
+
+The Yellowback lead architect's rule (2026-11-01): never trigger the Zakura jobs kogany does not
+want, and nothing at all for a branch that is not kogany's. Every file in `.github/workflows/`
+keeps to this policy, and the `workflows` leg of `kogany-audit.yml` fails when one does not:
+
+| Event | Allowed |
+| --- | --- |
+| `push` | only with a `branches:` filter within `upgrade/vault` and `vaults/**`; no `branches-ignore`, no tag pushes |
+| `pull_request` | only with a `branches:` filter (the base) within `upgrade/vault`, `vaults/**` and `kc/**` (agent branches are pushed without CI and tested by their pull request) |
+| `schedule` | yes: GitHub runs it from the default branch, `upgrade/vault`, only |
+| `workflow_dispatch`, `workflow_call` | yes (`workflow_call` only on `called` and `kogany` workflows) |
+| anything else | no: in particular no `create` or `delete` (the inherited-branch cleanup deletes hundreds of branches), no `merge_group` (kogany has no merge queue), no `pull_request_target`, no `workflow_run` |
+
+So a push to a `kc/*` branch, to one of the ~600 inherited upstream branches, or a branch
+deletion starts nothing. The leg's tests (`qa/test_kogany_audit.py`, `TriggerPolicyTest`) pin
+each of those cases. Upstream's own triggers in the kept workflows (`main`, `feat/**`,
+`release/**`, the merge queue) are commented out, each with a `kogany (2026-11-01)` comment.
 
 ## Which workflows run
 
-| State | Workflows | What changed |
+| State | Where | Workflows |
 | --- | --- | --- |
-| kept | `lint.yml`, `tests-unit.yml`, `zakura-e2e.yml`, `docs-check.yml`, `test-crates.yml`, `header-fuzz.yml`, `rpc-fuzz.yml` | trimmed in place; every edit carries a `kogany (2026-11-01)` comment |
-| called | `zakura-cluster.yml` | nothing (a reusable workflow `tests-unit.yml` and `zakura-e2e.yml` call) |
-| off | the other 32 upstream workflows: the DigitalOcean fleet and deploy jobs, the release pipeline, `ci-alerts`, `coverage`, `benchmarks`, `legacy-pages`, the cranelift pair, `cross-platform`, `history-growth`, `test-docker`, `zcashd-compat-regtest`, `changelog`, `semver-checks` | nothing in the file; disabled in the repository settings |
-| kogany | `kogany-yellowback.yml`, `semgrep.yml`, `codeql.yml`, `secops.yml`, `code-scanning.yml` | ours |
+| kept | `.github/workflows/` | `lint.yml`, `tests-unit.yml`, `zakura-e2e.yml`, `docs-check.yml`, `test-crates.yml`, `header-fuzz.yml`, `rpc-fuzz.yml`: trimmed in place, every edit commented |
+| called | `.github/workflows/` | `zakura-cluster.yml` (reusable; `tests-unit.yml` and `zakura-e2e.yml` call it) |
+| off | `.github/workflows-off/` | the other 32 upstream workflows: the DigitalOcean fleet and deploy jobs, the release pipeline, `ci-alerts`, `coverage`, `benchmarks`, `legacy-pages`, the cranelift pair, `cross-platform`, `history-growth`, `test-docker`, `zcashd-compat-regtest`, `changelog`, `semver-checks` |
+| kogany | `.github/workflows/` | `kogany-audit.yml`, `kogany-build.yml`, `kogany-tests.yml`, `kogany-bin.yml`, `kogany-client-legs.yml`, `kogany-mixed.yml`, and the security CI `semgrep.yml`, `codeql.yml`, `secops.yml`, `code-scanning.yml` |
 
 The trims, as K-15 states them:
 
-- `lint.yml` and `tests-unit.yml` also run on pull requests into and pushes to `upgrade/vault`
-  and `vaults/**`. Neither runs nightly: `lint.yml`'s unused-deps job and `tests-unit.yml`'s
-  release-profile and simulator jobs run on `workflow_dispatch` only, so the nightly-failure
-  issue is never opened. `tests-unit.yml`'s crates.io publish-graph check runs only in
-  upstream's repository: kogany publishes no crate.
+- `lint.yml` and `tests-unit.yml` run on pull requests into kogany's branches and pushes to
+  `upgrade/vault` and `vaults/**`. Neither runs nightly: `lint.yml`'s unused-deps job and
+  `tests-unit.yml`'s release-profile and simulator jobs run on `workflow_dispatch` only.
+  `tests-unit.yml`'s crates.io publish-graph check runs only in upstream's repository.
+- `lint.yml`'s Python tests read some off workflows (`ci-alerts.yml`, the deploy and PR-node
+  workflows) from `.github/workflows/`; one kogany step copies `.github/workflows-off/*.yml` back
+  into that job's checkout first, so upstream's tests run unchanged. Nothing is committed, and no
+  workflow can start from a runner's working tree.
 - `zakura-e2e.yml` runs its regtest pr-gate on pull requests into kogany's branches; its long
-  four-node modes and block-sync fuzz run weekly (Sunday) instead of nightly.
-- `docs-check.yml` also runs on pushes to kogany's branches.
-- `test-crates.yml` runs weekly on the default branch, not on kogany's pull requests.
+  four-node modes and block-sync fuzz run weekly (Sunday). Pushes run nothing there.
+- `docs-check.yml` runs on Markdown changes in kogany's pull requests and pushes.
+- `test-crates.yml` runs weekly on the default branch and on dispatch only.
 - `header-fuzz.yml` and `rpc-fuzz.yml` keep only the Sunday campaign.
-- `.github/workflows/scripts/test_ci_alert.py` (upstream's check that every automatic workflow
-  has an alert policy, run by `lint.yml`) lists kogany's five workflows as alert exceptions:
-  they report through code scanning and the run summary, and `ci-alerts.yml` is off.
+- `.github/workflows/scripts/test_ci_alert.py` lists kogany's automatic workflows as alert
+  exceptions: they report through code scanning, the run summary and artifacts.
 - `.github/dependabot.yml` opens security updates only, grouped per ecosystem.
 
-## Why the off workflows are disabled in the settings, not deleted
+## Why the off workflows are moved to `.github/workflows-off/`
 
-kogany stays mergeable with upstream Zakura (plan §4.2 rule 7). A deleted or edited upstream
-workflow conflicts on every upstream sync that touches it; most of the off workflows are edited
-upstream often (the fleet and release jobs above all). Disabling a workflow in the repository's
-Actions settings keeps the file byte for byte as upstream has it, needs one mechanism for all
-32, survives every sync, and is reversible one workflow at a time, which is how K-15 turns jobs
-back on. Several of them need secrets, self-hosted runners or a DigitalOcean account the fork
-does not have, and would fail or queue if they ran.
+Until 2026-11-02 the off set stayed byte for byte in `.github/workflows/` and was to be disabled
+in the repository's Actions settings, to keep upstream syncs conflict-free (plan §4.2 rule 7).
+That left them one switch away from running: turning Actions on, or an upstream sync adding or
+renaming a workflow (GitHub enables a new file by default), would start fleet deploys, release
+jobs and `pull_request_target` handlers before anyone disabled them. The lead architect's
+requirement is that they must never trigger, so kogany now uses the same mechanism as the common
+fork (`zakura-common-ycash`, its `.github/README-ycash.md`):
 
-The edits to the seven kept workflows are the exception: K-15 changes what they run, which no
-setting can do. They are confined to the `on:` blocks and one `if:`, and each is commented.
+- GitHub runs only files directly under `.github/workflows/`. A file in `.github/workflows-off/`
+  cannot run, whatever the settings say; nothing has to be done in the settings, and no one can
+  forget to.
+- The files are moved unchanged (`git mv`), so git's rename detection carries an upstream edit to
+  one of them across a merge of upstream. The rebase cost the settings approach avoided is a
+  conflict only when upstream renames or deletes an off workflow, which the sync agent resolves
+  by moving the file again (plan §4.2 rule 7).
+- The `workflows` leg reports (report-only) an off file that differs from `kogany-legacy`'s copy,
+  expected only between an upstream merge and the re-pin.
+- A workflow an upstream sync adds lands in `.github/workflows/`; the leg fails until it is
+  classified, and its trigger policy fails it anyway unless its triggers are kogany's. The sync
+  agent moves it off or trims it.
 
-A workflow an upstream sync adds is enabled by default on GitHub. `qa/kogany_audit.py
-workflows` (the `audit` job of `kogany-yellowback.yml`, blocking) fails until it is classified
-in `kogany-workflows.txt`; an `off` one is then disabled in the settings with the rest.
+To turn an off workflow back on, `git mv` it back, trim its triggers to the policy and change its
+state in `kogany-workflows.txt`, in one reviewed commit.
+
+## Workflow and job map
+
+Every kogany workflow uses: `permissions: {}` at the top and `contents: read` per job; a
+`concurrency` group per workflow, event and ref (pull requests cancel superseded runs);
+`fail-fast: false` on every matrix; `CARGO_INCREMENTAL=0`; a timeout on every job;
+`workflow_dispatch`; and a Rust cache keyed per job, saved only from `upgrade/vault` and
+`vaults/**` pushes (upstream saves only from `main`, which kogany never builds), restored
+everywhere.
+
+**Compartments.** No job of one check `needs:` another check, so a failure never skips an
+unrelated job, and "Re-run failed jobs" re-runs exactly the failed ones. A matrix entry is its own
+job. The only `needs:` are on a binary a job runs (`zakurad-bin`, `ycash6-node-bin`): re-running
+a failed consumer reuses that run's artifact and does not rebuild it; re-running a failed build
+re-runs its consumers.
+
+| Workflow | Job (check name) | What it runs | Blocks | Re-runs alone | Duration (cold / cached) |
+| --- | --- | --- | --- | --- | --- |
+| `kogany-audit` | `audit self-test` | `qa/test_kogany_*.py` | yes | yes | 1 min |
+| | `audit consensus-diff` | leg (a), the reviewers' patch artefact | report-only | yes | 1 min |
+| | `audit frozen` | leg (b) | report-only | yes | 1 min |
+| | `audit greps` | leg (e), naming and attribution | yes | yes | 1 min |
+| | `audit dormancy` | no upstream test deleted | yes | yes | 1 min |
+| | `audit workflows` | classification, placement, the trigger policy | yes | yes | 1 min |
+| | `audit cross-line (c)` | `qa/yellowback-cross-line.py --this-line kogany` against ycash6 at `YCASH6_REV` (and `testdata/yellowback/PIN` naming that commit) | yes | yes | 1 min |
+| | `audit vault-params (d)` | `cargo run -p zakura-chain --features ycash --example kogany_vault_params`, ycash6's `qa/yellowback-vault-params.py extract` at `YCASH6_REV`, `qa/kogany_vault_params.py compare` | yes | yes | 15 / 5 min |
+| `kogany-build` | `check (ycash feature off)`, `check (… on)` | `cargo check -p zakura --all-targets` | yes | each | 25 / 8 min |
+| | `clippy kogany-pure`, `kogany-rpc`, `zakura-chain`, `zakura-consensus`, `zakura-state`, `zakura-rpc-network`, `zakurad` | `cargo clippy --all-targets -D warnings`, ycash feature on (feature off is `lint.yml`'s) | yes | each | 5–35 / 3–10 min |
+| | `rustfmt (kogany crates)` | `cargo fmt --check` over `kogany-*` | yes | yes | 1 min |
+| `kogany-tests` | `kogany crates (dev / release / ci-tests)` | `kogany-pq`, `kogany-vault`, `kogany-yellowback` | yes | each | 5 / 2 min |
+| | `<crate> (feature off)` for `zakura-chain`, `-state`, `-consensus`, `-rpc`, `-network` | nextest profile `all-tests` | yes | each | 20–45 / 8–20 min |
+| | `<crate> (ycash)` for `zakura-chain`, `-header-chain`, `-consensus`, `-network`, `-rpc`, `kogany-rpc`, `zakura` | nextest profile `kogany-ycash` (the Ycash-gated tests: `.config/nextest.toml`) | yes | each | 20–50 / 8–20 min |
+| | `vault fuzz verdicts` | the 3,735 ycash6 verdicts (W3-e) | yes | yes | 15 / 5 min |
+| | `kogany-regtest (report-only)` | nextest profile `kogany-regtest` (W4-e) | no, until the W4 gate | yes | 40 / 15 min |
+| `kogany-bin` | `zakurad-bin (ycash, dev)` | the `zakurad-bin` artifact (cross-line contract) | — | yes | 35 / 10 min |
+| `kogany-client-legs` | `zakurad / zakurad-bin` (called `kogany-bin`) | this run's `zakurad-bin` | — | yes | 35 / 10 min |
+| | `lightwalletd-dd`, `chain-viz`, `yolo` (each report-only) | the client unmodified at its pin against this run's zakurad (`crates/kogany-rpc/qa/kogany_client_legs.py`; yolo's `tests/regtest.rs` kogany mode with ycash6's node-bin) | no, until the lead architect flips one | each | 10–40 min |
+| `kogany-mixed` | `zakurad / zakurad-bin`, `ycash6 node-bin` | the two binaries | — | each | 35 / 1 min |
+| | `mixed node`, `vault`, `yed`, `fees`, `attest` | ycash6's `qa/kogany_mixed_shards.py run <group>`: `gate` scripts block, `report` scripts never fail the job (all `report` today) | its `gate` scripts | each | 30–120 min |
+
+Blocking means a candidate for a required status check (see "Turning Actions on"); a
+`continue-on-error` job never turns its run red. The durations are estimates for a
+GitHub-hosted 4-core runner, not measurements: kogany's Actions have not run yet.
+
+**What runs where.** Locally (seconds, stdlib Python; run before every push): every audit leg
+(`python3 qa/kogany_audit.py all`), its tests, the cross-line leg against a local ycash6 clone
+(`--other-dir`), the vault-params comparison with a built example, `actionlint` and
+`zizmor --offline --config contrib/secops/zizmor.yml .github/workflows/`. Only in CI (heavy
+cargo): the build, clippy and test jobs, the client legs and the mixed shards. Locally they are
+run by the chunk agents per crate (`-p`), never workspace-wide (the coordination brief).
+
+`kogany-ycash` selects tests by name (`ycash`, `vault`, `bip68`, `yed`, `yellowback`, `kogany`,
+`pq`, `falcon`, `slh`, `checkpoint::list`) plus the kogany test binaries; it is the ycash-feature
+subset the chunk agents reported green, per crate. A crate whose subset is red on its first CI
+run is a finding for the coordinator, not a reason to widen the filter.
+
+## Cross-line contract
+
+What kogany publishes and consumes (the workspace's `docs/plans/kogany/ci-design.md` §3, §5):
+
+- **`zakurad-bin` (published).** `kogany-bin.yml`, a job of its own, on pushes to
+  `upgrade/vault` and `vaults/**`, weekly (Saturday, so the default branch always has an unexpired
+  one), on dispatch, and called by `kogany-client-legs.yml` and `kogany-mixed.yml`. Artifact
+  `zakurad-bin` holding `zakurad-bin.tgz`: `zakurad` and `zakurad-bin.json` (`repository`,
+  `commit`, `binary`, `features: ["ycash"]`, `profile: "dev"`, `runner`, `librocksdb`, `rustc`,
+  `producer`), built by `cargo build --locked -p zakura --bin zakurad --features ycash` on
+  ubuntu-24.04 (it links the runner's librocksdb: run it on ubuntu-24.04 with `librocksdb-dev`).
+  Retention 30 days. Consumers (ycash6's `zakurad` job, yolo's kogany entry) search every
+  workflow's push, schedule or dispatch runs at their pinned kogany commit and fall back to a
+  build there.
+- **`ycash6-node-bin` (consumed).** From a push, schedule or dispatch run of ycash6's
+  `yellowback-tests.yml` at the commit kogany pins: artifact `ycash6-node-bin` (else its current
+  name `node-bin`) holding `node-bin.tgz` with `src/ycashd` and `src/ycash-cli` at its root.
+  `kogany-mixed.yml` takes the commit from its `ycash6_rev` input (default: the pin in the file)
+  and optionally the run from `ycash6_run_id`, as `workflow_dispatch` or `workflow_call` inputs
+  (a caller may pass the `YCASH6_ARTIFACT_TOKEN` secret); it checks the run's event and head
+  commit before using its binary, and runs the harness from ycash6 at that same commit.
+  `kogany-client-legs.yml`'s yolo job takes the newest trusted run on ycash6's
+  `vaults/kogany-compat`.
+- **Pins kogany holds** (bumped by a reviewed commit, never a branch tip): `YCASH6_REV` in
+  `kogany-audit.yml` (must equal `testdata/yellowback/PIN`'s source commit; the cross-line job
+  checks it), `YCASH6_REV` in `kogany-mixed.yml`, `LWD_REV`, `CHAINVIZ_REV` and `YOLO_REV` in
+  `kogany-client-legs.yml`.
+- The sidecar (W9) and parity (S5) nightlies follow the `kogany-mixed.yml` pattern with ycash6's
+  test rig and yew's `yewd-bin`; they are added, scheduled, once the default branch carries them.
 
 ## Turning Actions on
 
-GitHub Actions are disabled on `boyfromcave/kogany` by the Yellowback lead architect and stay
-disabled until the lead architect decides otherwise. When they are turned on:
+GitHub Actions are off on `boyfromcave/kogany` until the Yellowback lead architect turns them on.
+Nothing has to be disabled first: the off set cannot run. When turning them on:
 
-1. Disable the off set first, in the same session:
-
-   ```bash
-   python3 qa/kogany_audit.py workflows --print-disable | grep '^gh workflow disable' | sh
-   ```
-
-2. Scheduled workflows run from the default branch, which is `upgrade/vault`. Until
-   `vaults/kogany-compat` merges back into it (the W0 gate), `upgrade/vault` holds upstream's
-   untrimmed kept workflows (nightly `lint`, `tests-unit`, `zakura-e2e`, daily fuzzing) and none
-   of kogany's. Either turn Actions on after that merge, or disable the kept workflows as well
-   until then.
-3. Settings → Code security: enable code scanning and Dependabot security updates. For
-   `semgrep.yml`'s `sync` job, allow GitHub Actions to create pull requests (optionally the
-   `SEMGREP_PR_TOKEN` secret, see `contrib/semgrep/README.md`).
-
-What then runs, per event:
-
-| Event | Workflows |
-| --- | --- |
-| pull request into `upgrade/vault` or `vaults/**` | `lint`, `tests-unit`, `zakura-e2e` (pr-gate), `docs-check` (Markdown paths), `kogany-yellowback`, `semgrep`, `codeql`, `secops` |
-| push to `upgrade/vault` or `vaults/kogany-compat` | `lint`, `tests-unit`, `docs-check` (path-filtered), `kogany-yellowback`, `semgrep`, `codeql`, `secops`, `code-scanning` (when its dismissals change) |
-| nightly | `semgrep` 02:17, `secops` 03:43, `code-scanning` 03:53 (UTC) |
-| weekly | `codeql` Monday 04:41; Sunday: `header-fuzz` 05:13, `rpc-fuzz` 05:43, `test-crates` 06:23, `zakura-e2e` long modes 08:00 |
-
-## kogany-yellowback.yml
-
-| Job | Leg | Blocking |
-| --- | --- | --- |
-| `audit` | (a) consensus-diff: the consensus path set (`qa/kogany-consensus-paths.txt`) and the forked crates' `Cargo.lock` entries against tag `kogany-baseline` (else `kogany-legacy`); the patch is the reviewers' artefact | report-only |
-| `audit` | (b) frozen-file: `qa/kogany-frozen-files.txt` (Orchard, Ironwood, NU5 to NU7) against `kogany-legacy` | report-only |
-| `audit` | (e) naming and attribution greps over the lines and commits kogany adds | yes |
-| `audit` | dormancy: no upstream test function deleted | yes |
-| `audit` | workflows: every workflow classified | yes |
-| `build` | `cargo check -p zakura`, `ycash` feature off | yes |
-| `build` | the same with `--features ycash` | not until W1-Y1 adds the feature |
-
-The logic is `qa/kogany_audit.py` (stdlib Python, `main(argv=None)`, tests in
-`qa/test_kogany_audit.py`); run it locally with `python3 qa/kogany_audit.py all`. The reports go
-to `kogany-audit-out/` and the step summary.
+1. Prefer doing it after `vaults/kogany-compat` merges back into `upgrade/vault` (the W0 gate
+   merge). Scheduled runs come from the default branch, `upgrade/vault`; until that merge it holds
+   upstream's untrimmed workflows in `.github/workflows/` (nightly `lint`, `tests-unit`,
+   `zakura-e2e`, the fleet and release workflows) and none of kogany's. If Actions must come on
+   earlier, disable every workflow listed on `upgrade/vault` in the Actions UI first.
+2. Settings → Actions → General: allow GitHub Actions and the actions the workflows use (every
+   `uses:` is SHA-pinned, so "require full-length commit SHA" can be on); workflow permissions
+   "Read repository contents"; require approval for outside contributors' pull requests;
+   artifact and log retention at least 30 days (the `zakurad-bin` contract).
+3. Settings → Code security: enable code scanning (the SARIF uploads) and Dependabot security
+   updates. For `semgrep.yml`'s `sync` job, allow GitHub Actions to create pull requests
+   (optionally the `SEMGREP_PR_TOKEN` secret, see `contrib/semgrep/README.md`).
+4. Optional secret `YCASH6_ARTIFACT_TOKEN` (a fine-grained token with Actions: read on
+   `boyfromcave/ycash6`), only if the job token cannot download ycash6's public artifacts.
+5. Rulesets on `vaults/kogany-compat` and `upgrade/vault`, after the first green push run: the
+   required checks are the blocking jobs above (`audit self-test`, `audit greps`,
+   `audit dormancy`, `audit workflows`, `audit cross-line (c)`, `audit vault-params (d)`, both
+   `check`, every `clippy`, `rustfmt (kogany crates)`, every `kogany crates`, `(feature off)` and
+   `(ycash)` job, `vault fuzz verdicts`) and upstream's `test success` and lint checks. Add
+   `kogany-regtest` at the W4 gate and a `mixed <group>` when its first script becomes `gate`.
+6. Confirm one push run of `kogany-bin` published `zakurad-bin`, then set ycash6's repository
+   variable `KOGANY_MIXED` (ci-design.md §9).
 
 ## Security CI
 

@@ -27,9 +27,8 @@ use kogany_vault::{
     state::{
         records::{key_member, KEY_BOND, KEY_MEMBER, KEY_SET, KEY_TEMPLATE_OUT},
         state_hash_of_entries, BlockHashFn, BondRecord, CoinAccessor, Delta, MemberList,
-        MemberRecord, Rules,
-        SetRecord, SetState, SpentCoin, StateRead, TemplateOutRecord, VaultOverlay, VaultTx,
-        VaultTxIn, VaultTxOut,
+        MemberRecord, Rules, SetRecord, SetState, SpentCoin, StateRead, TemplateOutRecord,
+        VaultOverlay, VaultTx, VaultTxIn, VaultTxOut,
     },
     Hash32, OutPoint, PubKeyBytes, SetId,
 };
@@ -44,8 +43,7 @@ use crate::{
     request::FinalizedBlock,
     service::{
         finalized_state::{
-            disk_db::DiskWriteBatch, disk_format::RawBytes, zakura_db::ZakuraDb,
-            TypedColumnFamily,
+            disk_db::DiskWriteBatch, disk_format::RawBytes, zakura_db::ZakuraDb, TypedColumnFamily,
         },
         yed::{
             module::{finalized_block_hash_at, with_vault_rules},

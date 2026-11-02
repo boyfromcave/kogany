@@ -178,7 +178,10 @@ fn check_vault_accepts_the_recorded_chain_and_rejects_acts_out_of_order() {
                 height,
                 hash,
             }) => {
-                assert!(reason.starts_with("bad-"), "a ycash6 reject reason: {reason}");
+                assert!(
+                    reason.starts_with("bad-"),
+                    "a ycash6 reject reason: {reason}"
+                );
                 assert_eq!((height, hash), (cv.height, cv.hash));
                 let total = block_vault_delta_for_chain(&network, base, &db, &cv);
                 assert_ne!(total, deltas[i], "the total transition skipped something");
@@ -212,8 +215,16 @@ fn check_vault_accepts_the_recorded_chain_and_rejects_acts_out_of_order() {
                 continue;
             }
             if first {
-                mempool_vault_check(&network, &parent_state, None, tx, txid, b.height, &all_coins)
-                    .unwrap_or_else(|r| panic!("block {:?}'s first tx passes: {r}", b.height));
+                mempool_vault_check(
+                    &network,
+                    &parent_state,
+                    None,
+                    tx,
+                    txid,
+                    b.height,
+                    &all_coins,
+                )
+                .unwrap_or_else(|r| panic!("block {:?}'s first tx passes: {r}", b.height));
                 first = false;
             }
             if let Err(reason) =
@@ -225,7 +236,10 @@ fn check_vault_accepts_the_recorded_chain_and_rejects_acts_out_of_order() {
         }
         mempool_rejected += usize::from(any_failed);
     }
-    assert!(mempool_rejected >= 5, "the mempool rejects them too ({mempool_rejected})");
+    assert!(
+        mempool_rejected >= 5,
+        "the mempool rejects them too ({mempool_rejected})"
+    );
 
     // Before the activation height nothing is checked.
     let mut pre = contextual(&network, &mut HashMap::new(), &blocks[0]);

@@ -6,8 +6,7 @@
 //! [`kogany_yellowback::module::YedModule`] (plan W5-f), and the `LruSigCache` bounds.
 
 use kogany_vault::state::{
-    find_module, registered_modules, Module, ModuleContext, SetState, VaultReject, VaultTx,
-    YED_TAG,
+    find_module, registered_modules, Module, ModuleContext, SetState, VaultReject, VaultTx, YED_TAG,
 };
 use kogany_vault::template::{
     IntentParams, TemplateParams, TemplateSpend, SEL_APP, SEL_OWNER, SEL_RELEASED, SEL_UNLOCK,

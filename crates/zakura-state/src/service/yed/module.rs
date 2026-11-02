@@ -24,9 +24,7 @@ use kogany_yellowback::{
 use zakura_chain::{block::Height, parameters::Network};
 
 use crate::service::{
-    finalized_state::{
-        vault::VaultNetworkParams, yed::yed_network_params, ZakuraDb,
-    },
+    finalized_state::{vault::VaultNetworkParams, yed::yed_network_params, ZakuraDb},
     non_finalized_state::Chain,
 };
 

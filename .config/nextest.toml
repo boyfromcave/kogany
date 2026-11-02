@@ -238,3 +238,15 @@ default-filter = 'package(zakura) and test(~zcashd_compat)'
 failure-output = "immediate"
 slow-timeout = { period = "5m", terminate-after = 2 }
 default-filter = 'package(zakura) and binary(kogany_regtest)'
+
+# kogany (plan §5; .github/workflows/kogany-tests.yml `ycash`): the ycash-feature subset of one
+# crate, run as `cargo nextest run --profile kogany-ycash -p <crate> --features <crate>/ycash`. It
+# selects the tests that exist for the Ycash build: the names of the ycash-gated test modules
+# (parameters::vault_tests, checkpoint::list, transaction::tests::{vault,bip68}, the Ycash header,
+# RPC and mempool tests) and the kogany test binaries; kogany_regtest and vault_fuzz_verdicts have
+# their own profile and job. Upstream's feature-off tests are `all-tests` (tests-unit.yml).
+[profile.kogany-ycash]
+fail-fast = false
+failure-output = "immediate"
+slow-timeout = { period = "5m", terminate-after = 2 }
+default-filter = 'not binary(kogany_regtest) and not binary(vault_fuzz_verdicts) and (test(/ycash|vault|bip68|yed|yellowback|kogany|pq|falcon|slh|checkpoint::list/) or binary(vault_chain) or binary(live_state) or binary(decode_vectors) or package(kogany-rpc))'

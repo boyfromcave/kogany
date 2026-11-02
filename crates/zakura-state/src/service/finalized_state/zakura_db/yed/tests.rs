@@ -1665,10 +1665,22 @@ fn golden_chain_through_the_registered_module_rejects_at_dos_100() {
     let want = &g.doc["totals"];
     assert_eq!(t.supply_cents, want["supplyCents"].as_i64().unwrap());
     assert_eq!(t.collateral_zat, want["collateralZat"].as_i64().unwrap());
-    assert_eq!(i64::from(t.active_vaults), want["activeVaults"].as_i64().unwrap());
-    assert_eq!(i64::from(t.void_vaults), want["voidVaults"].as_i64().unwrap());
-    assert_eq!(i64::from(t.closed_vaults), want["closedVaults"].as_i64().unwrap());
-    assert_eq!(i64::from(t.claimed_vaults), want["claimedVaults"].as_i64().unwrap());
+    assert_eq!(
+        i64::from(t.active_vaults),
+        want["activeVaults"].as_i64().unwrap()
+    );
+    assert_eq!(
+        i64::from(t.void_vaults),
+        want["voidVaults"].as_i64().unwrap()
+    );
+    assert_eq!(
+        i64::from(t.closed_vaults),
+        want["closedVaults"].as_i64().unwrap()
+    );
+    assert_eq!(
+        i64::from(t.claimed_vaults),
+        want["claimedVaults"].as_i64().unwrap()
+    );
     assert_eq!(t.unbacked_cents, want["unbackedCents"].as_i64().unwrap());
     assert_eq!(t.open_debt_cents, want["openDebtCents"].as_i64().unwrap());
 }
