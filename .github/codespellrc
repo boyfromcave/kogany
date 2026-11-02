@@ -1,5 +1,11 @@
 [codespell]
-ignore-words-list = crate,Sur,inout,Groth,groth,re-use,abl,zcash,zcashd,zakurad,zebra,utxo,utxos,nullifier,nullifiers,sapling,orchard,sprout,backpressure,proptest,thiserror,rocksdb,libsecp,fullnode,peerset,threadsafe,unrepresentable,getblocktemplate,syncer,Actix,Akka,mermaid,println,eprintln,usize,nocapture,Parallelizable,invis,UTXO,Zcash,Zaino,Zallet,librustzcash,Mainnet,Testnet,mainnet,testnet,idents,reentrancy,serializable,deserializable,deserialization,zkSNARK,zkSNARKs,lightwalletd,statics,ser,endianity,aranges,daa,trough,retuned,pre-empting
+# kogany (2026-11-02): the last line of names after pre-empting are kogany's: its own names (Kogany,
+# koganyd, kogane, yewd, Ycash, YED, Yellowback), the protocol field name nIn (codespell checks it
+# lowercased, as nin) and Falcon's floating-point type fpr (the string "fpr.c" in
+# crates/kogany-pq/tests/vendored.rs).
+ignore-words-list = crate,Sur,inout,Groth,groth,re-use,abl,zcash,zcashd,zakurad,zebra,utxo,utxos,nullifier,nullifiers,sapling,orchard,sprout,backpressure,proptest,thiserror,rocksdb,libsecp,fullnode,peerset,threadsafe,unrepresentable,getblocktemplate,syncer,Actix,Akka,mermaid,println,eprintln,usize,nocapture,Parallelizable,invis,UTXO,Zcash,Zaino,Zallet,librustzcash,Mainnet,Testnet,mainnet,testnet,idents,reentrancy,serializable,deserializable,deserialization,zkSNARK,zkSNARKs,lightwalletd,statics,ser,endianity,aranges,daa,trough,retuned,pre-empting,Kogany,kogany,koganyd,kogane,yewd,Ycash,ycash,YED,yed,Yellowback,nin,fpr
 # kogany (2026-11-01): testdata/yellowback holds the cross-line vectors pinned byte for byte from
 # ycash6 (field names such as nIn are protocol names, not typos).
-skip = ./qa/supply-chain,./target,./testdata/yellowback
+# kogany (2026-11-02): crates/kogany-pq/csrc is vendored reference C (Falcon, SLH-DSA), pinned by
+# csrc/SHA256SUMS; its upstream spellings (Ake/Ege Keccak lanes, ...) are not ours to edit.
+skip = ./qa/supply-chain,./target,./testdata/yellowback,./crates/kogany-pq/csrc

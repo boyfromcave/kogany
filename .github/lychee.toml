@@ -52,6 +52,11 @@ exclude = [
     # Dead upstream links in historical audit document (zebra-dependencies-for-audit.md)
     "^https://github.com/iqlusioninc/abscissa/tree/develop",
     "^https://github.com/servo/bincode/releases/tag/v1\\.3\\.3",
+
+    # kogany (2026-11-02): upstream docs (docs/release-tag-protection.md,
+    # crates/zakurad/tests/common/zcashd_compat/README.md) link these upstream workflows, which kogany
+    # keeps off in .github/workflows-off/ (.github/README-kogany.md); the docs stay upstream's.
+    "/\\.github/workflows/(create-release|publish-crates|release-binaries|zcashd-compat-regtest)\\.yml$",
 ]
 
 # Exclude paths

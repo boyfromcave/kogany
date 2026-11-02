@@ -164,6 +164,7 @@ in debug and in release (`--release`, `--profile ci-tests`).
 | `cases[].fn` | `math_spec_rational_cases` (the eleven functions; an unknown name fails) |
 | `cases[].args` | `math_spec_rational_cases` (positional, as the C++ `arg(k)`; mainnet `Params` where the function takes them) |
 | `cases[].expect` | `math_spec_rational_cases` (`null` = `None` for the `std::optional` functions; a bool for `IsUnderwater`) |
+
 ## Vault set state and `statehash` (W4-b)
 
 Consumer: `crates/kogany-vault` `state` (W4-b). C++: ycash6 `src/test/vault_state_tests.cpp` at
@@ -279,6 +280,7 @@ Consumer: `crates/kogany-yellowback` `state` (W5-d1). C++: ycash6 `src/test/yell
 `EmergencyFixture`; deterministic keys where the C++ draws random ones).
 
 **W5-d1, ported (84):**
+
 - chains (`tests/yellowback_state_golden.rs`): `statehash_golden_vector`, `pq_vectors_chain_across_falcon`;
 - MINT, TRANSFER, TX-0 (`tests/yellowback_state_mint_tests.rs`): `mint1_wellformed_creates_vault_and_token`,
   `tx0_coinbase_payload_registers_nothing`, `mint2_every_clause_voids`, `mint2_regtest_height_underflow`,
@@ -326,6 +328,7 @@ Beyond the C++ list (`tests/yellowback_state_records_tests.rs`): `keys_order_is_
 
 **W5-d2, ported (61; release, owner redeem and the early fee, SNAP's price/halt/sigma/tag rules, the supply cap,
 EQV-1 and the mirror through the state, PIN-1, dormancy, ARM, liveness, FEE-W, the mempool check):**
+
 - owner redeem, IT-9, NOT-1 on close, MINT-6/6b (`tests/yellowback_state_redeem_tests.rs`):
   `red_owner_redeem_passes_and_closes`, `red2_missing_and_short_burn`, `in3_burn_recorded_on_closed_vault`,
   `red3_fee_and_payee_edges`, `red1_structure_and_selectors`, `m3_vault_spend_with_mint_payload`,

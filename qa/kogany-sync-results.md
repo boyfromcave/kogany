@@ -35,12 +35,12 @@ Blocks above the list's end (3,086,087..3,087,341) were fully verified, none rej
 
 ## Final Y8 counts (mainnet, genesis..3,087,341)
 
-* block-by-block comparison: 0 mismatches (hash, `finalsaplingroot`, `blockcommitments` at
+- block-by-block comparison: 0 mismatches (hash, `finalsaplingroot`, `blockcommitments` at
   every height, ZIP-221 `chainhistoryroot` from Heartwood, `chainSupply`, value pools);
-* `z_gettreestate`: 643 samples, all identical (`sapling.finalState`, `sapling.finalRoot`);
-* rejected blocks: 0 (the 11 `Checkpoint { source: Finished }` lines are the old partial list's
+- `z_gettreestate`: 643 samples, all identical (`sapling.finalState`, `sapling.finalRoot`);
+- rejected blocks: 0 (the 11 `Checkpoint { source: Finished }` lines are the old partial list's
   end at 280,951, the router's fail-safe, counted separately);
-* checkpoint list: COMPLETE through 3,086,086, 7,803 checkpoints, every ycashd pin; no Vault
+- checkpoint list: COMPLETE through 3,086,086, 7,803 checkpoints, every ycashd pin; no Vault
   epoch on mainnet. Testnet sync remains (no Ycash testnet node yet).
 
 Findings on the way: `zakura-state` lacked the `ycash` feature `is_ycash_network` tests for (a
