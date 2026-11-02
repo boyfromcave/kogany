@@ -52,6 +52,10 @@ pub struct ScriptContext {
     /// consensus verification, [`STANDARD_NOT_MANDATORY_FLAGS`] for the mempool's
     /// standard-flags check ([`ScriptContext::with_standard_policy`]).
     pub policy_flags: Flags,
+    /// Consensus flags left out (kogany W6-c): empty, or `CHECKLOCKTIMEVERIFY` for ycashd's
+    /// mempool retry with `flags & ~STANDARD_NOT_MANDATORY_VERIFY_FLAGS`
+    /// ([`ScriptContext::with_mempool_mandatory_flags`]).
+    pub cleared_flags: Flags,
 }
 
 impl fmt::Debug for ScriptContext {
@@ -64,6 +68,7 @@ impl fmt::Debug for ScriptContext {
                 &self.vault_state.as_ref().map(|_| "StateRead"),
             )
             .field("policy_flags", &self.policy_flags)
+            .field("cleared_flags", &self.cleared_flags)
             .finish()
     }
 }
@@ -76,6 +81,7 @@ impl ScriptContext {
             height,
             vault_state,
             policy_flags: Flags::empty(),
+            cleared_flags: Flags::empty(),
         }
     }
 
@@ -87,9 +93,21 @@ impl ScriptContext {
         self
     }
 
-    /// The script verification flags at this height ([`script_flags`]), plus the policy flags.
+    /// This context with ycashd's mempool-mandatory flags only (kogany W6-c, W6-a finding F-4):
+    /// ycash6 `ContextualCheckInputs` retries a failed mempool input with
+    /// `flags & ~STANDARD_NOT_MANDATORY_VERIFY_FLAGS`, which clears `CHECKLOCKTIMEVERIFY` as well
+    /// as the policy flags (`policy/policy.h`: CLTV is standard, not mandatory), and keeps the
+    /// vault flags. A failure that disappears there is `non-mandatory-script-verify-flag`.
+    pub fn with_mempool_mandatory_flags(mut self) -> Self {
+        self.policy_flags = Flags::empty();
+        self.cleared_flags = Flags::CHECKLOCKTIMEVERIFY;
+        self
+    }
+
+    /// The script verification flags at this height ([`script_flags`]), plus the policy flags,
+    /// less the cleared flags.
     pub fn flags(&self) -> Flags {
-        script_flags(&self.network, self.height) | self.policy_flags
+        (script_flags(&self.network, self.height) | self.policy_flags) - self.cleared_flags
     }
 }
 

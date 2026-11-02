@@ -340,6 +340,17 @@ fn is_scored_but_never_bans(error: &TransactionError) -> bool {
             | CoinbaseOutputsNotDecryptable
             | CoinbaseExpiryBlockHeight { .. }
             | Subsidy(_)
+    ) || is_scored_ycash_verdict(error)
+}
+
+/// kogany (W6-c): a byte-level act failure scores 10 (ycashd) without a ban.
+fn is_scored_ycash_verdict(error: &TransactionError) -> bool {
+    matches!(
+        error,
+        TransactionError::VaultRejected {
+            byte_level: true,
+            ..
+        }
     )
 }
 

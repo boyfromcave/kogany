@@ -94,7 +94,9 @@ async fn mempool_verify(
             .expect("the verifier asks the state")
             .respond(zakura_state::Response::UnspentBestChainUtxo(Some(utxo)));
         if vault_active {
-            let tip = height.previous().expect("a mempool height is above genesis");
+            let tip = height
+                .previous()
+                .expect("a mempool height is above genesis");
             state
                 .expect_request(zakura_state::Request::BestChainVaultSnapshot)
                 .await
@@ -116,6 +118,23 @@ async fn mempool_verify(
             .await
             .expect("the verifier asks the state")
             .respond(zakura_state::Response::ValidBestChainTipNullifiersAndAnchors);
+        // kogany (W6-c): from Vault the verifier asks the YED module last.
+        #[cfg(feature = "ycash")]
+        if vault_active {
+            let tip = height
+                .previous()
+                .expect("a mempool height is above genesis");
+            state
+                .expect_request_that(|req| {
+                    matches!(req, zakura_state::Request::BestChainYedMempoolCheck(_))
+                })
+                .await
+                .expect("the verifier asks the state")
+                .respond(zakura_state::Response::YedMempoolCheck {
+                    tip: Some((tip, zakura_chain::block::Hash([0; 32]))),
+                    reasons: vec![None],
+                });
+        }
     });
 
     verifier

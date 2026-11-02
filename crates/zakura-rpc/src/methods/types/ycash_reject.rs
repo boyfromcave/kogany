@@ -281,6 +281,21 @@ pub fn transaction_reject(error: &TransactionError, context: Context) -> CxxReje
     match error {
         // main.cpp:2198-2202 (vault::CheckTx in AcceptToMemoryPool, W4-d follow-up): the reason is ycashd's own.
         E::VaultRejected { reason, .. } => CxxReject::invalid(reason.clone()),
+        // main.cpp:2229-2232 (W6-c): a template input failing on the set state, DoS 0.
+        E::VaultTemplateSetState { script_error, .. } => {
+            CxxReject::invalid(format!("{MANDATORY_SCRIPT_FAILED} ({script_error})"))
+        }
+        // main.cpp:3085-3087 (W6-c): the mempool retry without the standard-not-mandatory flags.
+        E::NonMandatoryScriptFlag { script_error, .. } => CxxReject::reject(
+            REJECT_NONSTANDARD,
+            format!("{NON_MANDATORY_SCRIPT_FAILED} ({script_error})"),
+        ),
+        // main.cpp:1979-1983 (W6-c): IsStandardTx before vault::CheckTx.
+        E::NonStandardTransaction { reason } => {
+            CxxReject::reject(REJECT_NONSTANDARD, reason.clone())
+        }
+        // main.cpp:2259-2260 (W6-c): the YED module's mempool verdict, DoS 0.
+        E::YellowbackRejected { reason } => CxxReject::invalid(format!("bad-yellowback-{reason}")),
         // main.cpp:6059-6063, 1975 (a loose coinbase), 1870.
         E::CoinbasePosition | E::NotCoinbase => CxxReject::invalid("bad-cb-missing"),
         E::CoinbaseAfterFirst => CxxReject::invalid("bad-cb-multiple"),
