@@ -68,6 +68,19 @@ pub trait YedReadState: Send + Sync + 'static {
     /// `yed_getblockverdict`: `EvaluateBlock` on a stored block whose parent is the index tip.
     /// Errors: `"block not found"`, `"block not on disk"`, `verdict-parent-not-tip`.
     async fn block_verdict(&self, block_hash: Hash32) -> Result<BlockVerdict, YedError>;
+
+    /// `yed_gettxinfo`'s row of `txid` in `snapshot` (`None` when unknown). The default reads
+    /// the index alone; a node that can fetch the transaction adds what ycashd reads from it
+    /// (`carrierVin`, `bundleSource`, a REDEEM's reference height).
+    async fn tx_info(&self, snapshot: &YedSnapshot, txid: &Hash32) -> Option<TxInfoRow> {
+        snapshot.index.tx_info(txid)
+    }
+
+    /// `yed_getnotice`'s lookup of the vault `txid:0` in `snapshot`. The default reads the index
+    /// alone; a node that can read blocks names the notice transaction.
+    async fn notice(&self, snapshot: &YedSnapshot, txid: &Hash32) -> NoticeLookup {
+        snapshot.index.notice(txid)
+    }
 }
 
 #[async_trait]
@@ -93,6 +106,12 @@ impl<S: YedReadState + ?Sized> YedReadState for Arc<S> {
     }
     async fn block_verdict(&self, block_hash: Hash32) -> Result<BlockVerdict, YedError> {
         (**self).block_verdict(block_hash).await
+    }
+    async fn tx_info(&self, snapshot: &YedSnapshot, txid: &Hash32) -> Option<TxInfoRow> {
+        (**self).tx_info(snapshot, txid).await
+    }
+    async fn notice(&self, snapshot: &YedSnapshot, txid: &Hash32) -> NoticeLookup {
+        (**self).notice(snapshot, txid).await
     }
 }
 
@@ -394,6 +413,16 @@ pub trait YedIndexView: Send + Sync {
 
     /// The `TxLog` record of `txid` (or an expired wallet transaction), `None` when unknown.
     fn tx_info(&self, txid: &Hash32) -> Option<TxInfoRow>;
+
+    /// [`Self::tx_info`] with the transaction itself when the caller could fetch it (ycashd's
+    /// `carrierVin`, `bundleSource` and a REDEEM's reference height read it).
+    fn tx_info_with(
+        &self,
+        txid: &Hash32,
+        _tx: Option<&kogany_vault::state::VaultTx>,
+    ) -> Option<TxInfoRow> {
+        self.tx_info(txid)
+    }
 
     /// `yed_estimatecollateral` at `R = tip - REF_LAG` (`price` overrides the snapshot's
     /// `pMint` and both bundle refusals). The RPC layer has checked the argument types and the

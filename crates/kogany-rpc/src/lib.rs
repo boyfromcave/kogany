@@ -70,6 +70,7 @@ where
         + 'static,
     R::Future: Send,
 {
+    yed::live::set_network(network);
     let yed = yed_state(tip.clone(), read_state.clone());
     let state: Arc<dyn VaultReadState> =
         if std::env::var(mock::MOCK_ENV).is_ok_and(|value| value == "1") {
