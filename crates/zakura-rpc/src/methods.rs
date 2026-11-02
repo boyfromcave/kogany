@@ -2456,6 +2456,12 @@ where
                     Ok(GetBlockResponse::Raw(block.into()))
                 }
                 zakura_state::ReadResponse::Block(None) => {
+                    #[cfg(feature = "ycash")]
+                    if types::ycash::block_body_pruned(self.read_state.clone(), hash_or_height)
+                        .await
+                    {
+                        return Err(types::ycash::PRUNED_BLOCK).map_error(ErrorCode::InternalError);
+                    }
                     Err("Block not found").map_error(server::error::LegacyCode::InvalidParameter)
                 }
                 _ => unreachable!("unmatched response to a block request"),
@@ -2531,6 +2537,16 @@ where
             }
 
             let tx_ids_response = futs.next().await.expect("`futs` should not be empty");
+            // Ycash: a pruned body is ycashd's pruned refusal at every verbosity.
+            #[cfg(feature = "ycash")]
+            if matches!(
+                tx_ids_response,
+                Ok(zakura_state::ReadResponse::TransactionIdsForBlock(None))
+                    | Ok(zakura_state::ReadResponse::BlockAndSize(None))
+            ) && types::ycash::block_body_pruned(self.read_state.clone(), hash_or_height).await
+            {
+                return Err(types::ycash::PRUNED_BLOCK).map_error(ErrorCode::InternalError);
+            }
             let (tx, size): (Vec<_>, Option<usize>) = match tx_ids_response? {
                 zakura_state::ReadResponse::TransactionIdsForBlock(tx_ids) => (
                     tx_ids

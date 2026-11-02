@@ -926,7 +926,7 @@ impl YedRpc for YedRpcImpl {
         let s = self.live().await?;
         let id = hash_arg(&txid, "txid")?;
         healthy(&s)?;
-        let l = self.state.tx_info(&s, &id).await.ok_or_else(|| {
+        let l = self.state.tx_info(&s, &id).await?.ok_or_else(|| {
             invalid(format!(
                 "tx-not-found: {} is not in the Yellowback index",
                 display_hex(&id)
@@ -1311,7 +1311,7 @@ impl YedRpc for YedRpcImpl {
         let id = hash_arg(&vault_txid, "vaultTxid")?;
         healthy(&s)?;
         let p = &s.params;
-        match self.state.notice(&s, &id).await {
+        match self.state.notice(&s, &id).await? {
             NoticeLookup::VaultNotFound => Err(invalid(format!(
                 "vault-not-found: no vault at {}:0",
                 display_hex(&id)

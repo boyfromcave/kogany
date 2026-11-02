@@ -57,7 +57,8 @@ pub trait YedReadState: Send + Sync + 'static {
     /// The coinbase tag of a stored block (`yed_gettag`, `yed_getprice`'s `tag`): `Ok(None)`
     /// when the block carries no valid tag or is below `startHeight`. Errors:
     /// `"height out of range"`, `"block not found"`, `"block not on disk"`
-    /// ([`YedErrorKind::InvalidParameter`], no identifier).
+    /// ([`YedErrorKind::InvalidParameter`], no identifier), and [`YedError::pruned`] when the
+    /// node pruned the block's body.
     async fn coinbase_tag(&self, block: BlockRef) -> Result<Option<CoinbaseTag>, YedError>;
 
     /// `yed_validaterawtransaction`: the dry run of §3.8 at `tip + 1` and script verification
@@ -69,17 +70,28 @@ pub trait YedReadState: Send + Sync + 'static {
     /// Errors: `"block not found"`, `"block not on disk"`, `verdict-parent-not-tip`.
     async fn block_verdict(&self, block_hash: Hash32) -> Result<BlockVerdict, YedError>;
 
-    /// `yed_gettxinfo`'s row of `txid` in `snapshot` (`None` when unknown). The default reads
-    /// the index alone; a node that can fetch the transaction adds what ycashd reads from it
-    /// (`carrierVin`, `bundleSource`, a REDEEM's reference height).
-    async fn tx_info(&self, snapshot: &YedSnapshot, txid: &Hash32) -> Option<TxInfoRow> {
-        snapshot.index.tx_info(txid)
+    /// `yed_gettxinfo`'s row of `txid` in `snapshot` (`Ok(None)` when unknown). The default
+    /// reads the index alone; a node that can fetch the transaction adds what ycashd reads from
+    /// it (`carrierVin`, `bundleSource`, a REDEEM's reference height). A node whose copy of the
+    /// transaction was pruned answers [`YedError::pruned`] rather than a row without those
+    /// fields (pruning assessment KP-1).
+    async fn tx_info(
+        &self,
+        snapshot: &YedSnapshot,
+        txid: &Hash32,
+    ) -> Result<Option<TxInfoRow>, YedError> {
+        Ok(snapshot.index.tx_info(txid))
     }
 
     /// `yed_getnotice`'s lookup of the vault `txid:0` in `snapshot`. The default reads the index
-    /// alone; a node that can read blocks names the notice transaction.
-    async fn notice(&self, snapshot: &YedSnapshot, txid: &Hash32) -> NoticeLookup {
-        snapshot.index.notice(txid)
+    /// alone; a node that can read blocks names the notice transaction, and answers
+    /// [`YedError::pruned`] when the block at the notice's height was pruned.
+    async fn notice(
+        &self,
+        snapshot: &YedSnapshot,
+        txid: &Hash32,
+    ) -> Result<NoticeLookup, YedError> {
+        Ok(snapshot.index.notice(txid))
     }
 
     /// `yed_verifyindex`'s vault half (`vault::AuditLockedValue` over the set-state database):
@@ -114,16 +126,28 @@ impl<S: YedReadState + ?Sized> YedReadState for Arc<S> {
     async fn block_verdict(&self, block_hash: Hash32) -> Result<BlockVerdict, YedError> {
         (**self).block_verdict(block_hash).await
     }
-    async fn tx_info(&self, snapshot: &YedSnapshot, txid: &Hash32) -> Option<TxInfoRow> {
+    async fn tx_info(
+        &self,
+        snapshot: &YedSnapshot,
+        txid: &Hash32,
+    ) -> Result<Option<TxInfoRow>, YedError> {
         (**self).tx_info(snapshot, txid).await
     }
-    async fn notice(&self, snapshot: &YedSnapshot, txid: &Hash32) -> NoticeLookup {
+    async fn notice(
+        &self,
+        snapshot: &YedSnapshot,
+        txid: &Hash32,
+    ) -> Result<NoticeLookup, YedError> {
         (**self).notice(snapshot, txid).await
     }
     async fn set_audit(&self) -> (Vec<String>, Vec<SetAudit>) {
         (**self).set_audit().await
     }
 }
+
+/// ycashd's text for a block whose data was pruned (`getblock`, `src/rpc/blockchain.cpp`):
+/// what [`YedError::pruned`] answers.
+pub const PRUNED_DATA: &str = "Block not available (pruned data)";
 
 /// A refusal with one of ycashd's error classes. The RPC message is `"<id>: <text>"` when `id`
 /// is set (the M8 identifier the clients match), else `text`.
@@ -154,6 +178,14 @@ impl YedError {
             id: None,
             text: text.into(),
         }
+    }
+
+    /// The refusal for a block or transaction whose body this node pruned (Zakura's Pruned
+    /// storage mode): ycashd's `getblock` error for a pruned block, `RPC_INTERNAL_ERROR`
+    /// (-32603) `"Block not available (pruned data)"` (`src/rpc/blockchain.cpp`), never a
+    /// "not found" or an answer missing what the body would have said.
+    pub fn pruned() -> Self {
+        Self::plain(YedErrorKind::Internal, PRUNED_DATA)
     }
 
     /// The message ycashd writes.
