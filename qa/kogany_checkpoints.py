@@ -46,7 +46,9 @@ import base64
 import json
 import os
 import sys
-import urllib.request
+import http.client
+import time
+import urllib.parse
 
 MAX_CHECKPOINT_HEIGHT_GAP = 400
 MAX_CHECKPOINT_BYTE_COUNT = 32 * 1024 * 1024
@@ -167,21 +169,54 @@ def check_list(entries, pins, stop_below, upstream=None, shared_below=None):
 
 
 class Rpc:
+    """JSON-RPC over one kept-alive HTTP connection (a connection per batch exhausts the
+    ephemeral ports on a busy machine: EADDRNOTAVAIL); a dropped connection, a node restart or
+    its warm-up (-28) is retried with a backoff."""
+
+    RETRIES = 30
+
     def __init__(self, url, user, password, timeout=300):
         self.url = url
+        parts = urllib.parse.urlsplit(url)
+        self.host, self.port = parts.hostname, parts.port or 80
+        self.path = parts.path or "/"
         self.auth = "Basic " + base64.b64encode(("%s:%s" % (user, password)).encode()).decode()
         self.timeout = timeout
         self.next_id = 0
+        self.conn = None
+
+    def _post(self, payload):
+        if self.conn is None:
+            self.conn = http.client.HTTPConnection(self.host, self.port, timeout=self.timeout)
+        self.conn.request("POST", self.path, body=payload,
+                          headers={"Authorization": self.auth, "Content-Type": "application/json"})
+        r = self.conn.getresponse()
+        data = r.read()
+        if r.status not in (200, 500):
+            raise OSError("HTTP %d %r" % (r.status, data[:200]))
+        return json.loads(data)
 
     def batch(self, calls):
         body = []
         for method, params in calls:
             self.next_id += 1
             body.append({"jsonrpc": "1.0", "id": self.next_id, "method": method, "params": params})
-        req = urllib.request.Request(self.url, data=json.dumps(body).encode(),
-                                     headers={"Authorization": self.auth, "Content-Type": "application/json"})
-        with urllib.request.urlopen(req, timeout=self.timeout) as r:
-            replies = json.loads(r.read())
+        payload = json.dumps(body).encode()
+        for attempt in range(self.RETRIES):
+            try:
+                replies = self._post(payload)
+                if isinstance(replies, dict) and (replies.get("error") or {}).get("code") == -28:
+                    raise OSError("node warming up: %s" % replies["error"].get("message"))
+                if isinstance(replies, list) and any((x.get("error") or {}).get("code") == -28 for x in replies):
+                    raise OSError("node warming up")
+                break
+            except (OSError, http.client.HTTPException, ValueError) as e:
+                if self.conn is not None:
+                    self.conn.close()
+                self.conn = None
+                if attempt == self.RETRIES - 1:
+                    raise CheckpointError("rpc failed after %d attempts: %s" % (self.RETRIES, e))
+                time.sleep(min(60, 2 * (attempt + 1)))
         by_id = {x["id"]: x for x in replies}
         out = []
         for i in range(self.next_id - len(calls) + 1, self.next_id + 1):
