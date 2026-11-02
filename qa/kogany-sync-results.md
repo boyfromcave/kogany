@@ -25,3 +25,25 @@ every block 0..2,275,000 with `blockcommitments` now compared at every height: *
 |---|---|---|---|---|---|---|
 | 2,800,000 | 2,800,000 | `000003170414909d5104f4a71708eca4e5b545d231c412c2d3e0e3f33874facb` | 2,800,000 | 0 | 0 | 3,086,086 (COMPLETE) |
 | 3,079,999 | 3,079,999 | `000005030be4763e433447000ef6b98c7ce310a8b0b7bb50f1a6aca3d31e4bef` | 3,079,999 | 0 | 0 | 3,086,086 (COMPLETE) |
+| tip 3,087,341 | 3,087,341 | `0000002ba6d97af6474d3bac9b8b82da7b54568f47097871d429438b338461bf` | 3,087,341 | 0 | 0 | 3,086,086 (COMPLETE) |
+
+At the tip `debug_stop_at_height` does not apply (it acts on finalized commits; the last 100
+blocks stay in the non-finalized state), so kogany was stopped with SIGINT the moment its best
+block equalled ycash6's (height and hash); the non-finalized backup under
+`state/non_finalized_state` restores those blocks on reopen, which the isolated reopen confirmed.
+Blocks above the list's end (3,086,087..3,087,341) were fully verified, none rejected.
+
+## Final Y8 counts (mainnet, genesis..3,087,341)
+
+* block-by-block comparison: 0 mismatches (hash, `finalsaplingroot`, `blockcommitments` at
+  every height, ZIP-221 `chainhistoryroot` from Heartwood, `chainSupply`, value pools);
+* `z_gettreestate`: 643 samples, all identical (`sapling.finalState`, `sapling.finalRoot`);
+* rejected blocks: 0 (the 11 `Checkpoint { source: Finished }` lines are the old partial list's
+  end at 280,951, the router's fail-safe, counted separately);
+* checkpoint list: COMPLETE through 3,086,086, 7,803 checkpoints, every ycashd pin; no Vault
+  epoch on mainnet. Testnet sync remains (no Ycash testnet node yet).
+
+Findings on the way: `zakura-state` lacked the `ycash` feature `is_ycash_network` tests for (a
+ycash zakurad panicked on the embedded Zcash VCT frontier; fixed b5ba9b111); kogany's
+`finalsaplingroot` / `blockcommitments` below Sapling and `z_gettreestate` finalState encoding
+differed from ycashd (fixed on the integration tip, 25518495f and 9c9f8aa00, rechecked here).
