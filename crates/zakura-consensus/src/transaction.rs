@@ -660,6 +660,22 @@ where
 
             // kogany (W4-d): the set state the scripts read.
             let vault_state = Self::vault_script_state(&req, &network, state.clone()).await?;
+            // kogany (W4-d): the mempool's vault rules at the next height over the tip's set state
+            // (ycash6 `vault::CheckTx`, unscored); a block's run in contextual validation.
+            if let (true, Some(tip_state)) = (req.is_mempool(), vault_state.as_ref()) {
+                zakura_state::vault::mempool_vault_check(
+                    &network,
+                    tip_state.as_ref(),
+                    &tx,
+                    &req.tx_mined_id(),
+                    req.height(),
+                    &spent_utxos,
+                )
+                .map_err(|reason| TransactionError::VaultRejected {
+                    reason,
+                    height: req.height(),
+                })?;
+            }
 
             let mut async_checks = match tx.as_ref() {
                 Transaction::V1 { .. } | Transaction::V2 { .. } | Transaction::V3 { .. } => {

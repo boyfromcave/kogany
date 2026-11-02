@@ -701,6 +701,16 @@ where
                                         let error_msg = format!(
                                             "failed to validate tx: {tx_id}, error: {tx_verifier_error}"
                                         );
+                                        // Ycash (kogany W7-e): the same text, with ycashd's
+                                        // reject code and reason taken from the typed error.
+                                        #[cfg(feature = "ycash")]
+                                        let error_msg = zakura_rpc::methods::ycash_reject::MempoolRejection::new(
+                                            error_msg,
+                                            match &tx_verifier_error {
+                                                TransactionDownloadVerifyError::Invalid { error, .. } => Some(error),
+                                                _ => None,
+                                            },
+                                        );
                                         let _ = rsp_tx.send(Err(error_msg.into()));
                                     };
 

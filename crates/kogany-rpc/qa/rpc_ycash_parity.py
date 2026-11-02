@@ -144,13 +144,8 @@ ACCEPTED = [
      "Zakura's mempool tracks no in-template dependencies"),
     ('getblocktemplate', r'\.coinbase\.(script_sig_tail|expiry_height)$', 'derived',
      "Zakura's coinbase tag, random data and expiry height"),
-    # submitblock
-    ('submitblock', r'=answer$|!error$', 'chunk',
-     'W7-e (rpc-parity) maps the rejection strings and the -22 decode error; accept is null on both'),
-    # sendrawtransaction errors
-    ('sendrawtransaction', r'!error$', 'chunk', 'W7-e (rpc-parity): the -26/-25/-27 reject texts; '
-     'at ycashd\'s default fee, kogany\'s ZIP 317 mempool refuses what ycashd takes (finding F-2, '
-     'the pre-Vault Ycash fee policy has no chunk yet)'),
+    # submitblock and sendrawtransaction: no row. From W7-e both answer ycashd's codes and texts
+    # (the error message is compared too, below); rpc_reject_parity.py provokes each text.
     # yed_getinfo
     ('yed_getinfo', r'.*', 'chunk', 'W7-b: the yed_* read RPCs (kogany-rpc/src/yed/)'),
     # validateaddress: ycashd adds wallet fields from DescribeAddressVisitor (misc.cpp).
@@ -192,6 +187,9 @@ CLIENT_FIELDS = {
     'validateaddress': r'\.(isvalid|address|scriptPubKey|pqscheme|pqkeyhash)$',
     'getblocksubsidy': r'\.(miner|founders|totalblocksubsidy)$',
 }
+
+# The methods whose error messages are compared as well as their codes (W7-e).
+EXACT_ERROR_METHODS = ('sendrawtransaction', 'submitblock')
 
 WALLET_ONLY = {
     'z_sendmany': 'lightwalletd-dd uses it on the regtest faucet path; kogany has no wallet (K-3)',
@@ -386,7 +384,11 @@ class Report:
         self.calls += 1
         (a, ea), (b, eb) = ra, rb
         if ea or eb:
-            if bool(ea) != bool(eb) or (ea or {}).get('code') != (eb or {}).get('code'):
+            # W7-e: the reject texts of the two transaction and block submission calls are
+            # ycashd's, so their messages must agree too.
+            exact = method in EXACT_ERROR_METHODS
+            if (bool(ea) != bool(eb) or (ea or {}).get('code') != (eb or {}).get('code')
+                    or (exact and (ea or {}).get('message') != (eb or {}).get('message'))):
                 self.add(method, call, '!error', 'error', ea, eb)
             return
         if isinstance(a, dict) and isinstance(b, dict) or isinstance(a, list) and isinstance(b, list):

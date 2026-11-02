@@ -1255,6 +1255,10 @@ where
         _ => unreachable!("incorrect response to {request:?}"),
     };
 
+    // Ycash (W7-e): ycashd's `curtime` reads the mock clock `setmocktime` sets.
+    #[cfg(feature = "ycash")]
+    let chain_info = super::ycash_reject::with_mock_cur_time(chain_info);
+
     Ok(chain_info)
 }
 

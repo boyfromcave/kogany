@@ -803,7 +803,8 @@ impl OutputObject {
                 .unwrap_or("nonstandard")
                 .to_string(),
             addresses,
-        );
+        )
+        .with_network_fields(network);
 
         Self {
             best_block,
@@ -842,6 +843,33 @@ pub struct ScriptPubKey {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[getset(get = "pub")]
     addresses: Option<Vec<String>>,
+}
+
+impl ScriptPubKey {
+    /// The fields the node's network describes differently: under `ycash` (kogany W7-e),
+    /// ycashd's `type`, `reqSigs` and `addresses` (`super::ycash_script`); otherwise unchanged.
+    fn with_network_fields(self, _network: &Network) -> Self {
+        #[cfg(feature = "ycash")]
+        {
+            let (req_sigs, r#type, addresses) =
+                super::ycash_script::script_pub_key_fields(&self.hex, self.r#type, _network);
+            // Zakura's disassembler stops at the Ycash opcodes (`[error]`).
+            let asm = if self.asm.contains("[error]") {
+                super::ycash_script::script_to_asm(self.hex.as_raw_bytes())
+            } else {
+                self.asm
+            };
+            Self {
+                asm,
+                req_sigs,
+                r#type,
+                addresses,
+                ..self
+            }
+        }
+        #[cfg(not(feature = "ycash"))]
+        self
+    }
 }
 
 /// The scriptSig of a transaction input.
@@ -1327,7 +1355,8 @@ impl TransactionObject {
                             .unwrap_or("nonstandard")
                             .to_string(),
                             addresses,
-                        },
+                        }
+                        .with_network_fields(network),
                     }
                 })
                 .collect(),

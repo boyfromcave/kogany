@@ -211,6 +211,16 @@ pub enum TransactionError {
     // This error variant is at least 128 bytes
     ValidateContextError(Box<ValidateContextError>),
 
+    /// kogany (W4-d): the mempool's vault check failed against the best chain tip's set state
+    /// (ycash6 `vault::CheckTx` in `AcceptToMemoryPool`, DoS 0: it depends on the tip).
+    #[error("vault rule violation in the mempool at {height:?}: {reason}")]
+    VaultRejected {
+        /// The C++ reject reason.
+        reason: String,
+        /// The next block's height, which the check ran at.
+        height: zakura_chain::block::Height,
+    },
+
     #[error("could not validate mempool transaction lock time on best chain: {0}")]
     #[cfg_attr(any(test, feature = "proptest-impl"), proptest(skip))]
     // TODO: turn this into a typed error
@@ -489,6 +499,9 @@ impl TransactionError {
                 BodyVerificationClass::Retryable(TransientBodyFailureKind::MissingContext)
             }
             Self::ValidateContextError(error) => error.body_verification_class(),
+            Self::VaultRejected { .. } => {
+                BodyVerificationClass::Retryable(TransientBodyFailureKind::VerifierUnavailable)
+            }
             Self::ValidateMempoolLockTimeError(_)
             | Self::Zip317(_)
             | Self::NonStandardScriptSigSize { .. }

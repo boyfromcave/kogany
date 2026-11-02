@@ -134,8 +134,10 @@ impl Policy {
                     rules_height,
                 )
                 .map_err(|(input_index, error)| {
+                    // kogany W7-e: ycashd's ScriptErrorString, which sendrawtransaction shows.
                     NonStandardTransactionError::NonMandatoryScriptVerifyFlag(format!(
-                        "input {input_index}: {error}"
+                        "input {input_index}: {}",
+                        zakura_rpc::methods::ycash_reject::script_error_string(&error)
                     ))
                 })?;
             }
