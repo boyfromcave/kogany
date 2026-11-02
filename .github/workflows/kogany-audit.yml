@@ -10,9 +10,11 @@ name: kogany-audit
 #
 #   selftest        qa/test_kogany_*.py                                          blocking
 #   leg (matrix)    consensus-diff (a)  report-only: the consensus path set vs kogany-baseline
-#                   frozen (b)          report-only: qa/kogany-frozen-files.txt vs kogany-legacy
-#                   greps (e)           blocking: naming (rule 6) and attribution (rule 8)
-#                   dormancy            blocking: no upstream test function deleted
+#                   frozen (b)          report-only: qa/kogany-frozen-files.txt vs the upstream pin
+#                   greps (e)           blocking: naming (rule 6) and attribution (rule 8), in
+#                                       kogany's commits only (not upstream's, merged by a sync)
+#                   dormancy            blocking: no upstream test function (at the pin) deleted
+#                   (the upstream pin: the commit qa/UPSTREAM_PIN names, see qa/kogany_audit.py)
 #                   workflows           blocking: every workflow classified, `off` ones in
 #                                       .github/workflows-off/, every trigger within the policy
 #   cross-line (c)  the pinned vectors equal ycash6's at YCASH6_REV              blocking
@@ -66,14 +68,26 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          fetch-depth: 0  # the legs diff against kogany-legacy / kogany-baseline and read the commit log
+          fetch-depth: 0  # the legs diff against the upstream pin / kogany-baseline and read the commit log
           persist-credentials: false
       - name: Fetch the baselines
         # kogany-legacy is a branch and kogany-baseline a tag; a pull_request checkout has neither
         # as a local ref, so name them explicitly.
         run: |
           git fetch --no-tags origin '+refs/heads/kogany-legacy:refs/remotes/origin/kogany-legacy'
-          git fetch --no-tags origin '+refs/tags/kogany-baseline:refs/tags/kogany-baseline' || echo "no kogany-baseline tag: consensus-diff uses kogany-legacy"
+          git fetch --no-tags origin '+refs/tags/kogany-baseline:refs/tags/kogany-baseline' || echo "no kogany-baseline tag: consensus-diff uses the upstream pin"
+      - name: Fetch the upstream pin
+        # The legs' default upstream is the commit qa/UPSTREAM_PIN names: the upstream Zakura commit
+        # this tree is synced to, not upstream's moving main (which runs ahead of the sync and would
+        # count tests upstream added or deleted since). A synced tree already holds it (the sync
+        # merged it); fetch it from zakura-core/zakura otherwise.
+        run: |
+          pin=$(sed -e 's/#.*//' -e '/^[[:space:]]*$/d' qa/UPSTREAM_PIN)
+          if git cat-file -e "${pin}^{commit}" 2>/dev/null; then
+            echo "upstream pin $pin is in the checkout"
+          else
+            git fetch --no-tags https://github.com/zakura-core/zakura.git "$pin"
+          fi
       - name: audit ${{ matrix.leg }}
         env:
           LEG: ${{ matrix.leg }}

@@ -10,13 +10,16 @@ Legs (`all` runs every one; kogany-audit.yml runs each leg as its own job):
 
   consensus-diff  (a) report-only. The delta of the consensus path set
                   (qa/kogany-consensus-paths.txt) and of the forked crates' Cargo.lock entries,
-                  against --base (default: tag kogany-baseline, else kogany-legacy). Writes
+                  against --base (default: tag kogany-baseline, else the upstream pin). Writes
                   consensus-diff.patch and consensus-diff.md: the artefact the two reviewers read.
   frozen          (b) report-only. Any delta of qa/kogany-frozen-files.txt against --upstream
-                  (default kogany-legacy). A non-zero report is a plan §9 finding.
+                  (default: the upstream pin, below). A non-zero report is a plan §9 finding.
   greps           (e) blocking. The lines kogany adds against --upstream, and the messages of its
                   commits, must not carry the retired or upstream product names (AGENTS.md rule 6;
                   a path that cites an upstream file is allowed) or AI attribution (rule 8).
+                  "Its commits" are those reachable from HEAD and from neither --upstream nor
+                  upstream/main (when that remote ref exists): upstream's own commits, merged by a
+                  sync, carry upstream's trailers (Co-Authored-By and the like) and are never ours.
   dormancy        blocking. No upstream Rust test function present at --upstream is missing at
                   HEAD (plan §2.5: every Zakura test, NU5-NU7 and Ironwood included, keeps running
                   on the feature-off build; a deleted one fails the gate).
@@ -28,6 +31,14 @@ Legs (`all` runs every one; kogany-audit.yml runs each leg as its own job):
                   pull_request_target, workflow_run, ...); push only with a branches filter within
                   upgrade/vault and vaults/**; pull_request only with a branches filter within
                   upgrade/vault, vaults/** and kc/**; no branches-ignore, no tag pushes.
+
+The upstream pin. --upstream (or KOGANY_AUDIT_UPSTREAM) names it explicitly; by default it is
+the commit in qa/UPSTREAM_PIN, the upstream Zakura commit the tree is synced to, which an upstream
+sync bumps in its merge (so a sync never leaves the greps leg scanning upstream's commits or the
+dormancy leg counting tests upstream itself deleted). It must resolve: kogany-audit.yml fetches it
+from zakura-core/zakura when the checkout lacks it. Without qa/UPSTREAM_PIN the default is the
+kogany-legacy branch. When kogany-legacy resolves to another commit, the run says so (kogany-legacy
+is moved to the pin after each sync) but does not fail.
 
 The report-only legs exit 0 whatever they find (non-zero only on an error); the blocking legs exit
 1 on a finding. Reports go to --out (default kogany-audit-out/) and to stdout; with
@@ -94,7 +105,43 @@ def pick_ref(repo, explicit, candidates, what):
 
 
 UPSTREAM_REFS = ("kogany-legacy", "origin/kogany-legacy", "refs/remotes/origin/kogany-legacy")
-BASE_REFS = ("kogany-baseline", "refs/tags/kogany-baseline") + UPSTREAM_REFS
+BASE_REFS = ("kogany-baseline", "refs/tags/kogany-baseline")
+UPSTREAM_PIN = "qa/UPSTREAM_PIN"
+# Upstream's moving branch, when the checkout has it: commits reachable from it are upstream's.
+UPSTREAM_MAIN_REFS = ("upstream/main", "refs/remotes/upstream/main")
+
+
+def read_upstream_pin(repo):
+    """The commit qa/UPSTREAM_PIN names (comments and blanks dropped), or None without the file."""
+    path = os.path.join(repo, UPSTREAM_PIN)
+    if not os.path.exists(path):
+        return None
+    with open(path, encoding="utf-8") as f:
+        shas = [l.split("#", 1)[0].strip() for l in f]
+    shas = [x for x in shas if x]
+    if len(shas) != 1 or not re.fullmatch(r"[0-9a-f]{40}", shas[0]):
+        raise AuditError("%s must name exactly one full commit hash" % UPSTREAM_PIN)
+    return shas[0]
+
+
+def pick_upstream(repo, explicit):
+    """--upstream, else qa/UPSTREAM_PIN, else kogany-legacy (module docstring, "The upstream pin")."""
+    if explicit:
+        return pick_ref(repo, explicit, (), "upstream pin")
+    pin = read_upstream_pin(repo)
+    if pin is None:
+        return pick_ref(repo, None, UPSTREAM_REFS, "upstream pin")
+    if not resolves(repo, pin):
+        raise AuditError("the upstream pin %s (%s) is not in this checkout: fetch it with "
+                         "`git fetch https://github.com/zakura-core/zakura.git %s`" % (pin, UPSTREAM_PIN, pin))
+    for ref in UPSTREAM_REFS:
+        if resolves(repo, ref):
+            legacy = git(repo, "rev-parse", ref + "^{commit}").strip()
+            if legacy != pin:
+                print("note: %s is %s, not the upstream pin %s (%s); the audit uses the pin"
+                      % (ref, legacy[:12], pin[:12], UPSTREAM_PIN), file=sys.stderr)
+            break
+    return pin
 
 
 def read_list(repo, rel):
@@ -259,14 +306,17 @@ def leg_greps(repo, base, upstream, out, args):
             continue
         for word in line_findings(text):
             hits.append("%s:%d: %r" % (path, lineno, word))
-    log = git(repo, "log", "--format=%H%x00%B%x00", "%s..HEAD" % upstream)
+    # Only kogany's commits: not upstream's, which a sync merges with upstream's own trailers.
+    excluded = [upstream] + [r for r in UPSTREAM_MAIN_REFS if resolves(repo, r)][:1]
+    log = git(repo, "log", "--format=%H%x00%B%x00", "HEAD", *("^" + r for r in excluded))
     parts = log.split("\x00")
     for sha, body in zip(parts[0::2], parts[1::2]):
         sha = sha.strip()
         for m in COMMIT_ATTRIBUTION.finditer(body):
             hits.append("commit %s: %r" % (sha[:12], m.group(0)))
     lines = ["## audit (e) naming and attribution greps (blocking)", "",
-             "Lines and commits added against `%s`." % upstream, ""]
+             "Lines added against `%s`; commits reachable from HEAD and not from %s." % (
+                 upstream, ", ".join("`%s`" % r for r in excluded)), ""]
     lines += ["%d finding(s):" % len(hits), ""] + ["- %s" % h for h in hits] if hits else ["None."]
     report = "\n".join(lines) + "\n"
     write(out, "greps.md", report)
@@ -574,9 +624,9 @@ def main(argv=None):
     ap.add_argument("legs", nargs="+", choices=sorted(LEGS) + ["all"])
     ap.add_argument("--repo", default=None, help="the kogany checkout (default: this file's repository)")
     ap.add_argument("--base", default=os.environ.get("KOGANY_AUDIT_BASE"),
-                    help="consensus-diff base (default: kogany-baseline, else kogany-legacy)")
+                    help="consensus-diff base (default: kogany-baseline, else the upstream pin)")
     ap.add_argument("--upstream", default=os.environ.get("KOGANY_AUDIT_UPSTREAM"),
-                    help="the upstream pin (default: kogany-legacy)")
+                    help="the upstream pin (default: qa/UPSTREAM_PIN, else kogany-legacy)")
     ap.add_argument("--out", default="kogany-audit-out")
     args = ap.parse_args(argv)
 
@@ -584,8 +634,9 @@ def main(argv=None):
     repo = git(repo, "rev-parse", "--show-toplevel").strip()
     legs = list(LEGS) if "all" in args.legs else args.legs
     try:
-        upstream = pick_ref(repo, args.upstream, UPSTREAM_REFS, "upstream pin")
-        base = pick_ref(repo, args.base, BASE_REFS, "consensus-diff base")
+        upstream = pick_upstream(repo, args.upstream)
+        base = pick_ref(repo, args.base, BASE_REFS, "consensus-diff base") if args.base or any(
+            resolves(repo, r) for r in BASE_REFS) else upstream
         rc = 0
         for leg in legs:
             rc |= LEGS[leg](repo, base, upstream, args.out, args)

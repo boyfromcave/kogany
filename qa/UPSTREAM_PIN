@@ -1,0 +1,6 @@
+# The upstream Zakura commit (zakura-core/zakura) kogany is synced to: the last upstream commit
+# merged into this branch (sync 6cc2f22a2, doc/sync-zakura-20261102.md). qa/kogany_audit.py
+# defaults --upstream to it, and kogany-audit.yml fetches it from zakura-core/zakura when the
+# checkout lacks it. An upstream sync bumps this line in its merge; the kogany-legacy branch is
+# moved to the same commit (fast-forward) after the sync lands.
+b44ec121d6cf55f6596c29f1a31775553d218d18
