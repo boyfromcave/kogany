@@ -1176,6 +1176,60 @@ dependencies = [
 ]
 
 [[package]]
+name = "kogany-pq"
+version = "0.1.0"
+dependencies = [
+ "cc",
+ "hex",
+ "serde_json",
+ "sha2",
+]
+
+[[package]]
+name = "kogany-rpc"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "hex",
+ "kogany-vault",
+ "kogany-yellowback",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tower",
+ "tracing",
+ "zakura-address",
+ "zakura-chain",
+ "zakura-protocol",
+ "zakura-rpc",
+ "zakura-script",
+ "zakura-state",
+]
+
+[[package]]
+name = "kogany-vault"
+version = "0.1.0"
+dependencies = [
+ "hex",
+ "ripemd",
+ "secp256k1",
+ "serde_json",
+ "sha2",
+]
+
+[[package]]
+name = "kogany-yellowback"
+version = "0.1.0"
+dependencies = [
+ "hex",
+ "kogany-pq",
+ "kogany-vault",
+ "secp256k1",
+ "serde_json",
+ "sha2",
+]
+
+[[package]]
 name = "lazy_static"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2716,6 +2770,8 @@ dependencies = [
  "hyper-util",
  "indexmap",
  "insta",
+ "kogany-rpc",
+ "kogany-vault",
  "libc",
  "metrics",
  "pin-project",
@@ -2758,9 +2814,8 @@ dependencies = [
 
 [[package]]
 name = "zakura-address"
-version = "5.0.0-rc.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "80a6eea4fa3ebb74ff968f2cb2f336f0e01d63b4c73a8411ba144c3d31c0c582"
+version = "5.0.0-rc.4+ycash.1"
+source = "git+https://github.com/boyfromcave/zakura-common-ycash?rev=049895445b6fe7a9db20b484736008952a6d6d94#049895445b6fe7a9db20b484736008952a6d6d94"
 dependencies = [
  "bech32",
  "blake2b_simd",
@@ -2777,9 +2832,8 @@ checksum = "d67b9aaf5a85d339b0e270133fb3601a78ff249caca73bca62cdee6c21ab3d26"
 
 [[package]]
 name = "zakura-bellman"
-version = "5.0.0-rc.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5299942b20c0886e8d8a1486da53dadc1bfe4f02bcd511408f6a938492562bcd"
+version = "5.0.0-rc.4+ycash.1"
+source = "git+https://github.com/boyfromcave/zakura-common-ycash?rev=049895445b6fe7a9db20b484736008952a6d6d94#049895445b6fe7a9db20b484736008952a6d6d94"
 dependencies = [
  "blake2s_simd",
  "ff",
@@ -2821,9 +2875,8 @@ dependencies = [
 
 [[package]]
 name = "zakura-bls12-381"
-version = "5.0.0-rc.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5e259ae02f2832ef8b21c806c343c98ea12768fac921e6c98eca11a214b14b42"
+version = "5.0.0-rc.4+ycash.1"
+source = "git+https://github.com/boyfromcave/zakura-common-ycash?rev=049895445b6fe7a9db20b484736008952a6d6d94#049895445b6fe7a9db20b484736008952a6d6d94"
 dependencies = [
  "ff",
  "group",
@@ -2852,6 +2905,8 @@ dependencies = [
  "hex",
  "incrementalmerkletree",
  "itertools 0.14.0",
+ "kogany-vault",
+ "kogany-yellowback",
  "proptest",
  "proptest-derive",
  "rand 0.10.2",
@@ -2902,6 +2957,9 @@ dependencies = [
  "futures-util",
  "getset",
  "hex",
+ "kogany-pq",
+ "kogany-vault",
+ "kogany-yellowback",
  "metrics",
  "pin-project",
  "proptest",
@@ -2910,6 +2968,9 @@ dependencies = [
  "rand_core 0.6.4",
  "rayon",
  "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
  "thiserror",
  "tokio",
  "tokio-util",
@@ -2935,9 +2996,8 @@ dependencies = [
 
 [[package]]
 name = "zakura-equihash"
-version = "5.0.0-rc.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "458342f34ddb17065d8c6c4d07445dc3a3ff7af7726629134c719399483431c4"
+version = "5.0.0-rc.4+ycash.1"
+source = "git+https://github.com/boyfromcave/zakura-common-ycash?rev=049895445b6fe7a9db20b484736008952a6d6d94#049895445b6fe7a9db20b484736008952a6d6d94"
 dependencies = [
  "blake2b_simd",
  "corez",
@@ -2946,9 +3006,8 @@ dependencies = [
 
 [[package]]
 name = "zakura-halo2-gadgets"
-version = "5.0.0-rc.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "141de16ba60dedf75de34a238d7fcf4045b0840688cbfffc61feeb32e0a5fa41"
+version = "5.0.0-rc.4+ycash.1"
+source = "git+https://github.com/boyfromcave/zakura-common-ycash?rev=049895445b6fe7a9db20b484736008952a6d6d94#049895445b6fe7a9db20b484736008952a6d6d94"
 dependencies = [
  "arrayvec",
  "ff",
@@ -2961,9 +3020,8 @@ dependencies = [
 
 [[package]]
 name = "zakura-halo2-poseidon"
-version = "5.0.0-rc.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7058a1b1b4f037051fc75347db5cb3ac728cf91e5227566230201320564c014f"
+version = "5.0.0-rc.4+ycash.1"
+source = "git+https://github.com/boyfromcave/zakura-common-ycash?rev=049895445b6fe7a9db20b484736008952a6d6d94#049895445b6fe7a9db20b484736008952a6d6d94"
 dependencies = [
  "ff",
  "group",
@@ -2972,9 +3030,8 @@ dependencies = [
 
 [[package]]
 name = "zakura-halo2-proofs"
-version = "5.0.0-rc.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "594424240c144560a90de8e1ef48d39c95d05ea1bfdb772241754c91bed42042"
+version = "5.0.0-rc.4+ycash.1"
+source = "git+https://github.com/boyfromcave/zakura-common-ycash?rev=049895445b6fe7a9db20b484736008952a6d6d94#049895445b6fe7a9db20b484736008952a6d6d94"
 dependencies = [
  "blake2b_simd",
  "ff",
@@ -3015,9 +3072,8 @@ dependencies = [
 
 [[package]]
 name = "zakura-jubjub"
-version = "5.0.0-rc.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "648b8ae33080f3315bb3be2196d9218705aca5e542a84f57e6f27966fea4dbdb"
+version = "5.0.0-rc.4+ycash.1"
+source = "git+https://github.com/boyfromcave/zakura-common-ycash?rev=049895445b6fe7a9db20b484736008952a6d6d94#049895445b6fe7a9db20b484736008952a6d6d94"
 dependencies = [
  "ff",
  "group",
@@ -3112,9 +3168,8 @@ dependencies = [
 
 [[package]]
 name = "zakura-note-encryption"
-version = "5.0.0-rc.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "28e4dfa4db3daac524d2b5fca32318a231f79db87d7a59af341ca8aaff345e02"
+version = "5.0.0-rc.4+ycash.1"
+source = "git+https://github.com/boyfromcave/zakura-common-ycash?rev=049895445b6fe7a9db20b484736008952a6d6d94#049895445b6fe7a9db20b484736008952a6d6d94"
 dependencies = [
  "chacha20",
  "chacha20poly1305",
@@ -3125,9 +3180,8 @@ dependencies = [
 
 [[package]]
 name = "zakura-orchard"
-version = "5.0.0-rc.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "195ebdee06330338dc939d3d3f1af9cedf0731cf548d5bf64c9fef4212ce943a"
+version = "5.0.0-rc.4+ycash.1"
+source = "git+https://github.com/boyfromcave/zakura-common-ycash?rev=049895445b6fe7a9db20b484736008952a6d6d94#049895445b6fe7a9db20b484736008952a6d6d94"
 dependencies = [
  "blake2b_simd",
  "corez",
@@ -3150,9 +3204,8 @@ dependencies = [
 
 [[package]]
 name = "zakura-orchard-legacy"
-version = "5.0.0-rc.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e7fd98098a2a5d484777b9a03b033a2cac76c00ef8f2f8d57b2405491c9727c7"
+version = "5.0.0-rc.4+ycash.1"
+source = "git+https://github.com/boyfromcave/zakura-common-ycash?rev=049895445b6fe7a9db20b484736008952a6d6d94#049895445b6fe7a9db20b484736008952a6d6d94"
 dependencies = [
  "ff",
  "group",
@@ -3166,18 +3219,16 @@ dependencies = [
 
 [[package]]
 name = "zakura-pairing"
-version = "5.0.0-rc.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1fb09877c6e7b592aae6e122ccfa005246ce3121ea6df2df12fe9e420b3e114a"
+version = "5.0.0-rc.4+ycash.1"
+source = "git+https://github.com/boyfromcave/zakura-common-ycash?rev=049895445b6fe7a9db20b484736008952a6d6d94#049895445b6fe7a9db20b484736008952a6d6d94"
 dependencies = [
  "group",
 ]
 
 [[package]]
 name = "zakura-pasta-curves"
-version = "5.0.0-rc.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2cbf008dc6724a0d17826a6b9c65b20026cdf624bd849cefa0aa1639fea2820d"
+version = "5.0.0-rc.4+ycash.1"
+source = "git+https://github.com/boyfromcave/zakura-common-ycash?rev=049895445b6fe7a9db20b484736008952a6d6d94#049895445b6fe7a9db20b484736008952a6d6d94"
 dependencies = [
  "blake2b_simd",
  "cc",
@@ -3192,9 +3243,8 @@ dependencies = [
 
 [[package]]
 name = "zakura-primitives"
-version = "5.0.0-rc.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "89107f24216d2fe086e31266b4e1291a2ffcfdf967b63556db4045e66d25d3dd"
+version = "5.0.0-rc.4+ycash.1"
+source = "git+https://github.com/boyfromcave/zakura-common-ycash?rev=049895445b6fe7a9db20b484736008952a6d6d94#049895445b6fe7a9db20b484736008952a6d6d94"
 dependencies = [
  "blake2b_simd",
  "corez",
@@ -3217,9 +3267,8 @@ dependencies = [
 
 [[package]]
 name = "zakura-protocol"
-version = "5.0.0-rc.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "64fb65ace9f3e335ae64d7836c01f3cd8da684e94a9663595f957e168fdcd4c6"
+version = "5.0.0-rc.4+ycash.1"
+source = "git+https://github.com/boyfromcave/zakura-common-ycash?rev=049895445b6fe7a9db20b484736008952a6d6d94#049895445b6fe7a9db20b484736008952a6d6d94"
 dependencies = [
  "corez",
  "hex",
@@ -3255,9 +3304,8 @@ dependencies = [
 
 [[package]]
 name = "zakura-reddsa"
-version = "5.0.0-rc.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "10af63d461329fd70539771d15de5d187ab104c30109b14ef721a13c9d3c837d"
+version = "5.0.0-rc.4+ycash.1"
+source = "git+https://github.com/boyfromcave/zakura-common-ycash?rev=049895445b6fe7a9db20b484736008952a6d6d94#049895445b6fe7a9db20b484736008952a6d6d94"
 dependencies = [
  "blake2b_simd",
  "group",
@@ -3270,9 +3318,8 @@ dependencies = [
 
 [[package]]
 name = "zakura-redjubjub"
-version = "5.0.0-rc.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "553a7ac5bc554f20443f5f2c7cc95a13e45fbd25ce55edea91c84d335defdd42"
+version = "5.0.0-rc.4+ycash.1"
+source = "git+https://github.com/boyfromcave/zakura-common-ycash?rev=049895445b6fe7a9db20b484736008952a6d6d94#049895445b6fe7a9db20b484736008952a6d6d94"
 dependencies = [
  "rand_core 0.10.1",
  "serde",
@@ -3310,6 +3357,8 @@ dependencies = [
  "hyper-util",
  "indexmap",
  "insta",
+ "kogany-vault",
+ "kogany-yellowback",
  "libc",
  "metrics",
  "proptest",
@@ -3362,9 +3411,8 @@ dependencies = [
 
 [[package]]
 name = "zakura-sapling-crypto"
-version = "5.0.0-rc.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ae199a811761f9435dd3b16461cd2a89408b9c648228c2e980f3398fa8d6915a"
+version = "5.0.0-rc.4+ycash.1"
+source = "git+https://github.com/boyfromcave/zakura-common-ycash?rev=049895445b6fe7a9db20b484736008952a6d6d94#049895445b6fe7a9db20b484736008952a6d6d94"
 dependencies = [
  "blake2b_simd",
  "blake2s_simd",
@@ -3403,8 +3451,11 @@ name = "zakura-script"
 version = "5.0.1-rc1"
 dependencies = [
  "hex",
+ "kogany-pq",
+ "kogany-vault",
  "ripemd",
  "secp256k1",
+ "serde_json",
  "sha2",
  "thiserror",
  "zakura-chain",
@@ -3416,8 +3467,7 @@ dependencies = [
 [[package]]
 name = "zakura-sensei"
 version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6d4a2f9bc97b7624a4fc2579f6016f1234f9f79251f29df3cc948654873d86e7"
+source = "git+https://github.com/boyfromcave/zakura-common-ycash?rev=049895445b6fe7a9db20b484736008952a6d6d94#049895445b6fe7a9db20b484736008952a6d6d94"
 dependencies = [
  "blake2b_simd",
  "once_cell",
@@ -3434,8 +3484,7 @@ dependencies = [
 [[package]]
 name = "zakura-sensei-artifacts"
 version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "afe47fed099f19d9d372831a28ebc8c6f60be551a554199a4bded2a5d3f4f134"
+source = "git+https://github.com/boyfromcave/zakura-common-ycash?rev=049895445b6fe7a9db20b484736008952a6d6d94#049895445b6fe7a9db20b484736008952a6d6d94"
 dependencies = [
  "zakura-bento",
  "zakura-sensei-shared",
@@ -3445,8 +3494,7 @@ dependencies = [
 [[package]]
 name = "zakura-sensei-macros"
 version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "62e794ddd0fbe25a819ab88e6968d12ba3522023d5eb30e7f6ab5b7429d02711"
+source = "git+https://github.com/boyfromcave/zakura-common-ycash?rev=049895445b6fe7a9db20b484736008952a6d6d94#049895445b6fe7a9db20b484736008952a6d6d94"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3457,8 +3505,7 @@ dependencies = [
 [[package]]
 name = "zakura-sensei-shared"
 version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d17a999a972bef1053a5c841b870c13bbd18657325f4219f86375f40120f156b"
+source = "git+https://github.com/boyfromcave/zakura-common-ycash?rev=049895445b6fe7a9db20b484736008952a6d6d94#049895445b6fe7a9db20b484736008952a6d6d94"
 dependencies = [
  "zakura-bento",
  "zakura-udon",
@@ -3492,9 +3539,8 @@ dependencies = [
 
 [[package]]
 name = "zakura-sinsemilla"
-version = "5.0.0-rc.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fb1a38d6c9d0c356e7d51880f383e6e32f9b920b189dbb923f51d65e6323e079"
+version = "5.0.0-rc.4+ycash.1"
+source = "git+https://github.com/boyfromcave/zakura-common-ycash?rev=049895445b6fe7a9db20b484736008952a6d6d94#049895445b6fe7a9db20b484736008952a6d6d94"
 dependencies = [
  "group",
  "once_cell",
@@ -3515,12 +3561,15 @@ dependencies = [
  "indexmap",
  "insta",
  "itertools 0.14.0",
+ "kogany-vault",
+ "kogany-yellowback",
  "libc",
  "metrics",
  "proptest",
  "proptest-derive",
  "rand 0.10.2",
  "rayon",
+ "secp256k1",
  "semver",
  "serde",
  "serde_json",
@@ -3581,9 +3630,8 @@ dependencies = [
 
 [[package]]
 name = "zakura-transparent"
-version = "5.0.0-rc.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f5f32c89d1ba414e2325ed9ff689000aaae0e1c223cecf7f91e8a0998014a7f7"
+version = "5.0.0-rc.4+ycash.1"
+source = "git+https://github.com/boyfromcave/zakura-common-ycash?rev=049895445b6fe7a9db20b484736008952a6d6d94#049895445b6fe7a9db20b484736008952a6d6d94"
 dependencies = [
  "bs58",
  "corez",
@@ -3631,9 +3679,8 @@ dependencies = [
 
 [[package]]
 name = "zakura-zcash-script"
-version = "0.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d6e8e9ee2f42d0925d6c95337746d698b0ecc9cf21c8e1e69587bda65cfc80f5"
+version = "0.0.1+ycash.1"
+source = "git+https://github.com/boyfromcave/zakura-common-ycash?rev=049895445b6fe7a9db20b484736008952a6d6d94#049895445b6fe7a9db20b484736008952a6d6d94"
 dependencies = [
  "bitflags",
  "bounded-vec",
