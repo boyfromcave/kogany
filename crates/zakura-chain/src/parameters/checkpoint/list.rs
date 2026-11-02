@@ -116,10 +116,10 @@ impl Network {
         let is_partial = |list: &str| list.lines().any(|line| line.starts_with("# PARTIAL"));
         match self {
             Network::Mainnet => is_partial(MAINNET_CHECKPOINTS),
+            // Only the hard-coded testnet list can be partial. (Not `is_regtest()`: this runs
+            // while the default Regtest parameters are being built, and that check reads them.)
             Network::Testnet(params) => {
-                !params.is_regtest()
-                    && *params.checkpoints() == **TESTNET_CHECKPOINT_LIST
-                    && is_partial(TESTNET_CHECKPOINTS)
+                *params.checkpoints() == **TESTNET_CHECKPOINT_LIST && is_partial(TESTNET_CHECKPOINTS)
             }
         }
     }
