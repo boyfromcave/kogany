@@ -41,6 +41,9 @@ use zakura_state as zs;
 use crate::{error::TransactionError, primitives, script, BoxError};
 
 pub mod check;
+/// kogany (W6-c): the Vault and YED mempool checks for the next block.
+#[cfg(feature = "ycash")]
+pub mod vault_mempool;
 #[cfg(test)]
 mod tests;
 
@@ -661,6 +664,27 @@ where
             // kogany (W4-d): the set state the scripts read.
             let vault_state = Self::vault_script_state(&req, &network, state.clone()).await?;
 
+            // kogany (W6-c): the primitive's rules and the template input's script for the next
+            // block over the tip's set state (ycash6 `AcceptToMemoryPool`, after the fee checks).
+            #[cfg(feature = "ycash")]
+            if let (true, Some(vault_state)) = (req.is_mempool(), &vault_state) {
+                vault_mempool::check_vault_rules(
+                    &network,
+                    &tx,
+                    &tx_id.mined_id(),
+                    req.height(),
+                    vault_state,
+                    &spent_utxos,
+                )?;
+                vault_mempool::check_template_input(
+                    &network,
+                    &tx,
+                    &cached_ffi_transaction,
+                    req.height(),
+                    vault_state,
+                )?;
+            }
+
             let mut async_checks = match tx.as_ref() {
                 Transaction::V1 { .. } | Transaction::V2 { .. } | Transaction::V3 { .. } => {
                     tracing::debug!(?tx, "got transaction with wrong version");
@@ -725,6 +749,19 @@ where
             async_checks.check(block_batch_flush_key).await?;
 
             tracing::trace!(?tx_id, "finished async checks");
+
+            // kogany (W6-c): the YED module's verdict for the next block, after the scripts
+            // (ycash6 `AcceptToMemoryPool`'s `MempoolCheckReason`).
+            #[cfg(feature = "ycash")]
+            if req.is_mempool() && network.is_vault_active(req.height()) {
+                vault_mempool::yed_mempool_check(
+                    state.clone(),
+                    &tx,
+                    &tx_id.mined_id(),
+                    req.height(),
+                )
+                .await?;
+            }
 
             // Mempool fees were calculated before the expensive async checks.
             // Calculate the fee here only for non-coinbase block transactions.

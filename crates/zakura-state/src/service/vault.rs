@@ -29,7 +29,10 @@ use crate::{
 #[cfg(any(test, feature = "proptest-impl"))]
 pub use crate::service::finalized_state::vault::register_vault_params_for_test;
 pub use crate::service::{
-    finalized_state::vault::{vault_network_params, FinalizedVaultState, VaultNetworkParams},
+    finalized_state::vault::{
+        vault_network_params, vault_outpoint, vault_tx, FinalizedVaultState, UtxoCoins,
+        VaultNetworkParams,
+    },
     non_finalized_state::{ChainVaultOverlay, ChainVaultView, VaultDelta},
 };
 

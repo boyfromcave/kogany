@@ -312,6 +312,51 @@ pub enum TransactionError {
 
     #[error("unexpected error")]
     Other(String),
+
+    /// kogany (W6-c): the Vault primitive's rules refuse the transaction for the next block
+    /// (ycash6 `vault::CheckTx` in `AcceptToMemoryPool`, `src/main.cpp:2197-2203`). `reason` is
+    /// ycashd's reject reason (`VaultReject::reason`). `byte_level` is ycashd's
+    /// `IsByteLevelActFailure` (`src/vault/node.cpp:517`): a malformed act no honest relay
+    /// produces, scored 10; every other reason depends on the set state at this node's tip and
+    /// scores 0.
+    #[cfg(feature = "ycash")]
+    #[error("vault rule violation in the mempool: {reason}")]
+    VaultRejected { reason: String, byte_level: bool },
+
+    /// kogany (W6-c): a vault template (V/I) input's script fails on the set state at this node's
+    /// tip (`OP_CHECKSETSIG`, `OP_CHECKSETDORMANT`), which the relaying peer's tip need not share
+    /// (ycash6 `AcceptToMemoryPool`'s template-input check, `src/main.cpp:2215-2234`, DoS 0,
+    /// `mandatory-script-verify-flag-failed (...)`; audit 07/F-1).
+    #[cfg(feature = "ycash")]
+    #[error(
+        "vault template input {input_index} fails on the set state at this node's tip \
+         (mandatory-script-verify-flag-failed ({script_error}))"
+    )]
+    VaultTemplateSetState {
+        input_index: usize,
+        script_error: String,
+    },
+
+    /// kogany (W6-c): a vault template (V/I) input's script passes the consensus flags but not
+    /// the standard ones (ycash6 `ContextualCheckInputs` with `STANDARD_SCRIPT_VERIFY_FLAGS`,
+    /// `non-mandatory-script-verify-flag`, `REJECT_NONSTANDARD`, DoS 0).
+    #[cfg(feature = "ycash")]
+    #[error(
+        "vault template input {input_index} did not pass standard validation \
+         (non-mandatory-script-verify-flag ({script_error}))"
+    )]
+    VaultTemplateNonStandard {
+        input_index: usize,
+        script_error: String,
+    },
+
+    /// kogany (W6-c): the Yellowback (YED) rule module refuses the transaction for the next
+    /// block (ycash6 `MempoolCheckReason` in `AcceptToMemoryPool`, `src/main.cpp:2255-2261`):
+    /// the module's state moves with the tip, so DoS 0. `reason` is the module's verdict
+    /// (ycashd's reject reason is `bad-yellowback-<reason>`).
+    #[cfg(feature = "ycash")]
+    #[error("yellowback module refuses the transaction for the next block: bad-yellowback-{reason}")]
+    YellowbackRejected { reason: String },
 }
 
 impl From<ValidateContextError> for TransactionError {
@@ -517,6 +562,15 @@ impl TransactionError {
             Self::Io(_) | Self::TryFromSlice(_) | Self::Other(_) => {
                 BodyVerificationClass::Retryable(TransientBodyFailureKind::VerifierUnavailable)
             }
+            // kogany (W6-c): mempool-only verdicts at this node's tip; a block's vault and YED
+            // rules fail in contextual validation instead.
+            #[cfg(feature = "ycash")]
+            Self::VaultRejected { .. }
+            | Self::VaultTemplateSetState { .. }
+            | Self::VaultTemplateNonStandard { .. }
+            | Self::YellowbackRejected { .. } => {
+                BodyVerificationClass::Retryable(TransientBodyFailureKind::VerifierUnavailable)
+            }
             Self::Amount(_) => consensus("transaction.amount"),
             Self::Balance(_) => consensus("transaction.balance"),
             Self::OrchardProofSize => consensus("transaction.orchard_proof_size"),
@@ -591,6 +645,18 @@ impl TransactionError {
             // NU6.2 mempool transactions are invalid under NU6.3 rules, but
             // honest peers can relay them briefly while their chain tips converge.
             WrongConsensusBranchIdNu6_3GracePeriod => 0,
+
+            // kogany (W6-c): ycashd scores a byte-level act failure 10 and every other vault
+            // or YED mempool refusal 0 (`src/main.cpp:2202,2229,2260`).
+            #[cfg(feature = "ycash")]
+            VaultRejected {
+                byte_level: true, ..
+            } => 10,
+            #[cfg(feature = "ycash")]
+            VaultRejected { .. }
+            | VaultTemplateSetState { .. }
+            | VaultTemplateNonStandard { .. }
+            | YellowbackRejected { .. } => 0,
 
             // TODO: Consider add peer penalty 1 if these are very old
             DuplicateTransparentSpend(_)
