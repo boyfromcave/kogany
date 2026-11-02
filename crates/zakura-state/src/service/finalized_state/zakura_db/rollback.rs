@@ -260,6 +260,20 @@ pub enum RollbackFinalizedStateError {
     /// Non-finalized backup file I/O failed.
     #[error("failed to update non-finalized backup cache")]
     BackupIo(#[from] std::io::Error),
+
+    /// kogany (K-14): finalized vault state has no undo, so a rollback never removes a block at
+    /// or above the Vault activation height.
+    #[error(
+        "cannot roll back below the Vault activation height {activation:?} (finalized tip \
+         {tip:?}): the vault set state has no finalized undo; delete the state and resync"
+    )]
+    PastVaultActivation {
+        /// Current finalized tip height.
+        tip: block::Height,
+        /// The Vault activation height, or the tip when vault state is stored on a network
+        /// without one.
+        activation: block::Height,
+    },
 }
 
 /// Preview a finalized-state rollback without mutating the database.
@@ -272,6 +286,7 @@ pub fn preview_rollback_finalized_state(
 
     let db = open_rollback_db(&config, network, true)?;
     let bounds = validate_rollback(&db, &options)?;
+    refuse_rollback_past_vault(&db, network, &bounds)?;
 
     // A dry run only reports the plan, so it deliberately skips the genesis-to-target treestate
     // rebuild and batch construction that `rollback_finalized_state` performs. The real run
@@ -477,12 +492,34 @@ fn validate_rollback(
     })
 }
 
+/// kogany (K-14): refuses a rollback that would remove a block at or above the Vault activation
+/// height, or any block of a database that stores vault state.
+fn refuse_rollback_past_vault(
+    db: &ZakuraDb,
+    network: &Network,
+    bounds: &RollbackBounds,
+) -> Result<(), RollbackFinalizedStateError> {
+    let tip = bounds.old_tip.0;
+    let activation = match crate::service::finalized_state::vault::vault_network_params(network) {
+        Some(params) if params.is_active(tip) => Some(params.activation_height),
+        _ if db.has_vault_state() => Some(tip),
+        _ => None,
+    };
+    match activation {
+        Some(activation) => {
+            Err(RollbackFinalizedStateError::PastVaultActivation { tip, activation })
+        }
+        None => Ok(()),
+    }
+}
+
 fn prepare_rollback(
     db: &ZakuraDb,
     network: &Network,
     options: &RollbackFinalizedStateOptions,
 ) -> Result<PreparedRollback, RollbackFinalizedStateError> {
     let bounds = validate_rollback(db, options)?;
+    refuse_rollback_past_vault(db, network, &bounds)?;
     let (old_tip_height, _) = bounds.old_tip;
 
     let target_value_pool = db
