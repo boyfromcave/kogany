@@ -94,10 +94,10 @@ impl Fmt<'_> {
             return Some(Holder::Pq(o));
         }
         if let Ok(a) = s.parse::<transparent::Address>() {
-            if a.network_kind() == self.kind() && !a.is_script_hash() {
-                return Some(Holder::KeyId(a.hash_bytes()));
-            }
-            return None;
+            // A P2PKH address of this network: it re-encodes to itself here (regtest shares
+            // testnet's prefixes, so the parsed network kind alone cannot tell).
+            let key = a.hash_bytes();
+            return (!a.is_script_hash() && self.p2pkh(&key) == s).then_some(Holder::KeyId(key));
         }
         let data = decode_base58_check(s)?;
         let body = data.strip_prefix(self.plain_pq_version.as_slice())?;

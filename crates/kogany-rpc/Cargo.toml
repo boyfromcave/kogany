@@ -15,7 +15,9 @@ publish = false
 async-trait = { workspace = true }
 hex = { workspace = true }
 serde = { workspace = true, features = ["serde_derive"] }
-serde_json = { workspace = true, features = ["raw_value"] }
+# preserve_order: the json!-built objects (yed_getinfo.params, yed_decodepayload) keep ycashd's
+# field order (zakurad enables it too).
+serde_json = { workspace = true, features = ["raw_value", "preserve_order"] }
 tracing = { workspace = true }
 
 kogany-vault = { path = "../kogany-vault" }
@@ -24,6 +26,7 @@ zakura-chain = { path = "../zakura-chain", version = "11.0.0-rc0" }
 zakura-rpc = { path = "../zakura-rpc", version = "13.0.1-rc0", default-features = false }
 
 [dev-dependencies]
+hex = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 
 [lints]
