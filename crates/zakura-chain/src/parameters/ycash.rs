@@ -6,7 +6,12 @@
 //! zcashd's `CMainParams` (kogany plan §2.3, decision K-5). Every value cites the C++ line it
 //! mirrors: `ycash6` at `65cb4ae0f` (`vaults/kogany-compat` = `upgrade/vault`).
 //!
-//! The Vault upgrade is not part of this module: it is runtime-gated by its height (W2-b).
+//! The Vault upgrade is runtime-gated by its height ([`Network::is_vault_active`], W2-b): this
+//! module only carries the heights ycashd compiles in. Ycash mainnet has none (set by the
+//! gate-passing release, upgrade plan P8), the `fast` testnet profile has 510,400, the `slow`
+//! profile none, and Regtest takes `Vault` from its configured activation heights.
+//!
+//! [`Network::is_vault_active`]: super::Network::is_vault_active
 //!
 //! [`Network::Mainnet`]: super::Network::Mainnet
 //! [`Network::Testnet`]: super::Network::Testnet
@@ -52,6 +57,7 @@ pub mod mainnet {
 ///
 /// `ycash6 src/chainparams.cpp:429-459` (`CTestNetParams`): Zcash testnet history through
 /// 510,247, the new fork block at 510,248, then Blossom, Heartwood and Canopy two blocks apart.
+/// The `fast` profile adds Vault at [`testnet::VAULT_FAST`]; the `slow` profile has no Vault height.
 pub mod testnet {
     use crate::block::Height;
 
@@ -69,6 +75,10 @@ pub mod testnet {
     pub const HEARTWOOD: Height = Height(510_252);
     /// The block height at which `Canopy` activates on the Ycash testnet.
     pub const CANOPY: Height = Height(510_254);
+    /// The block height at which `Vault` activates on the `fast` testnet profile only
+    /// (`CTestNetFastParams`, `ycash6 src/chainparams.cpp:640`; H_V, a placeholder until the
+    /// testnet's launch ceremony fixes it). The `slow` profile has none until its first rc.
+    pub const VAULT_FAST: Height = Height(510_400);
 
     /// The first height of the maximum block time rule on the Ycash testnet:
     /// `nFutureTimestampSoftForkHeight = Blossom + 6` (`ycash6 src/chainparams.cpp:538`).
@@ -91,7 +101,10 @@ pub(super) const MAINNET_ACTIVATION_HEIGHTS: &[(Height, NetworkUpgrade)] = &[
     (mainnet::CANOPY, Canopy),
 ];
 
-/// Ycash testnet activation list, in height order (both profiles).
+/// Ycash testnet activation list, in height order: the default (`fast`) profile's. The `slow`
+/// profile is the same without Vault ([`Network::new_ycash_testnet_slow`]).
+///
+/// [`Network::new_ycash_testnet_slow`]: super::Network::new_ycash_testnet_slow
 pub(super) const TESTNET_ACTIVATION_HEIGHTS: &[(Height, NetworkUpgrade)] = &[
     (Height(0), Genesis),
     (testnet::BEFORE_OVERWINTER, BeforeOverwinter),
@@ -101,6 +114,7 @@ pub(super) const TESTNET_ACTIVATION_HEIGHTS: &[(Height, NetworkUpgrade)] = &[
     (testnet::BLOSSOM, Blossom),
     (testnet::HEARTWOOD, Heartwood),
     (testnet::CANOPY, Canopy),
+    (testnet::VAULT_FAST, Vault),
 ];
 
 /// Ycash network magics. Mainnet and Regtest share Zcash's (`ycash6 src/chainparams.cpp:224-227,
@@ -175,12 +189,21 @@ pub(super) fn testnet_default_port(params: &super::testnet::Parameters) -> u16 {
 impl super::Network {
     /// Creates the re-forked Ycash testnet's `slow` profile: the `fast` profile's consensus
     /// values with the `slow` profile's magic and name (`CTestNetSlowParams`,
-    /// `ycash6 src/chainparams.cpp:658-672`). The two profiles differ only in Vault parameters,
-    /// which W2-b adds.
+    /// `ycash6 src/chainparams.cpp:658-672`). The two profiles differ only in Vault parameters:
+    /// the `slow` profile has no Vault height until its first rc (testnet plan T-15).
     pub fn new_ycash_testnet_slow() -> Self {
+        let heights = super::testnet::ConfiguredActivationHeights {
+            vault: None,
+            ..TESTNET_ACTIVATION_HEIGHTS
+                .iter()
+                .copied()
+                .collect::<std::collections::BTreeMap<_, _>>()
+                .into()
+        };
         super::testnet::Parameters::build()
             .with_network_name(names::TESTNET_SLOW)
             .and_then(|builder| builder.with_network_magic(magics::TESTNET_SLOW))
+            .and_then(|builder| builder.with_activation_heights(heights))
             .and_then(|builder| builder.to_network())
             .expect("the hard-coded slow testnet profile is a valid configured testnet")
     }

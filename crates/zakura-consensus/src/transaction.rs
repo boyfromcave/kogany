@@ -35,7 +35,7 @@ use zakura_chain::{
 };
 
 use zakura_node_services::mempool;
-use zakura_script::{CachedFfiTransaction, Sigops};
+use zakura_script::{CachedFfiTransaction, ScriptContext, Sigops, VaultStateSnapshot};
 use zakura_state as zs;
 
 use crate::{error::TransactionError, primitives, script, BoxError};
@@ -1018,6 +1018,7 @@ where
 
         Ok(Self::verify_transparent_inputs_and_outputs(
             request,
+            network,
             script_verifier,
             cached_ffi_transaction,
         )?
@@ -1073,6 +1074,7 @@ where
             | NetworkUpgrade::Blossom
             | NetworkUpgrade::Heartwood
             | NetworkUpgrade::Canopy
+            | NetworkUpgrade::Vault
             | NetworkUpgrade::Nu5
             | NetworkUpgrade::Nu6
             | NetworkUpgrade::Nu6_1
@@ -1133,6 +1135,7 @@ where
 
         Ok(Self::verify_transparent_inputs_and_outputs(
             request,
+            network,
             script_verifier,
             cached_ffi_transaction,
         )?
@@ -1185,7 +1188,9 @@ where
             | NetworkUpgrade::Ycash
             | NetworkUpgrade::Blossom
             | NetworkUpgrade::Heartwood
-            | NetworkUpgrade::Canopy => Err(TransactionError::UnsupportedByNetworkUpgrade(
+            | NetworkUpgrade::Canopy
+            // kogany: v4 only under Vault (U-26, ycash6 `bad-vault-tx-version-group-id`).
+            | NetworkUpgrade::Vault => Err(TransactionError::UnsupportedByNetworkUpgrade(
                 transaction.version(),
                 network_upgrade,
             )),
@@ -1215,6 +1220,7 @@ where
 
         Ok(Self::verify_transparent_inputs_and_outputs(
             request,
+            network,
             script_verifier,
             cached_ffi_transaction,
         )?
@@ -1258,10 +1264,19 @@ where
     /// Returns script verification responses via the `utxo_sender`.
     fn verify_transparent_inputs_and_outputs(
         request: &Request,
+        network: &Network,
         script_verifier: script::Verifier,
         cached_ffi_transaction: Arc<CachedFfiTransaction>,
     ) -> Result<AsyncChecks, TransactionError> {
         let transaction = request.transaction();
+        // kogany W3-c: every input is verified with the flags of this network and height and the
+        // set state after the parent block (ycash6 `CScriptCheck` with `GetVaultScriptFlags` and
+        // `vault::SetSigChecker`).
+        let script_context = ScriptContext::new(
+            network.clone(),
+            request.height(),
+            Self::vault_script_state(request),
+        );
 
         if transaction.is_coinbase() {
             // The script verifier only verifies PrevOut inputs and their corresponding UTXOs.
@@ -1276,6 +1291,7 @@ where
                     let request = script::Request {
                         cached_ffi_transaction: cached_ffi_transaction.clone(),
                         input_index,
+                        context: script_context.clone(),
                     };
 
                     script_verifier.oneshot(request)
@@ -1284,6 +1300,19 @@ where
 
             Ok(script_checks)
         }
+    }
+
+    /// The set state the scripts of `request` read: the state after the parent of the block
+    /// (block requests) or after the best chain tip (mempool requests), ycash6's `SetSnapshot`.
+    ///
+    /// TODO(kogany W4-d `snapshot-hook`): return the fork-aware snapshot
+    /// (`zakura_state::vault::vault_snapshot_by_hash` of the parent hash, through
+    /// `zs::ReadRequest::VaultSnapshot { parent_hash }`) once the request carries it. Until then
+    /// `None`: before Vault no set opcode evaluates, and from Vault every set opcode fails closed
+    /// (no threshold, never released). Never an empty `SetState`, in which every unknown set is
+    /// released.
+    fn vault_script_state(_request: &Request) -> Option<VaultStateSnapshot> {
+        None
     }
 
     /// Verifies a transaction's Sprout shielded join split data.

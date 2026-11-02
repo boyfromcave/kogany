@@ -51,6 +51,14 @@ pub enum NetworkUpgrade {
     Heartwood,
     /// The Zcash protocol after the Canopy upgrade.
     Canopy,
+    /// The Ycash vault upgrade (branch ID `0x6d5b7a31`): the vault lock/unlock primitive and the
+    /// YED rule module, on a Canopy-era (v4-only) chain.
+    ///
+    /// Present in every build, between Canopy and NU5 (kogany plan K-1), so every ordinal gate
+    /// reads it as Canopy-era. Only explicit membership activates it: ask
+    /// [`Network::is_vault_active`], never `current(..) >= Vault` or `Vault.activation_height(..)`
+    /// (the fallback would read it as active from NU5's height on Zcash networks).
+    Vault,
     /// The Zcash protocol after the NU5 upgrade.
     #[serde(rename = "NU5")]
     Nu5,
@@ -84,6 +92,7 @@ const NETWORK_UPGRADES: &[NetworkUpgrade] = &[
     Blossom,
     Heartwood,
     Canopy,
+    Vault,
     Nu5,
     Nu6,
     Nu6_1,
@@ -281,6 +290,8 @@ pub(crate) const CONSENSUS_BRANCH_IDS: &[(NetworkUpgrade, ConsensusBranchId)] = 
     (Blossom, ConsensusBranchId(0x2bb40e60)),
     (Heartwood, ConsensusBranchId(0xf5b9230b)),
     (Canopy, ConsensusBranchId(0xe9ff75a6)),
+    // Inert in this build: no Zcash network schedules the Vault upgrade.
+    (Vault, ConsensusBranchId(0x6d5b7a31)),
     (Nu5, ConsensusBranchId(0xc2d6d0b4)),
     (Nu6, ConsensusBranchId(0xc8e71055)),
     (Nu6_1, ConsensusBranchId(0x4dec4df0)),
@@ -308,6 +319,7 @@ pub(crate) const CONSENSUS_BRANCH_IDS: &[(NetworkUpgrade, ConsensusBranchId)] = 
     (Blossom, ConsensusBranchId(0x8e471bd6)),
     (Heartwood, ConsensusBranchId(0x66314da3)),
     (Canopy, ConsensusBranchId(0x19bd2d2f)),
+    (Vault, ConsensusBranchId(0x6d5b7a31)),
     (Nu5, ConsensusBranchId(0xf919a198)),
     (Nu6, ConsensusBranchId(0xc8e71055)),
     (Nu6_1, ConsensusBranchId(0x4dec4df0)),
@@ -448,8 +460,50 @@ impl Network {
     /// in ascending height order.
     pub fn full_activation_list(&self) -> Vec<(block::Height, NetworkUpgrade)> {
         NetworkUpgrade::iter()
+            // kogany: Ycash's upgrades appear only where the network schedules them, never
+            // through the fallback to the next upgrade's height.
+            .filter(|&nu| self.is_kogany_upgrade_scheduled(nu))
             .filter_map(|nu| Some((NetworkUpgrade::activation_height(&nu, self)?, nu)))
             .collect()
+    }
+
+    /// kogany: whether `nu`, if it is one of Ycash's own upgrades, is scheduled on this network.
+    /// Zcash's upgrades are always `true` (upstream's implicit activations are unchanged).
+    ///
+    /// `Vault` needs explicit membership ([`Network::vault_activation_height`]); `Ycash` is
+    /// implicit in a `ycash` build (Regtest may collapse it into a later upgrade at one height,
+    /// kogany plan §2.2) and never scheduled in a Zcash build.
+    pub(crate) fn is_kogany_upgrade_scheduled(&self, nu: NetworkUpgrade) -> bool {
+        match nu {
+            Vault => self.vault_activation_height().is_some(),
+            Ycash => cfg!(feature = "ycash"),
+            _ => true,
+        }
+    }
+
+    /// Returns the activation height of the Vault upgrade on this network, if this network
+    /// schedules it explicitly.
+    ///
+    /// Unlike [`NetworkUpgrade::activation_height`], this never falls back to a later upgrade's
+    /// height: an unscheduled Vault has no height, even where NU5 or later is active (kogany plan
+    /// §2.2, mapping M24-2).
+    pub fn vault_activation_height(&self) -> Option<block::Height> {
+        self.activation_list()
+            .into_iter()
+            .find(|&(_, nu)| nu == Vault)
+            .map(|(height, _)| height)
+    }
+
+    /// Returns `true` if the Vault upgrade's rules apply at `height` on this network: Vault is
+    /// **present** in [`Network::activation_list`] and `height` is at or above its key.
+    ///
+    /// This is the only way kogany asks "is Vault on" (kogany plan §2.2, the grep guard in
+    /// `parameters::vault_tests`): never `NetworkUpgrade::current(..) >= Vault`, which a future
+    /// Ycash NU5 would turn off, and never `Vault.activation_height(..)`, which on Zcash networks
+    /// falls back to NU5's height. It is `false` on every Zcash network at every height.
+    pub fn is_vault_active(&self, height: block::Height) -> bool {
+        self.vault_activation_height()
+            .is_some_and(|activation| height >= activation)
     }
 }
 
@@ -557,7 +611,7 @@ impl NetworkUpgrade {
             Genesis | BeforeOverwinter | Overwinter | Sapling | Ycash => {
                 PRE_BLOSSOM_POW_TARGET_SPACING
             }
-            Blossom | Heartwood | Canopy | Nu5 | Nu6 | Nu6_1 | Nu6_2 | Nu6_3 => {
+            Blossom | Heartwood | Canopy | Vault | Nu5 | Nu6 | Nu6_1 | Nu6_2 | Nu6_3 => {
                 POST_BLOSSOM_POW_TARGET_SPACING.into()
             }
             Nu7 => POST_NU7_POW_TARGET_SPACING.into(),
@@ -663,7 +717,7 @@ impl NetworkUpgrade {
     pub fn averaging_window(&self) -> usize {
         match self {
             Genesis | BeforeOverwinter | Overwinter | Sapling | Ycash | Blossom | Heartwood
-            | Canopy | Nu5 | Nu6 | Nu6_1 | Nu6_2 | Nu6_3 => PRE_NU7_POW_AVERAGING_WINDOW,
+            | Canopy | Vault | Nu5 | Nu6 | Nu6_1 | Nu6_2 | Nu6_3 => PRE_NU7_POW_AVERAGING_WINDOW,
             Nu7 => POST_NU7_POW_AVERAGING_WINDOW,
 
             #[cfg(zcash_unstable = "zfuture")]
@@ -717,9 +771,7 @@ impl From<zcash_protocol::consensus::NetworkUpgrade> for NetworkUpgrade {
             zcash_protocol::consensus::NetworkUpgrade::Overwinter => Self::Overwinter,
             zcash_protocol::consensus::NetworkUpgrade::Sapling => Self::Sapling,
             zcash_protocol::consensus::NetworkUpgrade::Ycash => Self::Ycash,
-            // Vault: no Zakura upgrade yet (W2-b adds it). Never scheduled here:
-            // `Parameters::activation_height` answers `None` before converting.
-            zcash_protocol::consensus::NetworkUpgrade::Vault => Self::Canopy,
+            zcash_protocol::consensus::NetworkUpgrade::Vault => Self::Vault,
             zcash_protocol::consensus::NetworkUpgrade::Blossom => Self::Blossom,
             zcash_protocol::consensus::NetworkUpgrade::Heartwood => Self::Heartwood,
             zcash_protocol::consensus::NetworkUpgrade::Canopy => Self::Canopy,

@@ -796,7 +796,8 @@ impl Arbitrary for Transaction {
             NetworkUpgrade::Ycash
             | NetworkUpgrade::Blossom
             | NetworkUpgrade::Heartwood
-            | NetworkUpgrade::Canopy => Self::v4_strategy(ledger_state),
+            | NetworkUpgrade::Canopy
+            | NetworkUpgrade::Vault => Self::v4_strategy(ledger_state),
             NetworkUpgrade::Nu5
             | NetworkUpgrade::Nu6
             | NetworkUpgrade::Nu6_1

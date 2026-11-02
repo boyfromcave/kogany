@@ -3,7 +3,7 @@ use std::{future::Future, pin::Pin, sync::Arc};
 use tracing::Instrument;
 
 use zakura_chain::transparent;
-use zakura_script::CachedFfiTransaction;
+use zakura_script::{CachedFfiTransaction, ScriptContext};
 
 use crate::{primitives::spawn_fifo_and_convert, BoxError};
 
@@ -33,6 +33,9 @@ pub struct Request {
     ///
     /// Coinbase inputs are rejected by the script verifier, because they do not spend a UTXO.
     pub input_index: usize,
+    /// The consensus context of the verification (kogany W3-c): the network and the spending
+    /// height, which set the script flags, and the set-state snapshot the Ycash checker reads.
+    pub context: ScriptContext,
 }
 
 impl tower::Service<Request> for Verifier {
@@ -54,6 +57,7 @@ impl tower::Service<Request> for Verifier {
         let Request {
             cached_ffi_transaction,
             input_index,
+            context,
         } = req;
 
         let span = tracing::trace_span!("script");
@@ -70,8 +74,10 @@ impl tower::Service<Request> for Verifier {
                     let outpoint = *outpoint;
 
                     // Script verification is CPU-bound so run in Rayon thread
-                    spawn_fifo_and_convert(move || cached_ffi_transaction.is_valid(input_index))
-                        .await?;
+                    spawn_fifo_and_convert(move || {
+                        cached_ffi_transaction.is_valid_in(input_index, &context)
+                    })
+                    .await?;
                     tracing::trace!(?outpoint, "script verification succeeded");
 
                     Ok(())

@@ -93,6 +93,10 @@ impl DefaultRoots {
                 && chain_history_root == block::CHAIN_HISTORY_ACTIVATION_RESERVED.into()
             {
                 block::CHAIN_HISTORY_ACTIVATION_RESERVED.into()
+            } else if ycash_pre_nu5(net, height) {
+                // Ycash (W1-Y6): from Heartwood until NU5 the header commits to the chain
+                // history root alone (ZIP 221), and Ycash has no NU5.
+                <[u8; 32]>::from(chain_history_root).into()
             } else {
                 ChainHistoryBlockTxAuthCommitmentHash::from_commitments(
                     &chain_history_root,
@@ -101,4 +105,16 @@ impl DefaultRoots {
             },
         }
     }
+}
+
+/// True if a Ycash template at `height` commits to the chain history root alone (W1-Y6).
+#[cfg(feature = "ycash")]
+fn ycash_pre_nu5(net: &Network, height: Height) -> bool {
+    super::ycash::is_pre_nu5(net, height)
+}
+
+/// Upstream Zakura builds every template from NU5 on.
+#[cfg(not(feature = "ycash"))]
+fn ycash_pre_nu5(_net: &Network, _height: Height) -> bool {
+    false
 }

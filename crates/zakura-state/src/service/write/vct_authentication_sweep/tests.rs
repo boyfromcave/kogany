@@ -102,6 +102,7 @@ fn parameters(checkpoint_blocks: Option<&[Arc<Block>]>) -> Network {
     let builder = ParametersBuilder::default()
         .with_activation_heights(ConfiguredActivationHeights {
             ycash: None,
+            vault: None,
             before_overwinter: Some(1),
             overwinter: Some(2),
             sapling: Some(3),
@@ -186,7 +187,8 @@ fn generate_chain(network: &Network) -> Vec<Arc<Block>> {
             | NetworkUpgrade::Ycash
             | NetworkUpgrade::Blossom
             | NetworkUpgrade::Heartwood
-            | NetworkUpgrade::Canopy => Transaction::V4 {
+            | NetworkUpgrade::Canopy
+            | NetworkUpgrade::Vault => Transaction::V4 {
                 inputs: vec![input],
                 outputs: Vec::new(),
                 lock_time: LockTime::unlocked(),
