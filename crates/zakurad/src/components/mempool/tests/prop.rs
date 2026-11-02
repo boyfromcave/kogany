@@ -343,8 +343,13 @@ fn is_scored_but_never_bans(error: &TransactionError) -> bool {
     ) || is_scored_ycash_verdict(error)
 }
 
-/// kogany (W6-c): a byte-level act failure scores 10 (ycashd) without a ban.
+/// kogany (W6-c): a byte-level act failure scores 10 (ycashd) without a ban. kogany (S5): so
+/// does a signature over the previous epoch's branch ID (`old-consensus-branch-id`).
 fn is_scored_ycash_verdict(error: &TransactionError) -> bool {
+    #[cfg(feature = "ycash")]
+    if matches!(error, TransactionError::OldConsensusBranchId { .. }) {
+        return true;
+    }
     matches!(
         error,
         TransactionError::VaultRejected {

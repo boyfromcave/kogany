@@ -3739,7 +3739,16 @@ async fn precious_block_prefers_equal_work_siblings() -> Result<()> {
         .await
         .map_err(|err| eyre!(err))?;
     let first = proposal_block_from_template(&template, BlockTemplateTimeSource::MinTime, &net)?;
-    let second = proposal_block_from_template(&template, BlockTemplateTimeSource::MaxTime, &net)?;
+    // kogany: a Ycash template carries no `maxtime` (ycashd sends none, so it reads back as
+    // `DateTime32::MAX`); one minute past `mintime` is a valid, distinct header time there.
+    let second_time = if cfg!(feature = "ycash") {
+        BlockTemplateTimeSource::Raw(zakura_chain::serialization::DateTime32::from(
+            template.min_time().timestamp() + 60,
+        ))
+    } else {
+        BlockTemplateTimeSource::MaxTime
+    };
+    let second = proposal_block_from_template(&template, second_time, &net)?;
     assert_ne!(first.hash(), second.hash());
     // Submit the lower hash first so receipt order deliberately opposes hash order.
     let (first, second) = if first.hash().0 < second.hash().0 {
