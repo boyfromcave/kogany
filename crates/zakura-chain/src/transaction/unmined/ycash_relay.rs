@@ -124,4 +124,52 @@ mod tests {
         assert_eq!(min_relay_fee(10_000), 1_000);
         assert_eq!(min_relay_fee(2_000_000), 1_000);
     }
+
+    /// ycash6 `pq_wallet_tests.cpp` `pq_zip317_low_fee_penalty` (audit 04/N-1, W6-b): a
+    /// post-quantum spend's conventional fee counts its large scriptSig (500 per 150 bytes of
+    /// input), so at ycash-dd's former 1,000-zatoshi wallet fee it has unpaid actions (ycashd's
+    /// ZIP-401 eviction weight then carries `LOW_FEE_PENALTY`, and an opted-in
+    /// `-txunpaidactionlimit` refuses it), and at the conventional fee none. The relay fee
+    /// itself stays the size-capped minimum: the 1,000-zatoshi spend relays by default.
+    #[test]
+    fn pq_zip317_low_fee_penalty() {
+        use crate::{
+            block::Height,
+            transaction::LockTime,
+            transparent::{Input, OutPoint, Output, Script},
+        };
+
+        // PQSpendInputSize: SLH-DSA 7,981 bytes (a 7,938-byte scriptSig), Falcon 1,620 (1,577).
+        for (input_size, script_sig) in [(7_981u64, 7_938usize), (1_620, 1_577)] {
+            let tx = Transaction::V4 {
+                inputs: vec![Input::PrevOut {
+                    outpoint: OutPoint {
+                        hash: crate::transaction::Hash([1; 32]),
+                        index: 0,
+                    },
+                    unlock_script: Script::new(&vec![0u8; script_sig]),
+                    sequence: u32::MAX,
+                }],
+                outputs: vec![Output {
+                    value: Amount::try_from(1_000).expect("1,000 zatoshis is a valid amount"),
+                    lock_script: Script::new(&[0u8; 25]),
+                }],
+                lock_time: LockTime::Height(Height(0)),
+                expiry_height: Height(0),
+                joinsplit_data: None,
+                sapling_shielded_data: None,
+            };
+            let conventional = MARGINAL_FEE * input_size.div_ceil(150);
+            assert!(conventional > LEGACY_DEFAULT_FEE);
+            assert_eq!(
+                u64::from(zip317::conventional_actions(&tx)) * MARGINAL_FEE,
+                conventional
+            );
+            let fee = |z: u64| Amount::try_from(z).expect("a valid amount");
+            assert!(unpaid_actions(&tx, fee(LEGACY_DEFAULT_FEE)) > 0);
+            assert_eq!(unpaid_actions(&tx, fee(conventional)), 0);
+            let unmined = UnminedTx::from(tx);
+            assert!(mempool_checks(&unmined, fee(LEGACY_DEFAULT_FEE)).is_ok());
+        }
+    }
 }
