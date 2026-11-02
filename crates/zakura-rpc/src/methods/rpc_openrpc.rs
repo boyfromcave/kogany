@@ -317,7 +317,7 @@ pub(crate) static METHODS: &[(&str, openrpc::RpcMethod)] = &[
     deprecated: false,
 }),
 ("disconnectnode", openrpc::RpcMethod {
-    description: "Immediately disconnects from the specified node.\n\n# Parameters\n\n- `node`: (string, required) The node's address, as `getpeerinfo` reports it (`ip:port`).\n\n# Notes\n\nkogany (finding F-S5-6): closes every connection to `node`, and keeps its address out of\nthe address book, so the node is not redialed, until `addnode` adds it again, as ycashd\nnever redials a node it disconnected that `addnode` does not name\n(`ycash6` `src/rpc/net.cpp:224-245`). Answers `-29` (\"Node not found in connected nodes\")\nwhen no connection to `node` is open.\n\nzcashd reference: [`disconnectnode`](https://zcash.github.io/rpc/disconnectnode.html)\nmethod: post\ntags: network\n",
+    description: "Immediately disconnects from the specified node.\n\n# Parameters\n\n- `node`: (string, required) The node's address, as `getpeerinfo` reports it (`ip:port`).\n\n# Notes\n\nkogany (finding F-S5-6): closes every connection to `node`, and keeps its address out of\nthe address book, so the node is not redialed, until `addnode` adds it again, as ycashd\nnever redials a node it disconnected that `addnode` does not name\n(`ycash6` `src/rpc/net.cpp:224-245`). Answers `-29` (\"Node not found in connected nodes\")\nwhen no connection to `node` is open; the address is kept out of the book then too.\n\nzcashd reference: [`disconnectnode`](https://zcash.github.io/rpc/disconnectnode.html)\nmethod: post\ntags: network\n",
     params: |_g| vec![
         _g.param::<String>("node", crate::methods::PARAM_NODE_DESC, true),
     ],

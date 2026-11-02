@@ -30,7 +30,8 @@ behaviours follow ycashd's there, each against Zakura's own:
 
 - **Peers.** `disconnectnode "ip:port"` closes the connections to that node (`-29` "Node not found
   in connected nodes" when there are none) and keeps its address out of the address book until
-  `addnode` names it again, so it is not redialled. `addnode "ip:port" onetry` dials a node now,
+  `addnode` names it again, so it is not redialled (also when no connection was open: an `addnode`
+  address stays in the book, where ycashd's `onetry` node is never redialled). `addnode "ip:port" onetry` dials a node now,
   where `add` of a known address waits out its two-minute reconnection delay. A gossiped address
   that ycashd's address manager refuses as not routable (loopback, RFC 1918 and the other reserved
   ranges, `CNetAddr::IsRoutable`) is not kept, so a regtest node connects only to the nodes

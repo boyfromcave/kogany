@@ -24,8 +24,8 @@ pub trait AddressBookPeers {
     fn add_peer(&mut self, peer: PeerSocketAddr) -> bool;
 
     /// Close the connections to `peer` and keep its address out of the book until
-    /// [`Self::add_peer`] adds it again (`disconnectnode`, kogany F-S5-6). Returns `false` when
-    /// no connection to `peer` is open.
+    /// [`Self::add_peer`] adds it again (`disconnectnode`, kogany F-S5-6), whether or not a
+    /// connection was open. Returns `false` when no connection to `peer` was open.
     fn disconnect_peer(&mut self, _peer: PeerSocketAddr) -> bool {
         false
     }

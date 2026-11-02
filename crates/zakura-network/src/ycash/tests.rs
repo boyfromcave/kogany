@@ -586,6 +586,11 @@ async fn disconnect_peer_closes_the_connection_and_keeps_the_address_out() {
     let peer: crate::PeerSocketAddr = "127.0.0.1:18344".parse().expect("parses");
     assert!(book.add_peer(peer));
     assert!(!book.disconnect_peer(peer), "no connection is open yet");
+    assert!(
+        book.get(peer).is_none(),
+        "the address leaves the book anyway, so it is not dialled"
+    );
+    assert!(book.add_peer(peer), "addnode adds it again");
 
     let (guard, updater) = registry.register_legacy(ConnectedPeer {
         addr: peer,

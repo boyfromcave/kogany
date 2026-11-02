@@ -1140,13 +1140,12 @@ impl AddressBookPeers for AddressBook {
             .peer_registry
             .as_ref()
             .map_or(0, |registry| registry.disconnect(peer));
-        if closed == 0 {
-            return false;
-        }
+        // Kept out even when no connection was open: an address `addnode` added stays in the
+        // book and would be redialled, where ycashd's `onetry` node never is.
         let peer = canonical_peer_addr(*peer);
         self.disconnected_by_operator.insert(peer);
         self.take(peer);
-        true
+        closed > 0
     }
 
     fn add_peer(&mut self, peer: PeerSocketAddr) -> bool {

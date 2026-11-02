@@ -1013,7 +1013,7 @@ pub trait RpcServer {
     /// the address book, so the node is not redialed, until `addnode` adds it again, as ycashd
     /// never redials a node it disconnected that `addnode` does not name
     /// (`ycash6` `src/rpc/net.cpp:224-245`). Answers `-29` ("Node not found in connected nodes")
-    /// when no connection to `node` is open.
+    /// when no connection to `node` is open; the address is kept out of the book then too.
     ///
     /// zcashd reference: [`disconnectnode`](https://zcash.github.io/rpc/disconnectnode.html)
     /// method: post
