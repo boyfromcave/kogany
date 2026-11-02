@@ -338,19 +338,32 @@ where
     ) -> Result<Option<kogany_yellowback::codecs::tag::CoinbaseTag>, YedError> {
         let (_, p) = self.yed_snapshot().await?;
         let invalid = |text: &str| YedError::plain(YedErrorKind::InvalidParameter, text);
+        let start = i64::from(p.start_height);
         let block = match r {
             BlockRef::Height(h) => {
                 let tip = self.tip.best_tip_height().map_or(-1, |t| i64::from(t.0));
                 if h < 0 || h > tip {
                     return Err(invalid("height out of range"));
                 }
+                // ycashd reads no body below startHeight, so a pruned one is no refusal there.
+                if h < start {
+                    return Ok(None);
+                }
                 let height = u32::try_from(h).map_err(|_| invalid("height out of range"))?;
                 self.block(HashOrHeight::Height(Height(height)), false)
                     .await?
             }
             BlockRef::Hash(hash) => {
-                self.block(HashOrHeight::Hash(block::Hash(hash.0)), true)
-                    .await?
+                let at = HashOrHeight::Hash(block::Hash(hash.0));
+                match self.block(at, true).await {
+                    Err(e) if e == YedError::pruned() => {
+                        return match self.header_height(at).await {
+                            Some(h) if h < start => Ok(None),
+                            _ => Err(e),
+                        };
+                    }
+                    other => other?,
+                }
             }
         }
         .ok_or_else(|| invalid("block not found"))?;
@@ -524,8 +537,15 @@ where
         })
     }
 
-    /// `yed_gettxinfo` with the transaction ycashd's `GetTransaction` finds (`-txindex`).
-    async fn tx_info(&self, s: &YedSnapshot, txid: &Hash32) -> Option<TxInfoRow> {
+    /// `yed_gettxinfo` with the transaction ycashd's `GetTransaction` finds (`-txindex`). A row
+    /// whose transaction a pruned node no longer stores is [`YedError::pruned`], not the
+    /// index-only row (`carrierVin` -1, no reference height), which would read as a different
+    /// answer.
+    async fn tx_info(
+        &self,
+        s: &YedSnapshot,
+        txid: &Hash32,
+    ) -> Result<Option<TxInfoRow>, YedError> {
         let tx = match self
             .read_state
             .clone()
@@ -538,7 +558,13 @@ where
             )),
             _ => None,
         };
-        s.index.tx_info_with(txid, tx.as_ref())
+        let row = s.index.tx_info_with(txid, tx.as_ref());
+        if let (None, Some(r)) = (&tx, &row) {
+            if self.body_pruned_at(r.height).await? {
+                return Err(YedError::pruned());
+            }
+        }
+        Ok(row)
     }
 
     /// `AuditLockedValue` over the best chain's set state.
@@ -568,17 +594,20 @@ where
 
     /// `yed_getnotice`, naming the notice transaction: the CLAIM_NOTICE of this vault in the
     /// block at the notice's height whose TxLog row says it held.
-    async fn notice(&self, s: &YedSnapshot, txid: &Hash32) -> NoticeLookup {
+    /// The block at the notice's height is read; a pruned node that no longer stores it
+    /// answers [`YedError::pruned`] (a standing notice lives at most `EMERGENCY_NOTICE_TTL`
+    /// blocks, well inside Zakura's retention floor, so this is a guard, not a path).
+    async fn notice(&self, s: &YedSnapshot, txid: &Hash32) -> Result<NoticeLookup, YedError> {
         let NoticeLookup::Standing(mut n) = s.index.notice(txid) else {
-            return s.index.notice(txid);
+            return Ok(s.index.notice(txid));
         };
         let vault = OutPoint { txid: *txid, n: 0 };
         let block = match u32::try_from(n.height) {
-            Ok(h) => self
-                .block(HashOrHeight::Height(Height(h)), false)
-                .await
-                .ok()
-                .flatten(),
+            Ok(h) => match self.block(HashOrHeight::Height(Height(h)), false).await {
+                Ok(b) => b,
+                Err(e) if e == YedError::pruned() => return Err(e),
+                Err(_) => None,
+            },
             Err(_) => None,
         };
         for tx in block.iter().flat_map(|b| b.transactions.iter()) {
@@ -596,7 +625,7 @@ where
                 break;
             }
         }
-        NoticeLookup::Standing(n)
+        Ok(NoticeLookup::Standing(n))
     }
 }
 
@@ -637,7 +666,9 @@ where
         }
     }
 
-    /// A stored block: on the best chain, or (`any_chain`) on any chain.
+    /// A stored block: on the best chain, or (`any_chain`) on any chain. A block this node
+    /// knows (its header is kept) but whose body it pruned is [`YedError::pruned`], so no
+    /// caller answers "block not found" or a degraded row for it (pruning assessment KP-1).
     async fn block(
         &self,
         at: HashOrHeight,
@@ -648,9 +679,51 @@ where
         } else {
             ReadRequest::Block(at)
         };
-        match self.read_state.clone().oneshot(request).await {
-            Ok(ReadResponse::Block(b)) => Ok(b),
-            Ok(_) => Ok(None),
+        let block = match self.read_state.clone().oneshot(request).await {
+            Ok(ReadResponse::Block(b)) => b,
+            Ok(_) => None,
+            Err(e) => return Err(YedError::plain(YedErrorKind::Internal, e.to_string())),
+        };
+        if block.is_some() {
+            return Ok(block);
+        }
+        match self.header_height(at).await {
+            Some(h) if self.body_pruned_at(h).await? => Err(YedError::pruned()),
+            _ => Ok(None),
+        }
+    }
+
+    /// The height of a block this node holds the header of (a height is its own answer).
+    async fn header_height(&self, at: HashOrHeight) -> Option<i64> {
+        match at {
+            HashOrHeight::Height(h) => Some(i64::from(h.0)),
+            HashOrHeight::Hash(_) => match self
+                .read_state
+                .clone()
+                .oneshot(ReadRequest::BlockHeader(at))
+                .await
+            {
+                Ok(ReadResponse::BlockHeader { height, .. }) => Some(i64::from(height.0)),
+                _ => None,
+            },
+        }
+    }
+
+    /// Whether the body of the block at `height` was pruned: the node prunes (Zakura's
+    /// `getblockchaininfo.pruned`) and `height` is below the lowest height whose body it keeps
+    /// (`pruneheight`). Genesis is never pruned.
+    async fn body_pruned_at(&self, height: i64) -> Result<bool, YedError> {
+        match self
+            .read_state
+            .clone()
+            .oneshot(ReadRequest::PruningInfo)
+            .await
+        {
+            Ok(ReadResponse::PruningInfo {
+                pruned: true,
+                prune_height: Some(lowest),
+            }) => Ok(height > 0 && height < i64::from(lowest.0)),
+            Ok(_) => Ok(false),
             Err(e) => Err(YedError::plain(YedErrorKind::Internal, e.to_string())),
         }
     }
@@ -756,5 +829,127 @@ fn script_error_text(e: &zakura_script::Error) -> String {
     #[cfg(not(feature = "ycash"))]
     {
         e.to_string()
+    }
+}
+
+/// Pruning assessment KP-1: a pruned body is an explicit `"Block not available (pruned data)"`
+/// (-32603, ycashd's `getblock` refusal), never "block not found" or a degraded row.
+#[cfg(test)]
+mod pruned_tests {
+    use super::*;
+    use zakura_chain::{block::genesis::regtest_genesis_block, chain_tip::NoChainTip};
+
+    /// A read state that stores no body, knows one header (`known` at `header_height`) and
+    /// reports `pruning` (`None`: an archive node).
+    fn state(
+        pruning: Option<u32>,
+        known: block::Hash,
+        header_height: u32,
+    ) -> LiveYedState<
+        NoChainTip,
+        impl Service<
+                ReadRequest,
+                Response = ReadResponse,
+                Error = BoxError,
+                Future = impl Send,
+            > + Clone
+            + Send
+            + Sync
+            + 'static,
+    > {
+        let header = regtest_genesis_block().header.clone();
+        let svc = tower::service_fn(move |req: ReadRequest| {
+            let header = header.clone();
+            async move {
+                Ok::<_, BoxError>(match req {
+                    ReadRequest::Block(_) | ReadRequest::AnyChainBlock(_) => {
+                        ReadResponse::Block(None)
+                    }
+                    ReadRequest::Transaction(_) => ReadResponse::Transaction(None),
+                    ReadRequest::BlockHeader(HashOrHeight::Hash(h)) if h == known => {
+                        ReadResponse::BlockHeader {
+                            header,
+                            hash: known,
+                            height: Height(header_height),
+                            next_block_hash: None,
+                        }
+                    }
+                    ReadRequest::BlockHeader(_) => ReadResponse::Block(None),
+                    ReadRequest::PruningInfo => ReadResponse::PruningInfo {
+                        pruned: pruning.is_some(),
+                        prune_height: pruning.map(Height),
+                    },
+                    other => panic!("unexpected request {other:?}"),
+                })
+            }
+        });
+        LiveYedState::new(NoChainTip, svc)
+    }
+
+    #[tokio::test]
+    async fn a_pruned_body_is_the_pruned_error() {
+        let known = block::Hash([7; 32]);
+        let s = state(Some(1_000), known, 5);
+        let h = |n| HashOrHeight::Height(Height(n));
+        assert_eq!(s.block(h(5), false).await, Err(YedError::pruned()));
+        assert_eq!(s.block(h(999), false).await, Err(YedError::pruned()));
+        // Genesis is never pruned; at and above pruneheight a missing body is "not found".
+        assert_eq!(s.block(h(0), false).await, Ok(None));
+        assert_eq!(s.block(h(1_000), false).await, Ok(None));
+        // By hash: the kept header names the height.
+        assert_eq!(
+            s.block(HashOrHeight::Hash(known), true).await,
+            Err(YedError::pruned())
+        );
+        assert_eq!(
+            s.block(HashOrHeight::Hash(block::Hash([8; 32])), true).await,
+            Ok(None)
+        );
+        assert!(s.body_pruned_at(999).await.unwrap());
+        assert!(!s.body_pruned_at(0).await.unwrap());
+        assert!(!s.body_pruned_at(1_000).await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn an_archive_node_never_answers_pruned() {
+        let known = block::Hash([7; 32]);
+        let s = state(None, known, 5);
+        assert_eq!(
+            s.block(HashOrHeight::Height(Height(5)), false).await,
+            Ok(None)
+        );
+        assert_eq!(s.block(HashOrHeight::Hash(known), true).await, Ok(None));
+        assert!(!s.body_pruned_at(5).await.unwrap());
+        // A pruning node that has pruned nothing yet (pruneheight 0) is the same.
+        let s = state(Some(0), known, 5);
+        assert!(!s.body_pruned_at(5).await.unwrap());
+    }
+
+    #[test]
+    fn the_pruned_error_is_ycashds_getblock_refusal() {
+        let e = YedError::pruned();
+        assert_eq!(e.kind, YedErrorKind::Internal);
+        assert_eq!(e.message(), "Block not available (pruned data)");
+        let o = zakura_rpc::server::jsonrpc::ErrorObject::from(e);
+        assert_eq!(o.code(), -32603);
+        assert_eq!(o.message(), "Block not available (pruned data)");
+    }
+
+    /// The relation the assessment's §3 rests on: at Zakura's Mainnet/Testnet floor every block
+    /// whose YED snapshot is servable by hash (`UNDO_KEEP` below the finalized tip, which trails
+    /// the best tip by at most `MAX_BLOCK_REORG_HEIGHT`) still has its body, and any retention
+    /// Zakura accepts exceeds the reorg window (no reorg ever needs a pruned body). If either
+    /// fails, a pruned kogany needs its own floor (mapping §24, the K-14 coupling).
+    #[test]
+    fn retention_floor_covers_the_yed_undo_window_and_the_reorg_window() {
+        use zakura_state::constants::{min_pruning_retention, MIN_PRUNING_RETENTION};
+        use zakura_state::yed::UNDO_KEEP;
+        use zakura_state::MAX_BLOCK_REORG_HEIGHT;
+        assert!(MIN_PRUNING_RETENTION > UNDO_KEEP + MAX_BLOCK_REORG_HEIGHT);
+        for network in [Network::Mainnet, Network::new_default_testnet()] {
+            assert_eq!(min_pruning_retention(&network), MIN_PRUNING_RETENTION);
+        }
+        let regtest = Network::new_regtest(Default::default());
+        assert!(min_pruning_retention(&regtest) > MAX_BLOCK_REORG_HEIGHT);
     }
 }

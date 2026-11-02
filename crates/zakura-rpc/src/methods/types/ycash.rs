@@ -154,6 +154,38 @@ where
     (cache.hash == tip_hash && cache.height == tip_height).then(|| format!("{:064x}", cache.work))
 }
 
+/// ycashd's refusal of a block whose data a pruned node deleted: `getblock` answers
+/// `RPC_INTERNAL_ERROR` (-32603) with this text (`ycash6 src/rpc/blockchain.cpp:785`, the
+/// `fHavePruned && !BLOCK_HAVE_DATA` check), where Zakura answers "Block not found" (-8). The
+/// difference matters to lightwalletd-dd, which reads -8 as "beyond the tip" and waits for the
+/// block forever (`common/common.go`, `getBlockFromRPC`); -32603 is an error it reports.
+pub const PRUNED_BLOCK: &str = "Block not available (pruned data)";
+
+/// Whether the body of a block this node knows was pruned (pruning assessment KP-1): the node
+/// prunes, and the block (a best-chain height, or a hash whose header it keeps) is below
+/// `pruneheight`. Genesis is never pruned. `false` on any state error, so the caller keeps
+/// Zakura's own answer.
+pub async fn block_body_pruned<ReadState>(read_state: ReadState, at: HashOrHeight) -> bool
+where
+    ReadState: ReadStateService,
+{
+    let Ok(ReadResponse::PruningInfo {
+        pruned: true,
+        prune_height: Some(lowest),
+    }) = read_state.clone().oneshot(ReadRequest::PruningInfo).await
+    else {
+        return false;
+    };
+    let height = match at {
+        HashOrHeight::Height(h) => h,
+        HashOrHeight::Hash(_) => match read_state.oneshot(ReadRequest::BlockHeader(at)).await {
+            Ok(ReadResponse::BlockHeader { height, .. }) => height,
+            _ => return false,
+        },
+    };
+    height > Height(0) && height < lowest
+}
+
 /// The [`ChainWorkCache`] of the genesis block: its own work.
 async fn genesis_work<ReadState>(
     read_state: ReadState,

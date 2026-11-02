@@ -2456,6 +2456,12 @@ where
                     Ok(GetBlockResponse::Raw(block.into()))
                 }
                 zakura_state::ReadResponse::Block(None) => {
+                    #[cfg(feature = "ycash")]
+                    if types::ycash::block_body_pruned(self.read_state.clone(), hash_or_height)
+                        .await
+                    {
+                        return Err(types::ycash::PRUNED_BLOCK).map_error(ErrorCode::InternalError);
+                    }
                     Err("Block not found").map_error(server::error::LegacyCode::InvalidParameter)
                 }
                 _ => unreachable!("unmatched response to a block request"),
@@ -2541,6 +2547,13 @@ where
                     None,
                 ),
                 zakura_state::ReadResponse::BlockAndSize(block_and_size) => {
+                    #[cfg(feature = "ycash")]
+                    if block_and_size.is_none()
+                        && types::ycash::block_body_pruned(self.read_state.clone(), hash_or_height)
+                            .await
+                    {
+                        return Err(types::ycash::PRUNED_BLOCK).map_error(ErrorCode::InternalError);
+                    }
                     let (block, size) = block_and_size.ok_or_misc_error("Block not found")?;
                     let block_time = block.header.time;
                     let transactions = block
