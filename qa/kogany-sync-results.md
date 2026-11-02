@@ -24,3 +24,4 @@ every block 0..2,275,000 with `blockcommitments` now compared at every height: *
 | H | kogany tip | hash at H (kogany = ycash6) | compared through | mismatches | rejected | list reaches |
 |---|---|---|---|---|---|---|
 | 2,800,000 | 2,800,000 | `000003170414909d5104f4a71708eca4e5b545d231c412c2d3e0e3f33874facb` | 2,800,000 | 0 | 0 | 3,086,086 (COMPLETE) |
+| 3,079,999 | 3,079,999 | `000005030be4763e433447000ef6b98c7ce310a8b0b7bb50f1a6aca3d31e4bef` | 3,079,999 | 0 | 0 | 3,086,086 (COMPLETE) |
