@@ -736,6 +736,22 @@ fn block_reasons_are_bip22_strings() {
         )),
     };
     assert_eq!(block_reject(&error), "bad-txns-nonfinal");
+    // F-S5-4: the YED module's block verdict is its reason, not a bare "rejected".
+    let error = RouterError::Block {
+        source: Box::new(VerifyBlockError::Commit(
+            CommitBlockError::ValidateContextError(Box::new(
+                ValidateContextError::yed_rejected_for_test(
+                    "bad-yellowback-vault-claim-not-underwater",
+                    "vault-claim-not-underwater:00",
+                    Height(300),
+                ),
+            )),
+        )),
+    };
+    assert_eq!(
+        block_reject(&error),
+        "bad-yellowback-vault-claim-not-underwater"
+    );
     assert_eq!(
         CxxReject::Unmapped("x".to_owned()).block_reason(),
         "rejected"

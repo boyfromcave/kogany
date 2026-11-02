@@ -1021,6 +1021,18 @@ pub enum ValidateContextError {
 }
 
 impl ValidateContextError {
+    /// kogany (F-S5-4): a YED block verdict, for tests outside this crate (the variant is
+    /// `#[non_exhaustive]`; `service::check::yed` builds it in this crate).
+    #[cfg(any(test, feature = "proptest-impl"))]
+    pub fn yed_rejected_for_test(reason: &str, detail: &str, height: block::Height) -> Self {
+        Self::YedRejected {
+            reason: reason.to_owned(),
+            detail: detail.to_owned(),
+            height,
+            hash: block::Hash([0; 32]),
+        }
+    }
+
     /// Classify contextual validation without conflating peer data and local availability.
     pub fn body_verification_class(&self) -> zakura_header_chain::BodyVerificationClass {
         use zakura_chain::block::CommitmentError;

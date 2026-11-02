@@ -463,6 +463,9 @@ pub fn context_reject(error: &ValidateContextError, context: Context) -> CxxReje
         // W4-d: the vault primitive's (or a module's) reason, as ycash6 `src/vault/state.cpp`
         // writes it (main.cpp:4351; in the mempool main.cpp:2204).
         E::VaultRejected { reason, .. } => CxxReject::invalid(reason.clone()),
+        // W5-f, F-S5-4: the YED module's block verdict, `bad-yellowback-<verdict>` (DoS 100; the
+        // reason ycash6's ConnectBlock gives the block, main.cpp:2260 in the mempool).
+        E::YedRejected { reason, .. } => CxxReject::invalid(reason.clone()),
         // main.cpp:907-910.
         E::UnsatisfiedSequenceLock { .. } => {
             if mempool {
