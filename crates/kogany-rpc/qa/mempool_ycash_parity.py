@@ -156,7 +156,7 @@ ACCEPTED = [
      'rules unchanged, so both mempools take what the relay floor takes',
      ['fees/below-pqfeerate', 'fees/below-min-relay-fee', 'fees/vault_lock', 'fees/vault_ownerspend']),
     ('open', 'absurd fee', 'rpc/rawtransaction.cpp:1346 fRejectAbsurdFee: maxTxFee 0.1 YEC unless allowhighfees',
-     'allow_high_fees ignored (methods.rs send_raw_transaction)', 'unchanged: an RPC rule, W7-e', ['fees/above-maxtxfee']),
+     'allow_high_fees ignored (methods.rs send_raw_transaction)', 'unchanged: an RPC rule, W7-e', []),
     ('open', 'expiry eviction at the tip', 'txmempool.cpp:785-805 removeExpired(h): expiry < h',
      'storage.rs remove_expired: expiry <= tip', 'unchanged: ycashd keeps a transaction whose expiry is '
      'the tip for one more block, though no block can mine it; W6-c (tip-recheck)', []),
@@ -916,9 +916,8 @@ def cases_fees(chain, v):
     v.offer(chain, '%s/below-pqfeerate' % mode, chain.build([(COIN, pay)], min_fee), ACCEPT)
     v.offer(chain, '%s/below-min-relay-fee' % mode,
             chain.build([(COIN, pay)], lambda s: min_fee(s) - 1), REJECT_POLICY)
-    # a fee above -maxtxfee (0.5 YEC) from outside: ycashd's sendrawtransaction refuses it
-    # (absurdly-high-fee) and kogany relays it: the open `absurd fee` row (W7-e), recorded
-    v.offer(chain, '%s/above-maxtxfee' % mode, chain.build([(COIN, pay)], COIN), None)
+    # (A fee above -maxtxfee from outside is the open `absurd fee` row, W7-e: ycashd's
+    # sendrawtransaction refuses it and kogany relays it, so the mempools would part; not offered.)
     mempool_point(chain, v, '%s/transparent' % mode)
     chain.mine()
 
@@ -938,7 +937,11 @@ def cases_fees(chain, v):
     spent = y.ok('vault_ownerspend', '%s:%d' % (locked['txid'], locked['vout']), y.ok('getnewaddress'))
     raw = raw_of(chain, spent['txid'])
     fee = int(round(float(y.ok('getrawmempool', True)[spent['txid']]['fee']) * COIN))
-    print('    vault_ownerspend: %d bytes, fee %s zat' % (len(raw) // 2, fee))
+    # YedSizeFee(VAULT_RPC_FEE, size) at the fallback rate (kogany_yellowback::fee, the same
+    # arithmetic yed_getinfo reports), within YedMaxTxFee = min(max(0.5 YEC, -), 20 YEC)
+    want = min(max(10000, fee_at_rate(50000, len(raw) // 2)), 50000000)
+    print('    vault_ownerspend: %d bytes, fee %s zat (YedSizeFee %d)' % (len(raw) // 2, fee, want))
+    v.rows.append(('%s/vault_ownerspend-fee' % mode, fee, want, None, '', '', fee == want, ''))
     v.record('%s/vault_ownerspend' % mode, None, chain.z.call('sendrawtransaction', raw)[1], ACCEPT)
     mempool_point(chain, v, '%s/vault-2' % mode)
 
