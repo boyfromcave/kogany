@@ -391,7 +391,17 @@ impl InventoryRegistry {
             // Prefer `missing` over `advertised`, so malicious peers can't reset their own entries,
             // and funnel multiple failing requests to themselves.
             if let Some(old_status) = hash_peers.get(&addr) {
-                if old_status.is_missing() && new_status.is_available() {
+                // kogany (W9-a/F-6): a peer that answered `notfound` for a transaction and then
+                // announces it again holds it now (ycashd announces a transaction it accepted
+                // again, and asks a peer again after its `notfound`). Its new advertisement
+                // replaces the marker, so the transaction can be downloaded; a peer that keeps
+                // re-announcing pays one `inv` per request. Blocks keep upstream's rule.
+                #[cfg(feature = "ycash")]
+                let readvertised_tx = matches!(inv, Tx(_) | Wtx(_));
+                #[cfg(not(feature = "ycash"))]
+                let readvertised_tx = false;
+
+                if old_status.is_missing() && new_status.is_available() && !readvertised_tx {
                     debug!(
                         ?new_status,
                         ?old_status,

@@ -157,8 +157,9 @@ type YedCf<'cf> = TypedColumnFamily<'cf, RawBytes, RawBytes>;
 /// - mainnet and testnet use `MainParams`/`TestParams` and refuse every regtest-only key; regtest
 ///   uses `RegtestParams` with [`YellowbackConfig`]'s six keys;
 /// - `pq_falcon_height` is ycash6 `PQFalconHeightOf`: the later of the Vault height and the Falcon
-///   height, `-1` when either never activates, with kogany's Falcon height
-///   (`zakura_script::ycash::pq_falcon_height`: 0 off regtest, none on regtest);
+///   height, `-1` when either never activates, with the network's Falcon height
+///   ([`Network::pq_falcon_height`], the one `zakura_script::pq_falcon_height` reads: 0 off
+///   regtest, on regtest `activation_heights.pq_falcon_height` or none);
 /// - `issued_before_start` is `CirculatingSupplyAt(start - 1)` (D-Q-25), Zakura's
 ///   [`expected_issued_supply`](zakura_chain::parameters::subsidy::expected_issued_supply).
 ///
@@ -204,10 +205,11 @@ pub fn yed_network_params(
     }
     p.start_height = i32::try_from(start.0).map_err(|_| "the Vault height is out of range")?;
     // PQFalconHeightOf: max(vault, falcon), or -1 when Falcon never activates.
-    p.pq_falcon_height = if network.is_regtest() {
-        -1
-    } else {
-        p.start_height
+    p.pq_falcon_height = match network.pq_falcon_height() {
+        Some(falcon) => p
+            .start_height
+            .max(i32::try_from(falcon.0).map_err(|_| "the Falcon height is out of range")?),
+        None => -1,
     };
     p.issued_before_start = match start.previous() {
         Ok(before) if start.0 > 0 => {

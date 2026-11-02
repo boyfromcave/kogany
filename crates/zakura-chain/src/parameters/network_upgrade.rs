@@ -494,6 +494,20 @@ impl Network {
             .map(|(height, _)| height)
     }
 
+    /// kogany: the height from which `OP_CHECKPQSIG` admits scheme 0x02 (FN-DSA-512), given
+    /// Vault is active (ycash6 `Consensus::Params::pqFalconHeight`; W3-c finding F-1).
+    ///
+    /// Mainnet: 0 in a `ycash` build (quantum plan D-Q-2), none in a Zcash build. Testnet and
+    /// Regtest: their parameters' ([`Parameters::pq_falcon_height`](crate::parameters::testnet::Parameters::pq_falcon_height)): 0 on a Ycash
+    /// testnet unless configured, none on Regtest unless configured
+    /// (`activation_heights.pq_falcon_height`, ycashd's `-pqfalconheight` / `-pqfalcon=1`).
+    pub fn pq_falcon_height(&self) -> Option<block::Height> {
+        match self {
+            Network::Mainnet => cfg!(feature = "ycash").then_some(block::Height(0)),
+            Network::Testnet(params) => params.pq_falcon_height(),
+        }
+    }
+
     /// Returns `true` if the Vault upgrade's rules apply at `height` on this network: Vault is
     /// **present** in [`Network::activation_list`] and `height` is at or above its key.
     ///

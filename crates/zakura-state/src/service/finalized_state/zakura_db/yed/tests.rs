@@ -907,13 +907,35 @@ fn config_maps_to_params_as_params_from_args() {
         BundleCarrier::Either,
         true,
     );
-    want.pq_falcon_height = -1; // kogany's regtest has no Falcon height (W3-c/F-1)
+    want.pq_falcon_height = -1; // regtest without -pqfalcon has no Falcon height
     want.issued_before_start = i64::from(
         zakura_chain::parameters::subsidy::expected_issued_supply(Height(vault - 1), &network)
             .unwrap(),
     );
     assert!(want.issued_before_start > 0);
     assert_eq!(p, want);
+
+    // PQFalconHeightOf with the regtest Falcon height (W3-c finding F-1): the later of the Vault
+    // and Falcon heights, the one the script flags read (-pqfalcon=1 is the Vault height).
+    for (falcon, expected) in [(0, 205), (204, 205), (205, 205), (210, 210)] {
+        let with_falcon = Network::new_regtest(
+            ConfiguredActivationHeights {
+                vault: Some(vault),
+                pq_falcon: Some(falcon),
+                ..Default::default()
+            }
+            .into(),
+        );
+        let p = yed_network_params(&with_falcon, &config).unwrap().unwrap();
+        assert_eq!(p.pq_falcon_height, expected, "-pqfalconheight={falcon}");
+        assert_eq!(
+            with_falcon.pq_falcon_height(),
+            Some(Height(falcon)),
+            "the network's Falcon height"
+        );
+        assert!(!p.is_pq_falcon_active(i64::from(expected) - 1));
+        assert!(p.is_pq_falcon_active(i64::from(expected)));
+    }
 
     // Off: no attestor set, or no Vault height.
     assert_eq!(

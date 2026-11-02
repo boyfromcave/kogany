@@ -1652,3 +1652,52 @@ fn loaded_block_sync_session_slots_must_fund_one_request_each() {
         assert!(error.contains("at most 3,633"), "unexpected error: {error}");
     }
 }
+
+/// kogany (W3-c finding F-1): the Regtest Falcon height is `activation_heights.pq_falcon_height`
+/// (ycashd's `-pqfalconheight=<h>`, `-pqfalcon=1` for 0), the key the mixed-line harness writes,
+/// and it survives a serialization round trip. Unset, Regtest has none.
+#[cfg(feature = "ycash")]
+#[test]
+fn regtest_pq_falcon_height_parses_and_roundtrips() {
+    let _init_guard = zakura_test::init();
+
+    let toml_text = |falcon: &str| {
+        format!(
+            "[network]\n\
+             initial_testnet_peers = []\n\
+             [network.network]\n\
+             regtest = true\n\
+             [network.network.params.activation_heights]\n\
+             Overwinter = 1\n\
+             Sapling = 1\n\
+             Vault = 10\n\
+             {falcon}\n"
+        )
+    };
+
+    for (falcon, expected) in [
+        ("pq_falcon_height = 0", Some(Height(0))),
+        ("pq_falcon_height = 15", Some(Height(15))),
+        ("", None),
+    ] {
+        #[derive(serde::Deserialize, serde::Serialize, PartialEq, Debug)]
+        struct Outer {
+            network: Config,
+        }
+        let outer: Outer = toml::from_str(&toml_text(falcon)).expect("the harness's shape parses");
+        let network = &outer.network.network;
+        assert!(network.is_regtest(), "{falcon}");
+        assert_eq!(network.vault_activation_height(), Some(Height(10)));
+        assert_eq!(network.pq_falcon_height(), expected, "{falcon}");
+
+        let serialized = toml::to_string(&outer).expect("serializes");
+        assert_eq!(
+            serialized.contains("pq_falcon_height"),
+            expected.is_some(),
+            "{serialized}"
+        );
+        let back: Outer = toml::from_str(&serialized).expect("round-trips");
+        assert_eq!(back.network.network.pq_falcon_height(), expected);
+        assert_eq!(outer, back);
+    }
+}

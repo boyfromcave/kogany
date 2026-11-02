@@ -149,18 +149,15 @@ pub fn script_flags(network: &Network, height: Height) -> Flags {
 /// The height from which `OP_CHECKPQSIG` admits scheme 0x02 (FN-DSA-512), given Vault is active
 /// (ycash6 `Consensus::Params::pqFalconHeight`, `src/chainparams.cpp`).
 ///
-/// - Every network but regtest: 0, so Falcon follows the Vault upgrade exactly (quantum plan
-///   D-Q-2: mainnet and testnet `pqFalconHeight = 0`).
-/// - Regtest: none (ycash6's `NO_ACTIVATION_HEIGHT` default without `-pqfalcon` /
-///   `-pqfalconheight`). kogany has no regtest Falcon parameter yet, so a regtest that needs
-///   Falcon cannot be configured; that parameter belongs with the network's upgrade heights in
-///   `zakura-chain` (finding W3-c/F-1).
+/// The network's [`Network::pq_falcon_height`] (W3-c finding F-1, resolved):
+///
+/// - mainnet and an unconfigured testnet: 0, so Falcon follows the Vault upgrade exactly
+///   (quantum plan D-Q-2: mainnet and testnet `pqFalconHeight = 0`);
+/// - Regtest: none (ycash6's `NO_ACTIVATION_HEIGHT` default), unless
+///   `network.params.activation_heights.pq_falcon_height` sets one (ycashd's
+///   `-pqfalconheight=<h>`, or `-pqfalcon=1` for 0).
 pub fn pq_falcon_height(network: &Network) -> Option<Height> {
-    if network.is_regtest() {
-        None
-    } else {
-        Some(Height(0))
-    }
+    network.pq_falcon_height()
 }
 
 /// ycash6 `IsPQFalconActive`: Vault active at `height`, and `height` at or above the Falcon

@@ -150,6 +150,16 @@ fn vault_regtest() -> Network {
     }))
 }
 
+/// A regtest with Vault at `VAULT_HEIGHT` and a Falcon height (ycashd's `-pqfalconheight=<h>`,
+/// `-pqfalcon=1` for 0): the `activation_heights.pq_falcon_height` key (W3-c finding F-1).
+fn vault_regtest_with_falcon(pq_falcon: u32) -> Network {
+    Network::new_regtest(RegtestParameters::from(ConfiguredActivationHeights {
+        vault: Some(VAULT_HEIGHT),
+        pq_falcon: Some(pq_falcon),
+        ..Default::default()
+    }))
+}
+
 fn context(network: &Network, height: u32, state: Option<SetState>) -> ScriptContext {
     ScriptContext::new(
         network.clone(),
@@ -323,6 +333,55 @@ fn flags_follow_the_height_never_the_version() {
     );
 }
 
+/// W3-c finding F-1: Regtest takes a Falcon height, and `IsPQFalconActive` stays "Vault active
+/// and the height at or above it" (ycash6 `chainparams.cpp` `SetRegTestPqFalconHeight`).
+#[test]
+fn regtest_falcon_height_is_configurable() {
+    let base = Flags::P2SH | Flags::CHECKLOCKTIMEVERIFY;
+    let vault = base | Flags::CHECKSEQUENCEVERIFY | Flags::Vault;
+
+    // -pqfalcon=1 (height 0): Falcon follows Vault exactly, as on mainnet and testnet.
+    let falcon0 = vault_regtest_with_falcon(0);
+    assert!(
+        falcon0.is_regtest(),
+        "a Falcon height keeps the network Regtest"
+    );
+    assert_eq!(pq_falcon_height(&falcon0), Some(Height(0)));
+    assert_eq!(script_flags(&falcon0, Height(VAULT_HEIGHT - 1)), base);
+    assert!(!is_pq_falcon_active(&falcon0, Height(VAULT_HEIGHT - 1)));
+    assert_eq!(
+        script_flags(&falcon0, Height(VAULT_HEIGHT)),
+        vault | Flags::PqFalcon
+    );
+
+    // -pqfalconheight=<Vault+5>: Vault without Falcon below it, both from it.
+    let falcon5 = vault_regtest_with_falcon(VAULT_HEIGHT + 5);
+    assert_eq!(pq_falcon_height(&falcon5), Some(Height(VAULT_HEIGHT + 5)));
+    assert_eq!(script_flags(&falcon5, Height(VAULT_HEIGHT + 4)), vault);
+    assert!(!is_pq_falcon_active(&falcon5, Height(VAULT_HEIGHT + 4)));
+    assert_eq!(
+        script_flags(&falcon5, Height(VAULT_HEIGHT + 5)),
+        vault | Flags::PqFalcon
+    );
+
+    // A Falcon height below an unscheduled (or later) Vault activates nothing on its own.
+    let no_vault = Network::new_regtest(RegtestParameters::from(ConfiguredActivationHeights {
+        pq_falcon: Some(0),
+        ..Default::default()
+    }));
+    assert!(!is_pq_falcon_active(&no_vault, Height(SPEND_HEIGHT)));
+    assert_eq!(script_flags(&no_vault, Height(SPEND_HEIGHT)), base);
+    let falcon_before_vault = vault_regtest_with_falcon(VAULT_HEIGHT - 5);
+    assert!(!is_pq_falcon_active(
+        &falcon_before_vault,
+        Height(VAULT_HEIGHT - 1)
+    ));
+    assert!(is_pq_falcon_active(
+        &falcon_before_vault,
+        Height(VAULT_HEIGHT)
+    ));
+}
+
 // ---- ownerSpends[]: post-quantum owners -----------------------------------------------------
 
 #[test]
@@ -433,6 +492,55 @@ fn vault_vectors_owner_spends_through_the_verifier() {
         (2, 2, 1),
         "two owner-branch spends (one Falcon) and two released spends"
     );
+}
+
+/// W3-c finding F-1: a Vault regtest with Falcon at Vault+5 (`-pqfalconheight`) accepts the
+/// vectors' Falcon owner spend at Vault+5 and refuses it at Vault+4; `-pqfalcon=1` accepts it at
+/// the Vault height. The SLH-DSA owner spend is unaffected.
+#[test]
+fn vault_vectors_falcon_owner_spend_on_a_falcon_regtest() {
+    let vectors = load_pinned("vault_vectors.json");
+    let falcon5 = vault_regtest_with_falcon(VAULT_HEIGHT + 5);
+    let falcon0 = vault_regtest_with_falcon(0);
+    let mut seen = 0;
+
+    for spend in vectors["ownerSpends"].as_array().expect("ownerSpends") {
+        if spend["verify"].as_str() != Some("script") {
+            continue;
+        }
+        let name = name_of(spend);
+        let tx = prepared(spend, &falcon5, 0);
+        let input = n_in(spend);
+        if name.contains("falcon") {
+            seen += 1;
+            assert_eq!(
+                tx.is_valid_in(input, &context(&falcon5, VAULT_HEIGHT + 5, None)),
+                Ok(()),
+                "{name}: accepted at the Falcon height"
+            );
+            assert_eq!(
+                interpreter_error(
+                    tx.is_valid_in(input, &context(&falcon5, VAULT_HEIGHT + 4, None))
+                ),
+                Some(interpreter::Error::PqScheme),
+                "{name}: refused one block below the Falcon height"
+            );
+            assert_eq!(
+                tx.is_valid_in(input, &context(&falcon0, VAULT_HEIGHT, None)),
+                Ok(()),
+                "{name}: -pqfalcon=1 accepts it from the Vault height"
+            );
+        } else {
+            for height in [VAULT_HEIGHT + 4, VAULT_HEIGHT + 5] {
+                assert_eq!(
+                    tx.is_valid_in(input, &context(&falcon5, height, None)),
+                    Ok(()),
+                    "{name}: SLH-DSA needs no Falcon flag ({height})"
+                );
+            }
+        }
+    }
+    assert_eq!(seen, 1, "the vectors carry one Falcon owner spend");
 }
 
 // ---- spends[]: set-signed unlock and cancel -------------------------------------------------

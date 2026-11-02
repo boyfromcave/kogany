@@ -112,6 +112,7 @@ impl VctFastSyncedChain {
             .with_activation_heights(ConfiguredActivationHeights {
                 ycash: None,
                 vault: None,
+                pq_falcon: None,
                 before_overwinter: Some(1),
                 overwinter: Some(10),
                 sapling: Some(15),

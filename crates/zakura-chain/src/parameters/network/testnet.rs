@@ -599,6 +599,18 @@ pub struct ConfiguredActivationHeights {
     /// `-nuparams=6d5b7a31:<h>`). Default `None`: Regtest never back-fills it.
     #[serde(rename = "Vault", default, skip_serializing_if = "Option::is_none")]
     pub vault: Option<u32>,
+    /// kogany: the post-quantum Falcon height (ycashd `-pqfalconheight=<h>`, `-pqfalcon=1` = 0;
+    /// ycash6 `Consensus::Params::pqFalconHeight`), from which `OP_CHECKPQSIG` admits scheme 0x02
+    /// (FN-DSA-512) where Vault is active. Not a network upgrade: no branch ID, no place in the
+    /// upgrade order, and 0 is a valid value. The toml key is the harness's
+    /// (`activation_heights.pq_falcon_height`). `None` keeps the network's default: 0 on a
+    /// configured Testnet (a `ycash` build), never on Regtest. Only a `ycash` build accepts one.
+    #[serde(
+        rename = "pq_falcon_height",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub pq_falcon: Option<u32>,
     /// Activation height for `NU5` network upgrade.
     #[serde(rename = "NU5")]
     pub nu5: Option<u32>,
@@ -636,6 +648,7 @@ impl ConfiguredActivationHeights {
             heartwood,
             canopy,
             vault,
+            pq_falcon,
             nu5,
             nu6,
             nu6_1,
@@ -661,6 +674,7 @@ impl ConfiguredActivationHeights {
             heartwood,
             canopy,
             vault,
+            pq_falcon,
             nu5,
             nu6,
             nu6_1,
@@ -708,6 +722,7 @@ impl ConfiguredActivationHeights {
             heartwood: self.heartwood.or(base.heartwood),
             canopy: self.canopy.or(base.canopy),
             vault: self.vault.or(base.vault),
+            pq_falcon: self.pq_falcon.or(base.pq_falcon),
             nu5: self.nu5.or(base.nu5),
             nu6: self.nu6.or(base.nu6),
             nu6_1: self.nu6_1.or(base.nu6_1),
@@ -831,6 +846,8 @@ pub struct ParametersBuilder {
     /// The NSM value balance immediately before NU7, see
     /// [`Parameters::initial_nsm_value_balance`].
     initial_nsm_value_balance: Option<Amount<NonNegative>>,
+    /// kogany: the Falcon height, see [`Parameters::pq_falcon_height`].
+    pq_falcon_height: Option<Height>,
 }
 
 impl Default for ParametersBuilder {
@@ -895,6 +912,11 @@ impl Default for ParametersBuilder {
             test_nsm_reissuance_height: None,
             // Configured networks derive their seed unless an override is supplied.
             initial_nsm_value_balance: None,
+            // ycash6 testnet `pqFalconHeight = 0` (quantum plan D-Q-2); a Zcash build has none.
+            #[cfg(feature = "ycash")]
+            pq_falcon_height: Some(Height(0)),
+            #[cfg(not(feature = "ycash"))]
+            pq_falcon_height: None,
         }
     }
 }
@@ -974,6 +996,7 @@ impl ParametersBuilder {
             heartwood,
             canopy,
             vault,
+            pq_falcon,
             nu5,
             nu6,
             nu6_1,
@@ -993,6 +1016,12 @@ impl ParametersBuilder {
         // A Zcash build never schedules the Ycash upgrade (kogany plan §2.3).
         #[cfg(not(feature = "ycash"))]
         if ycash.is_some() {
+            return Err(ParametersBuilderError::YcashUpgradeNeedsYcashBuild);
+        }
+
+        // kogany: the Falcon height is a Ycash parameter (W3-c finding F-1).
+        #[cfg(not(feature = "ycash"))]
+        if pq_falcon.is_some() {
             return Err(ParametersBuilderError::YcashUpgradeNeedsYcashBuild);
         }
 
@@ -1071,6 +1100,9 @@ impl ParametersBuilder {
         // Height(0) must be reserved for the `NetworkUpgrade::Genesis`.
         self.activation_heights.split_off(&Height(1));
         self.activation_heights.extend(activation_heights);
+        if let Some(pq_falcon) = pq_falcon {
+            self.pq_falcon_height = Some(Height(pq_falcon));
+        }
 
         Ok(self)
     }
@@ -1277,6 +1309,13 @@ impl ParametersBuilder {
         self
     }
 
+    /// kogany: sets the Falcon height (`None`: Falcon never activates), see
+    /// [`Parameters::pq_falcon_height`].
+    pub fn with_pq_falcon_height(mut self, height: Option<Height>) -> Self {
+        self.pq_falcon_height = height;
+        self
+    }
+
     /// Disables the soft fork that would temporarily disable Orchard transactions.
     pub fn disable_temporary_orchard_disabling_soft_fork(mut self) -> Self {
         self.temporary_orchard_disabling_soft_fork_height = None;
@@ -1331,6 +1370,7 @@ impl ParametersBuilder {
             #[cfg(any(test, feature = "proptest-impl"))]
             test_nsm_reissuance_height,
             initial_nsm_value_balance,
+            pq_falcon_height,
         } = self;
         let mut parameters = Parameters {
             network_name,
@@ -1353,6 +1393,7 @@ impl ParametersBuilder {
             test_nsm_reissuance_height,
             nsm_reissuance_crossing_height: DerivedHeight::default(),
             initial_nsm_value_balance,
+            pq_falcon_height,
         };
 
         // ZIP 218 moves the third halving, and ZIP 214 Revision 3 moves the end of the
@@ -1436,6 +1477,7 @@ impl ParametersBuilder {
             #[cfg(any(test, feature = "proptest-impl"))]
                 test_nsm_reissuance_height: _,
             initial_nsm_value_balance: _,
+            pq_falcon_height,
         } = Self::default();
 
         // Compare the height ranges after NU7 moves the inherited ones, so an explicit copy
@@ -1454,6 +1496,7 @@ impl ParametersBuilder {
             && self.post_blossom_halving_interval == post_blossom_halving_interval
             && self.lockbox_disbursements == lockbox_disbursements
             && self.initial_nsm_value_balance == Some(testnet::INITIAL_NSM_VALUE_BALANCE)
+            && self.pq_falcon_height == pq_falcon_height
     }
 }
 
@@ -1553,6 +1596,9 @@ pub struct Parameters {
     nsm_reissuance_crossing_height: DerivedHeight,
     /// The NSM value balance immediately before NU7 activates.
     initial_nsm_value_balance: Option<Amount<NonNegative>>,
+    /// kogany: the Falcon height (ycash6 `Consensus::Params::pqFalconHeight`), `None` when
+    /// Falcon never activates.
+    pq_falcon_height: Option<Height>,
 }
 
 /// A height derived from the other [`Parameters`] fields and computed on first use.
@@ -1635,6 +1681,9 @@ impl Parameters {
             // Like the default Testnet activation heights stripped below, the default Testnet's
             // temporary Orchard-disabling soft fork does not apply to Regtest.
             .disable_temporary_orchard_disabling_soft_fork()
+            // kogany: ycash6 regtest has no Falcon height unless `-pqfalcon`/`-pqfalconheight`
+            // (`activation_heights.pq_falcon_height`) sets one (W3-c finding F-1).
+            .with_pq_falcon_height(None)
             // Removes default Testnet activation heights if not configured,
             // most network upgrades are disabled by default for Regtest in zcashd
             .with_activation_heights(activation_heights.for_regtest())?
@@ -1718,6 +1767,8 @@ impl Parameters {
             // identity check for the same reason the halving interval stays in: it is
             // derived from the defaults above, not chosen.
             initial_nsm_value_balance: _,
+            // kogany: the Falcon height is configurable on Regtest, as ycashd's -pqfalconheight.
+            pq_falcon_height: _,
         } = default_regtest();
 
         self.network_name == *network_name
@@ -1823,6 +1874,12 @@ impl Parameters {
     /// Returns the checkpoints for this network.
     pub fn checkpoints(&self) -> Arc<CheckpointList> {
         self.checkpoints.clone()
+    }
+
+    /// kogany: the height from which `OP_CHECKPQSIG` admits scheme 0x02 (FN-DSA-512) where
+    /// Vault is active (ycash6 `Consensus::Params::pqFalconHeight`), `None` when it never does.
+    pub fn pq_falcon_height(&self) -> Option<Height> {
+        self.pq_falcon_height
     }
 
     /// Returns the height at which the soft-fork to temporarily disable Orchard in
