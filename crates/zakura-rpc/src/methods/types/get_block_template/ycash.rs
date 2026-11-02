@@ -97,13 +97,22 @@ pub trait YcashMining: Send + Sync + 'static {
 }
 
 impl<Mempool, State, ReadState, Tip, AddressBook, BlockVerifierRouter, SyncStatus>
-    crate::methods::RpcImpl<Mempool, State, ReadState, Tip, AddressBook, BlockVerifierRouter, SyncStatus>
+    crate::methods::RpcImpl<
+        Mempool,
+        State,
+        ReadState,
+        Tip,
+        AddressBook,
+        BlockVerifierRouter,
+        SyncStatus,
+    >
 where
     Mempool: zakura_node_services::mempool::MempoolService,
     State: zakura_state::State,
     ReadState: zakura_state::ReadState,
     Tip: zakura_chain::chain_tip::ChainTip + Clone + Send + Sync + 'static,
-    AddressBook: zakura_network::address_book_peers::AddressBookPeers + Clone + Send + Sync + 'static,
+    AddressBook:
+        zakura_network::address_book_peers::AddressBookPeers + Clone + Send + Sync + 'static,
     BlockVerifierRouter: zakura_consensus::router::service_trait::BlockVerifierService,
     SyncStatus: zakura_chain::chain_sync_status::ChainSyncStatus + Clone + Send + Sync + 'static,
 {
