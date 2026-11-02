@@ -411,7 +411,7 @@ fn red5a_roles_are_positional_and_the_claimant_is_floored() {
     let collateral = EmergencyFixture::COLLATERAL;
     let floor = collateral - residual;
     let verdict_of = |g: &EmergencyFixture, tx: &MTx| {
-        let ev = g.dry(&[tx.clone()]);
+        let ev = g.dry(std::slice::from_ref(tx));
         assert!(!ev.txlogs.is_empty());
         ev.txlogs[0].1.verdict.clone()
     };

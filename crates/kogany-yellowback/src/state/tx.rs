@@ -491,16 +491,18 @@ impl Eval<'_, '_> {
         out
     }
 
-    /// EQV-1 on the mirror (`ApplyEquivocation`): `(ejected seq, the evidence's seq)`.
+    /// EQV-1 on the mirror (`ApplyEquivocation`): `(ejected seq, the evidence's seq)`. The cited
+    /// height's block hash is a snapshot below H, which no transaction writes, so it is read
+    /// before the mirror is borrowed for writing.
     fn equivocation(&mut self, tx: &VaultTx) -> Option<(u16, u16)> {
         let p = self.p;
-        // the block hashes are read before the mirror is written (they are snapshots below H)
-        let hashes: std::collections::BTreeMap<i64, Option<Hash32>> = {
-            let e = crate::attest::equivocation::equivocation_evidence(tx, p)?;
-            let c = i64::from(e.attestation().cited_height);
-            [(c, block_hash_at(&self.st, p, c))].into_iter().collect()
-        };
-        let hash_at = |hh: i64| hashes.get(&hh).copied().flatten();
+        let cited = i64::from(
+            crate::attest::equivocation::equivocation_evidence(tx, p)?
+                .attestation()
+                .cited_height,
+        );
+        let hash = block_hash_at(&self.st, p, cited);
+        let hash_at = |hh: i64| if hh == cited { hash } else { None };
         apply_equivocation(&mut self.st, tx, p, self.h, &hash_at)
     }
 }

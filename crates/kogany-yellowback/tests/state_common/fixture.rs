@@ -759,7 +759,7 @@ impl Fixture {
         o: SpendOpts,
     ) -> MTx {
         let v = self.vault(vault_txid).expect("the vault");
-        let p = self.p.clone();
+        let p = self.p;
         let owner = v.owner();
         let (oh, ah) = (i64::from(v.owner_height), i64::from(v.app_height));
         let vs = yed_vault_script_at(&p, &owner, oh, ah).unwrap();

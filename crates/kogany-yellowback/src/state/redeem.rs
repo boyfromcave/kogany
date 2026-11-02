@@ -73,6 +73,12 @@ pub(crate) fn vault_script_of(p: &crate::params::Params, v: &VaultRecord) -> Vec
     .unwrap_or_default()
 }
 
+/// `AssignedCents` of an assignment list (at most 13 x (2^32 - 1): no overflow).
+fn assigned_cents(a: &[crate::codecs::payload::Assignment]) -> Cents {
+    a.iter()
+        .fold(0i64, |s, x| s.saturating_add(i64::from(x.cents)))
+}
+
 fn fail<T>(v: &str) -> Result<T, String> {
     Err(v.to_owned())
 }
@@ -166,7 +172,7 @@ impl Eval<'_, '_> {
             res?;
         }
         // RED-2
-        let burn = yed_in.saturating_sub(Payload::Redeem(red.clone()).assigned_cents());
+        let burn = yed_in.saturating_sub(assigned_cents(&red.assignments));
         if burn < vault.minted_cents {
             return fail(if burn <= 0 {
                 verdict::VAULT_SPEND_MISSING_BURN
@@ -388,7 +394,7 @@ impl Eval<'_, '_> {
         };
         let red: Redeem = red;
         self.write_assignments(tx, &red.assignments, log);
-        log.yed_out = Payload::Redeem(red.clone()).assigned_cents();
+        log.yed_out = assigned_cents(&red.assignments);
         log.verdict = verdict::OK.to_owned();
         // U-23: the owner's spend closes the vault; a claim leaves it CLAIMING
         let vault = &mut spent.record;

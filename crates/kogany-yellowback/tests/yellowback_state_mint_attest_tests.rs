@@ -512,7 +512,7 @@ fn afee0_unarmed_vacuous() {
     ticks(&mut f, 3, 50000);
     assert!(f.armed());
     let r = i64::from(f.attest().arm_height) - 1;
-    assert!(r >= f.tip - i64::from(f.p.ref_window) + 1);
+    assert!(r > f.tip - i64::from(f.p.ref_window));
     assert!(!f.armed_at(r));
     let tx = f.spend_tx(
         &v,
