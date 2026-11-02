@@ -3528,6 +3528,8 @@ async fn zip234_mining_rpcs_include_the_reissuance_bonus() {
                     #[cfg(feature = "ycash")]
                     yellowback_payout_default: true,
                     #[cfg(feature = "ycash")]
+                    yellowback_payout_address: None,
+                    #[cfg(feature = "ycash")]
                     block_unpaid_action_limit: None,
                 },
                 Default::default(),
@@ -3828,6 +3830,8 @@ async fn gbt_with(net: Network, addr: ZcashAddress) {
         optimistic_block_inventory: true,
         #[cfg(feature = "ycash")]
         yellowback_payout_default: true,
+        #[cfg(feature = "ycash")]
+        yellowback_payout_address: None,
         #[cfg(feature = "ycash")]
         block_unpaid_action_limit: None,
     };
@@ -4858,6 +4862,8 @@ async fn rpc_getdifficulty() {
         optimistic_block_inventory: true,
         #[cfg(feature = "ycash")]
         yellowback_payout_default: true,
+        #[cfg(feature = "ycash")]
+        yellowback_payout_address: None,
         #[cfg(feature = "ycash")]
         block_unpaid_action_limit: None,
     };

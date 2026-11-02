@@ -747,13 +747,14 @@ impl StartCmd {
         // kogany W5-f: the YED payout key is the miner address's (ycashd -yellowbackpayoutaddress).
         // kogany F-S5-9: `mining.yellowback_payout_default = false` (ycashd
         // `-yellowbackpayoutdefault=0`) leaves the node without a payout key.
+        // kogany S5: `mining.yellowback_payout_address` (ycashd -yellowbackpayoutaddress) wins.
         #[cfg(feature = "ycash")]
         kogany_rpc::yed::live::set_payout_address(
-            config
+            config.mining.yellowback_payout_address.as_ref().or(config
                 .mining
                 .miner_address
                 .as_ref()
-                .filter(|_| config.mining.yellowback_payout_default),
+                .filter(|_| config.mining.yellowback_payout_default)),
         );
         #[cfg(not(feature = "ycash"))]
         kogany_rpc::yed::live::set_payout_address(config.mining.miner_address.as_ref());

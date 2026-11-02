@@ -79,6 +79,15 @@ pub struct Config {
     #[serde(skip_serializing_if = "is_true")]
     pub yellowback_payout_default: bool,
 
+    /// Ycash: the node's YED payout address, ycashd's `-yellowbackpayoutaddress` (a transparent
+    /// P2PKH address). When set it is the key the coinbase tag names, whatever address the
+    /// coinbase pays (a stratum pool paying each miner's username keeps its own payout key);
+    /// unset, the payout key follows [`Self::miner_address`] and
+    /// [`Self::yellowback_payout_default`] (ycashd MINER-2, `src/init.cpp`).
+    #[cfg(feature = "ycash")]
+    #[serde(with = "miner_address", skip_serializing_if = "Option::is_none")]
+    pub yellowback_payout_address: Option<ZcashAddress>,
+
     /// Ycash: the most unpaid ZIP-317 actions a block template carries, ycashd's
     /// `-blockunpaidactionlimit`. `None` (the default) is no limit, ycashd's
     /// `DEFAULT_BLOCK_UNPAID_ACTION_LIMIT` = `SIZE_MAX` (`ycash6 src/zip317.h:42`); `0` leaves out
@@ -145,6 +154,8 @@ impl Default for Config {
             optimistic_block_inventory: true,
             #[cfg(feature = "ycash")]
             yellowback_payout_default: true,
+            #[cfg(feature = "ycash")]
+            yellowback_payout_address: None,
             #[cfg(feature = "ycash")]
             block_unpaid_action_limit: None,
         }
@@ -334,5 +345,16 @@ mod tests {
             toml::from_str::<Config>(&toml::to_string(&config).unwrap()).unwrap(),
             config
         );
+    }
+
+    /// `yellowback_payout_address` (ycashd `-yellowbackpayoutaddress`) is optional and round-trips.
+    #[cfg(feature = "ycash")]
+    #[test]
+    fn ycash_yellowback_payout_address_parses() {
+        assert!(Config::default().yellowback_payout_address.is_none());
+        assert!(!toml::to_string(&Config::default())
+            .unwrap()
+            .contains("yellowback_payout_address"));
+        assert!(toml::from_str::<Config>("yellowback_payout_address = 'invalid'").is_err());
     }
 }
