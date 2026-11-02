@@ -21,6 +21,20 @@ use zakura_chain::{
 };
 use zakura_node_services::task::spawn_erased;
 
+/// kogany (S5, F-S5-19): how many rejected blocks are kept for `getblock`.
+#[cfg(feature = "ycash")]
+const MAX_REJECTED_BLOCKS: usize = 32;
+
+/// kogany (S5, F-S5-19): the blocks contextual validation rejected most recently, keyed by hash,
+/// with their heights, in rejection order (Ycash build only). ycashd keeps a rejected block in its
+/// block index (`BLOCK_FAILED_VALID`) and `getblock` answers it with `confirmations: -1`; Zakura
+/// dropped it. Process-wide, because the write task validates on a staged copy that an invalid
+/// block never replaces the state with. A read-side record only: validation never consults it.
+#[allow(clippy::type_complexity)]
+static REJECTED_BLOCKS: std::sync::LazyLock<
+    std::sync::Mutex<IndexMap<block::Hash, (Arc<zakura_chain::block::Block>, Height)>>,
+> = std::sync::LazyLock::new(Default::default);
+
 use crate::{
     constants::{MAX_INVALIDATED_BLOCKS, MAX_NON_FINALIZED_CHAIN_FORKS},
     error::ReconsiderError,
@@ -361,6 +375,60 @@ impl NonFinalizedState {
         }
     }
 
+    /// kogany (S5, F-S5-19): the block `hash` if it is off the best chain: in a side chain, in
+    /// an `invalidateblock` record, or a recently rejected block. `None` for a best-chain block
+    /// and for an unknown one.
+    pub fn off_chain_block(
+        &self,
+        hash: &block::Hash,
+    ) -> Option<(Arc<zakura_chain::block::Block>, Height)> {
+        let in_best_chain = self
+            .best_chain()
+            .is_some_and(|best| best.contains_block_hash(*hash));
+        self.chain_iter()
+            .skip(1)
+            .filter(|_| !in_best_chain)
+            .find_map(|chain| chain.block((*hash).into()))
+            .map(|block| (block.block.clone(), block.height))
+            .or_else(|| {
+                self.invalidated_blocks.values().find_map(|blocks| {
+                    blocks
+                        .iter()
+                        .find(|block| block.hash == *hash)
+                        .map(|block| (block.block.clone(), block.height))
+                })
+            })
+            .or_else(|| {
+                REJECTED_BLOCKS
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .get(hash)
+                    .cloned()
+            })
+    }
+
+    /// kogany (S5, F-S5-19): keeps a block contextual validation rejected for
+    /// [`Self::off_chain_block`]. A re-delivered invalidated block is already on record.
+    #[cfg(feature = "ycash")]
+    fn record_rejected_block(
+        &self,
+        hash: block::Hash,
+        rejected: (Arc<zakura_chain::block::Block>, Height),
+        error: &ValidateContextError,
+    ) {
+        if matches!(error, ValidateContextError::BlockPreviouslyInvalidated { .. }) {
+            return;
+        }
+        let mut rejected_blocks = REJECTED_BLOCKS
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        rejected_blocks.shift_remove(&hash);
+        rejected_blocks.insert(hash, rejected);
+        while rejected_blocks.len() > MAX_REJECTED_BLOCKS {
+            rejected_blocks.shift_remove_index(0);
+        }
+    }
+
     /// Returns true if `hash` is in `invalidated_blocks`.
     fn is_invalidated(&self, hash: &block::Hash) -> bool {
         self.invalidated_blocks
@@ -501,8 +569,15 @@ impl NonFinalizedState {
 
         // If the block is invalid, return the error,
         // and drop the cloned parent Arc, or newly created chain fork.
+        #[cfg(feature = "ycash")]
+        let rejected = (prepared.block.clone(), height);
         let modified_chain =
-            self.validate_and_commit(parent_chain, prepared, finalized_state, contextual_metrics)?;
+            self.validate_and_commit(parent_chain, prepared, finalized_state, contextual_metrics);
+        #[cfg(feature = "ycash")]
+        if let Err(error) = &modified_chain {
+            self.record_rejected_block(hash, rejected, error);
+        }
+        let modified_chain = modified_chain?;
 
         // If the block is valid:
         // - add the new chain fork or updated chain to the set of recent chains
@@ -768,12 +843,19 @@ impl NonFinalizedState {
         let (height, hash) = (prepared.height, prepared.hash);
 
         // If the block is invalid, return the error, and drop the newly created chain fork
+        #[cfg(feature = "ycash")]
+        let rejected = (prepared.block.clone(), height);
         let chain = self.validate_and_commit(
             Arc::new(chain),
             prepared,
             finalized_state,
             contextual_metrics,
-        )?;
+        );
+        #[cfg(feature = "ycash")]
+        if let Err(error) = &chain {
+            self.record_rejected_block(hash, rejected, error);
+        }
+        let chain = chain?;
 
         // If the block is valid, add the new chain fork to the set of recent chains.
         self.insert(chain);

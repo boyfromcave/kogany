@@ -1732,6 +1732,15 @@ pub enum ReadRequest {
     /// Returns [`ReadResponse::YedMempoolCheck`].
     BestChainYedMempoolCheck(Vec<(kogany_vault::state::VaultTx, u32)>),
 
+    /// kogany (S5, F-S5-19): the block `hash` off the best chain: in a non-finalized side
+    /// chain, in an `invalidateblock` record, or (Ycash build) a block contextual validation
+    /// rejected recently. ycashd's block index keeps every such block, and `getblock` answers it
+    /// with `confirmations: -1`.
+    ///
+    /// Returns [`ReadResponse::OffChainBlock`], `None` when the block is none of these (a block
+    /// of the best chain included: ask [`ReadRequest::BlockHeader`] first).
+    OffChainBlock(block::Hash),
+
     /// Computes the depth in the current best chain of the block identified by the given hash.
     ///
     /// Returns
@@ -2255,6 +2264,7 @@ impl ReadRequest {
             ReadRequest::BestChainYedSnapshot => "best_chain_yed_snapshot",
             ReadRequest::YedSnapshot { .. } => "yed_snapshot",
             ReadRequest::BestChainYedMempoolCheck(_) => "best_chain_yed_mempool_check",
+            ReadRequest::OffChainBlock(_) => "off_chain_block",
             ReadRequest::Depth(_) => "depth",
             ReadRequest::Block(_) => "block",
             ReadRequest::AnyChainBlock(_) => "any_chain_block",
