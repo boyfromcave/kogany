@@ -26,7 +26,8 @@ use std::collections::{BTreeMap, HashMap};
 use kogany_vault::{
     state::{
         records::{key_member, KEY_BOND, KEY_MEMBER, KEY_SET, KEY_TEMPLATE_OUT},
-        state_hash_of_entries, BondRecord, CoinAccessor, Delta, MemberList, MemberRecord, Rules,
+        state_hash_of_entries, BlockHashFn, BondRecord, CoinAccessor, Delta, MemberList,
+        MemberRecord, Rules,
         SetRecord, SetState, SpentCoin, StateRead, TemplateOutRecord, VaultOverlay, VaultTx,
         VaultTxIn, VaultTxOut,
     },
@@ -41,8 +42,15 @@ use zakura_chain::{
 
 use crate::{
     request::FinalizedBlock,
-    service::finalized_state::{
-        disk_db::DiskWriteBatch, disk_format::RawBytes, zakura_db::ZakuraDb, TypedColumnFamily,
+    service::{
+        finalized_state::{
+            disk_db::DiskWriteBatch, disk_format::RawBytes, zakura_db::ZakuraDb,
+            TypedColumnFamily,
+        },
+        yed::{
+            module::{finalized_block_hash_at, with_vault_rules},
+            YellowbackConfig,
+        },
     },
 };
 
@@ -277,22 +285,39 @@ pub type SkippedRejects = Vec<String>;
 /// A transaction or module verdict that rejects is skipped (the transaction changes nothing, as
 /// `ApplyTx` guarantees) and its reason returned. On a block that passed contextual validation
 /// nothing is ever skipped, so the result equals `kogany_vault::state::apply_block`'s.
+///
+/// The module table is the node's ([`with_vault_rules`]: `YED\0` registered where Yellowback is
+/// configured under `yellowback`), and `block_hashes` the ancestor hashes of the chain the block
+/// extends (the module hooks' `blockHashAt`).
 pub fn block_vault_delta_total(
     network: &Network,
+    yellowback: &YellowbackConfig,
     base: &dyn StateRead,
     txs: &[VaultTx],
     height: Height,
     coins: &dyn CoinAccessor,
+    block_hashes: Option<BlockHashFn<'_>>,
 ) -> (Delta, SkippedRejects) {
     let Some(params) = vault_network_params(network).filter(|p| p.is_active(height)) else {
         return (Delta::default(), Vec::new());
     };
-    let rules = params.rules();
+    with_vault_rules(&params, network, yellowback, block_hashes, |rules| {
+        block_vault_delta_total_with(base, txs, height, coins, rules)
+    })
+}
+
+fn block_vault_delta_total_with(
+    base: &dyn StateRead,
+    txs: &[VaultTx],
+    height: Height,
+    coins: &dyn CoinAccessor,
+    rules: &Rules<'_>,
+) -> (Delta, SkippedRejects) {
     let h = i64::from(height.0);
     let mut skipped = Vec::new();
     let mut st = VaultOverlay::new(base);
     for tx in txs {
-        if let Err(reject) = st.apply_tx(tx, h, coins, &rules) {
+        if let Err(reject) = st.apply_tx(tx, h, coins, rules) {
             skipped.push(format!(
                 "tx {}: {}",
                 display_txid(&tx.txid),
@@ -546,12 +571,16 @@ impl DiskWriteBatch {
             return;
         }
         let txs = vault_txs(block, transaction_hashes);
+        // The block's parent is the finalized tip, so its ancestors are finalized.
+        let block_hash_at = |h: i64| finalized_block_hash_at(zakura_db, h);
         let (delta, skipped) = block_vault_delta_total(
             network,
+            &zakura_db.config().yellowback,
             &zakura_db.vault_state(),
             &txs,
             height,
             &UtxoCoins(spent_utxos_by_outpoint),
+            Some(&block_hash_at),
         );
         report_skipped("finalized write", height, hash, &skipped);
         self.prepare_vault_delta_batch(zakura_db, &delta);

@@ -1694,6 +1694,22 @@ pub enum ReadRequest {
     /// Returns [`ReadResponse::VaultSnapshot`].
     BestChainVaultSnapshot,
 
+    /// kogany (W5-f): the Yellowback (YED) index state at the best chain tip (the `yed_*` read
+    /// RPCs' snapshot).
+    ///
+    /// Returns [`ReadResponse::YedSnapshot(Some(snapshot))`](ReadResponse::YedSnapshot), whose
+    /// `tip` is `None` before the state has a block.
+    BestChainYedSnapshot,
+
+    /// kogany (W5-f): the YED index state after the block `hash` (fork-aware: a block of any
+    /// non-finalized chain, the finalized tip, or a finalized block up to `UNDO_KEEP` below it).
+    ///
+    /// Returns [`ReadResponse::YedSnapshot`], `None` when the block is none of these.
+    YedSnapshot {
+        /// The block the state is after.
+        hash: block::Hash,
+    },
+
     /// Computes the depth in the current best chain of the block identified by the given hash.
     ///
     /// Returns
@@ -2208,6 +2224,8 @@ impl ReadRequest {
             ReadRequest::BlockInfo(_) => "block_info",
             ReadRequest::VaultSnapshot { .. } => "vault_snapshot",
             ReadRequest::BestChainVaultSnapshot => "best_chain_vault_snapshot",
+            ReadRequest::BestChainYedSnapshot => "best_chain_yed_snapshot",
+            ReadRequest::YedSnapshot { .. } => "yed_snapshot",
             ReadRequest::Depth(_) => "depth",
             ReadRequest::Block(_) => "block",
             ReadRequest::AnyChainBlock(_) => "any_chain_block",

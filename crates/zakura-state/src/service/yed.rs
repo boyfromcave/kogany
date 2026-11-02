@@ -9,9 +9,9 @@
 //! non-finalized [`Chain`] holds an overlay of what its blocks wrote ([`ChainYedOverlay`]),
 //! computed in contextual validation and carried by the block as its [`YedBlockEffect`].
 //!
-//! The module is **not registered** in this chunk: a block the module judges invalid is not
-//! rejected; its verdict is exposed in [`YedBlockEffect::invalid`] for W5-f, which registers
-//! `YED\0` with the primitive and rejects at DoS 100.
+//! W5-f registers the module: `YED\0` in the vault transition's module table ([`module`]), and
+//! a block the module judges invalid ([`YedBlockEffect::invalid`]) rejected at DoS 100 in
+//! contextual validation (`check::yed`).
 
 use std::{collections::BTreeMap, sync::Arc};
 
@@ -40,6 +40,9 @@ use crate::{
     },
     ContextuallyVerifiedBlock,
 };
+
+// kogany (W5-f): the module's registration with the vault primitive.
+pub mod module;
 
 #[cfg(any(test, feature = "proptest-impl"))]
 pub use crate::service::finalized_state::yed::register_yed_params_for_test;
@@ -198,7 +201,7 @@ pub fn yed_network_name(network: &Network) -> &'static str {
 /// The YED effect of `block` pushed onto `parent_chain` (the parent fork, or an empty chain at
 /// the finalized tip), evaluated over the state at the parent's tip: the hook contextual
 /// validation calls. **Stops the node** when the index cannot evaluate the block (U-21); an
-/// invalid block's verdict is in the effect (not rejected until W5-f).
+/// invalid block's verdict is in the effect, which `check::yed` turns into the rejection.
 pub fn block_yed_effect_for_chain(
     network: &Network,
     parent_chain: &Chain,
@@ -291,6 +294,19 @@ pub struct YedSnapshot {
     patch: Arc<BTreeMap<YedKey, Option<YedRecord>>>,
     db: ZakuraDb,
 }
+
+/// Two snapshots are equal when they are after the same block, under the same parameters, with
+/// the same patch over the finalized state (the database handle is not compared).
+impl PartialEq for YedSnapshot {
+    fn eq(&self, other: &Self) -> bool {
+        self.tip == other.tip
+            && self.params == other.params
+            && self.network == other.network
+            && self.patch == other.patch
+    }
+}
+
+impl Eq for YedSnapshot {}
 
 impl YedRead for YedSnapshot {
     fn get(&self, key: &YedKey) -> Option<YedRecord> {

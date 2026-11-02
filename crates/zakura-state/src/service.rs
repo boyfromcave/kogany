@@ -3025,6 +3025,18 @@ impl Service<ReadRequest> for ReadStateService {
                 },
             ))),
 
+            // kogany (W5-f): the yed_* read RPCs' index snapshot.
+            ReadRequest::BestChainYedSnapshot => Ok(ReadResponse::YedSnapshot(Some(
+                yed::tip_yed_snapshot(state.latest_best_chain().as_ref(), &state.db),
+            ))),
+            ReadRequest::YedSnapshot { hash } => {
+                Ok(ReadResponse::YedSnapshot(yed::yed_snapshot_by_hash(
+                    state.latest_non_finalized_state().chain_iter(),
+                    &state.db,
+                    hash,
+                )))
+            }
+
             // Used by the StateService.
             ReadRequest::Depth(hash) => Ok(ReadResponse::Depth(read::depth(
                 state.latest_best_chain(),

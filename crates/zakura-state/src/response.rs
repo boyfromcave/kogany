@@ -491,6 +491,10 @@ pub enum ReadResponse {
     /// [`ReadRequest::BestChainVaultSnapshot`].
     VaultSnapshot(Option<crate::service::vault::VaultSnapshot>),
 
+    /// kogany (W5-f): response to [`ReadRequest::BestChainYedSnapshot`] and
+    /// [`ReadRequest::YedSnapshot`].
+    YedSnapshot(Option<crate::service::yed::YedSnapshot>),
+
     /// Response to [`ReadRequest::Depth`] with the depth of the specified block.
     Depth(Option<u32>),
 
@@ -774,6 +778,9 @@ impl TryFrom<ReadResponse> for Response {
 
             ReadResponse::BlockInfo(block_info) => Ok(Response::BlockInfo(block_info)),
             ReadResponse::VaultSnapshot(snapshot) => Ok(Response::VaultSnapshot(snapshot)),
+            ReadResponse::YedSnapshot(_) => {
+                Err("there is no corresponding Response for this ReadResponse")
+            }
 
             ReadResponse::Depth(_)
             | ReadResponse::Transaction(_)
