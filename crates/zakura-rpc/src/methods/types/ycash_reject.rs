@@ -279,6 +279,8 @@ pub fn transaction_reject(error: &TransactionError, context: Context) -> CxxReje
     let mempool = context == Context::Mempool;
     let unmapped = || CxxReject::Unmapped(error.to_string());
     match error {
+        // main.cpp:2198-2202 (vault::CheckTx in AcceptToMemoryPool, W4-d follow-up): the reason is ycashd's own.
+        E::VaultRejected { reason, .. } => CxxReject::invalid(reason.clone()),
         // main.cpp:6059-6063, 1975 (a loose coinbase), 1870.
         E::CoinbasePosition | E::NotCoinbase => CxxReject::invalid("bad-cb-missing"),
         E::CoinbaseAfterFirst => CxxReject::invalid("bad-cb-multiple"),
