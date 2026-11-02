@@ -181,3 +181,6 @@ perf-artifacts/**/*
 # local VCT fast-sync run artifacts (state cache, config, logs, traces)
 .zakurad-vct-local-cache/
 zakurad-vct-local*
+
+# kogany audit output (qa/kogany_audit.py)
+kogany-audit-out/
