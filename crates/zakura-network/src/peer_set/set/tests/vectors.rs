@@ -2455,3 +2455,82 @@ async fn driver_refresh_retries_a_revoked_advertisement_on_a_later_peer() {
     .await
     .expect("a revoked advertisement is retried on a later peer through the refresh barrier");
 }
+
+/// kogany (S5, F-S5-16): a transaction broadcast reaches every ready peer at once, and a peer
+/// busy at that moment once it is ready again (ycashd's `RelayTransaction` reaches every peer).
+#[cfg(feature = "ycash")]
+#[test]
+fn ycash_tx_broadcast_reaches_busy_peers_once_ready() {
+    use std::collections::HashSet;
+
+    use crate::peer::ReceiveRequestAttempt;
+    use zakura_chain::transaction::{self, UnminedTxId};
+
+    let (runtime, _init_guard) = zakura_test::init_async();
+    let _guard = runtime.enter();
+    let versions = PeerVersions {
+        peer_versions: vec![CURRENT_NETWORK_PROTOCOL_VERSION; 3],
+    };
+    let (discovered, mut handles) = versions.mock_peer_discovery();
+    let (minimum, _tip) = MinimumPeerVersion::with_mock_chain_tip(&Network::Mainnet);
+    runtime.block_on(async move {
+        let (mut peers, _guard) = PeerSetBuilder::new()
+            .with_discover(discovered)
+            .with_minimum_peer_version(minimum)
+            .max_conns_per_ip(usize::MAX)
+            .build();
+        peers.ready().await.unwrap();
+        assert_eq!(peers.ready_services.len(), 3);
+
+        // One peer is busy with a request of ours.
+        let busy = *peers.ready_services.keys().next().unwrap();
+        std::mem::drop(peers.send_multiple(Request::Peers, vec![busy]));
+
+        let id = UnminedTxId::Legacy(transaction::Hash([9; 32]));
+        let advert = Request::AdvertiseTransactionIds(HashSet::from([id]), None);
+        std::mem::drop(peers.route_broadcast(advert.clone()));
+
+        let mut busy_request = None;
+        let mut advertised = 0;
+        for h in handles.iter_mut() {
+            while let ReceiveRequestAttempt::Request(r) = h.try_to_receive_outbound_client_request()
+            {
+                if r.request == advert {
+                    advertised += 1;
+                } else {
+                    busy_request = Some(r);
+                }
+            }
+        }
+        assert_eq!(advertised, 2, "every ready peer is advertised to at once");
+        assert!(peers.pending_tx_adverts.contains_key(&busy));
+
+        // The busy peer answers, becomes ready, and gets the queued inv.
+        let busy_request = busy_request.expect("the busy peer got its request");
+        let _ = busy_request.tx.send(Ok(Response::Nil));
+        timeout(Duration::from_secs(5), async {
+            loop {
+                let _ = peers.ready().now_or_never();
+                if !peers.pending_tx_adverts.contains_key(&busy) {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .expect("the queued advert is flushed");
+        let late: usize = handles
+            .iter_mut()
+            .map(|h| {
+                let mut n = 0;
+                while let ReceiveRequestAttempt::Request(r) =
+                    h.try_to_receive_outbound_client_request()
+                {
+                    n += usize::from(r.request == advert);
+                }
+                n
+            })
+            .sum();
+        assert_eq!(late, 1, "the busy peer is advertised to once it is ready");
+    });
+}
