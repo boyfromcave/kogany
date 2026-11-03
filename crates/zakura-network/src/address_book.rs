@@ -729,18 +729,29 @@ impl AddressBook {
         );
 
         if let Some(updated) = updated {
-            if updated.misbehavior() >= constants::MAX_PEER_MISBEHAVIOR_SCORE {
-                // Ban and skip outbound connections with excessively misbehaving peers.
-                let banned_ip = updated.addr.ip();
-                // Ycash (S5): ycashd's line for the same event (`src/main.cpp:2720`
-                // `Misbehaving`), which the shared regtest scripts read from the log.
-                #[cfg(feature = "ycash")]
+            // Ycash (S5): ycashd's line for the same event (`src/main.cpp:2720`
+            // `Misbehaving`), which the shared regtest scripts read from the log; and its
+            // refusal to ban a local peer (`src/main.cpp:9508`, `CNetAddr::IsLocal`), whose
+            // score stays in the book.
+            #[cfg(feature = "ycash")]
+            let spare_local = updated.misbehavior() >= constants::MAX_PEER_MISBEHAVIOR_SCORE && {
                 tracing::info!(
                     "Misbehaving: {} ({} -> {}) BAN THRESHOLD EXCEEDED",
                     updated.addr,
                     previous.as_ref().map_or(0, |p| p.misbehavior()),
                     updated.misbehavior(),
                 );
+                let local = crate::ycash::is_local(updated.addr.ip());
+                if local {
+                    tracing::info!("Warning: not banning local peer {}!", updated.addr);
+                }
+                local
+            };
+            #[cfg(not(feature = "ycash"))]
+            let spare_local = false;
+            if updated.misbehavior() >= constants::MAX_PEER_MISBEHAVIOR_SCORE && !spare_local {
+                // Ban and skip outbound connections with excessively misbehaving peers.
+                let banned_ip = updated.addr.ip();
                 self.bans_by_ip.insert(banned_ip);
 
                 // `most_recent_by_ip` is only populated when

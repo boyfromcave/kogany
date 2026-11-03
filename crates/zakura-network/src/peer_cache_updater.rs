@@ -112,8 +112,14 @@ mod tests {
                 cache_dir: CacheDir::custom_path(cache_dir.path()),
                 ..Config::default()
             };
-            let banned: PeerSocketAddr = "127.0.0.1:8233".parse().unwrap();
-            let other_port: PeerSocketAddr = "127.0.0.1:8234".parse().unwrap();
+            // Ycash never bans a local peer (ycashd `src/main.cpp:9508`): a routable host there.
+            let host = if cfg!(feature = "ycash") {
+                "1.0.0.1"
+            } else {
+                "127.0.0.1"
+            };
+            let banned: PeerSocketAddr = format!("{host}:8233").parse().unwrap();
+            let other_port: PeerSocketAddr = format!("{host}:8234").parse().unwrap();
             let safe: PeerSocketAddr = "127.0.0.2:8233".parse().unwrap();
             let mut cached = std::collections::HashSet::from([banned, other_port]);
             if retain_safe_peer {

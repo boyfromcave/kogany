@@ -99,10 +99,20 @@ async fn batch_misbehavior_reports(
     loop {
         tokio::select! {
             msg = misbehavior_rx.recv() => match msg {
-                Some((peer_addr, score_increment)) => *misbehaviors
-                    .entry(peer_addr)
-                    .or_default()
-                    += score_increment,
+                Some((peer_addr, score_increment)) => {
+                    let pending = misbehaviors.entry(peer_addr).or_default();
+                    *pending = pending.saturating_add(score_increment);
+                    // Ycash (S5): ycashd's `Misbehaving` bans at once (`src/main.cpp:2720`): a
+                    // report that alone reaches the ban threshold (a rule-breaking block, DoS
+                    // 100) is applied now. At most one such flush per peer, which is then banned.
+                    #[cfg(feature = "ycash")]
+                    if *pending >= crate::constants::MAX_PEER_MISBEHAVIOR_SCORE {
+                        let score = misbehaviors.remove(&peer_addr).unwrap_or_default();
+                        let _ = address_book_updater
+                            .send(MetaAddr::new_misbehavior(peer_addr, score))
+                            .await;
+                    }
+                }
                 None => break,
             },
 

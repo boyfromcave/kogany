@@ -354,3 +354,30 @@ fn disconnected_inbound_endpoint_is_not_dialed_or_cached() {
         assert_eq!(cached, !is_inbound, "inbound {is_inbound}: cacheable");
     }
 }
+
+/// Ycash (S5): a local peer that reaches the ban threshold is not banned (ycashd's
+/// `src/main.cpp:9508`): its IP stays dialable and its score stays in the book.
+#[cfg(feature = "ycash")]
+#[test]
+fn misbehaving_local_peer_is_not_banned() {
+    let local_addr: crate::PeerSocketAddr = format!("127.0.0.1:{}", Mainnet.default_port())
+        .parse()
+        .unwrap();
+    let mut address_book =
+        AddressBook::new("0.0.0.0:0".parse().unwrap(), &Mainnet, 2, Span::current());
+    address_book.update(MetaAddr::new_reconnect(local_addr));
+    address_book.update(MetaAddr::new_responded(local_addr, None));
+    address_book.update(MetaAddr::new_misbehavior(
+        local_addr,
+        crate::constants::MAX_PEER_MISBEHAVIOR_SCORE,
+    ));
+
+    assert!(!address_book.bans().contains(local_addr.ip()));
+    assert_eq!(
+        address_book.get(local_addr).map(|peer| peer.misbehavior()),
+        Some(crate::constants::MAX_PEER_MISBEHAVIOR_SCORE)
+    );
+    assert!(crate::ycash::is_local("0.1.2.3".parse().unwrap()));
+    assert!(crate::ycash::is_local("::1".parse().unwrap()));
+    assert!(!crate::ycash::is_local("1.0.0.1".parse().unwrap()));
+}

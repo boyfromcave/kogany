@@ -201,6 +201,17 @@ pub(crate) fn default_initial_testnet_peers() -> indexmap::IndexSet<String> {
 pub(crate) const P2P_V2_REFUSED: &str = "the Zakura P2P v2 stack is off on Ycash (kogany plan \
      decision K-11): set network.p2p_stack = \"legacy\" or leave it unset";
 
+/// ycashd's `CNetAddr::IsLocal` (`ycash6 src/netbase.cpp:798-810`): IPv4 `127.0.0.0/8` and `0.0.0.0/8`, and
+/// IPv6 `::1`. A misbehaving local peer is never banned (`src/main.cpp:9508`).
+pub fn is_local(ip: std::net::IpAddr) -> bool {
+    use std::net::IpAddr;
+
+    match ip.to_canonical() {
+        IpAddr::V4(ip) => matches!(ip.octets()[0], 0 | 127),
+        IpAddr::V6(ip) => ip.is_loopback(),
+    }
+}
+
 /// Returns `true` if `ip` is routable in ycashd's sense (`CNetAddr::IsRoutable`,
 /// `ycash6 src/netbase.cpp:798-810,854-857`): valid, and none of the loopback and `0/8` hosts,
 /// the RFC 1918, 2544, 3927, 4862, 6598, 5737, 4193 and 4843 ranges, or the RFC 3849 IPv6

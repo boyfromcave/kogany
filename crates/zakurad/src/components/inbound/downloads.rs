@@ -428,6 +428,12 @@ struct TaskSpawner<ZN, ZV, ZS> {
     /// Hands handles of tasks spawned by other tasks to the stream, which collects their
     /// results.
     spawned_sender: mpsc::UnboundedSender<DownloadHandle>,
+
+    /// Ycash (S5): scores the advertiser of a block that fails verification as soon as the
+    /// task ends, as ycashd's `Misbehaving` does on receipt, rather than when the inbound service
+    /// next drains the results (which waits for the next peer request).
+    #[cfg(feature = "ycash")]
+    misbehavior_sender: Option<tokio::sync::mpsc::Sender<(PeerSocketAddr, u32)>>,
 }
 
 impl<ZN: Clone, ZV: Clone, ZS: Clone> Clone for TaskSpawner<ZN, ZV, ZS> {
@@ -441,6 +447,8 @@ impl<ZN: Clone, ZV: Clone, ZS: Clone> Clone for TaskSpawner<ZN, ZV, ZS> {
             chain_network: self.chain_network.clone(),
             admission: self.admission.clone(),
             spawned_sender: self.spawned_sender.clone(),
+            #[cfg(feature = "ycash")]
+            misbehavior_sender: self.misbehavior_sender.clone(),
         }
     }
 }
@@ -595,11 +603,24 @@ where
                 chain_network,
                 admission: Arc::default(),
                 spawned_sender,
+                #[cfg(feature = "ycash")]
+                misbehavior_sender: None,
             },
             pending: FuturesUnordered::new(),
             spawned_receiver,
             poisoned_retries: PoisonedRetryBudgets::default(),
         }
+    }
+
+    /// Ycash (S5): score a failed block's advertiser from the download task itself
+    /// ([`TaskSpawner::misbehavior_sender`]).
+    #[cfg(feature = "ycash")]
+    pub fn with_misbehavior_sender(
+        mut self,
+        sender: tokio::sync::mpsc::Sender<(PeerSocketAddr, u32)>,
+    ) -> Self {
+        self.spawner.misbehavior_sender = Some(sender);
+        self
     }
 
     /// Re-request a gossiped block whose body was rejected as poisoned, from any peer.
@@ -1183,6 +1204,8 @@ where
         .boxed();
 
         let task_admission = self.admission.clone();
+        #[cfg(feature = "ycash")]
+        let misbehavior_sender = self.misbehavior_sender.clone();
         let task = tokio::spawn(async move {
             // Prefer the cancel handle if both are ready.
             let result = tokio::select! {
@@ -1194,6 +1217,13 @@ where
                 }
                 verification = fut => verification,
             };
+
+            #[cfg(feature = "ycash")]
+            if let (Some(sender), Err((err, _, advertiser_addr))) = (&misbehavior_sender, &result) {
+                if let Some(update) = super::block_misbehavior(err, *advertiser_addr) {
+                    let _ = sender.try_send(update);
+                }
+            }
 
             // `spawn_download_task` holds this lock until it has recorded the task.
             task_admission
@@ -1895,7 +1925,7 @@ mod tests {
             "{error}"
         );
         assert_eq!(addr, Some(advertiser_addr));
-        assert!(crate::components::inbound::block_misbehavior(error, addr).is_none());
+        assert!(crate::components::inbound::block_misbehavior(&error, addr).is_none());
     }
 
     /// A gossiped block that is not a tip child keeps the existing behind-tip policy, and stays
