@@ -229,6 +229,14 @@ workflows and scripts are copied from ycash6, with this repository's lists:
 | triage | `code-scanning.yml` | never | applies the dismissals file |
 | Dependabot | `.github/dependabot.yml` | — | security updates only |
 
+CodeQL reads `.github/codeql/codeql-config.yml`, which excludes, besides generated code: upstream
+Zakura's operator tooling (`deploy/`, `scripts/zakura-metrics-dashboard.py`,
+`scripts/pack-assets-crate.py`; path-injection, response-splitting, clear-text-storage,
+overly-permissive-file and insecure-protocol alerts), which is not part of koganyd and is left as
+upstream wrote it (none fixed upstream past `b44ec121d` as of 2026-11-02); and test code
+(`**/tests/**`, `**/testdata/**`), whose fixed test vectors trip the hard-coded-salt rule by design.
+gitleaks allows `qa/fuzz/vault/verdicts/` (hex fuzz vectors) in `.gitleaks.toml`.
+
 Upstream's own checks stay beside these: `lint.yml` runs `cargo deny` with the root `deny.toml`,
 `cargo vet` over `qa/supply-chain`, and its own pinned `zizmor`. kogany's zizmor configuration
 is `contrib/secops/zizmor.yml` rather than `.github/zizmor.yml`, because upstream's zizmor would
