@@ -102,6 +102,12 @@ pub trait YedReadState: Send + Sync + 'static {
         None
     }
 
+    /// `MempoolMintCents()` (ycash6 `src/yellowback/policy.cpp`): the cents of every MINT in
+    /// the mempool, which MINTPOL-1's cap gate counts (audit C-3). The default has no mempool.
+    async fn pending_mint_cents(&self) -> i64 {
+        0
+    }
+
     /// `yed_verifyindex`'s vault half (`vault::AuditLockedValue` over the set-state database):
     /// one line per mismatch and every signer set's stored and re-derived locked value. The
     /// default has no set state to read.
@@ -150,6 +156,9 @@ impl<S: YedReadState + ?Sized> YedReadState for Arc<S> {
     }
     async fn mempool_spender(&self, outpoint: &OutPoint) -> Option<Hash32> {
         (**self).mempool_spender(outpoint).await
+    }
+    async fn pending_mint_cents(&self) -> i64 {
+        (**self).pending_mint_cents().await
     }
     async fn set_audit(&self) -> (Vec<String>, Vec<SetAudit>) {
         (**self).set_audit().await
@@ -480,12 +489,14 @@ pub trait YedIndexView: Send + Sync {
     /// `yed_estimatecollateral` at `R = tip - REF_LAG` (`price` overrides the snapshot's
     /// `pMint` and both bundle refusals). The RPC layer has checked the argument types and the
     /// price range; the view refuses `mint-bad-lock`, the cents range, `bundle-insufficient`,
-    /// `mint10-diverged` and `mint-unsatisfiable`.
+    /// `mint10-diverged` and `mint-unsatisfiable`. `pending_mint_cents` is the mempool's MINT
+    /// cents (`MempoolMintCents`), counted by the MINTPOL-1 cap gate.
     fn estimate_collateral(
         &self,
         cents: i64,
         lock_blocks: i64,
         price: Option<i64>,
+        pending_mint_cents: i64,
     ) -> Result<CollateralEstimate, YedError>;
 
     /// `yed_listattestors`: every `Attestors` record, ascending `seq`, with `seated`, `pinned`
@@ -1080,7 +1091,7 @@ pub struct CollateralEstimate {
     /// `|pFast - aMint| · 10⁴ / min(xMint, aMint)`.
     pub divergence_bps: Option<i64>,
     /// MINTPOL-1's refusal identifier, `None` when the mint gate is open.
-    pub mint_blocked: Option<&'static str>,
+    pub mint_blocked: Option<String>,
 }
 
 /// An attestor status (`AttestorStatus`).

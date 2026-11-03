@@ -772,6 +772,7 @@ impl YedIndexView for Fixture {
         cents: i64,
         lock_blocks: i64,
         price: Option<i64>,
+        _pending_mint_cents: i64,
     ) -> Result<CollateralEstimate, YedError> {
         let p = &self.params;
         let class = (0..3u8).find(|c| {
