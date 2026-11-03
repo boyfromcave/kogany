@@ -786,7 +786,7 @@ mod tests {
             .unwrap();
         for (tip_height, expected) in [(Height(0), now), (Height(1), mtp_cap)] {
             let result = difficulty_time_and_history_tree(
-                vec![Arc::new(header); tip_height.0 as usize + 1],
+                (0..=tip_height.0).map(|_| Arc::new(header)).collect(),
                 tip_height,
                 block::Hash([0; 32]),
                 &network,
