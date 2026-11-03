@@ -157,6 +157,30 @@ impl YcashMining for NotLive {
     }
 }
 
+/// The reject the template's own block check gives (ycashd `CreateNewBlock`'s
+/// `TestNewBlockAtTipValidity`), set by a filter that kept a candidate the module refuses: only
+/// `yellowback.test_fault = "template"` (regtest) does that. `getblocktemplate` takes it after
+/// selection and refuses the template with it.
+static TEMPLATE_BLOCK_CHECK_REJECT: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
+
+/// Records the reject the template's block check gives (see [`TEMPLATE_BLOCK_CHECK_REJECT`]).
+pub fn refuse_template_block_check(reject: String) {
+    *TEMPLATE_BLOCK_CHECK_REJECT
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(reject);
+}
+
+/// Takes the reject [`refuse_template_block_check`] recorded, as ycashd's error text.
+pub fn take_template_block_check_reject() -> Option<String> {
+    TEMPLATE_BLOCK_CHECK_REJECT
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .take()
+        .map(|reject| {
+            format!("CreateNewBlock: TestNewBlockAtTipValidity failed: {reject} (code 16)")
+        })
+}
+
 /// The YED half of the template filter (ycash6 `yellowback::policy::FilterTemplate`,
 /// `src/yellowback/policy.cpp:49-94`), one per template.
 ///

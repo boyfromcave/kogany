@@ -271,6 +271,10 @@ pub enum YedTestFault {
     Storage(Option<Height>),
     /// `crash:<height>`: the process aborts at that block.
     Crash(Height),
+    /// `template`: the next template keeps one candidate the YED module refuses, so the
+    /// template's own block check refuses the template (ycash6 `ConsumeTemplateFault`). A
+    /// template-side fault only: it never touches the index, its undo records or its schema.
+    Template,
 }
 
 impl YedTestFault {
@@ -287,9 +291,10 @@ impl YedTestFault {
             ["crash", h] => Ok(YedTestFault::Crash(height(h)?)),
             ["storage", "check" | "commit"] => Ok(YedTestFault::Storage(None)),
             ["storage", "check" | "commit", h] => Ok(YedTestFault::Storage(Some(height(h)?))),
-            ["storage", "undo", ..] | ["template"] | ["schema"] => Err(format!(
+            ["template"] => Ok(YedTestFault::Template),
+            ["storage", "undo", ..] | ["schema"] => Err(format!(
                 "yellowback.test_fault: {spec} has no kogany counterpart \
-                 (no undo step, template-side index check or schema version)"
+                 (no undo step or schema version)"
             )),
             _ => Err(
                 "yellowback.test_fault: expected storage:<check|commit>[:<height>] \
@@ -304,6 +309,28 @@ impl YedTestFault {
 /// commit (`ycash6 src/main.cpp:4435`), which the regtest scripts look for in the node's log.
 pub const YED_TEST_FAULT_REASON: &str =
     "Failed to write to the Yellowback index (injected storage fault, yellowback.test_fault)";
+
+/// `yellowback.test_fault = "template"`, armed at parameter resolution, consumed by the first
+/// template that meets a candidate the YED module refuses.
+static YED_TEMPLATE_FAULT: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
+/// Arms the `template` fault when `config.test_fault` names it (regtest only: the parameter
+/// resolution refuses the key elsewhere).
+pub(crate) fn arm_yed_template_fault(config: &YellowbackConfig) {
+    if let Some(spec) = &config.test_fault {
+        if YedTestFault::parse(spec) == Ok(YedTestFault::Template) {
+            YED_TEMPLATE_FAULT.store(true, std::sync::atomic::Ordering::SeqCst);
+            tracing::info!("yellowback: -yellowbacktestfault=template armed");
+        }
+    }
+}
+
+/// True once after `yellowback.test_fault = "template"` (ycash6
+/// `YellowbackIndex::ConsumeTemplateFault`): the template filter keeps that candidate.
+pub fn consume_yed_template_fault() -> bool {
+    YED_TEMPLATE_FAULT.swap(false, std::sync::atomic::Ordering::SeqCst)
+}
 
 /// The armed fault: the spec it came from and the fault, `None` once it fired.
 static YED_TEST_FAULT: std::sync::Mutex<Option<(String, Option<YedTestFault>)>> =
@@ -751,6 +778,28 @@ pub fn finalized_yed_snapshot_below(
 mod ycash_test_fault_tests {
     use super::*;
 
+    /// kogany (S5): `template` is a template-side fault: it parses, never fires at a block
+    /// commit, and is consumed once by the template filter after it is armed.
+    #[test]
+    fn ycash_template_fault_is_armed_and_consumed_once() {
+        assert_eq!(YedTestFault::parse("template"), Ok(YedTestFault::Template));
+        let config = YellowbackConfig {
+            test_fault: Some("template".to_owned()),
+            ..YellowbackConfig::default()
+        };
+        assert!(config.validate().is_ok());
+        assert!(maybe_inject_yed_test_fault(
+            &config,
+            Height(1),
+            zakura_chain::block::Hash([0; 32])
+        )
+        .is_ok());
+        let _ = consume_yed_template_fault();
+        arm_yed_template_fault(&config);
+        assert!(consume_yed_template_fault());
+        assert!(!consume_yed_template_fault());
+    }
+
     /// kogany (S5): `yellowback.test_fault` takes ycashd's storage and crash forms and refuses the
     /// rest; a storage fault fires once, at its height.
     #[test]
@@ -767,14 +816,7 @@ mod ycash_test_fault_tests {
             YedTestFault::parse("crash:9"),
             Ok(YedTestFault::Crash(Height(9)))
         );
-        for bad in [
-            "storage:undo",
-            "template",
-            "schema",
-            "storage:bogus",
-            "crash:0",
-            "x",
-        ] {
+        for bad in ["storage:undo", "schema", "storage:bogus", "crash:0", "x"] {
             assert!(YedTestFault::parse(bad).is_err(), "{bad}");
         }
         let config = YellowbackConfig {
