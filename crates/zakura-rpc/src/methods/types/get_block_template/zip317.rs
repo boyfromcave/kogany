@@ -334,6 +334,11 @@ fn checked_add_transaction_weighted_random(
 
                 // Transactions that don't pay the conventional fee should not have
                 // the same probability of being included as their dependencies.
+                // Ycash (S5 parity, template policy): ycashd's own fee rules replace ZIP-317's
+                // (W1-Y9) and its `CreateNewBlock` takes a dependent after its parents whatever
+                // its fee (ycash6 `src/miner.cpp`), so a child paying the Ycash floor (a YED
+                // mint off an equivocation proof's change) is not dropped here.
+                #[cfg(not(feature = "ycash"))]
                 if !candidate_tx.pays_conventional_fee() {
                     continue;
                 }
