@@ -281,10 +281,16 @@ fn coinbase_tag_and_limit() {
     // the marker.
     let untagged = params(None).expect("valid config");
     let untagged = untagged.data().as_ref().expect("marker is always present");
+    #[cfg(not(feature = "ycash"))]
     assert_eq!(
         untagged.value().as_slice(),
         ZAKURA_COINBASE_MARKER.as_bytes()
     );
+    // Ycash (S5): without extra data the push is ycashd's `OP_0` (`src/miner.cpp:291`).
+    #[cfg(feature = "ycash")]
+    {
+        assert!(untagged.value().is_empty());
+    }
 
     // With extra data, the marker and separator precede it.
     let tag = ExtraCoinbaseData::try_from("/pool/".to_string()).expect("within the limit");

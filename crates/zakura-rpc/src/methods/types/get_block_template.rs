@@ -803,6 +803,15 @@ impl MinerParams {
             push_value(&coinbase_data(user_data.as_bytes()))
                 .expect("coinbase data fits in a push: extra_coinbase_data is length-validated"),
         );
+        // Ycash (S5): template policy, not consensus. Without `extra_coinbase_data` the coinbase
+        // input script is ycashd's `<height> OP_0 <COINBASE_FLAGS>` (`src/miner.cpp`), so a stratum
+        // pool that leaves the script untouched mines the same bytes as on ycashd.
+        #[cfg(feature = "ycash")]
+        let data = if user_data.is_empty() {
+            push_value(&[])
+        } else {
+            data
+        };
 
         let memo = conf
             .miner_memo
