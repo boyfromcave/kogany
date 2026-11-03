@@ -12,9 +12,9 @@
 //! the transaction behind a TxLog row (`yed_gettxinfo`) and the notice transaction
 //! (`yed_getnotice`).
 //!
-//! The mempool (`crate::mempool`, F-S5-5) is read for `yed_getvault.spendPending` only: a
-//! mempool coin is still an unknown input to the dry run's script check, and MINTPOL-1's
-//! pending mints count zero.
+//! The mempool (`crate::mempool`, F-S5-5) is read for `yed_getvault.spendPending` and for the dry
+//! run's script check (a mempool parent's output is a known, unconfirmed input, as ycashd's
+//! `FetchInputs` reads it); MINTPOL-1's pending mints count zero.
 
 use std::sync::{Arc, Mutex};
 
@@ -750,7 +750,7 @@ where
     }
 
     /// `VerifyAllInputs` at `next` over the best chain's unspent outputs: `(valid, reason,
-    /// unconfirmed inputs)`. A mempool parent is an unknown input here (no mempool access).
+    /// unconfirmed inputs)`. A mempool parent's output is known (and unconfirmed), as in ycashd.
     async fn verify_inputs(
         &self,
         tx: Transaction,
@@ -759,6 +759,7 @@ where
         let mut spent = Vec::new();
         let mut unconfirmed = Vec::new();
         let mut first_unknown = None;
+        let mut mempool: Option<Vec<zakura_chain::transaction::VerifiedUnminedTx>> = None;
         for (i, input) in tx.inputs().iter().enumerate() {
             let Some(outpoint) = input.outpoint() else {
                 continue;
@@ -772,10 +773,23 @@ where
                 Ok(ReadResponse::UnspentBestChainUtxo(u)) => u,
                 _ => None,
             };
-            match utxo {
-                Some(u) => spent.push(u.output),
+            if utxo.is_none() {
+                unconfirmed.push(zakura_state::vault::vault_outpoint(&outpoint));
+            }
+            // ycashd's `FetchInputs` reads through `CCoinsViewMemPool`: a mempool parent's
+            // output is a known input (`src/yellowback/policy.cpp:95`), only not confirmed.
+            let output = match utxo {
+                Some(u) => Some(u.output),
                 None => {
-                    unconfirmed.push(zakura_state::vault::vault_outpoint(&outpoint));
+                    if mempool.is_none() {
+                        mempool = Some(crate::mempool::transactions().await);
+                    }
+                    crate::mempool::output_in(mempool.as_deref().unwrap_or_default(), &outpoint)
+                }
+            };
+            match output {
+                Some(o) => spent.push(o),
+                None => {
                     first_unknown.get_or_insert(i);
                 }
             }
