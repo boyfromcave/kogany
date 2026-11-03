@@ -171,13 +171,15 @@ What kogany publishes and consumes (the workspace's `docs/plans/kogany/ci-design
   name `node-bin`) holding `node-bin.tgz` with `src/ycashd` and `src/ycash-cli` at its root.
   `kogany-mixed.yml` takes the commit from its `ycash6_rev` input (default: the pin in the file)
   and optionally the run from `ycash6_run_id`, as `workflow_dispatch` or `workflow_call` inputs
-  (a caller may pass the `YCASH6_ARTIFACT_TOKEN` secret); it checks the run's event and head
-  commit before using its binary, and runs the harness from ycash6 at that same commit.
-  `kogany-client-legs.yml`'s yolo job takes the newest trusted run on ycash6's
-  `vaults/kogany-compat`.
+  (a caller may pass the `YCASH6_ARTIFACT_TOKEN` secret), and runs the harness from ycash6 at that
+  same commit. Both it and `kogany-client-legs.yml`'s yolo job (pinned `YCASH6_REV`) fetch through
+  `.github/workflows/scripts/fetch-ycash6-node-bin.sh`, which accepts a run only when its workflow
+  file is `yellowback-tests.yml` of `boyfromcave/ycash6`, its `head_sha` is the pin, its event is
+  push, schedule or dispatch, and its `build` job succeeded, and checks the downloaded zip against
+  the artifact's recorded sha256 digest (ycash6 publishes no `SHA256SUMS` for node-bin yet).
 - **Pins kogany holds** (bumped by a reviewed commit, never a branch tip): `YCASH6_REV` in
   `kogany-audit.yml` (must equal `testdata/yellowback/PIN`'s source commit; the cross-line job
-  checks it), `YCASH6_REV` in `kogany-mixed.yml`, `LWD_REV`, `CHAINVIZ_REV` and `YOLO_REV` in
+  checks it), `YCASH6_REV` in `kogany-mixed.yml` and `kogany-client-legs.yml`, `LWD_REV`, `CHAINVIZ_REV` and `YOLO_REV` in
   `kogany-client-legs.yml`.
 - The sidecar (W9) and parity (S5) nightlies follow the `kogany-mixed.yml` pattern with ycash6's
   test rig and yew's `yewd-bin`; they are added, scheduled, once the default branch carries them.
@@ -226,6 +228,14 @@ workflows and scripts are copied from ycash6, with this repository's lists:
 | Semgrep rule tests | `secops.yml` `semgrep-rules` | a rule test fails | `contrib/semgrep/rules/` |
 | triage | `code-scanning.yml` | never | applies the dismissals file |
 | Dependabot | `.github/dependabot.yml` | — | security updates only |
+
+CodeQL reads `.github/codeql/codeql-config.yml`, which excludes, besides generated code: upstream
+Zakura's operator tooling (`deploy/`, `scripts/zakura-metrics-dashboard.py`,
+`scripts/pack-assets-crate.py`; path-injection, response-splitting, clear-text-storage,
+overly-permissive-file and insecure-protocol alerts), which is not part of koganyd and is left as
+upstream wrote it (none fixed upstream past `b44ec121d` as of 2026-11-02); and test code
+(`**/tests/**`, `**/testdata/**`), whose fixed test vectors trip the hard-coded-salt rule by design.
+gitleaks allows `qa/fuzz/vault/verdicts/` (hex fuzz vectors) in `.gitleaks.toml`.
 
 Upstream's own checks stay beside these: `lint.yml` runs `cargo deny` with the root `deny.toml`,
 `cargo vet` over `qa/supply-chain`, and its own pinned `zizmor`. kogany's zizmor configuration

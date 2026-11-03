@@ -1,0 +1,19 @@
+# Copyright (c) 2026 The Ycash developers
+# Distributed under the MIT software license, see the accompanying
+# file COPYING or https://www.opensource.org/licenses/mit-license.php .
+#
+# CodeQL configuration for kogany (codeql.yml). Exclusions are recorded in .github/README-kogany.md.
+paths-ignore:
+  - crates/zakura-rpc/proto/__generated__
+  - target
+  # Upstream Zakura operator tooling (kogany changes only the package name there), not part of koganyd: the deploy,
+  # monitoring, faucet and dashboard scripts (CodeQL py/path-injection, py/http-response-splitting,
+  # py/clear-text-storage-sensitive-data, py/overly-permissive-file, py/insecure-protocol). Out of
+  # kogany's scope; the fork diff stays minimal (no rewrite of upstream code).
+  - deploy
+  - scripts/zakura-metrics-dashboard.py
+  - scripts/pack-assets-crate.py
+  # Test code and fixtures: fixed test vectors are hard-coded by design
+  # (rust/hard-coded-cryptographic-value on crates/kogany-yellowback/tests/**).
+  - '**/tests/**'
+  - '**/testdata/**'
