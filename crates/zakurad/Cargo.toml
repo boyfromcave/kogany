@@ -106,7 +106,7 @@ x86_64-asm = ["dep:orchard", "orchard/x86_64-asm"]
 # Production features that activate extra dependencies, or extra features in dependencies
 
 # The Ycash network profile (kogany): build a Ycash node instead of a Zcash one.
-ycash = ["zakura-chain/ycash", "zakura-consensus/ycash", "zakura-header-chain/ycash", "zakura-network/ycash", "zakura-rpc/ycash", "zakura-script/ycash", "zakura-state/ycash", "kogany-rpc/ycash"]
+ycash = ["zakura-chain/ycash", "zakura-consensus/ycash", "zakura-header-chain/ycash", "zakura-network/ycash", "zakura-rpc/ycash", "zakura-script/ycash", "zakura-state/ycash", "kogany-rpc/ycash", "dep:rand_10"]
 
 # The indexer gRPC server, started when `rpc.indexer_listen_addr` is configured
 indexer-rpc = ["zakura-rpc/indexer-rpc"]
@@ -169,6 +169,8 @@ zakura-checkpoints = [
 ]
 
 [dependencies]
+# Ycash: ZIP-401 random eviction by weight (ycashd mempool_limit.cpp)
+rand_10 = { workspace = true, optional = true }
 zakura-chain = { path = "../zakura-chain", version = "11.0.0-rc0" }
 zakura-consensus = { path = "../zakura-consensus", version = "12.0.0-rc0" }
 zakura-header-chain = { path = "../zakura-header-chain", version = "5.0.1-rc0" }

@@ -1018,3 +1018,52 @@ proptest! {
         }
     }
 }
+
+/// kogany S5: the Ycash build evicts as ycashd's ZIP-401 limiter does (`src/mempool_limit.cpp`):
+/// the newcomer is admitted whatever its fee and exactly one stored transaction leaves per
+/// round, refused afterwards as recently evicted.
+#[cfg(feature = "ycash")]
+#[test]
+fn ycash_zip401_admits_newcomer_and_evicts_one_at_random() {
+    let _init_guard = zakura_test::init();
+    let mut factory = TxFactory::new();
+    let mut storage = storage_for(3);
+
+    let stored: HashSet<_> = [30_000, 20_000, 10_000]
+        .into_iter()
+        .map(|fee| insert(&mut storage, &factory.tx(fee), vec![]))
+        .collect();
+
+    let newcomer = factory.tx(1_000);
+    let (result, evicted) = storage.insert_with_evicted_ids(newcomer.clone(), vec![], None);
+
+    assert_eq!(result, Ok(newcomer.transaction.id()));
+    assert_eq!(evicted.len(), 1);
+    let victim = *evicted.iter().next().unwrap();
+    assert!(stored.contains(&victim));
+    assert_eq!(ids(&storage).len(), 3);
+    assert_eq!(
+        storage.rejection_error(&victim),
+        Some(ExactTipRejectionError::Evicted.into()),
+    );
+}
+
+/// kogany S5: ZIP-401 eviction never draws the newcomer's mempool ancestors.
+#[cfg(feature = "ycash")]
+#[test]
+fn ycash_zip401_keeps_the_newcomers_ancestors() {
+    let _init_guard = zakura_test::init();
+    let mut factory = TxFactory::new();
+    let mut storage = storage_for(2);
+
+    let parent_tx = factory.tx_with(10_000, 1, 0);
+    let parent = insert(&mut storage, &parent_tx, vec![]);
+    let other = insert(&mut storage, &factory.tx(10_000), vec![]);
+    let child = factory.tx(10_000);
+    let (result, evicted) =
+        storage.insert_with_evicted_ids(child.clone(), vec![first_output(&parent_tx)], None);
+
+    assert_eq!(result, Ok(child.transaction.id()));
+    assert_eq!(evicted, [other].into());
+    assert_eq!(ids(&storage), [parent, child.transaction.id()].into());
+}

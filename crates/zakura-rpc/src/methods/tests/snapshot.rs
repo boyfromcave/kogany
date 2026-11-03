@@ -1057,6 +1057,8 @@ pub async fn test_mining_rpcs<State, ReadState>(
         #[cfg(feature = "ycash")]
         yellowback_payout_default: true,
         #[cfg(feature = "ycash")]
+        yellowback_payout_address: None,
+        #[cfg(feature = "ycash")]
         block_unpaid_action_limit: None,
     };
 

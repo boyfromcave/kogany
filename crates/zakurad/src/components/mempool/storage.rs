@@ -632,6 +632,7 @@ impl Storage {
     ///
     /// Returns the IDs of the evicted transactions. Returns an error, and evicts nothing, if
     /// `tx` does not pay enough to evict them.
+    #[cfg_attr(feature = "ycash", allow(unreachable_code))]
     fn make_room(
         &mut self,
         tx: &VerifiedUnminedTx,
@@ -641,6 +642,11 @@ impl Storage {
             metrics::gauge!("zcash.mempool.eviction_cost.floor").set(0.0);
             return Ok(HashSet::new());
         }
+
+        // Ycash: ycashd's ZIP-401 limiter (`src/mempool_limit.cpp`, `CTxMemPool::EnsureSizeLimit`)
+        // admits the newcomer and evicts at random by eviction weight.
+        #[cfg(feature = "ycash")]
+        return self.make_room_zip401(tx, ancestors);
 
         let victims = self
             .verified
@@ -669,6 +675,70 @@ impl Storage {
         // A `usize` always fits in a `u64` on supported platforms.
         metrics::counter!("zcash.mempool.evicted").increment(evicted_ids.len() as u64);
 
+        Ok(evicted_ids)
+    }
+
+    /// Ycash (kogany S5): ycashd's ZIP-401 eviction (`src/mempool_limit.{h,cpp}`). Each stored
+    /// transaction weighs its cost (`max(size, MIN_TX_COST)`) plus `LOW_FEE_PENALTY` when it pays
+    /// less than its conventional fee; while the mempool with `tx` is over the cost limit, one
+    /// stored transaction is drawn at random by weight and removed with its descendants. The
+    /// newcomer's mempool ancestors are never drawn (removing them would invalidate it); ycashd
+    /// may draw the newcomer itself, kogany keeps it, so each round still evicts exactly one.
+    #[cfg(feature = "ycash")]
+    fn make_room_zip401(
+        &mut self,
+        tx: &VerifiedUnminedTx,
+        ancestors: &HashSet<transaction::Hash>,
+    ) -> Result<HashSet<UnminedTxId>, ExactTipRejectionError> {
+        use rand_10::RngExt;
+
+        /// ycashd `LOW_FEE_PENALTY` (`src/mempool_limit.h`).
+        const LOW_FEE_PENALTY: u64 = 40_000;
+
+        let mut rng = rand_10::rng();
+        let mut evicted_ids = HashSet::new();
+        while self.verified.total_cost().saturating_add(tx.cost()) > self.tx_cost_limit {
+            let candidates: Vec<(transaction::Hash, u64, u64)> = self
+                .verified
+                .transactions()
+                .iter()
+                .filter(|(hash, _)| !ancestors.contains(*hash))
+                .map(|(hash, stored)| {
+                    let cost = stored.cost();
+                    let penalty = if !stored.pays_conventional_fee() {
+                        LOW_FEE_PENALTY
+                    } else {
+                        0
+                    };
+                    (*hash, cost, cost.saturating_add(penalty))
+                })
+                .collect();
+            let total: u64 = candidates.iter().map(|c| c.2).sum();
+            if total == 0 {
+                metrics::counter!("zcash.mempool.rejected.below_eviction_cost").increment(1);
+                return Err(ExactTipRejectionError::BelowEvictionCost);
+            }
+            let mut pick = rng.random_range(0..total);
+            let &(victim, cost, weight) = candidates
+                .iter()
+                .find(|c| {
+                    if pick < c.2 {
+                        true
+                    } else {
+                        pick -= c.2;
+                        false
+                    }
+                })
+                .expect("pick is below the total weight");
+            tracing::info!("Evicting transaction (txid={victim}, cost={cost}, weight={weight})");
+            for evicted_tx in self.verified.remove(&victim) {
+                let evicted_id = evicted_tx.transaction.id();
+                self.reject(evicted_id, ExactTipRejectionError::Evicted.into());
+                evicted_ids.insert(evicted_id);
+            }
+        }
+        // A `usize` always fits in a `u64` on supported platforms.
+        metrics::counter!("zcash.mempool.evicted").increment(evicted_ids.len() as u64);
         Ok(evicted_ids)
     }
 
@@ -1154,6 +1224,12 @@ impl Storage {
                 continue;
             };
             tracing::debug!(?tx_id, error = %eviction.error, "evicting a mempool transaction at the new tip");
+            // ycashd's MP-1 sweep line (`src/yellowback/index.cpp` RemoveInvalidVaultSpends).
+            tracing::info!(
+                "yellowback: dropping {} from the mempool at the new tip: {}",
+                eviction.mined_id,
+                eviction.error
+            );
             removed.extend(
                 self.verified
                     .remove_all_that(|tx| tx.transaction.id().mined_id() == eviction.mined_id),
