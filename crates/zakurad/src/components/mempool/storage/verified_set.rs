@@ -611,7 +611,8 @@ impl VerifiedSet {
     }
 
     /// Panics if any dependency group exceeds the admission limit.
-    #[cfg(test)]
+    // kogany: only the Zcash-build eviction tests call this.
+    #[cfg(all(test, not(feature = "ycash")))]
     pub(super) fn assert_dependency_groups_are_bounded(&self) {
         let removed = HashSet::new();
         let expected: BTreeSet<_> = self
