@@ -181,6 +181,19 @@ pub const MAX_DEFERRED_PER_PEER: usize = 100;
 #[cfg(feature = "ycash")]
 pub const MAX_DEFERRED: usize = MAX_INBOUND_CONCURRENCY;
 
+/// Ycash: how long a download waits before re-requesting an announced id after a `notfound`.
+#[cfg(feature = "ycash")]
+pub const NOTFOUND_RETRY_DELAY: Duration = Duration::from_secs(1);
+
+/// Ycash: whether a download failed because the peer answered `notfound`.
+#[cfg(feature = "ycash")]
+fn is_not_found_response(error: &BoxError) -> bool {
+    error
+        .downcast_ref::<zn::SharedPeerError>()
+        .and_then(zn::SharedPeerError::not_found_class)
+        == Some(zn::NotFoundClass::Response)
+}
+
 /// A marker struct for the oneshot channels which cancel a pending download and verify.
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 struct CancelDownloadAndVerify;
@@ -565,6 +578,8 @@ where
         let verifier = self.verifier.clone();
         let mut state = self.state.clone();
         let download_source = source.as_ref().and_then(peer_source_from_queue_source);
+        #[cfg(feature = "ycash")]
+        let inv_announced = source.is_some();
         let pushed_advertiser_addr = source.as_ref().and_then(advertiser_addr_from_queue_source);
         let max_transaction_bytes = self.max_transaction_bytes;
         let peer_cooldowns = self.peer_cooldowns.clone();
@@ -607,9 +622,23 @@ where
                         None => zn::Request::TransactionsById(request_ids),
                     };
 
-                    let tx = match network
-                        .oneshot(req)
-                        .await
+                    #[cfg(feature = "ycash")]
+                    let retry_req = inv_announced.then(|| req.clone());
+                    let response = network.clone().oneshot(req).await;
+                    // Ycash: a `notfound` for an announced id is retried once after a short
+                    // delay, as ycashd re-requests from its advertiser. A legacy download is
+                    // routed by the inventory registry, which can lag the `inv` that queued it,
+                    // so the first request can reach a peer without the tx; by the retry the
+                    // advertiser is registered. Otherwise the id waits for the crawler.
+                    #[cfg(feature = "ycash")]
+                    let response = match (response, retry_req) {
+                        (Err(e), Some(retry_req)) if is_not_found_response(&e) => {
+                            tokio::time::sleep(NOTFOUND_RETRY_DELAY).await;
+                            network.oneshot(retry_req).await
+                        }
+                        (response, _) => response,
+                    };
+                    let tx = match response
                         .map_err(CloneError::from)
                         .map_err(TransactionDownloadVerifyError::DownloadFailed)?
                     {
@@ -1242,6 +1271,62 @@ mod tests {
                 ),
             }
         );
+        poll_task.abort();
+    }
+
+    /// Ycash: a `notfound` for an id announced by a legacy peer is re-requested once after
+    /// [`NOTFOUND_RETRY_DELAY`], instead of failing the download until the crawler.
+    #[cfg(feature = "ycash")]
+    #[tokio::test]
+    async fn notfound_from_advertiser_is_retried_once_from_it() {
+        tokio::time::pause();
+        let txid = tx_id(7);
+        let advertiser: std::net::SocketAddr = ([127, 0, 0, 1], 8233).into();
+        let (network_tx, mut network_rx) = tokio::sync::mpsc::unbounded_channel();
+        let calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let mut downloads = Downloads::new(
+            BoxCloneService::new(service_fn(move |request: zn::Request| {
+                let (network_tx, calls) = (network_tx.clone(), calls.clone());
+                async move {
+                    network_tx.send((request, tokio::time::Instant::now()))?;
+                    if calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst) == 0 {
+                        let error = zn::PeerError::NotFoundResponse(vec![txid.into()]);
+                        return Err(zn::SharedPeerError::from(error).into());
+                    }
+                    future::pending::<Result<zn::Response, BoxError>>().await
+                }
+            })),
+            BoxCloneService::new(service_fn(|_request| {
+                future::pending::<Result<tx::Response, BoxError>>()
+            })),
+            BoxCloneService::new(service_fn(|request| async move {
+                match request {
+                    zs::ReadRequest::Transaction(_) => Ok(zs::ReadResponse::Transaction(None)),
+                    zs::ReadRequest::Tip => Ok(zs::ReadResponse::Tip(None)),
+                    request => Err(format!("unexpected state request: {request:?}").into()),
+                }
+            })),
+            false,
+            u64::MAX,
+            PeerCooldowns::default(),
+            Arc::new(Notify::new()),
+        );
+
+        downloads
+            .download_if_needed_and_verify(
+                Gossip::Id(txid),
+                Some(QueueSource::LegacySocket(advertiser)),
+                None,
+            )
+            .expect("download is queued");
+        let poll_task = tokio::spawn(async move {
+            let _ = downloads.next().await;
+        });
+        let (first, first_at) = network_rx.recv().await.expect("first request");
+        let (second, second_at) = network_rx.recv().await.expect("retried request");
+        assert_eq!(first, zn::Request::TransactionsById(HashSet::from([txid])));
+        assert_eq!(first, second, "the same request is sent again");
+        assert!(second_at - first_at >= NOTFOUND_RETRY_DELAY);
         poll_task.abort();
     }
 

@@ -209,6 +209,10 @@ impl Handler {
                 //   - the transaction messages are sent in a single continuous batch
                 //   - missing transactions are silently skipped
                 //     (there is no `notfound` message at the end of the batch)
+                // Ycash: a repeat of an id already received in this batch marks a peer that skips
+                // `notfound`, so it still ends the request (below).
+                #[cfg(feature = "ycash")]
+                let repeated = transactions.iter().any(|t| t.id() == transaction.id());
                 if pending_ids.remove(&transaction.id()) {
                     // we are in the middle of the continuous transaction messages
                     transactions.push(transaction);
@@ -230,11 +234,20 @@ impl Handler {
                     ignored_msg = Some(Message::Tx(transaction));
                 }
 
-                if ignored_msg.is_some() && transactions.is_empty() {
+                // Ycash: ycashd answers every getdata id with a `tx` or a final `notfound`, and
+                // relays an advertised tx between them, so an interleaved tx does not end the
+                // request; the remaining ids stay pending until the batch, the `notfound`, or the
+                // request timeout. Ending it here dropped inv-announced ids until the crawler.
+                #[cfg(feature = "ycash")]
+                let interleaved_ends_request = ignored_msg.is_some() && repeated;
+                #[cfg(not(feature = "ycash"))]
+                let interleaved_ends_request = ignored_msg.is_some();
+
+                if interleaved_ends_request && transactions.is_empty() {
                     // If we didn't get anything we wanted, retry the request.
                     let missing_transaction_ids = pending_ids.into_iter().map(Into::into).collect();
                     Handler::Finished(Err(PeerError::NotFoundResponse(missing_transaction_ids)))
-                } else if pending_ids.is_empty() || ignored_msg.is_some() {
+                } else if pending_ids.is_empty() || interleaved_ends_request {
                     // If we got some of what we wanted, let the internal client know.
                     let available = transactions
                         .into_iter()
