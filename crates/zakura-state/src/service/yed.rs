@@ -357,10 +357,13 @@ pub fn maybe_inject_yed_test_fault(
         Some(YedTestFault::Crash(at)) if height >= at => {
             // ycashd's line (`index.cpp:526`), written unbuffered: the kill drops the tracing
             // writer's buffer.
-            eprintln!(
-                "yellowback: -yellowbacktestfault: crash before judging block {hash} at {}",
-                height.0
-            );
+            #[allow(clippy::print_stderr)]
+            {
+                eprintln!(
+                    "yellowback: -yellowbacktestfault: crash before judging block {hash} at {}",
+                    height.0
+                );
+            }
             // ycashd's `raise(SIGKILL)`: no unwinding, no crash report holding the database lock.
             #[cfg(unix)]
             #[allow(unsafe_code)]
