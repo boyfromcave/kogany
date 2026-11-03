@@ -1,4 +1,6 @@
 //! Tests for types and functions for the `getblocktemplate` RPC.
+// kogany: the Zcash-fixture tests are not built with `ycash`, leaving their helpers unused.
+#![cfg_attr(feature = "ycash", allow(unused_imports, dead_code))]
 
 mod nsm_fees;
 
@@ -130,6 +132,9 @@ fn a_dropped_preparation_worker_releases_the_queue() {
 /// Tests transparent coinbase generation at every configured Sapling-and-later
 /// network upgrade activation.
 #[test]
+// kogany: Zcash upgrades (NU5 to NU6.3) and funding streams; not run on Ycash (its coinbase
+// tests are get_block_template/ycash/tests.rs).
+#[cfg(not(feature = "ycash"))]
 fn transparent_coinbase() -> anyhow::Result<()> {
     let regtest = testnet::Parameters::build()
         .with_slow_start_interval(Height::MIN)
@@ -351,14 +356,23 @@ fn distinct_coinbase_tags_give_shared_address_miners_distinct_work() {
             },
         )
         .expect("valid miner config");
-        TransactionTemplate::new_coinbase(&net, height, &params, Amount::zero(), None)
-            .expect("coinbase builds")
-            .data()
-            .as_ref()
-            .zcash_deserialize_into::<Transaction>()
-            .expect("coinbase deserializes")
+        let coinbase =
+            TransactionTemplate::new_coinbase(&net, height, &params, Amount::zero(), None)
+                .expect("coinbase builds")
+                .data()
+                .as_ref()
+                .zcash_deserialize_into::<Transaction>()
+                .expect("coinbase deserializes");
+        // kogany: a Ycash coinbase is V4 (no authorizing-data digest); its txid commits to the
+        // coinbase script that carries the tag, so the txid is the work the tag must change.
+        #[cfg(feature = "ycash")]
+        let work: [u8; 32] = coinbase.hash().into();
+        #[cfg(not(feature = "ycash"))]
+        let work: [u8; 32] = coinbase
             .auth_digest()
             .expect("a V5 or later coinbase has an authorizing-data digest")
+            .into();
+        work
     };
 
     assert_eq!(
@@ -426,6 +440,9 @@ fn miner_params_reject_malformed_unified_receivers() {
 /// Sapling payouts fail explicitly, and unified addresses use transparent
 /// receivers before Ironwood activation.
 #[test]
+// kogany: Zcash upgrades (NU5 to NU6.3) and funding streams; not run on Ycash (its coinbase
+// tests are get_block_template/ycash/tests.rs).
+#[cfg(not(feature = "ycash"))]
 fn coinbase_addresses_without_sapling() -> anyhow::Result<()> {
     let net = shielded_coinbase_testnet();
     let sapling_params = MinerParams::from(

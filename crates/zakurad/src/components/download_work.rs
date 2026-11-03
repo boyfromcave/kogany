@@ -34,6 +34,14 @@ pub(super) fn has_sufficient_work(
     height: Height,
     target: CompactDifficulty,
 ) -> bool {
+    // kogany: the floor's height and reference target are Zcash Mainnet's. Ycash Mainnet's
+    // difficulty is far below a tenth of Zcash's, so above 3,535,411 every Ycash block would be
+    // refused and sync would stop; ycashd has no such floor. With `ycash` there is none until a
+    // Ycash reference is calibrated.
+    if cfg!(feature = "ycash") {
+        return true;
+    }
+
     if !matches!(network, Network::Mainnet) || height <= MAINNET_WORK_FLOOR_HEIGHT {
         return true;
     }
@@ -56,11 +64,15 @@ mod tests {
     use zakura_chain::work::difficulty::ParameterDifficulty as _;
 
     #[test]
+    // kogany: Zcash Mainnet's floor; with `ycash` there is none (see `has_sufficient_work`).
+    #[cfg(not(feature = "ycash"))]
     fn mainnet_work_floor_covers_the_default_semantic_path() {
         assert!(MAINNET_WORK_FLOOR_HEIGHT <= Network::Mainnet.checkpoint_list().max_height());
     }
 
     #[test]
+    // kogany: Zcash Mainnet's floor; with `ycash` there is none (see `has_sufficient_work`).
+    #[cfg(not(feature = "ycash"))]
     fn mainnet_work_floor_preserves_earlier_blocks_and_other_networks() {
         let easiest_target = Network::Mainnet.target_difficulty_limit().to_compact();
         for height in [Height(0), MAINNET_WORK_FLOOR_HEIGHT] {
@@ -85,6 +97,8 @@ mod tests {
     }
 
     #[test]
+    // kogany: Zcash Mainnet's floor; with `ycash` there is none (see `has_sufficient_work`).
+    #[cfg(not(feature = "ycash"))]
     fn mainnet_work_floor_compares_expanded_targets_at_the_boundary() {
         let height = MAINNET_WORK_FLOOR_HEIGHT.next().unwrap();
         let max_target =
@@ -114,5 +128,22 @@ mod tests {
             height,
             CompactDifficulty::from_le_bytes([0; 4]),
         ));
+    }
+
+    /// kogany: a Ycash build applies no download work floor on any network, at any height.
+    #[test]
+    #[cfg(feature = "ycash")]
+    fn ycash_networks_have_no_download_work_floor() {
+        let height = MAINNET_WORK_FLOOR_HEIGHT.next().unwrap();
+        for network in [
+            Network::Mainnet,
+            Network::new_default_testnet(),
+            Network::new_regtest(Default::default()),
+        ] {
+            let easiest_target = network.target_difficulty_limit().to_compact();
+            for height in [Height(0), MAINNET_WORK_FLOOR_HEIGHT, height, Height::MAX] {
+                assert!(has_sufficient_work(&network, height, easiest_target));
+            }
+        }
     }
 }

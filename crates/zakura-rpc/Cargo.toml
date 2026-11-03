@@ -42,7 +42,7 @@ internal-miner = []
 # `testnetprofile`), see zakura-chain's `ycash` feature. kogany W8: the coinbase tag and the
 # vault and YED template filter read kogany-yellowback and kogany-vault too; W7-e: the reject
 # table (VaultReject, the YED verdicts) and the Ycash scriptPubKey shapes.
-ycash = ["zakura-chain/ycash", "zakura-consensus/ycash", "zakura-script/ycash", "dep:kogany-vault", "dep:kogany-yellowback"]
+ycash = ["zakura-chain/ycash", "zakura-consensus/ycash", "zakura-network/ycash", "zakura-script/ycash", "zakura-state/ycash", "dep:kogany-vault", "dep:kogany-yellowback"]
 
 # Test-only features
 

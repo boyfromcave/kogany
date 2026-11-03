@@ -1,4 +1,6 @@
 //! Fixed test vectors for the ReadStateService.
+// kogany: the Zcash-fixture tests are not built with `ycash`, leaving their helpers unused.
+#![cfg_attr(feature = "ycash", allow(unused_imports, dead_code))]
 
 use std::sync::Arc;
 
@@ -857,6 +859,9 @@ async fn missing_subtree_before_last_checkpoint_reports_indeterminate_reason() {
 /// Ask for the first incomplete Ironwood index from the embedded frontier leaf count so the
 /// regression stays valid after release-state imports complete earlier Ironwood subtrees.
 #[tokio::test]
+// kogany: Zcash Mainnet embedded VCT frontier, grid and subtree artefacts, which a Ycash network
+// has none of (K-12); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn incomplete_ironwood_subtree_before_mainnet_last_checkpoint_is_empty() {
     let _init_guard = zakura_test::init();
     let blocks: Vec<Arc<Block>> = zakura_test::vectors::CONTINUOUS_MAINNET_BLOCKS

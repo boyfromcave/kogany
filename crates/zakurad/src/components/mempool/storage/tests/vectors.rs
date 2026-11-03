@@ -1,5 +1,6 @@
 //! Fixed test vectors for mempool storage.
-
+// kogany: the Zcash-fixture tests are not built with `ycash`, leaving their helpers unused.
+#![cfg_attr(feature = "ycash", allow(unused_imports, dead_code))]
 #![allow(clippy::unwrap_in_result)]
 
 use std::iter;
@@ -89,6 +90,9 @@ fn verified_ironwood_v6_tx(
 }
 
 #[test]
+// kogany: Zcash Mainnet block and transaction vectors (NU5-and-later branch IDs, Zcash-only
+// heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn oversized_policy_rejection_is_cached_by_exact_id() {
     let mut storage = Storage::new(&config::Config::default());
     let transaction = Network::Mainnet
@@ -123,6 +127,9 @@ fn oversized_policy_rejection_is_cached_by_exact_id() {
 }
 
 #[test]
+// kogany: Zcash Mainnet block and transaction vectors (NU5-and-later branch IDs, Zcash-only
+// heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn mempool_storage_crud_exact_mainnet() {
     let _init_guard = zakura_test::init();
 
@@ -158,6 +165,9 @@ fn mempool_storage_crud_exact_mainnet() {
 /// `transactions_exact` must not return a same-effects variant whose authorizing
 /// data differs from the requested ID.
 #[test]
+// kogany: Zcash Mainnet block and transaction vectors (NU5-and-later branch IDs, Zcash-only
+// heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn transactions_exact_ignores_different_authorizing_data() {
     let _init_guard = zakura_test::init();
 
@@ -284,6 +294,9 @@ fn mempool_storage_basic_for_network(network: Network) -> Result<()> {
 }
 
 #[test]
+// kogany: Zcash Mainnet block and transaction vectors (NU5-and-later branch IDs, Zcash-only
+// heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn mempool_storage_crud_same_effects_mainnet() {
     let _init_guard = zakura_test::init();
 

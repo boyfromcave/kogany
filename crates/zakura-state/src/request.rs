@@ -836,6 +836,9 @@ mod tests {
     use zakura_chain::serialization::ZcashDeserializeInto;
 
     #[test]
+    // kogany: Zcash Mainnet and Testnet block vectors (NU5 branch IDs, Zcash Heartwood and NU5
+    // heights); not run on Ycash.
+    #[cfg(not(feature = "ycash"))]
     fn transaction_hashes_and_auth_data_root_matches_separate_computation() {
         let _init_guard = zakura_test::init();
 
@@ -894,6 +897,9 @@ mod tests {
     }
 
     #[test]
+    // kogany: Zcash Mainnet and Testnet block vectors (NU5 branch IDs, Zcash Heartwood and NU5
+    // heights); not run on Ycash.
+    #[cfg(not(feature = "ycash"))]
     fn checkpoint_precomputed_auth_data_root_matches_its_block() {
         let _init_guard = zakura_test::init();
 

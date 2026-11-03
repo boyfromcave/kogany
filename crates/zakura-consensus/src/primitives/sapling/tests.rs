@@ -11,6 +11,8 @@
 //!
 //! The service regressions also cover offloaded preparation, explicit flushing,
 //! fallback isolation and response cancellation over real Mainnet bundles.
+// kogany: the Zcash-fixture tests are not built with `ycash`, leaving their helpers unused.
+#![cfg_attr(feature = "ycash", allow(unused_imports, dead_code))]
 
 use std::{
     future,
@@ -92,6 +94,9 @@ async fn explicitly_flushed_batch(items: Vec<Item>) -> (Vec<Result<(), BoxError>
 
 /// Real fixtures verify across partial and automatically full batches.
 #[tokio::test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn explicit_flush_verifies_partial_and_multiple_sapling_batches() {
     let _guard = zakura_test::init();
     let source: Vec<_> = mined_sapling_transactions()
@@ -109,6 +114,9 @@ async fn explicit_flush_verifies_partial_and_multiple_sapling_batches() {
 
 /// Failed preparation must not force valid neighbors into single-item retries.
 #[tokio::test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn malformed_sapling_bundle_does_not_retry_valid_neighbors() {
     let _guard = zakura_test::init();
     let (nu, tx) = mined_v4_sapling_transaction_with_spends();
@@ -129,6 +137,9 @@ async fn malformed_sapling_bundle_does_not_retry_valid_neighbors() {
 
 /// Cryptographic failures trigger retries and preserve good items.
 #[tokio::test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn invalid_sapling_signature_retries_batch_and_rejects_only_bad_item() {
     let _guard = zakura_test::init();
     let (nu, tx) = mined_v4_sapling_transaction_with_spends();
@@ -144,6 +155,9 @@ async fn invalid_sapling_signature_retries_batch_and_rejects_only_bad_item() {
 
 /// Dropped response futures preserve the remaining items' admission indices.
 #[tokio::test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn dropping_sapling_response_preserves_other_batch_results() {
     use super::{BatchControl, Verifier};
 
@@ -168,6 +182,9 @@ async fn dropping_sapling_response_preserves_other_batch_results() {
 
 /// The last batch completes if its verifier is dropped before an explicit flush.
 #[tokio::test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn dropping_sapling_verifier_flushes_unprepared_items() {
     use super::{BatchControl, Verifier};
 
@@ -195,6 +212,9 @@ async fn dropping_sapling_verifier_flushes_unprepared_items() {
 /// Early rejection waits for the configured CPU worker rather than preparing the
 /// bundle while polling its async response.
 #[tokio::test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn sapling_fallback_preparation_waits_for_the_rayon_worker() {
     let _guard = zakura_test::init();
     let (nu, tx) = mined_v4_sapling_transaction_with_spends();
@@ -224,6 +244,9 @@ async fn sapling_fallback_preparation_waits_for_the_rayon_worker() {
 
 /// A panic in a fallback CPU job must become an error and leave the pool usable.
 #[tokio::test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn sapling_fallback_contains_worker_panics() {
     let _guard = zakura_test::init();
     let result = tokio::time::timeout(
@@ -297,6 +320,9 @@ fn sapling_verifying_keys_are_reused() {
 }
 
 #[tokio::test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn historical_sapling_coinbase_verifies_without_proving_parameters() {
     let _guard = zakura_test::init();
     let height = 949_496;
@@ -512,6 +538,9 @@ fn as_fake_v5(tx: &Transaction) -> Transaction {
 }
 
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn cache_key_is_deterministic() {
     let tx = sapling_transaction();
 
@@ -524,6 +553,9 @@ fn cache_key_is_deterministic() {
 
 /// Two different Sapling bundles get different keys.
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn cache_key_distinguishes_different_transactions() {
     let transactions = sapling_transactions();
 
@@ -550,6 +582,9 @@ fn cache_key_distinguishes_different_transactions() {
 /// It is not a function of the transaction alone: the amounts and scripts of the spent
 /// transparent outputs enter it, and those come from the verification context.
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn cache_key_commits_to_the_sighash() {
     let tx = sapling_transaction();
     let original = item(&tx, NetworkUpgrade::Nu5).expect("the transaction has a bundle");
@@ -571,6 +606,9 @@ fn cache_key_commits_to_the_sighash() {
 /// binding signature, and `value_balance` enters the binding verification key. A v1-v4
 /// transaction ID is the hash of the whole serialized transaction, so each of those is inside it.
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn v4_cache_key_changes_with_every_piece_of_authorizing_data() {
     let tx = sapling_transaction_with_spends();
     let original = cache_key(&tx, NetworkUpgrade::Nu5);
@@ -602,6 +640,9 @@ fn v4_cache_key_changes_with_every_piece_of_authorizing_data() {
 /// The [`WtxId`](zakura_chain::transaction::WtxId) in the key carries the authorizing-data digest
 /// as well, which is what makes it complete.
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn v5_cache_key_changes_with_authorizing_data_its_txid_ignores() {
     let v4 = sapling_transaction_with_spends();
     let v5 = as_fake_v5(&v4);
@@ -695,6 +736,9 @@ fn mutated_value_balance(tx: &Transaction) -> Transaction {
 /// automatic. It is pinned because the two bundles verify identically, which is exactly when a
 /// key that named the bundle instead of the transaction could collide.
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn cache_key_distinguishes_v4_and_v5_carrying_the_same_bundle() {
     let v4 = sapling_transactions()
         .into_iter()
@@ -759,6 +803,9 @@ impl Service<Item> for CountingVerifier {
 }
 
 #[tokio::test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn cache_skips_the_inner_service_for_an_already_verified_bundle() {
     let tx = sapling_transaction();
     let inner = CountingVerifier::new(true);
@@ -782,6 +829,9 @@ async fn cache_skips_the_inner_service_for_an_already_verified_bundle() {
 }
 
 #[tokio::test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn cache_does_not_reuse_a_result_across_bundles() {
     let transactions = sapling_transactions();
     let inner = CountingVerifier::new(true);
@@ -810,6 +860,9 @@ async fn cache_does_not_reuse_a_result_across_bundles() {
 /// gives the benchmarks: a workload replayed against a cleared cache measures verification, not
 /// hits.
 #[tokio::test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn clearing_the_cache_forces_reverification() {
     let tx = sapling_transaction();
     let inner = CountingVerifier::new(true);
@@ -848,6 +901,9 @@ async fn clearing_the_cache_forces_reverification() {
 /// and an error can report that the batch worker shut down rather than that a proof is invalid.
 /// Remembering either as "invalid" would make the node reject valid blocks.
 #[tokio::test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn cache_does_not_remember_failures() {
     let tx = sapling_transaction();
     let inner = CountingVerifier::new(false);
@@ -911,6 +967,9 @@ impl Service<Item> for UnreadyVerifier {
 /// and a `Batch` whose worker has exited would otherwise turn a remembered `Ok` into a
 /// verification failure.
 #[tokio::test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn cache_hit_survives_an_inner_service_that_never_becomes_ready() {
     let tx = sapling_transaction();
 
@@ -946,6 +1005,9 @@ async fn cache_hit_survives_an_inner_service_that_never_becomes_ready() {
 /// A Sapling cache miss still propagates an inner readiness failure, and does not record it as a
 /// success.
 #[tokio::test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn cache_miss_propagates_an_inner_readiness_failure() {
     let tx = sapling_transaction();
     let dead = UnreadyVerifier::new();
@@ -1007,6 +1069,9 @@ fn uncached_verification_behind_a_fresh_cache() -> Cached<super::BatchFallbackSe
 /// signatures do not verify against another era's sighash, and the rejection proves the bundle
 /// was actually checked rather than answered from the cache.
 #[tokio::test(flavor = "multi_thread")]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn a_bundle_verified_under_one_upgrade_is_not_reused_under_another() {
     use crate::error::TransactionError;
 
@@ -1068,6 +1133,9 @@ async fn a_bundle_verified_under_one_upgrade_is_not_reused_under_another() {
 /// The corruption keeps the proof well-formed, so it passes `check_bundle`'s synchronous checks
 /// and can only be caught by the batch validation the cache would have skipped.
 #[tokio::test(flavor = "multi_thread")]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn cached_verifier_still_rejects_a_corrupted_proof_after_verifying_a_valid_one() {
     use crate::error::TransactionError;
 
@@ -1123,6 +1191,9 @@ async fn cached_verifier_still_rejects_a_corrupted_proof_after_verifying_a_valid
 /// second layer: if a bundle with an invalid `cv` reaches the Sapling verifier anyway,
 /// `check_bundle` fails closed before it batches any proof or signature.
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn library_verifier_rejects_invalid_value_commitments_that_now_convert() {
     let _init_guard = zakura_test::init();
 

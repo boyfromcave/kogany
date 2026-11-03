@@ -1618,6 +1618,8 @@ mod tests {
 }
 
 #[cfg(test)]
+// kogany: the Zcash-fixture tests are not built with `ycash`.
+#[cfg_attr(feature = "ycash", allow(unused_imports, dead_code))]
 mod deferred_pool_tests {
     use zakura_chain::{
         amount::{Amount, NonNegative},
@@ -1636,6 +1638,9 @@ mod deferred_pool_tests {
     /// Rollback reverses the deferred funding stream inside slow start, where block commits
     /// already apply it on configured networks.
     #[test]
+    // kogany: Zcash funding streams, lockbox and NU7 deferred-pool schedules (Zcash t3 stream
+    // addresses); not run on Ycash.
+    #[cfg(not(feature = "ycash"))]
     fn deferred_pool_change_applies_during_slow_start() {
         let _init_guard = zakura_test::init();
 

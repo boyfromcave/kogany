@@ -1,4 +1,6 @@
 //! Tests for the state write task.
+// kogany: the Zcash-fixture tests are not built with `ycash`, leaving their helpers unused.
+#![cfg_attr(feature = "ycash", allow(unused_imports, dead_code))]
 
 mod attachment_and_vct_aux;
 mod deferred;

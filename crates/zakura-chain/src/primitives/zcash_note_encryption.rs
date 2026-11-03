@@ -85,6 +85,8 @@ fn ironwood_action_decrypts_successfully<A>(act: &orchard::Action<A>) -> bool {
 }
 
 #[cfg(test)]
+// kogany: the Zcash-fixture tests are not built with `ycash`.
+#[cfg_attr(feature = "ycash", allow(unused_imports, dead_code))]
 mod tests {
     use group::{ff::PrimeField, CurveAffine, GroupEncoding};
     use halo2::pasta::pallas;
@@ -140,6 +142,9 @@ mod tests {
     }
 
     #[test]
+    // kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, Equihash (200, 9),
+    // Zcash Mainnet heights); not run on Ycash.
+    #[cfg(not(feature = "ycash"))]
     fn decrypts_successfully_routes_v6_ironwood_outputs_through_ironwood_domain() {
         let vector = zakura_test::vectors::ORCHARD_NOTE_ENCRYPTION_ZERO_VECTOR
             .first()

@@ -296,6 +296,9 @@ mod tests {
     use super::*;
 
     #[test]
+    // kogany: Zcash funding streams, lockbox, NU6.3/NU7 and ZIP 218/234 schedules (a Ycash network
+    // rejects NU5 with Vault); not run on Ycash.
+    #[cfg(not(feature = "ycash"))]
     fn nu7_fpf_rotation_boundaries() {
         // Pre-NU7 Mainnet periods contain 35,000 blocks and align with the first
         // halving: 3,146,400 starts H3, and 3,531,400 starts its twelfth period.
@@ -333,6 +336,9 @@ mod tests {
     }
 
     #[test]
+    // kogany: Zcash funding streams, lockbox, NU6.3/NU7 and ZIP 218/234 schedules (a Ycash network
+    // rejects NU5 with Vault); not run on Ycash.
+    #[cfg(not(feature = "ycash"))]
     fn zip_259_mainnet_activation_rotates_to_zip_2008_recipient() {
         // The ZIP 259 Mainnet NU7 activation height, its first moved address
         // rotation, and the moved end of the Revision 2 stream.

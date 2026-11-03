@@ -451,6 +451,8 @@ impl Address {
 }
 
 #[cfg(test)]
+// kogany: the Zcash-fixture tests are not built with `ycash`.
+#[cfg_attr(feature = "ycash", allow(unused_imports, dead_code))]
 mod tests {
     use ripemd::{Digest, Ripemd160};
     use secp256k1::PublicKey;
@@ -459,6 +461,8 @@ mod tests {
     use super::*;
 
     #[test]
+    // kogany: Zcash transparent address fixtures (t1, t3, tm, t2 prefixes); not run on Ycash.
+    #[cfg(not(feature = "ycash"))]
     fn serde_address_preserves_display_and_from_str() {
         for encoded in [
             "t3Vz22vK5z2LcKEdg16Yv4FFneEL1zg9ojd",
@@ -558,6 +562,8 @@ mod tests {
     }
 
     #[test]
+    // kogany: Zcash transparent address fixtures (t1, t3, tm, t2 prefixes); not run on Ycash.
+    #[cfg(not(feature = "ycash"))]
     fn pubkey_mainnet() {
         let _init_guard = zakura_test::init();
 
@@ -573,6 +579,8 @@ mod tests {
     }
 
     #[test]
+    // kogany: Zcash transparent address fixtures (t1, t3, tm, t2 prefixes); not run on Ycash.
+    #[cfg(not(feature = "ycash"))]
     fn pubkey_testnet() {
         let _init_guard = zakura_test::init();
 
@@ -588,6 +596,8 @@ mod tests {
     }
 
     #[test]
+    // kogany: Zcash transparent address fixtures (t1, t3, tm, t2 prefixes); not run on Ycash.
+    #[cfg(not(feature = "ycash"))]
     fn empty_script_mainnet() {
         let _init_guard = zakura_test::init();
 
@@ -599,6 +609,8 @@ mod tests {
     }
 
     #[test]
+    // kogany: Zcash transparent address fixtures (t1, t3, tm, t2 prefixes); not run on Ycash.
+    #[cfg(not(feature = "ycash"))]
     fn empty_script_testnet() {
         let _init_guard = zakura_test::init();
 
@@ -610,6 +622,8 @@ mod tests {
     }
 
     #[test]
+    // kogany: Zcash transparent address fixtures (t1, t3, tm, t2 prefixes); not run on Ycash.
+    #[cfg(not(feature = "ycash"))]
     fn from_string() {
         let _init_guard = zakura_test::init();
 
@@ -619,6 +633,8 @@ mod tests {
     }
 
     #[test]
+    // kogany: Zcash transparent address fixtures (t1, t3, tm, t2 prefixes); not run on Ycash.
+    #[cfg(not(feature = "ycash"))]
     fn debug() {
         let _init_guard = zakura_test::init();
 

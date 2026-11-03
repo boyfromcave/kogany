@@ -1468,7 +1468,9 @@ where
                     .await
                     .map_err(|e| TransactionError::Other(e.to_string()))?
                 else {
-                    unreachable!("Request::BestChainVaultSnapshot always responds with VaultSnapshot")
+                    unreachable!(
+                        "Request::BestChainVaultSnapshot always responds with VaultSnapshot"
+                    )
                 };
                 let at_parent = snapshot
                     .as_ref()

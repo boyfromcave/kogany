@@ -3349,6 +3349,8 @@ impl fmt::Display for LegacyRequestFrame {
 pub(super) mod bounded_decoding;
 
 #[cfg(test)]
+// kogany: the Zcash-fixture tests are not built with `ycash`.
+#[cfg_attr(feature = "ycash", allow(unused_imports, dead_code))]
 mod tests {
     use super::*;
     use std::{
@@ -4238,6 +4240,8 @@ mod tests {
     }
 
     #[tokio::test]
+    // kogany: the Zakura P2P v2 stack, which is off on Ycash (K-11); not run on Ycash.
+    #[cfg(not(feature = "ycash"))]
     async fn adapter_gossips_block_and_tx_ids_between_two_nodes() -> Result<(), BoxError> {
         let _guard = zakura_test::init();
         let (node_a, mut rx_a) = legacy_node(11).await?;
@@ -4487,6 +4491,8 @@ mod tests {
     }
 
     #[tokio::test]
+    // kogany: the Zakura P2P v2 stack, which is off on Ycash (K-11); not run on Ycash.
+    #[cfg(not(feature = "ycash"))]
     async fn request_adapter_fetches_available_and_missing_transactions() -> Result<(), BoxError> {
         let _guard = zakura_test::init();
         let transaction = UnminedTx::from(empty_v5_transaction(2));
@@ -4702,6 +4708,8 @@ mod tests {
     }
 
     #[tokio::test]
+    // kogany: the Zakura P2P v2 stack, which is off on Ycash (K-11); not run on Ycash.
+    #[cfg(not(feature = "ycash"))]
     async fn request_adapter_supports_mempool_ping_and_push_transaction() -> Result<(), BoxError> {
         let _guard = zakura_test::init();
         let block = Arc::new(Block::zcash_deserialize(
@@ -4850,6 +4858,8 @@ mod tests {
     }
 
     #[tokio::test]
+    // kogany: the Zakura P2P v2 stack, which is off on Ycash (K-11); not run on Ycash.
+    #[cfg(not(feature = "ycash"))]
     async fn service_request_routes_to_advertiser_then_fallback_after_missing(
     ) -> Result<(), BoxError> {
         let _guard = zakura_test::init();
@@ -5054,6 +5064,8 @@ mod tests {
     /// total attempt timeout, so all three reach the fallback in time, and the
     /// silent peer stays connected.
     #[tokio::test]
+    // kogany: the Zakura P2P v2 stack, which is off on Ycash (K-11); not run on Ycash.
+    #[cfg(not(feature = "ycash"))]
     async fn silent_source_downloads_reach_the_fallback_in_time() -> Result<(), BoxError> {
         let _guard = zakura_test::init();
         // `TRANSACTION_DOWNLOAD_TIMEOUT` in `zakurad`.
@@ -5186,6 +5198,8 @@ mod tests {
     /// keeps trickling frames, is cut off at the attempt timeout, which covers
     /// the whole exchange and not just its first frame.
     #[tokio::test]
+    // kogany: the Zakura P2P v2 stack, which is off on Ycash (K-11); not run on Ycash.
+    #[cfg(not(feature = "ycash"))]
     async fn partial_transaction_responses_are_cut_off() -> Result<(), BoxError> {
         let _guard = zakura_test::init();
         let (withheld, trickled) = futures::join!(
@@ -5266,6 +5280,8 @@ mod tests {
     /// When the advertising peer is not ready and an unrelated peer is the only
     /// candidate, a missing answer is not retried against that unrelated peer.
     #[tokio::test]
+    // kogany: the Zakura P2P v2 stack, which is off on Ycash (K-11); not run on Ycash.
+    #[cfg(not(feature = "ycash"))]
     async fn source_missing_retries_skip_an_unrelated_sole_peer() -> Result<(), BoxError> {
         let _guard = zakura_test::init();
         let txid = UnminedTx::from(empty_v5_transaction(4)).id();
@@ -5908,6 +5924,8 @@ mod tests {
     }
 
     #[test]
+    // kogany: the Zakura P2P v2 stack, which is off on Ycash (K-11); not run on Ycash.
+    #[cfg(not(feature = "ycash"))]
     fn tx_gossip_round_trips_legacy_and_witnessed_ids() {
         let frame =
             LegacyGossipFrame::AdvertiseTransactionIds(vec![legacy_tx_id(2), witnessed_tx_id(3)]);
@@ -5920,6 +5938,8 @@ mod tests {
     }
 
     #[test]
+    // kogany: the Zakura P2P v2 stack, which is off on Ycash (K-11); not run on Ycash.
+    #[cfg(not(feature = "ycash"))]
     fn inventory_request_frames_round_trip_and_enforce_bounds() {
         let block_request = LegacyRequestFrame::BlocksByHash(vec![block_hash(1), block_hash(2)]);
         assert_eq!(
@@ -6542,6 +6562,8 @@ mod tests {
     /// F-36: transaction responses, available or missing, must be bound to the
     /// requested IDs, as block responses are.
     #[test]
+    // kogany: the Zakura P2P v2 stack, which is off on Ycash (K-11); not run on Ycash.
+    #[cfg(not(feature = "ycash"))]
     fn decode_response_binds_transactions_to_requested_ids() -> Result<(), BoxError> {
         let transaction = UnminedTx::from(empty_v5_transaction(21));
         let missing_id = witnessed_tx_id(22);
@@ -6694,6 +6716,8 @@ mod tests {
     }
 
     #[test]
+    // kogany: the Zakura P2P v2 stack, which is off on Ycash (K-11); not run on Ycash.
+    #[cfg(not(feature = "ycash"))]
     fn response_codec_round_trips_chain_sync_and_mempool_responses() -> Result<(), BoxError> {
         let block = Arc::new(Block::zcash_deserialize(
             BLOCK_TESTNET_141042_BYTES.as_slice(),
@@ -7374,6 +7398,8 @@ mod tests {
     }
 
     #[tokio::test]
+    // kogany: the Zakura P2P v2 stack, which is off on Ycash (K-11); not run on Ycash.
+    #[cfg(not(feature = "ycash"))]
     async fn dual_stack_zakura_only_bypasses_legacy_for_inventory() -> Result<(), BoxError> {
         let _guard = zakura_test::init();
         let transaction = UnminedTx::from(empty_v5_transaction(9));
@@ -7414,6 +7440,8 @@ mod tests {
     }
 
     #[tokio::test]
+    // kogany: the Zakura P2P v2 stack, which is off on Ycash (K-11); not run on Ycash.
+    #[cfg(not(feature = "ycash"))]
     async fn dual_stack_zakura_only_routes_chain_sync_and_mempool_requests() -> Result<(), BoxError>
     {
         let _guard = zakura_test::init();

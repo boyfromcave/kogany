@@ -372,6 +372,8 @@ impl<S> Cached<S> {
     /// Readiness failures are not counted: an item that never reached the inner service was never
     /// verified by it.
     #[cfg(test)]
+    // kogany: used only by the Zcash-fixture tests, which are not built with `ycash`.
+    #[cfg_attr(feature = "ycash", allow(dead_code))]
     pub(super) fn inner_calls_for<I: CachedItem>(&self, item: &I) -> usize {
         let Some(key) = item.cache_key() else {
             return 0;
@@ -391,6 +393,8 @@ impl<S> Cached<S> {
     /// in a broken one, which is how the hit path is exercised in isolation from the inner
     /// service.
     #[cfg(test)]
+    // kogany: used only by the Zcash-fixture tests, which are not built with `ycash`.
+    #[cfg_attr(feature = "ycash", allow(dead_code))]
     pub(super) fn with_inner<T>(&self, inner: T) -> Cached<T> {
         Cached {
             inner,

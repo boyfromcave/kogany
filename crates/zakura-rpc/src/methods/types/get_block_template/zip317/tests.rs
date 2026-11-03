@@ -1,5 +1,6 @@
 //! Tests for ZIP-317 transaction selection for block template production
-
+// kogany: the Zcash-fixture tests are not built with `ycash`, leaving their helpers unused.
+#![cfg_attr(feature = "ycash", allow(unused_imports, dead_code))]
 #![allow(clippy::unwrap_in_result)]
 
 use zcash_transparent::address::TransparentAddress;
@@ -62,7 +63,11 @@ fn with_serialized_size(
 fn reserves_network_specific_header_and_transaction_count_sizes() {
     let regtest = Network::new_regtest(Default::default());
 
+    // kogany: Ycash Mainnet's Equihash (192, 7) solution is 400 bytes, Zcash's (200, 9) 1,344.
+    #[cfg(not(feature = "ycash"))]
     assert_eq!(block_template_overhead_bytes(&Network::Mainnet), 1_490);
+    #[cfg(feature = "ycash")]
+    assert_eq!(block_template_overhead_bytes(&Network::Mainnet), 546);
     assert_eq!(block_template_overhead_bytes(&regtest), 180);
 }
 
@@ -360,6 +365,8 @@ mod zip218_template_limits {
     /// global budget for a single Sapling output, even though the Sapling
     /// per-pool limit is untouched.
     #[test]
+    // kogany: ZIP-218 (NU7) with V5 transactions, which Ycash's fee rule refuses; not run on Ycash.
+    #[cfg(not(feature = "ycash"))]
     fn the_global_budget_bounds_selection_across_pools() {
         let mut limits = nu7_template_limits();
 

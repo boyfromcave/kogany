@@ -326,6 +326,8 @@ pub(super) fn try_flush(verifier: &VerifierService) -> Result<bool, BoxError> {
 
 /// Returns how many times `item` has reached the inner Sapling verifier.
 #[cfg(test)]
+// kogany: used only by the Zcash-fixture tests, which are not built with `ycash`.
+#[cfg_attr(feature = "ycash", allow(dead_code))]
 pub(crate) fn inner_calls_for(item: &Item) -> usize {
     VERIFIER.inner_calls_for(item)
 }

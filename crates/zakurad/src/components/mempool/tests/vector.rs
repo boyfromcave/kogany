@@ -431,6 +431,8 @@ fn transactions_declaring_a_later_upgrade_start_no_cooldown() {
 }
 
 #[test]
+// kogany: Zcash Mainnet schedules (NU6.3, the release's end-of-support heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn upgrade_grace_period_covers_the_first_blocks_of_each_upgrade() {
     use zakura_chain::parameters::testnet::ConfiguredActivationHeights;
 
@@ -1032,6 +1034,9 @@ async fn peer_penalties(
 /// an invalid one does, and that the mempool then ignores that peer's
 /// transaction advertisements instead of banning it.
 #[tokio::test(flavor = "multi_thread")]
+// kogany: Zcash Mainnet block and transaction vectors (NU5-and-later branch IDs, Zcash-only
+// heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn invalid_peer_transaction_starts_a_cooldown_instead_of_a_ban() -> Result<(), Report> {
     let network = Network::Mainnet;
     let mut transactions = network

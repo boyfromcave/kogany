@@ -1,5 +1,6 @@
 //! Implements methods for testing [`Handshake`]
-
+// kogany: the Zcash-fixture tests are not built with `ycash`, leaving their helpers unused.
+#![cfg_attr(feature = "ycash", allow(unused_imports, dead_code))]
 #![allow(clippy::unwrap_in_result)]
 
 use std::{
@@ -303,6 +304,8 @@ async fn start_test_zakura_endpoint_with_registry() -> (crate::zakura::ZakuraEnd
 /// the legacy upgrade prelude over the TCP stream, drop the legacy connection,
 /// and establish a real Zakura QUIC connection that registers on both ends.
 #[tokio::test]
+// kogany: the Zakura P2P v2 stack, which is off on Ycash (K-11); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn mutual_p2p_v2_legacy_upgrade_forms_zakura_connection() {
     let _init_guard = zakura_test::init();
 
@@ -414,6 +417,8 @@ async fn mutual_p2p_v2_legacy_upgrade_forms_zakura_connection() {
 /// registration (mirroring the initiator's hand-off wait) and otherwise fall
 /// back to a neutral `Rejected`, keeping the legacy connection.
 #[tokio::test]
+// kogany: the Zakura P2P v2 stack, which is off on Ycash (K-11); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn responder_upgrade_keeps_legacy_when_native_dial_never_registers() {
     let _init_guard = zakura_test::init();
 
@@ -698,6 +703,8 @@ async fn initiator_upgrade_disconnects_on_malformed_prelude() {
 ///
 /// Regression test for V12 #298060.
 #[tokio::test(start_paused = true)]
+// kogany: the Zakura P2P v2 stack, which is off on Ycash (K-11); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn timed_out_initiator_upgrade_does_not_leak_upgrade_dial() {
     let _init_guard = zakura_test::init();
 
@@ -894,6 +901,8 @@ fn p2p_v2_upgrade_uses_main_version_services_only() {
 }
 
 #[test]
+// kogany: the Zakura P2P v2 stack, which is off on Ycash (K-11); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn p2p_v2_upgrade_requires_local_enable_and_remote_service_bit() {
     let _init_guard = zakura_test::init();
 
@@ -1014,6 +1023,8 @@ async fn remote_p2p_v2_with_local_disabled_continues_legacy() {
 }
 
 #[tokio::test]
+// kogany: the Zakura P2P v2 stack, which is off on Ycash (K-11); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn mutual_p2p_v2_without_connector_fails_closed() {
     let _init_guard = zakura_test::init();
 
@@ -1067,6 +1078,8 @@ async fn mutual_p2p_v2_without_connector_fails_closed() {
 }
 
 #[tokio::test]
+// kogany: the Zakura P2P v2 stack, which is off on Ycash (K-11); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn mutual_p2p_v2_selected_upgrade_skips_legacy_connection() {
     let _init_guard = zakura_test::init();
 

@@ -179,6 +179,8 @@ impl Default for Nonce {
 }
 
 #[cfg(test)]
+// kogany: the Zcash-fixture tests are not built with `ycash`.
+#[cfg_attr(feature = "ycash", allow(unused_imports, dead_code))]
 mod test {
     use super::*;
     use crate::constants::CURRENT_NETWORK_PROTOCOL_VERSION;
@@ -212,11 +214,17 @@ mod test {
     }
 
     #[test]
+    // kogany: Zcash upgrade schedules (NU5 to NU7, NU6.3 protocol versions; a Ycash network rejects
+    // NU5 with Vault); not run on Ycash.
+    #[cfg(not(feature = "ycash"))]
     fn version_consistent_mainnet() {
         version_consistent(&Mainnet)
     }
 
     #[test]
+    // kogany: Zcash upgrade schedules (NU5 to NU7, NU6.3 protocol versions; a Ycash network rejects
+    // NU5 with Vault); not run on Ycash.
+    #[cfg(not(feature = "ycash"))]
     fn version_consistent_testnet() {
         version_consistent(&Network::new_default_testnet())
     }
@@ -260,6 +268,9 @@ mod test {
     /// Checks that Zakura advertises the Mainnet NU7 version, which meets the NU7
     /// minimum on every network.
     #[test]
+    // kogany: Zcash upgrade schedules (NU5 to NU7, NU6.3 protocol versions; a Ycash network rejects
+    // NU5 with Vault); not run on Ycash.
+    #[cfg(not(feature = "ycash"))]
     fn nu7_protocol_versions_match_current_version() {
         let _init_guard = zakura_test::init();
 
@@ -280,6 +291,9 @@ mod test {
 
     /// Checks the NU7 protocol versions against the ZIP 204 assignment rule.
     #[test]
+    // kogany: Zcash upgrade schedules (NU5 to NU7, NU6.3 protocol versions; a Ycash network rejects
+    // NU5 with Vault); not run on Ycash.
+    #[cfg(not(feature = "ycash"))]
     fn nu7_protocol_versions_follow_zip_204() {
         let _init_guard = zakura_test::init();
 
@@ -314,6 +328,9 @@ mod test {
     }
 
     #[test]
+    // kogany: Zcash upgrade schedules (NU5 to NU7, NU6.3 protocol versions; a Ycash network rejects
+    // NU5 with Vault); not run on Ycash.
+    #[cfg(not(feature = "ycash"))]
     fn custom_network_minimum_follows_activation_heights() {
         use zakura_chain::parameters::testnet::{ConfiguredActivationHeights, Parameters};
 

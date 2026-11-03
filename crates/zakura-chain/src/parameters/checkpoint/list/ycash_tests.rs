@@ -8,15 +8,36 @@ use super::*;
 /// at 65cb4ae0f: `:131-132` fork block, `:252-283` mainnet, `:571-583` testnet).
 const MAINNET_PINS: &[(u32, &str)] = &[
     (570_000, ycash::mainnet::YCASH_ACTIVATION_BLOCK_HASH),
-    (572_760, "00000008db657f58222e38e354c18ccbb6c74cf525ef4f3a95f0f8a324a3166d"),
-    (980_000, "00000510ccc6bae2ddb38b9313ffb9686397f6cd0dee243462baeaf8911d0791"),
-    (1_035_353, "00000543378a75f173914390c672838c9fbd9dc86ae647ffae18ed6b626edb30"),
-    (1_575_000, "000002b856230b06caa3412058e6490fab256cee9d9d9fb68eae59b4ebd94471"),
-    (2_250_000, "000003f98b7497fdcd8a6b6d10a93a887c5d47127e24a9dc3a40cb65754d21e7"),
+    (
+        572_760,
+        "00000008db657f58222e38e354c18ccbb6c74cf525ef4f3a95f0f8a324a3166d",
+    ),
+    (
+        980_000,
+        "00000510ccc6bae2ddb38b9313ffb9686397f6cd0dee243462baeaf8911d0791",
+    ),
+    (
+        1_035_353,
+        "00000543378a75f173914390c672838c9fbd9dc86ae647ffae18ed6b626edb30",
+    ),
+    (
+        1_575_000,
+        "000002b856230b06caa3412058e6490fab256cee9d9d9fb68eae59b4ebd94471",
+    ),
+    (
+        2_250_000,
+        "000003f98b7497fdcd8a6b6d10a93a887c5d47127e24a9dc3a40cb65754d21e7",
+    ),
 ];
 const TESTNET_PINS: &[(u32, &str)] = &[
-    (38_000, "001e9a2d2e2892b88e9998cf7b079b41d59dd085423a921fe8386cecc42287b8"),
-    (510_247, "0000ec904003d5591290064b0b4d3ccddffe87ef2a3a131284438959bf68fb31"),
+    (
+        38_000,
+        "001e9a2d2e2892b88e9998cf7b079b41d59dd085423a921fe8386cecc42287b8",
+    ),
+    (
+        510_247,
+        "0000ec904003d5591290064b0b4d3ccddffe87ef2a3a131284438959bf68fb31",
+    ),
 ];
 
 fn assert_pins(network: &Network, pins: &[(u32, &str)]) {

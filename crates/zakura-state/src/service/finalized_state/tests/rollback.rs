@@ -1411,6 +1411,9 @@ fn rollback_prunes_ironwood_nullifiers_above_target() {
 }
 
 #[test]
+// kogany: Zcash funding streams, lockbox and NU7 deferred-pool schedules (Zcash t3 stream
+// addresses); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn legacy_block_info_replay_preserves_slow_start_deferred_funding_and_nsm_seed() {
     use crate::service::finalized_state::disk_format::upgrade::{
         block_info_and_address_received::Upgrade, DiskFormatUpgrade,

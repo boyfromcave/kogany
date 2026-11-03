@@ -70,6 +70,9 @@ fn equihash_solution_test_vectors() {
 }
 
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, Equihash (200, 9), Zcash
+// Mainnet heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn equihash_solution_test_vectors_are_valid() -> eyre::Result<()> {
     let _init_guard = zakura_test::init();
 

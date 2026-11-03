@@ -1,5 +1,6 @@
 //! Tests for funding streams.
-
+// kogany: the Zcash-fixture tests are not built with `ycash`, leaving their helpers unused.
+#![cfg_attr(feature = "ycash", allow(unused_imports, dead_code))]
 #![allow(clippy::unwrap_in_result)]
 
 use std::{collections::HashMap, sync::Arc};
@@ -16,6 +17,9 @@ use super::*;
 
 /// Checks that the Mainnet funding stream values are correct.
 #[test]
+// kogany: Zcash coinbases and subsidies on Zcash schedules (no Ycash YDF output, funding streams,
+// ZIP 234); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn test_funding_stream_values() -> Result<(), Report> {
     let _init_guard = zakura_test::init();
     let network = &Network::Mainnet;
@@ -131,6 +135,9 @@ fn test_funding_stream_values() -> Result<(), Report> {
 
 /// Check public funding stream addresses have the specified network and script type.
 #[test]
+// kogany: Zcash coinbases and subsidies on Zcash schedules (no Ycash YDF output, funding streams,
+// ZIP 234); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn test_funding_stream_addresses() -> Result<(), Report> {
     let _init_guard = zakura_test::init();
     for network in Network::iter() {
@@ -255,6 +262,9 @@ fn mainnet_schedule_with_test_stream() -> (Network, Vec<transparent::Address>) {
 }
 
 #[test]
+// kogany: Zcash coinbases and subsidies on Zcash schedules (no Ycash YDF output, funding streams,
+// ZIP 234); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn mainnet_coinbase_boundaries_match_fixed_oracle() -> Result<(), Report> {
     use crate::{
         block::check::{miner_fees_are_valid, subsidy_is_valid},
@@ -532,6 +542,9 @@ fn testnet_with_nu7_at(nu7: u32, grants_addresses: Option<Vec<String>>) -> Netwo
 /// Testnet activation height. In particular, the distinct P2SH addresses make
 /// address-period mistakes observable when the built-in addresses are identical.
 #[test]
+// kogany: Zcash upgrade schedules (NU5 to NU7 heights; a Ycash network rejects NU5 with Vault); not
+// run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn configured_nu7_fork_coinbase_boundaries_match_fixed_oracle() -> Result<(), Report> {
     use crate::{
         block::check::{miner_fees_are_valid, subsidy_is_valid},
@@ -820,6 +833,9 @@ fn configured_nu7_fork_coinbase_boundaries_match_fixed_oracle() -> Result<(), Re
 /// Grants recipients rotate every `3 · 35,000` blocks after NU7, so the 27 built-in
 /// Revision 2 address slots last exactly until the moved third halving.
 #[test]
+// kogany: Zcash upgrade schedules (NU5 to NU7 heights; a Ycash network rejects NU5 with Vault); not
+// run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn revision_2_grants_addresses_rotate_on_the_zip_218_schedule() {
     let _init_guard = zakura_test::init();
 
@@ -876,6 +892,9 @@ fn coinbase_block(height: Height, outputs: Vec<transparent::Output>) -> Block {
 /// The coinbase must pay the Revision 2 streams until the moved third halving, and the
 /// checkpoint verifier must compute the same lockbox contribution as full validation.
 #[test]
+// kogany: Zcash coinbases and subsidies on Zcash schedules (no Ycash YDF output, funding streams,
+// ZIP 234); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn revision_2_funding_streams_are_required_until_the_zip_218_third_halving() -> Result<(), Report> {
     use crate::{
         block::check::{miner_fees_are_valid, subsidy_is_valid},

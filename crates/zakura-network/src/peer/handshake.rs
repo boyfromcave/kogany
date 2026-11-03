@@ -1302,6 +1302,8 @@ where
 enum ResponderRegistrationWait {
     Production,
     #[cfg(test)]
+    // kogany: used only by the Zakura v2 tests, which are not built with `ycash` (K-11).
+    #[cfg_attr(feature = "ycash", allow(dead_code))]
     TestTimeout(Duration),
 }
 

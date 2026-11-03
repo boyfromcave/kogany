@@ -158,6 +158,8 @@ async fn subsidy_lookup_preserves_success_and_service_errors() {
 /// `getblocksubsidy` reports the ZIP 214 Revision 2 streams until ZIP 218 moves the third
 /// halving, which is 4,656,000 on Testnet with NU7 at 4,386,000.
 #[tokio::test]
+// kogany: Zcash Testnet funding streams, lockbox and ZIP-218 halvings; not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn subsidy_reports_revision_2_streams_until_the_zip_218_third_halving() {
     let mut activation_heights: ConfiguredActivationHeights = Network::new_default_testnet()
         .parameters()

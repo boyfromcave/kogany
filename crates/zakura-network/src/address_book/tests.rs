@@ -47,6 +47,7 @@ fn banned_ips_match_ipv4_and_ipv4_mapped_ipv6() {
 
 #[test]
 fn address_metrics_are_updated_once_per_batch() {
+    // kogany: the network's default port (Ycash refuses Zcash's 8233 as a peer port).
     let mut address_book = AddressBook::new(
         "0.0.0.0:0".parse().unwrap(),
         &Mainnet,
@@ -56,10 +57,18 @@ fn address_metrics_are_updated_once_per_batch() {
     let mut address_metrics = address_book.address_metrics_watcher();
     let initial_update_count = address_book.address_metrics_update_count;
     let peers = [
-        "11.1.1.1:8233".parse().unwrap(),
-        "11.1.1.2:8233".parse().unwrap(),
-        "11.1.1.3:8233".parse().unwrap(),
-        "11.1.1.4:8233".parse().unwrap(),
+        format!("11.1.1.1:{}", Mainnet.default_port())
+            .parse()
+            .unwrap(),
+        format!("11.1.1.2:{}", Mainnet.default_port())
+            .parse()
+            .unwrap(),
+        format!("11.1.1.3:{}", Mainnet.default_port())
+            .parse()
+            .unwrap(),
+        format!("11.1.1.4:{}", Mainnet.default_port())
+            .parse()
+            .unwrap(),
     ]
     .map(MetaAddr::new_initial_peer);
 

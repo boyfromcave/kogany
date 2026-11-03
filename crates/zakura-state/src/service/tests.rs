@@ -1,5 +1,6 @@
 //! StateService test vectors.
-
+// kogany: the Zcash-fixture tests are not built with `ycash`, leaving their helpers unused.
+#![cfg_attr(feature = "ycash", allow(unused_imports, dead_code))]
 #![allow(clippy::unwrap_in_result)]
 
 // TODO: move these tests into tests::vectors and tests::prop modules.
@@ -548,6 +549,9 @@ impl Fixture {
 }
 
 #[test]
+// kogany: Zcash Mainnet and Testnet block vectors (NU5 branch IDs, Zcash Heartwood and NU5
+// heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn prepared_relay_preflight_authorizes_a_selected_tip_child() {
     let _init_guard = zakura_test::init();
     let fixture = Fixture::with_side_chain();
@@ -570,6 +574,9 @@ fn prepared_relay_preflight_authorizes_a_selected_tip_child() {
 }
 
 #[test]
+// kogany: Zcash Mainnet and Testnet block vectors (NU5 branch IDs, Zcash Heartwood and NU5
+// heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn prepared_relay_preflight_uses_commit_first_for_a_side_chain() {
     let _init_guard = zakura_test::init();
     let fixture = Fixture::with_side_chain();
@@ -600,6 +607,9 @@ fn prepared_relay_preflight_uses_commit_first_for_a_side_chain() {
 }
 
 #[test]
+// kogany: Zcash Mainnet and Testnet block vectors (NU5 branch IDs, Zcash Heartwood and NU5
+// heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn prepared_relay_preflight_rejects_an_easier_claimed_target() {
     let _init_guard = zakura_test::init();
     let fixture = Fixture::with_difficulty_context();
@@ -623,6 +633,9 @@ fn prepared_relay_preflight_rejects_an_easier_claimed_target() {
 }
 
 #[test]
+// kogany: Zcash Mainnet and Testnet block vectors (NU5 branch IDs, Zcash Heartwood and NU5
+// heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn prepared_relay_preflight_rejects_time_at_or_below_median() {
     use zakura_header_chain::{AdjustedDifficulty, POW_ADJUSTMENT_BLOCK_SPAN};
 
@@ -662,6 +675,9 @@ fn prepared_relay_preflight_rejects_time_at_or_below_median() {
 }
 
 #[test]
+// kogany: Zcash Mainnet and Testnet block vectors (NU5 branch IDs, Zcash Heartwood and NU5
+// heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn prepared_relay_preflight_rejects_a_forged_commitment() {
     let _init_guard = zakura_test::init();
     let fixture = Fixture::with_side_chain();
@@ -1106,6 +1122,9 @@ async fn assert_reconsideration_eviction_replay(header_runtime: bool) {
 }
 
 #[tokio::test]
+// kogany: Zcash Mainnet embedded VCT frontier, grid and subtree artefacts, which a Ycash network
+// has none of (K-12); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn state_init_loads_the_embedded_mainnet_frontier_grid() {
     let network = Network::Mainnet;
     let config = Config::ephemeral();
@@ -2184,6 +2203,9 @@ proptest! {
 
     /// Test the `Block.check_transaction_network_upgrade()` error inside the legacy check.
     #[test]
+    // kogany: Zcash Mainnet and Testnet block vectors (NU5 branch IDs, Zcash Heartwood and NU5
+    // heights); not run on Ycash.
+    #[cfg(not(feature = "ycash"))]
     fn at_least_one_transaction_with_inconsistent_network_upgrade(
         (network, nu_activation_height, chain) in partial_nu5_chain_strategy(5, false, OVER_LEGACY_CHAIN_LIMIT, NetworkUpgrade::Nu5)
     ) {
@@ -2225,6 +2247,9 @@ proptest! {
 
     /// Test there is at least one transaction with a valid `network_upgrade` in the legacy check.
     #[test]
+    // kogany: Zcash Mainnet and Testnet block vectors (NU5 branch IDs, Zcash Heartwood and NU5
+    // heights); not run on Ycash.
+    #[cfg(not(feature = "ycash"))]
     fn at_least_one_transaction_with_valid_network_upgrade(
         (network, nu_activation_height, chain) in partial_nu5_chain_strategy(5, true, UNDER_LEGACY_CHAIN_LIMIT, NetworkUpgrade::Nu5)
     ) {

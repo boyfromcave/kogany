@@ -1362,6 +1362,9 @@ mod tests {
         .expect("joined rejections finish promptly");
     }
     #[tokio::test(start_paused = true)]
+    // kogany: Zcash upgrade schedules (NU5 to NU7, NU6.3 protocol versions; a Ycash network rejects
+    // NU5 with Vault); not run on Ycash.
+    #[cfg(not(feature = "ycash"))]
     async fn waiting_advert_rechecks_version_and_existing_bans() {
         timeout(Duration::from_secs(10), async {
             let (minimum, tip) = MinimumPeerVersion::with_mock_chain_tip(

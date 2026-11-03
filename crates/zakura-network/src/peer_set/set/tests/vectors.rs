@@ -1803,6 +1803,9 @@ async fn driver_keeps_discovering_after_connection_churn() {
 
 /// Authorization updates wake the owner without any ordinary request or refresh request.
 #[tokio::test(start_paused = true)]
+// kogany: Zcash upgrade schedules (NU5 to NU7, NU6.3 protocol versions; a Ycash network rejects NU5
+// with Vault); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn driver_prunes_banned_and_outdated_peers_while_idle() {
     let _init = zakura_test::init();
     timeout(Duration::from_secs(10), async {
@@ -2072,6 +2075,9 @@ async fn driver_bounds_maintenance_on_inventory_wakes() {
 /// A chain tip change that keeps the minimum peer version does not rerun maintenance; one that
 /// changes it does.
 #[tokio::test(start_paused = true)]
+// kogany: Zcash upgrade schedules (NU5 to NU7, NU6.3 protocol versions; a Ycash network rejects NU5
+// with Vault); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn driver_reruns_maintenance_only_on_minimum_version_change() {
     use std::sync::{
         atomic::{AtomicUsize, Ordering},

@@ -1,4 +1,6 @@
 //! Fixed test vectors for transactions.
+// kogany: the Zcash-fixture tests are not built with `ycash`, leaving their helpers unused.
+#![cfg_attr(feature = "ycash", allow(unused_imports, dead_code))]
 
 use arbitrary::v5_transactions;
 use chrono::DateTime;
@@ -36,6 +38,9 @@ pub static EMPTY_V5_TX: LazyLock<Transaction> = LazyLock::new(|| Transaction::V5
 });
 
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, Equihash (200, 9), Zcash
+// Mainnet heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn attributed_memory_size_counts_orchard_proof_capacity() {
     let template = Network::iter()
         .flat_map(|network| v5_transactions(network.block_iter()))
@@ -88,6 +93,9 @@ fn transaction_inline_size_excludes_sprout_sapling_and_orchard_bundles() {
 }
 
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, Equihash (200, 9), Zcash
+// Mainnet heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn attributed_memory_size_counts_boxed_sprout_sapling_and_orchard_bundles() {
     fn bundle_bytes<T: AttributedMemorySize>(bundle: &T) -> u64 {
         u64::try_from(std::mem::size_of::<T>()).unwrap() + bundle.attributed_memory_size_bytes()
@@ -178,6 +186,9 @@ fn deserialize_canonical_zip244_test_vector(
 }
 
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, Equihash (200, 9), Zcash
+// Mainnet heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn zip244_noncanonical_orchard_proof_sizes_are_rejected() -> Result<()> {
     let _init_guard = zakura_test::init();
     let mut canonical_count = 0;
@@ -287,6 +298,9 @@ fn librustzcash_tx_hash() {
 }
 
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, Equihash (200, 9), Zcash
+// Mainnet heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn v5_orchard_cross_address_flag_fails_serialization() {
     let _init_guard = zakura_test::init();
 
@@ -315,6 +329,9 @@ fn v5_orchard_cross_address_flag_fails_serialization() {
 }
 
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, Equihash (200, 9), Zcash
+// Mainnet heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn v5_orchard_cross_address_flag_fails_deserialization() {
     let _init_guard = zakura_test::init();
 
@@ -367,6 +384,9 @@ fn v5_orchard_cross_address_flag_fails_deserialization() {
 /// V6 Orchard keeps the cross-address bit reserved on the wire, even though
 /// V6 Ironwood uses the same internal `Flags` type and permits that bit.
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, Equihash (200, 9), Zcash
+// Mainnet heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn v6_orchard_cross_address_flag_fails_serialization_and_deserialization() {
     let _init_guard = zakura_test::init();
 
@@ -426,6 +446,9 @@ fn v6_orchard_cross_address_flag_fails_serialization_and_deserialization() {
 /// V6 Ironwood must round-trip `ENABLE_CROSS_ADDRESS`, while still rejecting
 /// undefined flag bits 3..7.
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, Equihash (200, 9), Zcash
+// Mainnet heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn v6_ironwood_cross_address_flag_round_trips_and_rejects_reserved_bits() {
     let _init_guard = zakura_test::init();
 
@@ -717,6 +740,9 @@ fn invalid_orchard_nullifier() {
 /// in the block test vectors.
 /// Makes sure that zebra-serialized transactions can be deserialized by librustzcash.
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, Equihash (200, 9), Zcash
+// Mainnet heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn fake_v5_librustzcash_round_trip() {
     let _init_guard = zakura_test::init();
     for network in Network::iter() {
@@ -788,6 +814,9 @@ fn fake_v5_librustzcash_round_trip_for_network(network: Network) {
 }
 
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, Equihash (200, 9), Zcash
+// Mainnet heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn zip244_round_trip() -> Result<()> {
     let _init_guard = zakura_test::init();
 
@@ -809,6 +838,9 @@ fn zip244_round_trip() -> Result<()> {
 }
 
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, Equihash (200, 9), Zcash
+// Mainnet heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn zip244_txid() -> Result<()> {
     let _init_guard = zakura_test::init();
 
@@ -825,6 +857,9 @@ fn zip244_txid() -> Result<()> {
 }
 
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, Equihash (200, 9), Zcash
+// Mainnet heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn zip244_auth_digest() -> Result<()> {
     let _init_guard = zakura_test::init();
 
@@ -854,6 +889,9 @@ fn zip244_auth_digest() -> Result<()> {
 /// both implementations to the independently-published expected outputs, so a
 /// shared bug in the two V5 computations could not pass silently.
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, Equihash (200, 9), Zcash
+// Mainnet heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn native_zip244_matches_test_vectors() -> Result<()> {
     let _init_guard = zakura_test::init();
 
@@ -893,6 +931,9 @@ fn native_zip244_matches_test_vectors() -> Result<()> {
 /// introduces V6 and changes Orchard bundle semantics. Keep the native
 /// ZIP-244 path pinned to the librustzcash oracle at that mixed boundary.
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, Equihash (200, 9), Zcash
+// Mainnet heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn native_zip244_matches_librustzcash_for_v5_nu6_3_orchard() {
     let _init_guard = zakura_test::init();
 
@@ -1368,6 +1409,9 @@ fn zip243_sighash() -> Result<()> {
 }
 
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, Equihash (200, 9), Zcash
+// Mainnet heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn zip244_sighash() -> Result<()> {
     let _init_guard = zakura_test::init();
 
@@ -1523,6 +1567,9 @@ fn v6_zip244_sighash_matches_librustzcash() -> Result<()> {
 }
 
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, Equihash (200, 9), Zcash
+// Mainnet heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn script_code_commitment_is_version_specific() -> Result<()> {
     let _init_guard = zakura_test::init();
 
@@ -1629,6 +1676,9 @@ fn script_code_commitment_is_version_specific() -> Result<()> {
 /// a proof with trailing bytes must make it non-canonical (GHSA-jfw5-j458-pfv6). This
 /// also cross-checks `expected_proof_size` against real proofs produced by the chain.
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, Equihash (200, 9), Zcash
+// Mainnet heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn orchard_proof_size_is_canonical() {
     let mut checked = 0;
 
@@ -1663,6 +1713,9 @@ fn orchard_proof_size_is_canonical() {
 }
 
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, Equihash (200, 9), Zcash
+// Mainnet heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn consensus_branch_id() {
     for net in Network::iter() {
         for tx in v5_transactions(net.block_iter()).filter(|tx| {
@@ -1717,6 +1770,9 @@ fn consensus_branch_id() {
 }
 
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, Equihash (200, 9), Zcash
+// Mainnet heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn binding_signatures() {
     let _init_guard = zakura_test::init();
 
@@ -1974,6 +2030,9 @@ fn v6_transactions_accept_nu6_3_and_later_branch_ids() {
 /// same authorization mapper, so a swapped getter or accidental alias would
 /// otherwise send one pool's proof to the other pool's verifier.
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, Equihash (200, 9), Zcash
+// Mainnet heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn v6_sighasher_preserves_distinct_orchard_and_ironwood_bundle_slots() {
     use crate::{ironwood, orchard};
 
@@ -2182,6 +2241,9 @@ fn v6_ironwood_anchor_changes_auth_digest_not_txid() {
 }
 
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, Equihash (200, 9), Zcash
+// Mainnet heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn standalone_orchard_proof_size_is_enforced_during_deserialization() {
     let _init_guard = zakura_test::init();
 
@@ -2216,6 +2278,9 @@ fn standalone_orchard_proof_size_is_enforced_during_deserialization() {
 }
 
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, Equihash (200, 9), Zcash
+// Mainnet heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn v5_orchard_proof_size_is_always_enforced_during_deserialization() {
     let _init_guard = zakura_test::init();
 
@@ -2280,6 +2345,9 @@ fn v5_orchard_proof_size_is_always_enforced_during_deserialization() {
 }
 
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, Equihash (200, 9), Zcash
+// Mainnet heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn v6_noncanonical_orchard_proof_is_rejected_during_deserialization() {
     let _init_guard = zakura_test::init();
 
@@ -2329,6 +2397,9 @@ fn v6_noncanonical_orchard_proof_is_rejected_during_deserialization() {
 }
 
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, Equihash (200, 9), Zcash
+// Mainnet heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn v6_noncanonical_ironwood_proof_is_rejected_during_deserialization() {
     let _init_guard = zakura_test::init();
 

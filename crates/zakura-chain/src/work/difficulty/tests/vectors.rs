@@ -1,3 +1,5 @@
+// kogany: the Zcash-fixture tests are not built with `ycash`, leaving their helpers unused.
+#![cfg_attr(feature = "ycash", allow(unused_imports, dead_code))]
 use eyre::eyre;
 use eyre::Report;
 
@@ -328,6 +330,9 @@ fn compact_bitcoin_test_vectors() {
 
 /// Test blocks using CompactDifficulty.
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, Equihash (200, 9), Zcash
+// Mainnet heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn block_difficulty() -> Result<(), Report> {
     for network in Network::iter() {
         block_difficulty_for_network(network)?;
@@ -497,6 +502,9 @@ fn genesis_block_difficulty_for_network(network: Network) -> Result<(), Report> 
 
 /// Test that testnet minimum-difficulty blocks are valid
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, Equihash (200, 9), Zcash
+// Mainnet heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn testnet_minimum_difficulty() -> Result<(), Report> {
     const MINIMUM_DIFFICULTY_HEIGHTS: &[block::Height] = &[
         // block time gaps greater than 15 minutes (pre-Blossom)

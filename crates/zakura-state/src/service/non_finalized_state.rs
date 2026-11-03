@@ -416,7 +416,10 @@ impl NonFinalizedState {
         rejected: (Arc<zakura_chain::block::Block>, Height),
         error: &ValidateContextError,
     ) {
-        if matches!(error, ValidateContextError::BlockPreviouslyInvalidated { .. }) {
+        if matches!(
+            error,
+            ValidateContextError::BlockPreviouslyInvalidated { .. }
+        ) {
             return;
         }
         let mut rejected_blocks = REJECTED_BLOCKS

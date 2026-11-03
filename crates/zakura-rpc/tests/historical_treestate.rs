@@ -81,6 +81,9 @@ fn rpc_over(node: &VctFastSyncedNode, network: &Network) -> (TestRpc, tokio::tas
 /// absent tree as the *empty* tree, so it would derive a birthday anchor asserting an empty
 /// commitment tree deep in the chain with nothing raising an error.
 #[tokio::test(flavor = "multi_thread")]
+// kogany: Zcash's frontier encoding is the oracle (Ycash trims empty parents), on a VCT
+// fast-synced node, which a Ycash network never is (K-12); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn z_gettreestate_is_restored_across_the_absent_band() {
     let _init_guard = zakura_test::init();
 

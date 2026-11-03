@@ -1,3 +1,5 @@
+// kogany: the Zcash-fixture tests are not built with `ycash`, leaving their helpers unused.
+#![cfg_attr(feature = "ycash", allow(unused_imports, dead_code))]
 use std::{
     collections::HashMap,
     io::{Cursor, Write},
@@ -186,6 +188,9 @@ fn ordered_utxo_value_balances_match_plain_utxo_value_balances() {
 /// second transaction swaps them), so an accessor that read from the wrong
 /// pool, or reordered transactions, would produce a different sequence.
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, Equihash (200, 9), Zcash
+// Mainnet heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn ironwood_block_accessors_preserve_pool_and_wire_order() {
     let _init_guard = zakura_test::init();
 
@@ -292,6 +297,9 @@ fn ironwood_block_accessors_preserve_pool_and_wire_order() {
 /// bundle in the matching pool: Orchard-only transactions must not count as
 /// Ironwood ones, and a multi-action Ironwood bundle counts as one transaction.
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, Equihash (200, 9), Zcash
+// Mainnet heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn ironwood_transaction_count_is_pool_specific_and_counts_bundles() {
     let _init_guard = zakura_test::init();
 
@@ -353,6 +361,9 @@ fn ironwood_transaction_count_is_pool_specific_and_counts_bundles() {
 /// is the `ChainHistoryBlockTxAuthCommitment` digest, with no structural
 /// restriction on its bytes.
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, Equihash (200, 9), Zcash
+// Mainnet heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn nu6_3_uses_post_nu5_block_commitment_format() {
     let _init_guard = zakura_test::init();
 
@@ -521,6 +532,9 @@ fn blockheader_serialization() {
 }
 
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, Equihash (200, 9), Zcash
+// Mainnet heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn round_trip_blocks() {
     let _init_guard = zakura_test::init();
 
@@ -556,6 +570,9 @@ fn coinbase_parsing_rejects_above_0x80() {
 /// Header sizes are computed from the Equihash solution without encoding the
 /// header, so they must match the encoded length on every network.
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, Equihash (200, 9), Zcash
+// Mainnet heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn header_serialized_size_matches_encoding() {
     let _init_guard = zakura_test::init();
 
@@ -601,6 +618,9 @@ fn header_serialized_size_matches_encoding() {
 ///
 /// TODO: add chain history test vectors?
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, Equihash (200, 9), Zcash
+// Mainnet heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn block_commitment() {
     let _init_guard = zakura_test::init();
 

@@ -1220,6 +1220,8 @@ where
 mod missing_parent_tests;
 
 #[cfg(test)]
+// kogany: the Zcash-fixture tests are not built with `ycash`.
+#[cfg_attr(feature = "ycash", allow(unused_imports, dead_code))]
 mod tests {
     use super::*;
     use futures::StreamExt as _;
@@ -1797,6 +1799,9 @@ mod tests {
     /// here first, and honest peers' `inv`s for the same hash are dropped as `AlreadyQueued`
     /// while the poisoned download is outstanding.
     #[tokio::test]
+    // kogany: Zcash Mainnet block and transaction vectors (NU5-and-later branch IDs, Zcash-only
+    // heights); not run on Ycash.
+    #[cfg(not(feature = "ycash"))]
     async fn gossiped_tip_child_rejects_poisoned_coinbase_height() {
         let canonical: Arc<Block> = zakura_test::vectors::BLOCK_MAINNET_1687107_BYTES
             .zcash_deserialize_into()
@@ -1847,6 +1852,9 @@ mod tests {
 
     /// Weak-work gossip must fail before parent recovery or semantic verification.
     #[tokio::test]
+    // kogany: Zcash Mainnet block and transaction vectors (NU5-and-later branch IDs, Zcash-only
+    // heights); not run on Ycash.
+    #[cfg(not(feature = "ycash"))]
     async fn mainnet_work_floor_rejects_gossip_before_parent_recovery() {
         use zakura_chain::work::difficulty::ParameterDifficulty as _;
 

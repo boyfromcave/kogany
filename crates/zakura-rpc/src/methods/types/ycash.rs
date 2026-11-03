@@ -15,7 +15,7 @@ use zakura_chain::{
         subsidy::founders_reward,
         ycash::{
             magics,
-            ydf::{is_ycash_active, ydf_address, ydf_mandate_end_height, YDF_DIVISOR},
+            ydf::{is_ycash_active, ydf_address, ydf_mandate_end_height, ydf_reward},
         },
         Network, NetworkUpgrade,
     },
@@ -290,13 +290,17 @@ pub fn founders_share(
         return founders_reward(network, height);
     }
 
+    // The mandatory YDF is the consensus value `miner_subsidy` takes out (`ydf_reward`, the
+    // halving subsidy / 20). It equals `block_subsidy / 20` at every height a Ycash network
+    // schedules; on a regtest that configures ZIP 234, `block_subsidy` also carries the
+    // reissuance bonus, and a share of it would pay the YDF more than `miner_subsidy` leaves out.
+    if height < ydf_mandate_end_height(network) {
+        return ydf_reward(network, height);
+    }
+
     let subsidy =
         u64::try_from(i64::from(block_subsidy)).expect("a non-negative amount converts to u64");
-    let share = if height < ydf_mandate_end_height(network) {
-        subsidy / YDF_DIVISOR
-    } else {
-        subsidy * DEFAULT_YDF_FEE_PERCENTAGE / 100
-    };
+    let share = subsidy * DEFAULT_YDF_FEE_PERCENTAGE / 100;
 
     i64::try_from(share)
         .ok()

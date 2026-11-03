@@ -295,6 +295,9 @@ fn network_upgrade_iter_matches_order_constant() {
 }
 
 #[test]
+// kogany: Zcash Mainnet/Testnet schedules (halvings, subsidies, activation list, value pools); not
+// run on Ycash, whose schedule tests are parameters/ycash/tests.rs.
+#[cfg(not(feature = "ycash"))]
 fn full_activation_list_contains_all_upgrades() {
     let network = Network::Mainnet;
     let full_list = network.full_activation_list();

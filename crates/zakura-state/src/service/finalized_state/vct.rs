@@ -736,6 +736,8 @@ fn final_frontiers_bytes(height: block::Height, trees: &NoteCommitmentTrees) -> 
 }
 
 #[cfg(test)]
+// kogany: the Zcash-fixture tests are not built with `ycash`.
+#[cfg_attr(feature = "ycash", allow(unused_imports, dead_code))]
 mod tests {
     use std::{io::Write, num::NonZeroU64};
 
@@ -1013,6 +1015,9 @@ mod tests {
     }
 
     #[test]
+    // kogany: Zcash Mainnet embedded VCT frontier, grid and subtree artefacts, which a Ycash
+    // network has none of (K-12); not run on Ycash.
+    #[cfg(not(feature = "ycash"))]
     fn embedded_mainnet_final_frontiers_parse() {
         let frontiers = embedded_final_frontiers(&Network::Mainnet)
             .expect("mainnet has embedded final frontiers");
