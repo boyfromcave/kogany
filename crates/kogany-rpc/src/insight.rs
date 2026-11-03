@@ -352,7 +352,7 @@ impl InsightRpc for InsightRpcImpl {
                     }
                 }
             }
-            rows.sort_by(|a, b| (a.0, a.1, a.2, a.3, a.4).cmp(&(b.0, b.1, b.2, b.3, b.4)));
+            rows.sort_by_key(|r| (r.0, r.1, r.2, r.3, r.4));
             deltas.extend(rows.into_iter().map(|row| row.5));
         }
         if !(include_chain_info && start > 0 && end > 0) {
