@@ -1224,6 +1224,12 @@ impl Storage {
                 continue;
             };
             tracing::debug!(?tx_id, error = %eviction.error, "evicting a mempool transaction at the new tip");
+            // ycashd's MP-1 sweep line (`src/yellowback/index.cpp` RemoveInvalidVaultSpends).
+            tracing::info!(
+                "yellowback: dropping {} from the mempool at the new tip: {}",
+                eviction.mined_id,
+                eviction.error
+            );
             removed.extend(
                 self.verified
                     .remove_all_that(|tx| tx.transaction.id().mined_id() == eviction.mined_id),
