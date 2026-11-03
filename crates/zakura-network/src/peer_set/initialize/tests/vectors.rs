@@ -108,6 +108,8 @@ const ZCASHD_COMPAT_LISTENER_TEST_DURATION: Duration = Duration::from_millis(500
 const MIN_INBOUND_PEER_CONNECTION_INTERVAL_FOR_TESTS: Duration = Duration::from_millis(25);
 
 /// Misbehavior reports are coalesced per peer and flushed after five seconds.
+// Ycash flushes a peer's reports once they reach the ban threshold (the test below).
+#[cfg(not(feature = "ycash"))]
 #[tokio::test(start_paused = true)]
 async fn misbehavior_reports_are_batched_for_five_seconds() {
     let peer_addr: PeerSocketAddr = "127.0.0.1:8233".parse().unwrap();
@@ -150,6 +152,59 @@ async fn misbehavior_reports_are_batched_for_five_seconds() {
         update.misbehavior_score(),
         constants::MAX_PEER_MISBEHAVIOR_SCORE
     );
+
+    drop(misbehavior_tx);
+    batcher
+        .await
+        .expect("misbehavior batcher task should not panic");
+}
+
+/// Ycash (S5): reports below the ban threshold stay batched; a peer's reports that reach it (a
+/// rule-breaking block, DoS 100) are applied at once, as ycashd's `Misbehaving` bans at once.
+#[cfg(feature = "ycash")]
+#[tokio::test(start_paused = true)]
+async fn misbehavior_reports_at_the_ban_threshold_flush_at_once() {
+    let peer_addr: PeerSocketAddr = "127.0.0.1:8233".parse().unwrap();
+    let banned_addr: PeerSocketAddr = "127.0.0.2:8233".parse().unwrap();
+    let (misbehavior_tx, misbehavior_rx) = tokio::sync::mpsc::channel(1);
+    let (address_book_updater, mut address_book_updates) = tokio::sync::mpsc::channel(4);
+    let batcher = tokio::spawn(batch_misbehavior_reports(
+        misbehavior_rx,
+        address_book_updater,
+    ));
+
+    for report in [
+        (peer_addr, 40),
+        (peer_addr, 30),
+        (banned_addr, 100),
+        (peer_addr, 0),
+    ] {
+        misbehavior_tx
+            .send(report)
+            .await
+            .expect("misbehavior batcher is running");
+    }
+    tokio::task::yield_now().await;
+    let update = address_book_updates
+        .try_recv()
+        .expect("a report at the ban threshold is flushed before the interval elapses");
+    assert_eq!(update.addr(), banned_addr);
+    assert_eq!(
+        update.misbehavior_score(),
+        constants::MAX_PEER_MISBEHAVIOR_SCORE
+    );
+    assert!(
+        address_book_updates.try_recv().is_err(),
+        "reports below the threshold remain batched"
+    );
+
+    tokio::time::advance(MISBEHAVIOR_BATCH_INTERVAL).await;
+    let update = address_book_updates
+        .recv()
+        .await
+        .expect("misbehavior batcher should flush the batched update");
+    assert_eq!(update.addr(), peer_addr);
+    assert_eq!(update.misbehavior_score(), 70);
 
     drop(misbehavior_tx);
     batcher

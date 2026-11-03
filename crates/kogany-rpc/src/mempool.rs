@@ -52,6 +52,19 @@ pub async fn spender_of(outpoint: &transparent::OutPoint) -> Option<transaction:
     spender_in(&transactions().await, outpoint)
 }
 
+/// The output `outpoint` names, when a transaction of `transactions` creates it (ycashd's
+/// `CCoinsViewMemPool`, which `FetchInputs` reads: a mempool parent's coin).
+pub fn output_in(
+    transactions: &[VerifiedUnminedTx],
+    outpoint: &transparent::OutPoint,
+) -> Option<transparent::Output> {
+    let tx = transactions
+        .iter()
+        .find(|tx| tx.transaction.id().mined_id() == outpoint.hash)?;
+    let index = usize::try_from(outpoint.index).ok()?;
+    tx.transaction.transaction().outputs().get(index).cloned()
+}
+
 /// The transaction of `transactions` that spends `outpoint`.
 pub fn spender_in(
     transactions: &[VerifiedUnminedTx],

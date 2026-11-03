@@ -441,6 +441,14 @@ mod tests {
             index: 4,
         };
         assert_eq!(crate::mempool::spender_in(&pool, &other), None);
+        // the mempool transaction's own outputs are known coins (ycashd's CCoinsViewMemPool)
+        let own = |index| OutPoint { hash: txid, index };
+        assert_eq!(
+            crate::mempool::output_in(&pool, &own(1)).map(|o| o.value()),
+            Some(Amount::try_from(290_000).expect("amount"))
+        );
+        assert_eq!(crate::mempool::output_in(&pool, &own(2)), None);
+        assert_eq!(crate::mempool::output_in(&pool, &prev), None);
 
         let names = parse_addresses(&json!({ "addresses": [b.to_string(), a.to_string()] }))
             .expect("addresses");

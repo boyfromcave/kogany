@@ -235,7 +235,10 @@ fn router_consensus_invalid_gossip_keeps_advertiser_score() {
     };
 
     assert_eq!(
-        block_misbehavior(Box::new(router_error), Some(advertiser)),
+        block_misbehavior(
+            &(Box::new(router_error) as crate::BoxError),
+            Some(advertiser)
+        ),
         Some((
             advertiser,
             zakura_network::constants::MAX_PEER_MISBEHAVIOR_SCORE,
@@ -251,7 +254,7 @@ fn direct_consensus_invalid_gossip_keeps_advertiser_score() {
     };
 
     assert_eq!(
-        block_misbehavior(Box::new(error), Some(advertiser)),
+        block_misbehavior(&(Box::new(error) as crate::BoxError), Some(advertiser)),
         Some((
             advertiser,
             zakura_network::constants::MAX_PEER_MISBEHAVIOR_SCORE,

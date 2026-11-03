@@ -2383,7 +2383,16 @@ async fn driver_refresh_retries_a_revoked_advertisement_on_a_later_peer() {
             tracing::Span::none(),
         );
         let bans = book.bans();
-        let revoked_addr: PeerSocketAddr = "127.0.0.2:8233".parse::<SocketAddr>().unwrap().into();
+        // Ycash never bans a local peer (ycashd `src/main.cpp:9508`): a routable host there.
+        let revoked_host = if cfg!(feature = "ycash") {
+            "1.0.0.2"
+        } else {
+            "127.0.0.2"
+        };
+        let revoked_addr: PeerSocketAddr = format!("{revoked_host}:8233")
+            .parse::<SocketAddr>()
+            .unwrap()
+            .into();
         book.update(crate::meta_addr::MetaAddr::new_initial_peer(revoked_addr));
         let (discovery, discovered) = futures::channel::mpsc::unbounded();
         let (minimum, _tip) = MinimumPeerVersion::with_mock_chain_tip(&Network::Mainnet);
