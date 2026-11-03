@@ -6,8 +6,18 @@
 
 #[cfg(test)]
 mod encoding_tests;
+mod script_error_text;
 #[cfg(test)]
 mod tests;
+mod ycash;
+#[cfg(all(test, feature = "ycash"))]
+mod ycash_tests;
+
+pub use script_error_text::script_error_string;
+pub use ycash::{
+    is_pq_falcon_active, pq_falcon_height, script_flags, standard_script_flags, ScriptContext,
+    VaultStateSnapshot, YcashSignatureChecker, STANDARD_NOT_MANDATORY_FLAGS,
+};
 
 use core::fmt;
 use std::sync::Arc;
@@ -153,7 +163,25 @@ impl CachedFfiTransaction {
 
     /// Verify if the script in the input at `input_index` of a transaction correctly spends the
     /// matching [`transparent::Output`] it refers to.
+    ///
+    /// Uses the pre-Vault flags `P2SH | CHECKLOCKTIMEVERIFY` and no set state. Consensus
+    /// verification uses [`CachedFfiTransaction::is_valid_in`], whose flags follow the height.
     pub fn is_valid(&self, input_index: usize) -> Result<(), Error> {
+        self.verify_input(input_index, None)
+    }
+
+    /// Verify the input at `input_index` in its consensus context: the flags of
+    /// `context`'s network and height ([`script_flags`]) and the Ycash checker
+    /// ([`YcashSignatureChecker`]) over `context`'s set state (kogany W3-c).
+    pub fn is_valid_in(&self, input_index: usize, context: &ScriptContext) -> Result<(), Error> {
+        self.verify_input(input_index, Some(context))
+    }
+
+    fn verify_input(
+        &self,
+        input_index: usize,
+        context: Option<&ScriptContext>,
+    ) -> Result<(), Error> {
         let previous_output = self
             .all_previous_outputs
             .get(input_index)
@@ -167,7 +195,10 @@ impl CachedFfiTransaction {
         } = previous_output;
         let script_pub_key: &[u8] = lock_script.as_raw_bytes();
 
-        let flags = Flags::P2SH | Flags::CHECKLOCKTIMEVERIFY;
+        let flags = context.map_or(
+            Flags::P2SH | Flags::CHECKLOCKTIMEVERIFY,
+            ScriptContext::flags,
+        );
 
         let lock_time = self.transaction.raw_lock_time();
         let is_final = self.transaction.inputs()[input_index].sequence() == u32::MAX;
@@ -226,7 +257,16 @@ impl CachedFfiTransaction {
             lock_time: i64::from(lock_time),
             is_final,
         };
-        match script.eval(flags, &checker) {
+        let result = match context {
+            None => script.eval(flags, &checker),
+            Some(context) => {
+                let checker =
+                    YcashSignatureChecker::new(checker, &self.transaction, input_index, context)
+                        .ok_or(Error::TxIndex)?;
+                script.eval(flags, &checker)
+            }
+        };
+        match result {
             Ok(true) => Ok(()),
             Ok(false) => Err(Error::ScriptInvalid),
             Err((component, error)) => Err(Error::Interpreter { component, error }),

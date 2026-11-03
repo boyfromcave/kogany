@@ -173,6 +173,12 @@ pub enum Request {
     /// Request summary statistics from the mempool for `getmempoolinfo`.
     QueueStats,
 
+    /// Ycash: whether the mempool has caught up with the best chain tip: it has seen the latest
+    /// tip, no reorg resurrection is pending and no transaction verification is in flight.
+    /// `invalidateblock` and `reconsiderblock` wait for it, so the mempool answers as ycashd's
+    /// does once they return (its `DisconnectTip` refills the mempool synchronously).
+    Settled,
+
     /// Check whether a transparent output is spent in the mempool.
     UnspentOutput(transparent::OutPoint),
 }
@@ -247,6 +253,9 @@ pub enum Response {
 
     /// Returns whether a transparent output is created or spent in the mempool, if present.
     TransparentOutput(Option<CreatedOrSpent>),
+
+    /// Response to [`Request::Settled`].
+    Settled(bool),
 }
 
 /// Indicates whether an output was created or spent by a mempool transaction.

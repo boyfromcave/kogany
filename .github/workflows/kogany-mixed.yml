@@ -1,0 +1,156 @@
+# Copyright (c) 2026 The Ycash developers
+# Distributed under the MIT software license, see the accompanying
+# file COPYING or https://www.opensource.org/licenses/mit-license.php .
+#
+name: kogany-mixed
+
+# kogany's side of the mixed-line regtest (plan §5 "mixed-regtest"; workspace
+# docs/plans/kogany/ci-design.md §5; .github/README-kogany.md "Cross-line contract"): this commit's
+# koganyd (kogany-bin.yml, this run's koganyd-bin) with ycash6's node-bin at a pinned ycash6 commit,
+# running the ycash6 harness from a checkout at that commit (qa/kogany_mixed_shards.py over
+# qa/kogany-mixed-shards.txt). One job per shard group: a failed group re-runs alone with the same
+# two binaries. Per group, the `gate` scripts block (KOGANY_STRICT=1) and the `report` scripts never
+# fail the job; today every script is `report`, so the workflow is report-only until the
+# coordinator flips a script to `gate` in ycash6 at a wave gate and bumps the YCASH6_REV pin here.
+#
+# node-bin: from a push, schedule or dispatch run of ycash6's yellowback-tests.yml at the commit
+# (artifact `ycash6-node-bin`, else `node-bin`, holding node-bin.tgz); `ycash6_run_id` names the
+# run, else the newest such run at the commit is used. ycash6 is not built here (an hour of C++).
+on:
+  push:
+    branches: [upgrade/vault, "vaults/**"]
+  pull_request:
+    branches: [upgrade/vault, "vaults/**", "kc/**"]
+  workflow_dispatch:
+    inputs:
+      ycash6_rev:
+        description: 'the ycash6 commit (40 hex digits; empty: YCASH6_MIXED_REV)'
+        type: string
+        default: ''
+      ycash6_run_id:
+        description: 'the ycash6 yellowback-tests.yml run whose node-bin to use (empty: the newest at the commit)'
+        type: string
+        default: ''
+  workflow_call:
+    inputs:
+      ycash6_rev:
+        type: string
+        default: ''
+      ycash6_run_id:
+        type: string
+        default: ''
+    secrets:
+      YCASH6_ARTIFACT_TOKEN:
+        required: false
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-mixed-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  YCASH6_REPO: boyfromcave/ycash6
+  # The pin: ycash6 vaults/kogany-compat with the mixed shard runner (cba4024ea), unless a dispatch
+  # or caller names another commit. Bump by PR, never a branch tip.
+  YCASH6_REV: ${{ inputs.ycash6_rev || 'cba4024ea907970b27c4d2c0de5726c87dc0a899' }}
+
+jobs:
+  koganyd:
+    uses: ./.github/workflows/kogany-bin.yml
+    permissions:
+      contents: read
+
+  ycash6-node-bin:
+    name: ycash6 node-bin
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/workflows/scripts
+      - name: Download and check the commit's node-bin
+        env:
+          GH_TOKEN: ${{ secrets.YCASH6_ARTIFACT_TOKEN || github.token }}
+          RUN_ID: ${{ inputs.ycash6_run_id }}
+        run: .github/workflows/scripts/fetch-ycash6-node-bin.sh "$RUNNER_TEMP/dl"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ycash6-node-bin
+          path: ${{ runner.temp }}/dl/node-bin.tgz
+          retention-days: 7
+          if-no-files-found: error
+
+  mixed:
+    name: mixed ${{ matrix.group }}
+    needs: [koganyd, ycash6-node-bin]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        group: [node, vault, yed, fees, attest]
+    steps:
+      # The ycash6 tree at the binary's commit: its harness, test framework and shard list.
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          repository: ${{ env.YCASH6_REPO }}
+          ref: ${{ env.YCASH6_REV }}
+          persist-credentials: false
+      - uses: ./.github/actions/yellowback-prereqs
+        with:
+          apt: 'false'
+      - name: A C compiler (the Falcon signer of test_framework/pq.py) and librocksdb (koganyd)
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q gcc libc6-dev librocksdb-dev
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: ycash6-node-bin
+          path: ${{ runner.temp }}
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: koganyd-bin
+          path: ${{ runner.temp }}
+      - name: Unpack both lines
+        run: |
+          tar xzf "$RUNNER_TEMP/node-bin.tgz"
+          mkdir -p "$RUNNER_TEMP/zk" && tar xzf "$RUNNER_TEMP/koganyd-bin.tgz" -C "$RUNNER_TEMP/zk"
+          cat "$RUNNER_TEMP/zk/koganyd-bin.json"
+          "$RUNNER_TEMP/zk/koganyd" --version
+          echo "KOGANY_BIN=$RUNNER_TEMP/zk/koganyd" >> "$GITHUB_ENV"
+      - name: fetch zcash params
+        run: zcutil/fetch-params.sh
+      - name: the group's gate scripts (blocking, KOGANY_STRICT=1)
+        id: gate
+        env:
+          TMPDIR: ${{ runner.temp }}/mixed-tests
+          GROUP: ${{ matrix.group }}
+        run: |
+          mkdir -p "$TMPDIR"
+          python3 qa/kogany_mixed_shards.py run "$GROUP" --state gate --jobs 2
+      - name: the group's report scripts (a failure is reported, the job stays green)
+        id: report
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        env:
+          TMPDIR: ${{ runner.temp }}/mixed-tests
+          GROUP: ${{ matrix.group }}
+        run: |
+          mkdir -p "$TMPDIR"
+          python3 qa/kogany_mixed_shards.py run "$GROUP" --state report --jobs 2
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: ${{ !cancelled() && (steps.gate.outcome == 'failure' || steps.report.outcome == 'failure') }}
+        with:
+          name: kogany-mixed-logs-${{ matrix.group }}
+          path: |
+            ${{ runner.temp }}/mixed-tests/**/node*/regtest/debug.log
+            ${{ runner.temp }}/mixed-tests/**/kogany*/zakurad.log
+            ${{ runner.temp }}/mixed-tests/**/kogany*/zakurad.toml
+          retention-days: 14
+          if-no-files-found: warn

@@ -55,13 +55,13 @@ announcement) apply on top of this checklist.
 
 ## Update Versions and Prepare the Release
 
-Hotfixes are `patch` releases of the `zakura` package, plus semver bumps for
+Hotfixes are `patch` releases of the `kogany` package, plus semver bumps for
 each changed crate — follow the "Update Versions" sections of the
 [regular checklist](https://github.com/zakura-core/zakura/blob/main/.github/PULL_REQUEST_TEMPLATE/release-checklist.md)
 for the commands, using the branch checkout (`[workspace.metadata.release]`
 allows `hotfix/v*`).
 
-- [ ] Bump the `zakura` package version and changed-crate versions.
+- [ ] Bump the `kogany` package version and changed-crate versions.
 - [ ] De-rc'ing an rc line to its stable version? Re-run `cargo
       semver-checks` against the published **stable** baselines — post-rc
       changes can raise the required bump level (v1.0.3's planned patch

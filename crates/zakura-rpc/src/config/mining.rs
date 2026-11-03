@@ -67,6 +67,39 @@ pub struct Config {
     /// Advertise prepared mined block hashes after expected-work validation and state admission,
     /// but before contextual commit completes.
     pub optimistic_block_inventory: bool,
+
+    /// Ycash: whether a transparent P2PKH [`Self::miner_address`] is also the node's Ycash
+    /// Yellowback (YED) payout key, the key the coinbase tag names for pool fees (ycashd
+    /// MINER-2's default, `-yellowbackpayoutdefault`, default on).
+    ///
+    /// With `false` the miner address names no payout key: the node emits no tag and
+    /// `yed_setquote` refuses `no-payout-address`, as a ycashd that mines to its wallet, or that
+    /// runs with `-yellowbackpayoutdefault=0` (kogany finding F-S5-9).
+    #[cfg(feature = "ycash")]
+    #[serde(skip_serializing_if = "is_true")]
+    pub yellowback_payout_default: bool,
+
+    /// Ycash: the node's YED payout address, ycashd's `-yellowbackpayoutaddress` (a transparent
+    /// P2PKH address). When set it is the key the coinbase tag names, whatever address the
+    /// coinbase pays (a stratum pool paying each miner's username keeps its own payout key);
+    /// unset, the payout key follows [`Self::miner_address`] and
+    /// [`Self::yellowback_payout_default`] (ycashd MINER-2, `src/init.cpp`).
+    #[cfg(feature = "ycash")]
+    #[serde(with = "miner_address", skip_serializing_if = "Option::is_none")]
+    pub yellowback_payout_address: Option<ZcashAddress>,
+
+    /// Ycash: the most unpaid ZIP-317 actions a block template carries, ycashd's
+    /// `-blockunpaidactionlimit`. `None` (the default) is no limit, ycashd's
+    /// `DEFAULT_BLOCK_UNPAID_ACTION_LIMIT` = `SIZE_MAX` (`ycash6 src/zip317.h:42`); `0` leaves out
+    /// every transaction that pays less than the conventional fee (Zakura's own rule).
+    #[cfg(feature = "ycash")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub block_unpaid_action_limit: Option<u32>,
+}
+
+#[cfg(feature = "ycash")]
+fn is_true(value: &bool) -> bool {
+    *value
 }
 
 mod miner_address {
@@ -90,10 +123,24 @@ mod miner_address {
     where
         D: Deserializer<'de>,
     {
-        Option::<String>::deserialize(deserializer)?
+        #[cfg(not(feature = "ycash"))]
+        return Option::<String>::deserialize(deserializer)?
             .map(|encoded| encoded.parse())
             .transpose()
-            .map_err(serde::de::Error::custom)
+            .map_err(serde::de::Error::custom);
+
+        // Ycash (W7-c): ycashd's refusal of an address it cannot parse, such as a Zcash `t1…` or
+        // `tm…` one (`ycash6 src/init.cpp:1680-1683`, `-mineraddress`).
+        #[cfg(feature = "ycash")]
+        Option::<String>::deserialize(deserializer)?
+            .map(|encoded| {
+                encoded.parse().map_err(|_| {
+                    serde::de::Error::custom(format!(
+                        "Invalid address for mining.miner_address: Unable to parse '{encoded}' as a Ycash address."
+                    ))
+                })
+            })
+            .transpose()
     }
 }
 
@@ -105,6 +152,12 @@ impl Default for Config {
             miner_memo: None,
             internal_miner: false,
             optimistic_block_inventory: true,
+            #[cfg(feature = "ycash")]
+            yellowback_payout_default: true,
+            #[cfg(feature = "ycash")]
+            yellowback_payout_address: None,
+            #[cfg(feature = "ycash")]
+            block_unpaid_action_limit: None,
         }
     }
 }
@@ -195,6 +248,7 @@ pub fn default_miner_address(kind: NetworkKind, addr_type: &MinerAddressType) ->
     MINER_ADDRESS[&kind][addr_type]
 }
 
+#[cfg(not(feature = "ycash"))]
 static MINER_ADDRESS: LazyLock<HashMap<NetworkKind, HashMap<MinerAddressType, &'static str>>> =
     LazyLock::new(|| {
         [
@@ -219,13 +273,45 @@ static MINER_ADDRESS: LazyLock<HashMap<NetworkKind, HashMap<MinerAddressType, &'
 ].into()
     });
 
+/// Ycash (W7-c): the same key's Ycash encodings, so the default miner address of every network,
+/// Regtest's above all, is one a Ycash node accepts: the transparent receiver re-encoded with
+/// ycashd's P2PKH prefixes (`s1…` `0x1C28`, `sm…` `0x1C95`) and the Sapling receiver with its
+/// HRPs (`ys`, `ytestsapling`, `yregtestsapling`; `ycash6 src/chainparams.cpp:171,186,478,493,
+/// 781`). Ycash has no NU5, so a unified miner address is the Sapling receiver's own address
+/// (ycashd takes a UA only for its receiver of the latest settled upgrade).
+#[cfg(feature = "ycash")]
+static MINER_ADDRESS: LazyLock<HashMap<NetworkKind, HashMap<MinerAddressType, &'static str>>> =
+    LazyLock::new(|| {
+        [
+    (NetworkKind::Mainnet, [
+        (MinerAddressType::Unified, "ys1xl84ekz6stprmvrp39s77mf9t953nqjndwlcjtzfrr3cgjjez87639xm4u9pfuvylrhec336jlf"),
+        (MinerAddressType::Sapling, "ys1xl84ekz6stprmvrp39s77mf9t953nqjndwlcjtzfrr3cgjjez87639xm4u9pfuvylrhec336jlf"),
+        (MinerAddressType::Transparent, "s1WUAp94K9NPDh2S1GAYtWDRg7bzUSmZCNP"),
+    ].into()),
+    (NetworkKind::Testnet, [
+        (MinerAddressType::Unified, "ytestsapling1xl84ekz6stprmvrp39s77mf9t953nqjndwlcjtzfrr3cgjjez87639xm4u9pfuvylrhecne5py3"),
+        (MinerAddressType::Sapling, "ytestsapling1xl84ekz6stprmvrp39s77mf9t953nqjndwlcjtzfrr3cgjjez87639xm4u9pfuvylrhecne5py3"),
+        (MinerAddressType::Transparent, "smNJv8yYiY2tiqGdSvtrdMt6Rib5HwQ7Xr5"),
+    ].into()),
+    (NetworkKind::Regtest, [
+        (MinerAddressType::Unified, "yregtestsapling1xl84ekz6stprmvrp39s77mf9t953nqjndwlcjtzfrr3cgjjez87639xm4u9pfuvylrhec7x0pw7"),
+        (MinerAddressType::Sapling, "yregtestsapling1xl84ekz6stprmvrp39s77mf9t953nqjndwlcjtzfrr3cgjjez87639xm4u9pfuvylrhec7x0pw7"),
+        (MinerAddressType::Transparent, "smNJv8yYiY2tiqGdSvtrdMt6Rib5HwQ7Xr5"),
+    ].into()),
+].into()
+    });
+
 #[cfg(test)]
 mod tests {
     use super::Config;
 
     #[test]
     fn miner_address_preserves_string_encoding_and_optional_defaults() {
+        #[cfg(not(feature = "ycash"))]
         let encoded = "t1bmMa1wJDFdbc2TiURQP5BbBz6jHjUBuHq";
+        // kogany: a Ycash Mainnet transparent address (a Zcash `t1` address does not parse).
+        #[cfg(feature = "ycash")]
+        let encoded = "s1WUAp94K9NPDh2S1GAYtWDRg7bzUSmZCNP";
         let config: Config = toml::from_str(&format!("miner_address = {encoded:?}")).unwrap();
         assert_eq!(config.miner_address.as_ref().unwrap().to_string(), encoded);
         let serialized = toml::to_string(&config).unwrap();
@@ -246,5 +332,33 @@ mod tests {
         }
         assert!(toml::from_str::<Config>("miner_address = 'invalid'").is_err());
         assert!(toml::from_str::<Config>("miner_address = 42").is_err());
+    }
+
+    /// kogany F-S5-9: `yellowback_payout_default` defaults on (ycashd's MINER-2 default) and is
+    /// written only when off.
+    #[cfg(feature = "ycash")]
+    #[test]
+    fn ycash_yellowback_payout_default_parses_and_defaults_on() {
+        assert!(Config::default().yellowback_payout_default);
+        assert!(!toml::to_string(&Config::default())
+            .unwrap()
+            .contains("yellowback_payout_default"));
+        let config: Config = toml::from_str("yellowback_payout_default = false").unwrap();
+        assert!(!config.yellowback_payout_default);
+        assert_eq!(
+            toml::from_str::<Config>(&toml::to_string(&config).unwrap()).unwrap(),
+            config
+        );
+    }
+
+    /// `yellowback_payout_address` (ycashd `-yellowbackpayoutaddress`) is optional and round-trips.
+    #[cfg(feature = "ycash")]
+    #[test]
+    fn ycash_yellowback_payout_address_parses() {
+        assert!(Config::default().yellowback_payout_address.is_none());
+        assert!(!toml::to_string(&Config::default())
+            .unwrap()
+            .contains("yellowback_payout_address"));
+        assert!(toml::from_str::<Config>("yellowback_payout_address = 'invalid'").is_err());
     }
 }

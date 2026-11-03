@@ -279,6 +279,8 @@ impl NoteCommitmentTrees {
 }
 
 #[cfg(test)]
+// kogany: the Zcash-fixture tests are not built with `ycash`.
+#[cfg_attr(feature = "ycash", allow(unused_imports, dead_code))]
 mod tests {
     use halo2::pasta::pallas;
 
@@ -330,6 +332,9 @@ mod tests {
     /// opposite pools, so a pool mix-up or reordering would change the
     /// resulting Orchard or Ironwood tree root.
     #[test]
+    // kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, Equihash (200, 9),
+    // Zcash Mainnet heights); not run on Ycash.
+    #[cfg(not(feature = "ycash"))]
     fn parallel_block_update_keeps_orchard_and_ironwood_order_and_assignment() {
         let _init_guard = zakura_test::init();
 

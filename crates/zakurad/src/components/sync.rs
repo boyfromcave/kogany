@@ -8,6 +8,7 @@ use std::{
     convert,
     future::Future,
     pin::Pin,
+    sync::Arc,
     task::Poll,
     time::{Duration, Instant},
 };
@@ -53,7 +54,7 @@ mod status;
 #[cfg(test)]
 mod tests;
 
-use downloads::{AlwaysHedge, Downloads, NotFoundKind};
+use downloads::{AlwaysHedge, Downloads, NotFoundKind, ParentWait};
 use legacy_trace::{peer_addr_label, LegacySyncTrace};
 
 pub use downloads::VERIFICATION_PIPELINE_SCALING_MULTIPLIER;
@@ -108,6 +109,37 @@ const TRANSIENT_BLOCK_DOWNLOAD_RETRY_LIMIT: usize = 3;
 
 /// Maximum requeues of one block after a transient verification timeout in a sync round.
 const BLOCK_VERIFY_TIMEOUT_RETRY_LIMIT: usize = 3;
+
+/// Bounds a download task's wait for the parent of a block whose authorizing data binding was
+/// unconfirmed, including state readiness. The state's own limit only covers the request.
+const UNCONFIRMED_BINDING_PARENT_WAIT: Duration = zs::constants::AWAIT_BLOCK_INFO_TIMEOUT;
+
+/// Returns a [`ParentWait`] that asks `state` to wait for a block to commit, bounded by
+/// [`UNCONFIRMED_BINDING_PARENT_WAIT`].
+fn state_parent_wait<ZS>(state: ZS) -> ParentWait
+where
+    ZS: Service<zs::Request, Response = zs::Response, Error = BoxError>
+        + Send
+        + Sync
+        + Clone
+        + 'static,
+    ZS::Future: Send + 'static,
+{
+    ParentWait(Arc::new(move |parent| {
+        let state = state.clone();
+        // Boxing lets rustc prove this future is `Send` for spawned callers.
+        futures::FutureExt::boxed(async move {
+            matches!(
+                timeout(
+                    UNCONFIRMED_BINDING_PARENT_WAIT,
+                    state.oneshot(zs::Request::AwaitBlockInfo(parent)),
+                )
+                .await,
+                Ok(Ok(zs::Response::BlockInfo(Some(_))))
+            )
+        })
+    }))
+}
 
 /// Minimum UTXO lookup timeouts without a verified block before the syncer restarts.
 const MIN_UTXO_RACE_DROPS_BEFORE_RESTART: usize = 4;
@@ -210,6 +242,49 @@ pub(crate) fn lookahead_limit_multiplier(network: &Network, height: Height) -> u
 ///
 /// See [`MIN_CHECKPOINT_CONCURRENCY_LIMIT`] for details.
 pub const MAX_TIPS_RESPONSE_HASH_COUNT: usize = 500;
+
+/// kogany (S5-K11): sleeps for `delay`, or less if the address book's `responded` count rises
+/// (a peer connected). Returns true when a new peer ended the sleep early.
+#[cfg(feature = "ycash")]
+pub(crate) async fn restart_sleep(
+    delay: Duration,
+    metrics: Option<&mut watch::Receiver<zn::AddressMetrics>>,
+) -> bool {
+    let Some(metrics) = metrics else {
+        sleep(delay).await;
+        return false;
+    };
+    let mut responded = metrics.borrow_and_update().responded;
+    let deadline = tokio::time::Instant::now() + delay;
+    loop {
+        tokio::select! {
+            _ = sleep_until(deadline) => return false,
+            changed = metrics.changed() => {
+                if changed.is_err() {
+                    sleep_until(deadline).await;
+                    return false;
+                }
+                let now = metrics.borrow_and_update().responded;
+                if now > responded {
+                    info!(responded = now, "a peer connected: restarting sync now");
+                    return true;
+                }
+                responded = now;
+            }
+        }
+    }
+}
+
+/// kogany (S5-K12): waits for a gossiped block that could not connect ([`Notify`] keeps one
+/// permit, so a gap seen during a round ends the following restart sleep at once). Without a
+/// notifier it never returns.
+#[cfg(feature = "ycash")]
+pub(crate) async fn gossip_gap_notified(notify: Option<&tokio::sync::Notify>) {
+    match notify {
+        Some(notify) => notify.notified().await,
+        None => std::future::pending().await,
+    }
+}
 
 /// Returns true if a `FindBlocks` hash list has the protocol maximum number of
 /// block hashes or fewer.
@@ -859,7 +934,7 @@ where
         + Sync
         + Clone
         + 'static,
-    ZS::Future: Send,
+    ZS::Future: Send + 'static,
     ZV: Service<zakura_consensus::Request, Response = block::Hash, Error = BoxError>
         + Send
         + Sync
@@ -960,6 +1035,20 @@ where
 
     /// Structured diagnostics for the legacy sync pipeline.
     trace: LegacySyncTrace,
+
+    /// kogany (S5-K11): the address book's metrics. A rise in `responded` (an `addnode`, an
+    /// outbound or inbound connection completing) ends the restart sleep, so the next
+    /// `FindBlocks` round runs at once; the peer set routes the first `FindBlocks` of a new
+    /// peer to it, so a heavier tip is found within one round (ycashd syncs headers on connect).
+    #[cfg(feature = "ycash")]
+    peer_connected: Option<watch::Receiver<zn::AddressMetrics>>,
+
+    /// kogany (S5-K12): woken by the inbound downloads when a gossiped block is too far ahead of
+    /// the tip or its parent is missing; ends the restart sleep, so the gap is filled by the
+    /// next `FindBlocks` round rather than after the restart delay (by when a peer that mined
+    /// and left may be gone).
+    #[cfg(feature = "ycash")]
+    gossip_gap: Option<Arc<tokio::sync::Notify>>,
 }
 
 /// Polls the network to determine whether further blocks are available and
@@ -981,7 +1070,7 @@ where
         + Sync
         + Clone
         + 'static,
-    ZS::Future: Send,
+    ZS::Future: Send + 'static,
     ZV: Service<zakura_consensus::Request, Response = block::Hash, Error = BoxError>
         + Send
         + Sync
@@ -1067,10 +1156,13 @@ where
             expose_peer_addresses,
         );
 
+        let parent_wait = state_parent_wait(state.clone());
+
         let downloads = Box::pin(Downloads::new(
             block_network,
             verifier,
             latest_chain_tip.clone(),
+            parent_wait,
             past_lookahead_limit_sender,
             max(
                 checkpoint_verify_concurrency_limit,
@@ -1105,6 +1197,10 @@ where
             past_lookahead_limit_receiver,
             misbehavior_sender,
             trace,
+            #[cfg(feature = "ycash")]
+            peer_connected: None,
+            #[cfg(feature = "ycash")]
+            gossip_gap: None,
         };
 
         (new_syncer, sync_status)
@@ -1134,8 +1230,31 @@ where
                 state_tip = ?self.latest_chain_tip.best_tip_height(),
                 "waiting to restart sync"
             );
+            #[cfg(feature = "ycash")]
+            {
+                let gossip_gap = self.gossip_gap.clone();
+                tokio::select! {
+                    _ = restart_sleep(restart_delay, self.peer_connected.as_mut()) => {}
+                    _ = gossip_gap_notified(gossip_gap.as_deref()) => {
+                        info!("a gossiped block could not connect: restarting sync now");
+                    }
+                }
+            }
+            #[cfg(not(feature = "ycash"))]
             sleep(restart_delay).await;
         }
+    }
+
+    /// kogany (S5-K12): wake the restart sleep when a gossiped block cannot connect.
+    #[cfg(feature = "ycash")]
+    pub fn set_gossip_gap_notify(&mut self, notify: Arc<tokio::sync::Notify>) {
+        self.gossip_gap = Some(notify);
+    }
+
+    /// kogany (S5-K11): wake the restart sleep when a new peer responds.
+    #[cfg(feature = "ycash")]
+    pub fn set_peer_connected_watch(&mut self, metrics: watch::Receiver<zn::AddressMetrics>) {
+        self.peer_connected = Some(metrics);
     }
 
     /// Download and verify genesis.
@@ -2121,6 +2240,13 @@ where
                     debug!(new_hashes, "added hashes to download set");
                     metrics::histogram!("sync.obtain.response.hash.count")
                         .record(new_hashes as f64);
+                    // kogany (S5-K11): ycashd fetches a peer's heavier branch as soon as its
+                    // headers arrive; do not hold the new hashes for the fanout's slower peers
+                    // (a peer with nothing newer never answers `getblocks`, so it times out).
+                    #[cfg(feature = "ycash")]
+                    if new_hashes > 0 {
+                        break;
+                    }
                 }
                 Ok(_) => unreachable!("network returned wrong response"),
                 // We ignore this error because we made multiple fanout requests.
@@ -2554,6 +2680,8 @@ where
     /// A duplicate with a pending commit uses the same per-hash retry budget.
     /// If the UTXO lookup timed out because the block's parent is neither committed nor in flight,
     /// the block cannot verify in this round. The syncer drops that block without a restart.
+    /// A block whose authorizing data binding is still unconfirmed after the download task waited
+    /// for its parent is dropped the same way, without scoring its supplier.
     ///
     /// A [`NotFoundKind::Registry`] miss means the peer set found that *every* ready peer is marked
     /// missing the block, so it can't be served right now. Rather than blocking the loop on an inline
@@ -2592,6 +2720,16 @@ where
             self.poisoned_block_retry_counts.remove(hash);
             self.registry_miss_retry_counts.remove(hash);
             self.registry_miss_retry.remove(hash);
+        }
+
+        // The download task already waited for the parent and verified the body again.
+        if let Some((hash, parent)) = response.as_ref().err().and_then(Self::unconfirmed_binding) {
+            debug!(
+                ?hash,
+                ?parent,
+                "block parent did not commit in time to confirm its binding, dropping block"
+            );
+            return Ok(());
         }
 
         let unavailable_parent = response.as_ref().err().and_then(Self::unavailable_parent);
@@ -2992,6 +3130,22 @@ where
         )
     }
 
+    /// Returns the block and parent hashes of a verification failure whose authorizing data
+    /// binding is still unconfirmed after the download task waited for the parent.
+    fn unconfirmed_binding(error: &BlockDownloadVerifyError) -> Option<(block::Hash, block::Hash)> {
+        match error {
+            BlockDownloadVerifyError::Invalid {
+                error: RouterError::Block { source },
+                hash,
+                ..
+            } => match **source {
+                VerifyBlockError::AuthDataUnconfirmed { parent, .. } => Some((*hash, parent)),
+                _ => None,
+            },
+            _ => None,
+        }
+    }
+
     /// Returns the block and parent hashes of a UTXO lookup timeout whose parent is not in a
     /// chain that can accept the block.
     fn unavailable_parent(error: &BlockDownloadVerifyError) -> Option<(block::Hash, block::Hash)> {
@@ -3023,6 +3177,11 @@ where
         let peer = block_error_peer_label(e, expose_peer_addresses);
 
         match e {
+            // The handler drops the block without restarting the round.
+            e if Self::unconfirmed_binding(e).is_some() => {
+                debug!(error = ?e, %peer, "block binding stays unconfirmed, continuing sync");
+                false
+            }
             // The retry handler bounds these races without cancelling the parent's commit.
             e if Self::is_utxo_lookup_timeout(e)
                 || Self::is_post_checkpoint_verify_timeout(e)
@@ -3059,6 +3218,14 @@ where
                     %peer,
                     "block height is behind the current state tip, \
                      assuming the syncer will eventually catch up to the state, continuing"
+                );
+                false
+            }
+            BlockDownloadVerifyError::BelowMinimumWork { .. } => {
+                debug!(
+                    error = ?e,
+                    %peer,
+                    "block target is easier than the Mainnet admission floor, continuing sync"
                 );
                 false
             }

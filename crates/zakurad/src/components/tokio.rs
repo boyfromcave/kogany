@@ -100,10 +100,14 @@ fn finish_runtime(runtime: Runtime, result: Result<(), Report>) -> Result<(), Re
 
     match &result {
         Ok(()) => {
-            info!("shutting down Zakura");
+            info!("shutting down {}", crate::application::PRODUCT_NAME);
         }
         Err(error) => {
-            warn!(?error, "shutting down Zakura due to an error");
+            warn!(
+                ?error,
+                "shutting down {} due to an error",
+                crate::application::PRODUCT_NAME
+            );
         }
     }
 

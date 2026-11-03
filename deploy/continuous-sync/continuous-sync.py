@@ -428,7 +428,7 @@ def build_binary(config: Config, sha: str) -> Path:
         shutil.rmtree(worktree, ignore_errors=True)
     try:
         run(["git", "worktree", "add", "--detach", str(worktree), sha], cwd=config.paths.repo_dir)
-        build_command = ["cargo", "build", "--release", "--locked", "-p", "zakura"]
+        build_command = ["cargo", "build", "--release", "--locked", "-p", "kogany"]
         if features:
             build_command.extend(["--features", ",".join(features)])
         run(build_command, cwd=worktree)

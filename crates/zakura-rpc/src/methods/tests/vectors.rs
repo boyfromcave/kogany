@@ -1,4 +1,6 @@
 //! Fixed test vectors for RPC methods.
+// kogany: the Zcash-fixture tests are not built with `ycash`, leaving their helpers unused.
+#![cfg_attr(feature = "ycash", allow(unused_imports, dead_code))]
 
 use std::{str::FromStr, sync::Arc};
 
@@ -41,7 +43,7 @@ use crate::server::rpc_service::{call_method, RpcMethods};
 
 use crate::methods::{
     hex_data::HexData,
-    tests::utils::fake_history_tree,
+    tests::utils::{fake_history_tree, template_tip_height},
     types::get_block_template::{
         constants::{CAPABILITIES_FIELD, MUTABLE_FIELD, NONCE_RANGE_FIELD},
         GetBlockTemplateRequestMode, MinerAddress,
@@ -386,8 +388,17 @@ fn end_of_service_estimate_follows_target_spacing() {
     let pre_blossom_spacing = NetworkUpgrade::Genesis.target_spacing().num_seconds();
     let post_blossom_spacing = NetworkUpgrade::Blossom.target_spacing().num_seconds();
 
+    // kogany: around Mainnet Blossom (Zcash 653,600; Ycash 1,100,000) rather than a fixed height.
+    let mainnet_blossom = NetworkUpgrade::Blossom
+        .activation_height(&Mainnet)
+        .expect("Blossom activates on Mainnet")
+        .0;
     assert_eq!(
-        target_seconds_between_heights(&Mainnet, Height(653_589), Height(653_609)),
+        target_seconds_between_heights(
+            &Mainnet,
+            Height(mainnet_blossom - 11),
+            Height(mainnet_blossom + 9)
+        ),
         10 * pre_blossom_spacing + 10 * post_blossom_spacing,
     );
 
@@ -683,6 +694,15 @@ async fn rpc_getblock() {
                 block_commitments: Some(expected_block_commitments),
                 final_sapling_root: Some(expected_final_sapling_root),
                 final_orchard_root: None,
+                // kogany: ycashd's `chainhistoryroot` (zeros before Heartwood, S5 parity).
+                #[cfg(feature = "ycash")]
+                chain_history_root: Some(crate::methods::types::ycash::chain_history_root(
+                    &Mainnet,
+                    block
+                        .coinbase_height()
+                        .expect("vector blocks have a height"),
+                    expected_block_commitments,
+                )),
                 nonce: Some(expected_nonce),
                 bits: Some(block.header.difficulty_threshold),
                 difficulty: Some(
@@ -741,6 +761,15 @@ async fn rpc_getblock() {
                 block_commitments: Some(expected_block_commitments),
                 final_sapling_root: Some(expected_final_sapling_root),
                 final_orchard_root: None,
+                // kogany: ycashd's `chainhistoryroot` (zeros before Heartwood, S5 parity).
+                #[cfg(feature = "ycash")]
+                chain_history_root: Some(crate::methods::types::ycash::chain_history_root(
+                    &Mainnet,
+                    block
+                        .coinbase_height()
+                        .expect("vector blocks have a height"),
+                    expected_block_commitments,
+                )),
                 nonce: Some(expected_nonce),
                 bits: Some(block.header.difficulty_threshold),
                 difficulty: Some(
@@ -794,6 +823,8 @@ async fn rpc_getblock() {
                 block_commitments,
                 final_sapling_root,
                 final_orchard_root,
+                #[cfg(feature = "ycash")]
+                    chain_history_root: _,
                 nonce,
                 bits,
                 difficulty,
@@ -893,6 +924,8 @@ async fn rpc_getblock() {
                 block_commitments,
                 final_sapling_root,
                 final_orchard_root,
+                #[cfg(feature = "ycash")]
+                    chain_history_root: _,
                 nonce,
                 bits,
                 difficulty,
@@ -996,6 +1029,15 @@ async fn rpc_getblock() {
                 block_commitments: Some(expected_block_commitments),
                 final_sapling_root: Some(expected_final_sapling_root),
                 final_orchard_root: None,
+                // kogany: ycashd's `chainhistoryroot` (zeros before Heartwood, S5 parity).
+                #[cfg(feature = "ycash")]
+                chain_history_root: Some(crate::methods::types::ycash::chain_history_root(
+                    &Mainnet,
+                    block
+                        .coinbase_height()
+                        .expect("vector blocks have a height"),
+                    expected_block_commitments,
+                )),
                 nonce: Some(expected_nonce),
                 bits: Some(block.header.difficulty_threshold),
                 difficulty: Some(
@@ -1053,6 +1095,15 @@ async fn rpc_getblock() {
                 block_commitments: Some(expected_block_commitments),
                 final_sapling_root: Some(expected_final_sapling_root),
                 final_orchard_root: None,
+                // kogany: ycashd's `chainhistoryroot` (zeros before Heartwood, S5 parity).
+                #[cfg(feature = "ycash")]
+                chain_history_root: Some(crate::methods::types::ycash::chain_history_root(
+                    &Mainnet,
+                    block
+                        .coinbase_height()
+                        .expect("vector blocks have a height"),
+                    expected_block_commitments,
+                )),
                 nonce: Some(expected_nonce),
                 bits: Some(block.header.difficulty_threshold),
                 difficulty: Some(
@@ -1277,6 +1328,17 @@ async fn rpc_getblock_missing_error() {
         .expect_request(zakura_state::ReadRequest::Block(Height(0).into()))
         .await;
     response_handler.respond(zakura_state::ReadResponse::Block(None));
+
+    // kogany: on Ycash a missing body first asks whether it was pruned (ycashd's pruned refusal,
+    // `types::ycash::block_body_pruned`); an unpruned node answers -8 as before.
+    #[cfg(feature = "ycash")]
+    read_state
+        .expect_request(zakura_state::ReadRequest::PruningInfo)
+        .await
+        .respond(zakura_state::ReadResponse::PruningInfo {
+            pruned: false,
+            prune_height: None,
+        });
 
     let block_response = block_future.await.expect("block future should not panic");
     let block_response =
@@ -2130,23 +2192,38 @@ async fn rpc_getblock_side_chain_verbosity2_does_not_panic() {
         .await
         .respond(ReadResponse::Depth(None));
 
-    // get_block: BlockAndSize, OrchardTree, BlockInfo x2
-    read_state
-        .expect_request_that(|req| matches!(req, ReadRequest::BlockAndSize(_)))
-        .await
-        .respond(ReadResponse::BlockAndSize(Some((block, block_size))));
-    read_state
-        .expect_request_that(|req| matches!(req, ReadRequest::OrchardTree(_)))
-        .await
-        .respond(ReadResponse::OrchardTree(Some(Default::default())));
-    read_state
-        .expect_request_that(|req| matches!(req, ReadRequest::BlockInfo(_)))
-        .await
-        .respond(ReadResponse::BlockInfo(None));
-    read_state
-        .expect_request_that(|req| matches!(req, ReadRequest::BlockInfo(_)))
-        .await
-        .respond(ReadResponse::BlockInfo(Some(BlockInfo::default())));
+    // kogany (S5, F-S5-19): on Ycash a block off the best chain is served from the block itself.
+    #[cfg(feature = "ycash")]
+    {
+        read_state
+            .expect_request(ReadRequest::OffChainBlock(block_hash))
+            .await
+            .respond(ReadResponse::OffChainBlock(Some((
+                block,
+                zakura_chain::block::Height(0),
+            ))));
+        let _ = block_size;
+    }
+    #[cfg(not(feature = "ycash"))]
+    {
+        // get_block: BlockAndSize, OrchardTree, BlockInfo x2
+        read_state
+            .expect_request_that(|req| matches!(req, ReadRequest::BlockAndSize(_)))
+            .await
+            .respond(ReadResponse::BlockAndSize(Some((block, block_size))));
+        read_state
+            .expect_request_that(|req| matches!(req, ReadRequest::OrchardTree(_)))
+            .await
+            .respond(ReadResponse::OrchardTree(Some(Default::default())));
+        read_state
+            .expect_request_that(|req| matches!(req, ReadRequest::BlockInfo(_)))
+            .await
+            .respond(ReadResponse::BlockInfo(None));
+        read_state
+            .expect_request_that(|req| matches!(req, ReadRequest::BlockInfo(_)))
+            .await
+            .respond(ReadResponse::BlockInfo(Some(BlockInfo::default())));
+    }
 
     block_future
         .await
@@ -3355,6 +3432,8 @@ async fn rpc_getnetworksolps_uses_averaging_window_at_height() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+// kogany: Zcash Mainnet NU5 template (height, funding streams, coinbase); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn getblocktemplate() {
     let _init_guard = zakura_test::init();
 
@@ -3373,6 +3452,8 @@ async fn getblocktemplate() {
 /// `getblocksubsidy` and `getblocktemplate` include the ZIP 234 reissuance bonus at and
 /// after the start height, and return an error when the balance is negative.
 #[tokio::test(flavor = "multi_thread")]
+// kogany: Zcash ZIP-234 reissuance on a Zcash regtest; not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn zip234_mining_rpcs_include_the_reissuance_bonus() {
     use zakura_chain::{
         parameters::{
@@ -3513,6 +3594,12 @@ async fn zip234_mining_rpcs_include_the_reissuance_bonus() {
                     miner_memo: None,
                     internal_miner: true,
                     optimistic_block_inventory: true,
+                    #[cfg(feature = "ycash")]
+                    yellowback_payout_default: true,
+                    #[cfg(feature = "ycash")]
+                    yellowback_payout_address: None,
+                    #[cfg(feature = "ycash")]
+                    block_unpaid_action_limit: None,
                 },
                 Default::default(),
                 "0.0.1",
@@ -3611,10 +3698,11 @@ async fn check_template_rejection_recovery(reject_before_poll: bool) {
     let _init_guard = zakura_test::init();
     let parent = Hash([1; 32]);
     let (tip, tip_sender) = MockChainTip::new();
-    let height = NetworkUpgrade::Nu5.activation_height(&Mainnet).unwrap();
+    let height = template_tip_height(&Mainnet);
     tip_sender.send_best_tip_height(height);
     tip_sender.send_best_tip_hash(parent);
     tip_sender.send_estimated_distance_to_network_chain_tip(Some(0));
+    tip_sender.send_best_tip_block_time(chrono::Utc::now());
     let mut sync = MockSyncStatus::default();
     sync.set_is_close_to_tip(true);
     let (mempool_calls, mut calls) = tokio::sync::watch::channel(0);
@@ -3782,6 +3870,21 @@ async fn check_template_rejection_recovery(reject_before_poll: bool) {
     queue.abort();
 }
 
+#[test]
+fn test_networks_ignore_tip_age() {
+    let (tip, tip_sender) = MockChainTip::new();
+    tip_sender.send_best_tip_height(Height(1));
+    tip_sender.send_best_tip_block_time(chrono::Utc::now() - chrono::Duration::days(30));
+
+    crate::methods::types::get_block_template::check_synced_to_tip(
+        &Network::new_default_testnet(),
+        tip,
+    )
+    .expect("test networks serve templates regardless of tip age");
+}
+
+// kogany: used only by the Zcash `getblocktemplate` test.
+#[cfg(not(feature = "ycash"))]
 async fn gbt_with(net: Network, addr: ZcashAddress) {
     let mut mempool: MockService<_, _, _, BoxError> = MockService::build().for_unit_tests();
     let state: MockService<_, _, _, BoxError> = MockService::build().for_unit_tests();
@@ -3796,6 +3899,12 @@ async fn gbt_with(net: Network, addr: ZcashAddress) {
         miner_memo: None,
         internal_miner: true,
         optimistic_block_inventory: true,
+        #[cfg(feature = "ycash")]
+        yellowback_payout_default: true,
+        #[cfg(feature = "ycash")]
+        yellowback_payout_address: None,
+        #[cfg(feature = "ycash")]
+        block_unpaid_action_limit: None,
     };
 
     // nu5 block height
@@ -3817,6 +3926,7 @@ async fn gbt_with(net: Network, addr: ZcashAddress) {
     mock_tip_sender.send_best_tip_height(fake_tip_height);
     mock_tip_sender.send_best_tip_hash(fake_tip_hash);
     mock_tip_sender.send_estimated_distance_to_network_chain_tip(Some(0));
+    mock_tip_sender.send_best_tip_block_time(chrono::Utc::now());
 
     // Init RPC
     let (_tx, rx) = tokio::sync::watch::channel(None);
@@ -3953,35 +4063,56 @@ async fn gbt_with(net: Network, addr: ZcashAddress) {
         Amount::<NonNegative>::zero()
     );
 
-    mock_tip_sender.send_estimated_distance_to_network_chain_tip(Some(200));
-    let get_block_template_sync_error = rpc
-        .get_block_template(None)
-        .await
-        .expect_err("needs an error when estimated distance to network chain tip is far");
+    // The gate compares the tip's block time with the local clock. Each case stays at least a
+    // minute away from the boundary, so time passing during the test can't change the result.
+    let request_template = |tip_age: Option<chrono::Duration>| {
+        mock_tip_sender.send_best_tip_block_time(tip_age.map(|age| chrono::Utc::now() - age));
+        async {
+            tokio::join!(
+                rpc.get_block_template(None),
+                make_mock_mempool_request_handler(vec![], fake_tip_hash),
+                make_mock_read_state_request_handler(),
+            )
+            .0
+        }
+    };
 
-    assert_eq!(
-        get_block_template_sync_error.code(),
-        ErrorCode::ServerError(-10).code()
-    );
+    request_template(Some(
+        chrono::Duration::hours(6) - chrono::Duration::minutes(1),
+    ))
+    .await
+    .expect("a tip just inside the tip-age window is accepted");
+
+    request_template(Some(-chrono::Duration::hours(1)))
+        .await
+        .expect("a tip with a block time ahead of the local clock is accepted");
 
     mock_sync_status.set_is_close_to_tip(false);
+    request_template(Some(chrono::Duration::zero()))
+        .await
+        .expect("a fresh tip is accepted regardless of other node state");
+    mock_sync_status.set_is_close_to_tip(true);
 
-    mock_tip_sender.send_estimated_distance_to_network_chain_tip(Some(0));
+    mock_tip_sender.send_best_tip_block_time(None);
     let get_block_template_sync_error = rpc
         .get_block_template(None)
         .await
-        .expect_err("needs an error when syncer is not close to tip");
+        .expect_err("needs an error when the tip has no block time");
 
-    assert_eq!(
-        get_block_template_sync_error.code(),
-        ErrorCode::ServerError(-10).code()
+    assert!(
+        get_block_template_sync_error
+            .message()
+            .contains("no chain tip available yet"),
+        "unexpected error: {get_block_template_sync_error:?}"
     );
 
-    mock_tip_sender.send_estimated_distance_to_network_chain_tip(Some(200));
+    mock_tip_sender.send_best_tip_block_time(
+        chrono::Utc::now() - chrono::Duration::hours(6) - chrono::Duration::minutes(1),
+    );
     let get_block_template_sync_error = rpc
         .get_block_template(None)
         .await
-        .expect_err("needs an error when syncer is not close to tip or estimated distance to network chain tip is far");
+        .expect_err("needs an error when the tip is older than the tip-age window");
 
     assert_eq!(
         get_block_template_sync_error.code(),
@@ -4065,6 +4196,7 @@ async fn gbt_with(net: Network, addr: ZcashAddress) {
     mock_sync_status.set_is_close_to_tip(true);
 
     mock_tip_sender.send_estimated_distance_to_network_chain_tip(Some(0));
+    mock_tip_sender.send_best_tip_block_time(chrono::Utc::now());
 
     let (get_block_template, ..) = tokio::join!(
         rpc.get_block_template(None),
@@ -4160,6 +4292,8 @@ async fn rpc_submitblock_cancellation_keeps_verification_ownership() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+// kogany W7-e: under `ycash` a block that does not decode is ycashd's -22 "Block decode failed".
+#[cfg_attr(feature = "ycash", ignore)]
 async fn rpc_submitblock_errors() {
     let _init_guard = zakura_test::init();
 
@@ -4490,6 +4624,8 @@ async fn completed_mined_verification_precedes_admission() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+// kogany: Zcash address fixtures (t1, t2, tm, zs, u1); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn rpc_validateaddress() {
     let _init_guard = zakura_test::init();
 
@@ -4565,6 +4701,8 @@ async fn rpc_validateaddress() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+// kogany: Zcash address fixtures (t1, t2, tm, zs, u1); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn rpc_validateaddress_regtest() {
     let _init_guard = zakura_test::init();
 
@@ -4618,6 +4756,8 @@ async fn rpc_validateaddress_regtest() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+// kogany: Zcash address fixtures (t1, t2, tm, zs, u1); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn rpc_z_validateaddress() {
     let _init_guard = zakura_test::init();
 
@@ -4716,6 +4856,8 @@ async fn rpc_z_validateaddress() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+// kogany: Zcash address fixtures (t1, t2, tm, zs, u1); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn rpc_z_validateaddress_regtest() {
     let _init_guard = zakura_test::init();
 
@@ -4797,10 +4939,16 @@ async fn rpc_getdifficulty() {
         miner_memo: None,
         internal_miner: true,
         optimistic_block_inventory: true,
+        #[cfg(feature = "ycash")]
+        yellowback_payout_default: true,
+        #[cfg(feature = "ycash")]
+        yellowback_payout_address: None,
+        #[cfg(feature = "ycash")]
+        block_unpaid_action_limit: None,
     };
 
     // nu5 block height
-    let fake_tip_height = NetworkUpgrade::Nu5.activation_height(&Mainnet).unwrap();
+    let fake_tip_height = template_tip_height(&Mainnet);
     // nu5 block hash
     let fake_tip_hash =
         Hash::from_hex("0000000000d723156d9b65ffcf4984da7a19675ed7e2f06d9e5d5188af087bf8").unwrap();
@@ -4937,6 +5085,8 @@ async fn rpc_getdifficulty() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+// kogany: Zcash address fixtures (t1, t2, tm, zs, u1); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn rpc_z_listunifiedreceivers() {
     let _init_guard = zakura_test::init();
 
@@ -5115,6 +5265,8 @@ async fn rpc_addnode() {
             pingwait: None,
             subver: None,
             version: None,
+            #[cfg(feature = "ycash")]
+            banscore: 0,
         }]
     );
 
@@ -5341,9 +5493,7 @@ fn speculative_test_template(parent: Hash) -> BlockTemplateResponse {
         },
     )
     .expect("the test miner address is valid");
-    let height = NetworkUpgrade::Nu5
-        .activation_height(&network)
-        .expect("Nu5 activates on Mainnet");
+    let height = template_tip_height(&network);
     let chain_info = GetBlockTemplateChainInfo {
         expected_difficulty: CompactDifficulty::from(ExpandedDifficulty::from(U256::one())),
         tip_height: height,
@@ -5573,10 +5723,11 @@ async fn a_rejection_that_arrives_after_the_deadline_still_withdraws_the_templat
     let _init_guard = zakura_test::init();
     let parent = Hash([1; 32]);
     let (tip, tip_sender) = MockChainTip::new();
-    let height = NetworkUpgrade::Nu5.activation_height(&Mainnet).unwrap();
+    let height = template_tip_height(&Mainnet);
     tip_sender.send_best_tip_height(height);
     tip_sender.send_best_tip_hash(parent);
     tip_sender.send_estimated_distance_to_network_chain_tip(Some(0));
+    tip_sender.send_best_tip_block_time(chrono::Utc::now());
     let mut sync = MockSyncStatus::default();
     sync.set_is_close_to_tip(true);
     let mempool = tower::service_fn(move |_| async move {
@@ -5694,11 +5845,12 @@ async fn a_stale_preparation_holds_the_worker_until_it_finishes() {
     let _init_guard = zakura_test::init();
     let first_parent = Hash([1; 32]);
     let second_parent = Hash([2; 32]);
-    let height = NetworkUpgrade::Nu5.activation_height(&Mainnet).unwrap();
+    let height = template_tip_height(&Mainnet);
     let (tip, tip_sender) = MockChainTip::new();
     tip_sender.send_best_tip_height(height);
     tip_sender.send_best_tip_hash(first_parent);
     tip_sender.send_estimated_distance_to_network_chain_tip(Some(0));
+    tip_sender.send_best_tip_block_time(chrono::Utc::now());
     let mut sync = MockSyncStatus::default();
     sync.set_is_close_to_tip(true);
 
@@ -5799,10 +5951,11 @@ async fn a_timed_out_parent_is_not_speculated_on_again() {
     let _init_guard = zakura_test::init();
     let parent = Hash([1; 32]);
     let (tip, tip_sender) = MockChainTip::new();
-    let height = NetworkUpgrade::Nu5.activation_height(&Mainnet).unwrap();
+    let height = template_tip_height(&Mainnet);
     tip_sender.send_best_tip_height(height);
     tip_sender.send_best_tip_hash(parent);
     tip_sender.send_estimated_distance_to_network_chain_tip(Some(0));
+    tip_sender.send_best_tip_block_time(chrono::Utc::now());
     let mut sync = MockSyncStatus::default();
     sync.set_is_close_to_tip(true);
     let mempool = tower::service_fn(move |_| async move {

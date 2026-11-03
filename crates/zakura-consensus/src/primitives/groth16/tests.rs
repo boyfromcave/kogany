@@ -1,5 +1,6 @@
 //! Tests for transaction verification
-
+// kogany: the Zcash-fixture tests are not built with `ycash`, leaving their helpers unused.
+#![cfg_attr(feature = "ycash", allow(unused_imports, dead_code))]
 #![allow(clippy::unwrap_in_result)]
 
 use futures::{
@@ -58,6 +59,9 @@ where
 }
 
 #[tokio::test(flavor = "multi_thread")]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn verify_sprout_groth16() {
     let mut verifier = tower::service_fn(
         (|item: Item| {

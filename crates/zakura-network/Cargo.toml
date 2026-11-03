@@ -1,6 +1,6 @@
 [package]
 name = "zakura-network"
-version = "11.0.0-rc0"
+version = "11.0.0-rc1"
 authors.workspace = true
 description = "Networking code for the Zakura node. Internal crate, published to support cargo install zakura"
 # # Legal
@@ -38,6 +38,10 @@ exclude = [
 
 [features]
 default = []
+
+# The Ycash network profile (kogany): the Ycash version table, user agent, inventory filter,
+# seeds, and the Zakura P2P v2 stack off (decision K-11). See zakura-chain's `ycash` feature.
+ycash = ["zakura-chain/ycash", "zakura-header-chain/ycash"]
 
 # Legacy flags accepted for build compatibility; the progress display is removed.
 progress-bar = ["howudoin"]

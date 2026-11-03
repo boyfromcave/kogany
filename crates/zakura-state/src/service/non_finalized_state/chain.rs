@@ -52,6 +52,13 @@ mod height_map;
 #[cfg(feature = "internal-bench")]
 pub use height_map::benchmark::{benchmark_height_map, HeightMapBenchmarkSample};
 pub mod index;
+// kogany (W4-c): the Vault upgrade's set state on a fork.
+pub mod vault;
+// kogany (W5-e): the Yellowback (YED) index on a fork.
+pub mod yed;
+
+use self::vault::ChainVaultOverlay;
+use self::yed::ChainYedOverlay;
 
 /// A single non-finalized partial chain, from the child of the finalized tip,
 /// to a non-finalized chain tip.
@@ -258,6 +265,14 @@ pub struct ChainInner {
     pub(crate) chain_value_pools: ValueBalance<NonNegative>,
     /// The block info after the given block height.
     pub(crate) block_info_by_height: HeightMap<BlockInfo>,
+
+    // kogany (W4-c)
+    //
+    /// The Vault set-state entries this chain's blocks wrote, over the finalized state.
+    pub(crate) vault_overlay: ChainVaultOverlay,
+
+    /// kogany (W5-e): the YED index entries this chain's blocks wrote, over the finalized state.
+    pub(crate) yed_overlay: ChainYedOverlay,
 }
 
 impl Chain {
@@ -304,6 +319,8 @@ impl Chain {
             history_trees_by_height: Default::default(),
             chain_value_pools: finalized_tip_chain_value_pools,
             block_info_by_height: Default::default(),
+            vault_overlay: Default::default(),
+            yed_overlay: Default::default(),
         };
 
         let mut chain = Self {
@@ -1926,7 +1943,11 @@ impl UpdateWith<ContextuallyVerifiedBlock> for Chain {
         &mut self,
         contextually_valid: &ContextuallyVerifiedBlock,
     ) -> Result<(), ValidateContextError> {
-        self.update_chain_tip_with_block_parallel(contextually_valid)
+        self.update_chain_tip_with_block_parallel(contextually_valid)?;
+        // kogany (W4-c)
+        self.update_chain_tip_with(contextually_valid.vault_delta.as_ref())?;
+        // kogany (W5-e)
+        self.update_chain_tip_with(&contextually_valid.yed_effect.delta)
     }
 
     #[instrument(
@@ -2083,6 +2104,12 @@ impl UpdateWith<ContextuallyVerifiedBlock> for Chain {
         // revert the chain value pool balances, if needed
         // note that size is 0 because it isn't need for reverting
         self.revert_chain_with(&(*chain_value_pool_change, height, 0), position);
+
+        // kogany (W4-c)
+        self.revert_chain_with(contextually_valid.vault_delta.as_ref(), position);
+
+        // kogany (W5-e)
+        self.revert_chain_with(&contextually_valid.yed_effect.delta, position);
     }
 }
 

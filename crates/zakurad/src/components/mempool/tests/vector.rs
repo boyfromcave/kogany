@@ -11,7 +11,7 @@ use std::{
 use eyre::Report;
 use tokio::time::{self, timeout};
 use tower::{
-    util::{BoxCloneService, BoxService},
+    util::{BoxCloneService, BoxCloneSyncService, BoxService},
     ServiceBuilder, ServiceExt,
 };
 
@@ -59,7 +59,7 @@ fn policy_rejection_does_not_start_a_cooldown() {
     );
 
     let advertiser_addr = PeerSocketAddr::from(([203, 0, 113, 7], 8233));
-    let consensus_error = TransactionError::Script(zakura_script::Error::ScriptInvalid);
+    let consensus_error = TransactionError::SaplingVerificationFailed;
     assert_ne!(
         consensus_error.mempool_misbehavior_score(),
         0,
@@ -88,7 +88,7 @@ fn policy_rejection_does_not_start_a_cooldown() {
 fn stale_verification_failures_do_not_start_cooldowns() {
     let peer = PeerSocketAddr::from(([203, 0, 113, 7], 8233));
     let error = TransactionDownloadVerifyError::Invalid {
-        error: TransactionError::Script(zakura_script::Error::ScriptInvalid),
+        error: TransactionError::SaplingVerificationFailed,
         advertiser_addr: Some(peer),
         tip_height: Some(block::Height(100)),
         transaction_version: 4,
@@ -182,10 +182,7 @@ fn failures_retried_after_a_tip_reset_ban_but_start_no_cooldown() {
 
     for (error, transaction_version) in [
         (TransactionError::DisabledAddToSproutPool, 4),
-        (
-            TransactionError::Script(zakura_script::Error::ScriptInvalid),
-            4,
-        ),
+        (TransactionError::SaplingVerificationFailed, 4),
     ] {
         let fresh = relayed_transaction_failure(error.clone(), transaction_version);
         assert_eq!(
@@ -308,7 +305,7 @@ fn upgrade_dependent_failures_ban_only_v5_and_later() {
     use zakura_chain::primitives::{ed25519, reddsa, redjubjub};
 
     for error in [
-        TransactionError::Script(zakura_script::Error::ScriptInvalid),
+        TransactionError::SaplingVerificationFailed,
         TransactionError::SaplingVerificationFailed,
         TransactionError::Halo2VerificationFailed,
         TransactionError::Ed25519(ed25519::Error::InvalidSignature),
@@ -431,6 +428,8 @@ fn transactions_declaring_a_later_upgrade_start_no_cooldown() {
 }
 
 #[test]
+// kogany: Zcash Mainnet schedules (NU6.3, the release's end-of-support heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn upgrade_grace_period_covers_the_first_blocks_of_each_upgrade() {
     use zakura_chain::parameters::testnet::ConfiguredActivationHeights;
 
@@ -492,7 +491,7 @@ fn transactions_for_the_previous_upgrade_start_no_cooldown_in_its_grace_period()
             retried_after_tip_reset: false,
         }
     };
-    let script_invalid = TransactionError::Script(zakura_script::Error::ScriptInvalid);
+    let script_invalid = TransactionError::SaplingVerificationFailed;
 
     for (failure, tip_upgrade, previous_upgrade, cooldown_in_grace_period) in [
         (
@@ -672,7 +671,7 @@ async fn repeated_cooldown_disconnects_peer_without_banning() {
         &mut mempool,
         &mut tx_verifier,
         &network,
-        TransactionError::Script(zakura_script::Error::ScriptInvalid),
+        TransactionError::SaplingVerificationFailed,
     )
     .await;
 
@@ -746,12 +745,8 @@ async fn reject_pushed_transaction(
 /// banned every honest peer that relayed them.
 #[tokio::test(flavor = "multi_thread")]
 async fn stale_mempool_rejects_invalid_peer_transaction_without_cooldown() -> Result<(), Report> {
-    assert_peer_error_starts_no_cooldown(
-        None,
-        false,
-        TransactionError::Script(zakura_script::Error::ScriptInvalid),
-    )
-    .await
+    assert_peer_error_starts_no_cooldown(None, false, TransactionError::SaplingVerificationFailed)
+        .await
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -769,7 +764,7 @@ async fn caught_up_mempool_does_not_cool_down_stale_verification() -> Result<(),
     assert_peer_error_starts_no_cooldown(
         Some(chrono::Utc::now() - chrono::Duration::minutes(300)),
         true,
-        TransactionError::Script(zakura_script::Error::ScriptInvalid),
+        TransactionError::SaplingVerificationFailed,
     )
     .await
 }
@@ -888,7 +883,7 @@ async fn zcashd_compat_peer_is_never_penalized() -> Result<(), Report> {
 
     // Test vectors from early Mainnet blocks are v1 and v2 transactions, so a
     // script failure starts a cooldown and a missing input bans.
-    let script_invalid = TransactionError::Script(zakura_script::Error::ScriptInvalid);
+    let script_invalid = TransactionError::SaplingVerificationFailed;
     for peer in [sidecar, mapped_sidecar] {
         assert_eq!(
             peer_penalties(peer, script_invalid.clone(), &Network::Mainnet).await,
@@ -929,7 +924,7 @@ async fn upgrade_grace_period_suppresses_cooldowns() -> Result<(), Report> {
         .into(),
     );
     let peer = PeerSocketAddr::from(([203, 0, 113, 7], 8233));
-    let script_invalid = TransactionError::Script(zakura_script::Error::ScriptInvalid);
+    let script_invalid = TransactionError::SaplingVerificationFailed;
     assert_eq!(
         peer_penalties(peer, script_invalid, &regtest).await,
         (false, false)
@@ -1032,6 +1027,9 @@ async fn peer_penalties(
 /// an invalid one does, and that the mempool then ignores that peer's
 /// transaction advertisements instead of banning it.
 #[tokio::test(flavor = "multi_thread")]
+// kogany: Zcash Mainnet block and transaction vectors (NU5-and-later branch IDs, Zcash-only
+// heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn invalid_peer_transaction_starts_a_cooldown_instead_of_a_ban() -> Result<(), Report> {
     let network = Network::Mainnet;
     let mut transactions = network
@@ -1161,9 +1159,7 @@ async fn invalid_peer_transaction_starts_a_cooldown_instead_of_a_ban() -> Result
             )
         })
         .await
-        .respond(Err(TransactionError::Script(
-            zakura_script::Error::ScriptInvalid,
-        )));
+        .respond(Err(TransactionError::SaplingVerificationFailed));
 
     timeout(Duration::from_secs(3), async {
         while !mempool.storage().contains_rejected(&at_limit_id) {
@@ -1266,7 +1262,7 @@ async fn crawled_transaction_from_cooling_down_peer_is_not_verified() -> Result<
                     )
                 })
                 .await
-                .respond(Err(TransactionError::Script(zakura_script::Error::ScriptInvalid)));
+                .respond(Err(TransactionError::SaplingVerificationFailed));
         }
 
         timeout(Duration::from_secs(3), async {
@@ -3299,6 +3295,21 @@ async fn mempool_reject_bare_multisig() -> Result<(), Report> {
 
     service.enable(&mut recent_syncs).await;
 
+    // Ycash: ycashd's `-permitbaremultisig` defaults to true, so a 1-of-1 bare multisig output
+    // is standard there (kogany W6-a).
+    if cfg!(feature = "ycash") {
+        let result = service
+            .storage()
+            .insert(last_transaction.clone(), Vec::new(), None);
+        assert_ne!(
+            result.err(),
+            Some(MempoolError::NonStandardTransaction(
+                storage::NonStandardTransactionError::BareMultiSig
+            ))
+        );
+        return Ok(());
+    }
+
     let insert_err = service
         .storage()
         .insert(last_transaction.clone(), Vec::new(), None)
@@ -3759,7 +3770,7 @@ async fn setup_with_mempool_config(
     let (mempool, mempool_transaction_subscriber) = Mempool::new(
         &mempool_config,
         false,
-        Buffer::new(BoxService::new(peer_set.clone()), 1),
+        BoxCloneSyncService::new(Buffer::new(BoxService::new(peer_set.clone()), 1)),
         state_service.clone(),
         BoxCloneService::new(read_only_state_service),
         Buffer::new(BoxService::new(tx_verifier.clone()), 1),
@@ -3895,4 +3906,161 @@ async fn cancel_handles_drained_after_verification_timeout() {
         leaked, 0,
         "regression GHSA-65jj-fmw8-468q: cancel_handles must be drained after timeout"
     );
+}
+
+/// kogany (W9-a/F-6): lets the mempool pick up finished verifications.
+#[cfg(feature = "ycash")]
+async fn drain_results(mempool: &mut Mempool) {
+    for _ in 0..3 {
+        mempool.dummy_call().await;
+        time::sleep(Duration::from_millis(100)).await;
+    }
+}
+
+/// kogany (W9-a/F-6): the vectors' non-coinbase transactions.
+#[cfg(feature = "ycash")]
+fn non_coinbase_transactions(
+    network: &Network,
+) -> impl Iterator<Item = zakura_chain::transaction::UnminedTx> {
+    network
+        .unmined_transactions_in_blocks(..)
+        .map(|tx| tx.transaction)
+        .filter(|tx| !tx.transaction().is_coinbase())
+}
+
+/// kogany (W9-a/F-6): answers the next mock verification, which must be of `txid`, with `error`.
+#[cfg(feature = "ycash")]
+async fn fail_next_verification(
+    tx_verifier: &mut MockTxVerifier,
+    txid: UnminedTxId,
+    error: TransactionError,
+) {
+    let responder = tx_verifier.expect_request_that(|_| true).await;
+    assert_eq!(
+        responder
+            .request()
+            .clone()
+            .mempool_transaction()
+            .expect("a mempool request")
+            .id(),
+        txid
+    );
+    responder.respond(Err(error));
+}
+
+/// kogany (W9-a/F-6): a missing-input failure verified at an old tip (the parent's block arrived
+/// while the verification waited) is not cached for the new tip: the mempool verifies the
+/// transaction again at once. A failure that does not depend on the tip is cached as upstream.
+#[cfg(feature = "ycash")]
+#[tokio::test(flavor = "multi_thread")]
+async fn stale_state_failure_is_verified_again_not_cached() -> Result<(), Report> {
+    let block1: Arc<Block> = zakura_test::vectors::BLOCK_MAINNET_1_BYTES
+        .zcash_deserialize_into()
+        .unwrap();
+    let network = Network::Mainnet;
+    let (
+        mut mempool,
+        _peer_set,
+        mut state_service,
+        mut chain_tip_change,
+        mut tx_verifier,
+        mut recent_syncs,
+        _mempool_transaction_receiver,
+    ) = setup(&network, u64::MAX, true).await;
+    mempool.enable(&mut recent_syncs).await;
+
+    let tx = non_coinbase_transactions(&network)
+        .next()
+        .expect("a transaction");
+    let txid = tx.id();
+    mempool
+        .ready()
+        .await
+        .unwrap()
+        .call(Request::Queue(vec![tx.into()]))
+        .await
+        .unwrap();
+
+    // The verification runs at the genesis tip and waits; block 1 arrives meanwhile.
+    let pending = tx_verifier.expect_request_that(|_| true).await;
+    commit_block_and_wait_for_tip_change(&mut state_service, &mut chain_tip_change, block1).await;
+    mempool.dummy_call().await;
+    pending.respond(Err(TransactionError::TransparentInputNotFound));
+    drain_results(&mut mempool).await;
+
+    // Not cached as "did not pass consensus" for the new tip: verified again, at height 1.
+    assert_eq!(mempool.storage().rejection_error(&txid), None);
+    assert_eq!(mempool.tx_downloads().in_flight(), 1);
+    assert_eq!(mempool.state_retries.orphan_count(), 0);
+
+    // At the current tip, a failure of the transaction itself is cached.
+    fail_next_verification(&mut tx_verifier, txid, TransactionError::BadBalance).await;
+    drain_results(&mut mempool).await;
+    assert!(matches!(
+        mempool.storage().rejection_error(&txid),
+        Some(MempoolError::StorageExactTip(
+            ExactTipRejectionError::FailedVerification(TransactionError::BadBalance)
+        ))
+    ));
+    assert_eq!(mempool.tx_downloads().in_flight(), 0);
+
+    Ok(())
+}
+
+/// kogany (W9-a/F-6): a missing-input failure at the current tip is cached for that tip and the
+/// transaction is kept, as ycashd's orphan pool keeps it; when the tip grows it is verified again
+/// (the parent's block may be the one that arrived).
+#[cfg(feature = "ycash")]
+#[tokio::test(flavor = "multi_thread")]
+async fn orphan_is_verified_again_when_the_tip_grows() -> Result<(), Report> {
+    let block1: Arc<Block> = zakura_test::vectors::BLOCK_MAINNET_1_BYTES
+        .zcash_deserialize_into()
+        .unwrap();
+    let network = Network::Mainnet;
+    let (
+        mut mempool,
+        _peer_set,
+        mut state_service,
+        mut chain_tip_change,
+        mut tx_verifier,
+        mut recent_syncs,
+        _mempool_transaction_receiver,
+    ) = setup(&network, u64::MAX, true).await;
+    mempool.enable(&mut recent_syncs).await;
+
+    let tx = non_coinbase_transactions(&network)
+        .next()
+        .expect("a transaction");
+    let txid = tx.id();
+    mempool
+        .ready()
+        .await
+        .unwrap()
+        .call(Request::Queue(vec![tx.into()]))
+        .await
+        .unwrap();
+    fail_next_verification(
+        &mut tx_verifier,
+        txid,
+        TransactionError::TransparentInputNotFound,
+    )
+    .await;
+    drain_results(&mut mempool).await;
+
+    // At this tip the failure is cached (a peer's re-announcement is not downloaded again), and
+    // the transaction is kept.
+    assert!(mempool.storage().rejection_error(&txid).is_some());
+    assert_eq!(mempool.state_retries.orphan_count(), 1);
+    assert_eq!(mempool.tx_downloads().in_flight(), 0);
+
+    // The tip grows: the orphan is verified again at the new tip.
+    commit_block_and_wait_for_tip_change(&mut state_service, &mut chain_tip_change, block1).await;
+    mempool.dummy_call().await;
+    assert_eq!(mempool.state_retries.orphan_count(), 0);
+    assert_eq!(mempool.tx_downloads().in_flight(), 1);
+    fail_next_verification(&mut tx_verifier, txid, TransactionError::BadBalance).await;
+    drain_results(&mut mempool).await;
+    assert_eq!(mempool.state_retries.orphan_count(), 0);
+
+    Ok(())
 }

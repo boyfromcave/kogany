@@ -3,13 +3,13 @@
 Run the optimized benchmark with:
 
 ```sh
-cargo bench -p zakura --bench mempool_eviction --features mempool-bench --locked
+cargo bench -p kogany --bench mempool_eviction --features mempool-bench --locked
 ```
 
 To run only the default-sized chain cases:
 
 ```sh
-cargo bench -p zakura --bench mempool_eviction --features mempool-bench \
+cargo bench -p kogany --bench mempool_eviction --features mempool-bench \
   --locked -- 'chain/.*/8000'
 ```
 

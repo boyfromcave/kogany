@@ -1,5 +1,6 @@
 //! Tests for ZIP-317 transaction selection for block template production
-
+// kogany: the Zcash-fixture tests are not built with `ycash`, leaving their helpers unused.
+#![cfg_attr(feature = "ycash", allow(unused_imports, dead_code))]
 #![allow(clippy::unwrap_in_result)]
 
 use zcash_transparent::address::TransparentAddress;
@@ -62,7 +63,11 @@ fn with_serialized_size(
 fn reserves_network_specific_header_and_transaction_count_sizes() {
     let regtest = Network::new_regtest(Default::default());
 
+    // kogany: Ycash Mainnet's Equihash (192, 7) solution is 400 bytes, Zcash's (200, 9) 1,344.
+    #[cfg(not(feature = "ycash"))]
     assert_eq!(block_template_overhead_bytes(&Network::Mainnet), 1_490);
+    #[cfg(feature = "ycash")]
+    assert_eq!(block_template_overhead_bytes(&Network::Mainnet), 546);
     assert_eq!(block_template_overhead_bytes(&regtest), 180);
 }
 
@@ -101,6 +106,63 @@ fn selects_transaction_at_400_zatoshis_per_action() {
     .expect("block template is valid");
 
     assert_eq!(selected.len(), 1);
+}
+
+/// Ycash: a transaction short of the ZIP-317 conventional fee (a post-quantum owner spend at the
+/// size-based relay fee) is still selected, as ycashd's template has no unpaid-action limit
+/// (`DEFAULT_BLOCK_UNPAID_ACTION_LIMIT` = `SIZE_MAX`, ycash6 `src/zip317.h:42`).
+#[cfg(feature = "ycash")]
+#[test]
+fn ycash_selects_transaction_with_unpaid_actions() {
+    let network = Network::Mainnet;
+    let unmined_tx = network
+        .unmined_transactions_in_blocks(..)
+        .find(|tx| !tx.transaction.transaction().is_coinbase())
+        .expect("test network has an unmined transaction")
+        .transaction;
+    let relay_fee = transaction::ycash_relay::min_relay_fee(unmined_tx.size());
+    let miner_fee = Amount::try_from(i64::try_from(relay_fee).expect("fits")).expect("fee fits");
+    let verified_tx = transaction::VerifiedUnminedTx::new(
+        unmined_tx,
+        miner_fee,
+        0,
+        0,
+        std::sync::Arc::new(Vec::new()),
+    )
+    .expect("transaction pays the Ycash relay fee");
+    assert!(!verified_tx.pays_conventional_fee());
+    assert!(verified_tx.unpaid_actions > 0);
+
+    let miner_params = MinerParams::from(MinerAddress::from(TransparentAddress::PublicKeyHash(
+        [0x7e; 20],
+    )));
+    let selected = select_mempool_transactions(
+        &network,
+        Height(1_000_000),
+        &miner_params,
+        None,
+        vec![verified_tx.clone()],
+        TransactionDependencies::default(),
+    )
+    .expect("block template is valid");
+
+    assert_eq!(
+        selected.len(),
+        1,
+        "ycashd mines a transaction with unpaid actions"
+    );
+
+    // `mining.block_unpaid_action_limit = 0` (ycashd `-blockunpaidactionlimit=0`) leaves it out.
+    let selected = select_mempool_transactions(
+        &network,
+        Height(1_000_000),
+        &miner_params.with_block_unpaid_action_limit(0),
+        None,
+        vec![verified_tx],
+        TransactionDependencies::default(),
+    )
+    .expect("block template is valid");
+    assert!(selected.is_empty(), "the strict limit leaves it out");
 }
 
 #[test]
@@ -303,6 +365,8 @@ mod zip218_template_limits {
     /// global budget for a single Sapling output, even though the Sapling
     /// per-pool limit is untouched.
     #[test]
+    // kogany: ZIP-218 (NU7) with V5 transactions, which Ycash's fee rule refuses; not run on Ycash.
+    #[cfg(not(feature = "ycash"))]
     fn the_global_budget_bounds_selection_across_pools() {
         let mut limits = nu7_template_limits();
 
@@ -462,6 +526,9 @@ mod zip218_template_limits {
             remaining_sapling_ios: SAPLING_BLOCK_IO_LIMIT,
             remaining_sprout_joinsplits: SPROUT_BLOCK_JOINSPLIT_LIMIT,
             remaining_shielded_cost: GLOBAL_SHIELDED_BUDGET,
+            // Ycash (kogany W8-a): no template filter.
+            #[cfg(feature = "ycash")]
+            filter: None,
         }
     }
 
@@ -489,4 +556,12 @@ mod zip218_template_limits {
         VerifiedUnminedTx::new(unmined_tx, miner_fee, 0, 0, Arc::new(Vec::new()))
             .expect("the fake transaction pays the conventional fee")
     }
+}
+
+/// S5 parity: ycashd's block unpaid-action limit is `SIZE_MAX` (ycash6 `src/zip317.h`), so a
+/// Ycash template never leaves a transaction out for its unpaid actions.
+#[cfg(feature = "ycash")]
+#[test]
+fn ycash_templates_have_no_unpaid_action_limit() {
+    assert_eq!(super::BLOCK_UNPAID_ACTION_LIMIT_FOR_TEMPLATES, u32::MAX);
 }

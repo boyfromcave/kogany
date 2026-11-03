@@ -694,6 +694,23 @@ pub fn tx_transparent_coinbase_spends_maturity(
     Ok(())
 }
 
+/// kogany (W3-d): BIP68 relative lock-times, height-based only, for a mempool transaction
+/// evaluated at `height`, the next block's height (ycash6 `AcceptToMemoryPool`'s
+/// `ContextualCheckSequenceLocks(tx, view, nextBlockHeight, state, true)`). `spent_utxos` carries
+/// each spent output's height; an output of a mempool parent is at `height`, so a lock of 0 on it
+/// is satisfied and a lock of 1 waits. Ok wherever the Vault upgrade is not active at `height`.
+pub fn tx_transparent_sequence_locks(
+    network: &Network,
+    tx: &Transaction,
+    height: Height,
+    spent_utxos: &HashMap<transparent::OutPoint, transparent::Utxo>,
+) -> Result<(), TransactionError> {
+    zakura_state::check::transparent_sequence_locks(network, tx, height, |outpoint| {
+        spent_utxos.get(outpoint).map(|utxo| utxo.height)
+    })?;
+    Ok(())
+}
+
 /// The maximum number of signature operations in the redeem script of a standard P2SH input.
 ///
 /// This is zcashd's `MAX_P2SH_SIGOPS` standardness (policy) constant:
@@ -715,6 +732,60 @@ pub fn standard_script_kind(lock_script: &transparent::Script) -> Option<solver:
     let code = script::Code(lock_script.as_raw_bytes().to_vec());
     let component = code.to_component().ok()?.refine().ok()?;
     solver::standard(&component)
+}
+
+/// Ycash relay standardness before and from the Vault upgrade (kogany W6-a).
+#[cfg(feature = "ycash")]
+pub mod ycash_standard;
+
+/// Ycash (kogany): a standard script kind, the `zcash_script` solver's or a TX_PQPKH (ycash6
+/// `Solver`'s `TX_PQPKH`, quantum spec §2.1).
+///
+/// `solver::ScriptKind` is the forked `zcash_script` crate's, so the TX_PQPKH kind wraps it here
+/// rather than adding a variant there. TX_VAULT, TX_VAULT_INTENT and TX_PQCHANNEL are matched by
+/// the vault primitive's and the Yellowback module's own parsers; input standardness of a
+/// TX_PQPKH spend (ycash6 `AreInputsStandard`, `s + p + 2` pushes) is relay policy (W6-a), so
+/// [`are_inputs_standard`] still refuses it.
+#[cfg(feature = "ycash")]
+pub enum YcashScriptKind {
+    /// A kind the `zcash_script` solver recognises.
+    Solver(solver::ScriptKind),
+    /// A TX_PQPKH `0x20 <keyHash:32> OP_1|OP_2 OP_CHECKPQSIG`.
+    PqPubKeyHash(transparent::PqKeyId),
+}
+
+#[cfg(feature = "ycash")]
+impl YcashScriptKind {
+    /// ycash6's `GetTxnOutputType` name.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            YcashScriptKind::Solver(kind) => kind.as_str(),
+            YcashScriptKind::PqPubKeyHash(_) => "pqpubkeyhash",
+        }
+    }
+}
+
+/// Ycash (kogany): ycash6 `Solver`'s standard kinds: [`standard_script_kind`], with the TX_PQPKH
+/// recognised first (the shapes are disjoint, so the order does not matter), and a P2PK only
+/// when its key's header byte implies the pushed length (`MatchPayToPubkey`'s
+/// `CPubKey::ValidSize`; the `zcash_script` solver checks the length alone).
+#[cfg(feature = "ycash")]
+pub fn ycash_standard_script_kind(lock_script: &transparent::Script) -> Option<YcashScriptKind> {
+    if let Some(id) = lock_script.pq_key_id() {
+        return Some(YcashScriptKind::PqPubKeyHash(id));
+    }
+    match standard_script_kind(lock_script)? {
+        solver::ScriptKind::PubKey { data } => {
+            let key = data.as_slice();
+            let valid = match key.first() {
+                Some(2 | 3) => key.len() == 33,
+                Some(4 | 6 | 7) => key.len() == 65,
+                _ => false,
+            };
+            valid.then_some(YcashScriptKind::Solver(solver::ScriptKind::PubKey { data }))
+        }
+        kind => Some(YcashScriptKind::Solver(kind)),
+    }
 }
 
 /// Returns the expected number of scriptSig arguments for a given script kind.

@@ -69,8 +69,14 @@ impl PeerPreference {
 
         // This check only prefers the configured network, because
         // address_is_valid_for_outbound_connections() rejects the port used by the other network.
+        #[cfg(not(feature = "ycash"))]
         let canonical_port =
             AttributePreference::preferred_from([8232, 18232].contains(&peer_addr.port()));
+        // kogany: the canonical ports are ycashd's (`crate::ycash::P2P_PORTS`).
+        #[cfg(feature = "ycash")]
+        let canonical_port = AttributePreference::preferred_from(
+            crate::ycash::P2P_PORTS.contains(&peer_addr.port()),
+        );
 
         Ok(PeerPreference { canonical_port })
     }
@@ -118,6 +124,14 @@ pub fn address_is_valid_for_inbound_listeners(
             return Ok(());
         }
 
+        // kogany: another Ycash network's port, and Zcash's, which shares Ycash's mainnet and
+        // regtest magics (`crate::ycash::zcash_port_refusal`).
+        #[cfg(feature = "ycash")]
+        if crate::ycash::P2P_PORTS.contains(&listener_addr.port()) {
+            return Err("invalid peer port: port is for another Ycash network");
+        }
+
+        #[cfg(not(feature = "ycash"))]
         if listener_addr.port() == 8232 {
             return Err(
                 "invalid peer port: port is for Mainnet, but this node is configured for Testnet",
@@ -129,12 +143,21 @@ pub fn address_is_valid_for_inbound_listeners(
         }
     }
 
+    #[cfg(feature = "ycash")]
+    if let Some(refusal) = crate::ycash::zcash_port_refusal(listener_addr.port()) {
+        return Err(refusal);
+    }
+
     // Ignore ports used by potentially compatible nodes: other coins and unsupported Zcash regtest.
+    // kogany: 18344 is Ycash regtest's port, accepted above on Regtest.
+    #[cfg(not(feature = "ycash"))]
     if listener_addr.port() == 18344 {
         return Err(
             "invalid peer port: port is for Regtest, but Zakura does not support that network",
         );
-    } else if [8033, 18033, 16125, 26125].contains(&listener_addr.port()) {
+    }
+
+    if [8033, 18033, 16125, 26125].contains(&listener_addr.port()) {
         // These coins use the same network magic numbers as Zcash, so we have to reject them by port:
         // - ZClassic: 8033/18033
         //   https://github.com/ZclassicCommunity/zclassic/blob/504362bbf72400f51acdba519e12707da44138c2/src/chainparams.cpp#L130

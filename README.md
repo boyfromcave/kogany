@@ -1,183 +1,182 @@
 <p align="center">
-  <img width="500" height="133" src="https://zakura.com/assets/github/readme_banner.png" alt="Zakura banner">
+  <img src="docs/images/kogany-logo-tag.jpeg" alt="Kogany. A Rust full node for Ycash. Built for post-quantum vaults." width="560">
 </p>
 
-[![Unit Tests](https://github.com/zakura-core/zakura/actions/workflows/tests-unit.yml/badge.svg)](https://github.com/zakura-core/zakura/actions/workflows/tests-unit.yml)
-[![Lint](https://github.com/zakura-core/zakura/actions/workflows/lint.yml/badge.svg)](https://github.com/zakura-core/zakura/actions/workflows/lint.yml)
-[![codecov](https://codecov.io/gh/zakura-core/zakura/branch/main/graph/badge.svg)](https://codecov.io/gh/zakura-core/zakura)
-![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue.svg)
+# Kogany: the Ycash node in Rust (`koganyd`)
 
-- [Getting Started](#getting-started)
-  - [Installer](#installer)
-  - [Docker](#docker)
-  - [Manual Install](#manual-install)
-- [Documentation](#documentation)
-- [User support](#user-support)
-- [Security](#security)
+**Kogany** is the Ycash developers' Ycash full node in Rust. The name is a play on the Japanese
+word _kogane_ (黄金, "gold"): the node carries the Ycash Yellowback (YED) upgrade with **vaults**,
+so the Ycash contributors called it Kogany. The codebase began as [Zakura](README-zakura.md), a
+consensus-compatible Zcash full node in Rust (Zebra lineage); on that baseline the Ycash
+contributors added the vault network upgrade and made the node compatible with the Ycash network.
+
+Built with the `ycash` cargo feature, the tree is **Kogany**, a Ycash full node, `koganyd`: it
+follows Ycash mainnet, the re-forked Ycash testnet and Ycash regtest, and it enforces the vault
+network upgrade and the Ycash Yellowback (YED) rule module on top of Ycash consensus. Yellowback
+is a decentralized dollar on Ycash; YED is its unit.
+
+Built without the feature, the tree is upstream Zakura, a Zcash node (`zakurad`), and runs
+Zakura's own tests unchanged. Upstream's README is kept as
+[README-zakura.md](README-zakura.md), and Zakura's design documents under [`docs/`](docs/) still
+describe the node's architecture; this file covers what is different on Ycash. In code and
+paths the name is lowercase: the repository and cargo package are `kogany`, the daemon is
+`koganyd`, the data directory is `~/.kogany`.
+
+- [The three Ycash node lines](#the-three-ycash-node-lines)
+- [Building](#building)
+- [Versioning](#versioning)
+- [Networks, ports and identifiers](#networks-ports-and-identifiers)
+- [Directories and files](#directories-and-files)
+- [Running](#running)
+- [Yellowback and vault RPCs](#yellowback-and-vault-rpcs)
+- [Upstream documentation](#upstream-documentation)
 - [License](#license)
 
----
+## The three Ycash node lines
 
-[**Zakura**](https://github.com/zakura-core/zakura/) is a consensus-compatible Zcash full node written in Rust, built for scale. Supporting payments at global scale requires on the order of 50k TPS, which translates to consensus processing at least 100 MB/s of block data. Today's chain peaks at 28 KB/s. With cryptographic optimizations to the Zcash protocol underway in [Project Tachyon](https://tachyon.z.cash/) and at [Valargroup](https://valargroup.dev), Zakura is the node implementation built to close that gap.
+Ycash Yellowback (YED) and the vault network upgrade are implemented on three node lines, which
+enforce the same rules and the same branch ID (`0x6d5b7a31`, the `Vault` network upgrade):
 
-Zakura is forked from [Zebra](https://github.com/ZcashFoundation/zebra). This first release brings major improvements over existing Zcash node software:
+| Line | Codebase | Role |
+| --- | --- | --- |
+| `ycash-dd` | ycashd 4.5.0 (C++, Zcash 4.5 lineage) | the primary Yellowback line |
+| `ycash6` | ycashd 6.20 (C++, Zcash 6.x lineage) | the release line (6.22.x for the vault upgrade) |
+| kogany | Zakura (Rust, Zebra lineage) | the third line: `koganyd`, this repository |
 
-- Performance: Blockchain sync is nearly 5× faster than Zebra. Block execution is notably faster than Zebra, especially on worst-case sandblast attacks.
-- Pruning and snapshots: Native block pruning with configurable retention lets you operate a full node with substantially less disk space. We also publish snapshots (~11 GB pruned) that let you bootstrap a node 680× faster than syncing over the standard P2P network. See the [snapshots page](https://zakura.com/snapshots/).
-- [zcashd compatibility](docs/zcashd-compat.md): A compatibility mode
-  reproduces the legacy zcashd RPC interface, so existing wallets and
-  integrations keep working.
-- Experimental P2P v2: We are building a new P2P transport layer for Zakura nodes, currently off by default on Mainnet. The goals are sub-500ms worst-case block propagation, mempool aggregation (used in Tachyon), sync at the speed of your bandwidth, and a future-proofed gossip protocol. The v2 stack has known DoS risks and is not yet production-hardened.
+A rule change is made on every line together; the cross-line vectors in
+[`testdata/yellowback/`](testdata/yellowback/) are byte-identical to ycash6's and pin the shared
+behaviour. The Yellowback workspace (`AGENTS.md` there) holds the plans and the crosswalk.
 
-## Getting Started
+## Building
 
-There are several ways to install the node software: an interactive installer that downloads the binary, Docker, or building from source or crates.io.
-
-### Installer
-
-The simplest way to install Zakura on a new machine is using the interactive installer:
-
-```console
-curl -fsSL https://zakura.com/install.sh | bash
-```
-
-The installer can set up either standard Zakura or its
-[zcashd-compatible variant](docs/zcashd-compat.md).
-
-### Docker
-
-You can run Zakura using our [Docker
-image](https://hub.docker.com/r/zakuracore/zakura/tags) or install it manually.
-The zcashd-compatible split-container mode uses the
-[zakuracore/zcashd:v1.3.1 image](https://hub.docker.com/r/zakuracore/zcashd/tags).
-
-This command will run our latest release and sync it to the tip:
+`koganyd` is the `kogany` package's `ycash` build:
 
 ```sh
-docker run -d \
-  --name zakura \
-  -p 8233:8233 \
-  -v zakurad-cache:/home/zakura/.cache/zakura \
-  zakuracore/zakura:latest
+cargo build --release --locked -p kogany --bin koganyd --features ycash
 ```
 
-The `-p 8233:8233` flag exposes the P2P port so other Zcash nodes can connect to
-yours, and `-v` persists the chain state across restarts (use port `18233` for
-Testnet). For more information, see the image's
-[Docker Hub page](https://hub.docker.com/r/zakuracore/zakura).
+The `ycash` feature switches the forked librustzcash crates (`zakura-common-ycash`, pinned in the
+root `Cargo.toml` under `[patch.crates-io]`) to their Ycash values. The same build also links a
+`zakurad` binary, which refuses to run: a Ycash node never runs, or installs, under Zcash's name.
+Without the feature, `cargo build -p kogany` builds upstream's Zcash `zakurad` and no `koganyd`.
 
-### Manual Install
-
-Building Zakura requires [Rust](https://www.rust-lang.org/tools/install) and a
-C++ compiler. Below are quick summaries for installing these dependencies.
-
-[//]: # "The empty lines in the `summary` tag below are required for correct Markdown rendering."
-
-<details><summary>
-
-#### General Instructions for Installing Dependencies
-
-</summary>
-
-1. Install [`cargo` and `rustc`](https://www.rust-lang.org/tools/install).
-2. Install a C++ compiler, such as `g++` or `clang` on Linux, Xcode on macOS,
-   or Visual Studio's MSVC on Windows.
-
-</details>
-
-[//]: # "The empty lines in the `summary` tag below are required for correct Markdown rendering."
-
-<details><summary>
-
-#### Dependencies on Arch Linux
-
-</summary>
+The container image is upstream's `docker/Dockerfile` with the same switch: with `ycash` in the
+`FEATURES` build argument it builds and ships `koganyd` (and no `zakurad`), without it upstream's
+`zakurad`. The image's default command, `node`, runs whichever is installed:
 
 ```sh
-sudo pacman -S rust gcc
+docker build -f docker/Dockerfile --target runtime --build-arg FEATURES="default-release-binaries ycash" -t koganyd .
+docker run --rm --entrypoint koganyd koganyd --version
 ```
 
-</details>
+## Versioning
 
-Once you have the dependencies in place, you can install Zakura with:
+The package is `kogany` (cargo prints `Compiling kogany v1.8.0-rc1`); its directory,
+`crates/zakurad`, and its library name, `zakurad`, stay upstream's so upstream syncs keep merging.
+The version line is Zakura's: the package version is the Zakura version kogany tracks
+(`1.8.0-rc1` now). The build metadata is kogany's own, counted from the tag
+`kogany-ycash-baseline`, never from an upstream `v*` tag; for example:
+
+```text
+$ koganyd --version
+koganyd 1.8.0-rc1+kogany.31.g4e67df4e3a1b
+```
+
+`31` is the number of commits since `kogany-ycash-baseline`
+(`git describe --tags --match kogany-ycash-baseline --long`), `g…` the commit, and `.modified` is
+appended for uncommitted changes. A build without `.git` (the Docker image) has no count and
+prints `koganyd 1.8.0-rc1+kogany.g<commit>` from the commit it was given (`SHORT_SHA`). The same
+version is in the startup diagnostics and the `kogany.build.info` metric. The user agent carries
+the package version only, `/koganyd:1.8.0-rc1/`: ycashd keeps only `[A-Za-z0-9 .-/:]` of a peer's
+subversion, so a `+` would be dropped. Upstream's `zakurad` (built without the `ycash` feature)
+keeps Zakura's scheme.
+
+## Networks, ports and identifiers
+
+Every value equals ycashd's (ycash6 `src/chainparams.cpp`, `src/chainparamsbase.cpp`); the test
+`parameters::ycash::identity_tests` in `zakura-chain` checks them and checks that none collides
+with a Zcash network's on one host.
+
+| Network | P2P port | RPC port | Magic | `getblockchaininfo.chain` | `testnetprofile` |
+| --- | --- | --- | --- | --- | --- |
+| Ycash mainnet (`Mainnet`) | 8833 | 8832 | `24e92764` | `main` | |
+| Ycash testnet, `fast` profile (`Testnet`) | 18833 | 18832 | `f77962d3` | `test` | `fast` |
+| Ycash testnet, `slow` profile (`TestnetSlow`) | 18933 | 18932 | `f77962d4` | `test` | `slow` |
+| Ycash regtest (`Regtest`) | 18344 | 18832 | `aae83f5f` | `regtest` | |
+
+- The RPC server is off until `rpc.listen_addr` is set; the RPC ports above are the ones to set.
+  Regtest and the `fast` testnet share 18832, as in ycashd.
+- Ycash mainnet and regtest share Zcash's magic. A Zcash peer is refused by its protocol version
+  (Ycash peers advertise at least 270013) and by its port (8233, 18233), and the Zakura P2P v2
+  overlay, which identifies a chain by its genesis hash, is off (decision K-11).
+- User agent: `/koganyd:<package version>/`, e.g. `/koganyd:1.8.0-rc1/` ([Versioning](#versioning)).
+- Addresses: transparent `s1…`/`s3…` on mainnet, `sm…` on the testnets and regtest; Sapling
+  `ys…`, `ytestsapling…`, `yregtestsapling…`; post-quantum `sq…`, `tq…`, `rq…`; Yellowback (YED)
+  `yb…`, `yt…`, `yr…`. Coin type 347 on mainnet.
+- DNS seed: `seed.ycash.xyz` on mainnet; the testnet has fixed seeds only.
+- The legacy `testnet3` profile of ycashd is not one of kogany's networks (decision K-10).
+- The `slow` profile is built in (`Network::new_ycash_testnet_slow`) but `kogany.toml` has no
+  selector for it yet: `network = "Testnet"` is the `fast` profile.
+
+## Directories and files
+
+kogany never uses Zakura's names, so a Zcash `zakurad` and a Ycash `koganyd` (mainnet or testnet)
+run on one host without sharing a file:
+
+| What | `koganyd` default | Zcash `zakurad` default |
+| --- | --- | --- |
+| Config file | `kogany.toml` in the preference directory (`~/.config` on Linux, `~/Library/Preferences` on macOS) | `zakura.toml` (or a legacy `zebrad.toml`) |
+| State, peer cache | `kogany/` in the cache directory (`~/.cache/kogany` on Linux, `~/Library/Caches/kogany` on macOS) | `zakura/` |
+| RPC cookie | `<cache>/kogany/.cookie` on mainnet, `<cache>/kogany/<network>/.cookie` on the testnets and regtest | `<cache>/zakura/.cookie` |
+| Network identity | `~/.kogany` | `~/.zakura` |
+
+Environment overrides keep Zakura's `ZAKURA_` prefix (`ZAKURA_RPC__LISTEN_ADDR=127.0.0.1:8832`);
+they apply to the process that reads them only.
+
+## Running
+
+`koganyd generate -o ~/.config/kogany.toml` writes the default configuration for mainnet
+(Ycash seeds, the Ycash listen port, the paths above); edit it or start with no config at all:
 
 ```sh
-cargo install --locked zakura
+koganyd start                       # Ycash mainnet, ~/.cache/kogany
+koganyd -c testnet.toml start       # with [network] network = "Testnet": the fast profile
+koganyd -c regtest.toml start       # with [network] network = "Regtest"
 ```
 
-Alternatively, you can install it from GitHub:
+A minimal RPC section, for mainnet:
 
-```sh
-cargo install --git https://github.com/zakura-core/zakura --tag v1.7.0 zakura
+```toml
+[rpc]
+listen_addr = "127.0.0.1:8832"
 ```
 
-Standard x86-64 builds enable Pasta field assembly through the default
-`x86_64-asm` Cargo feature. Both BMI2 and ADX CPU extensions are required;
-`RUSTFLAGS` is not needed:
+On regtest every Ycash upgrade height, and the Vault height, come from
+`[network.network.params.activation_heights]`, as ycashd's `-nuparams` set them; the regtest
+harness in ycash6 (`qa/rpc-tests/test_framework/kogany.py`) writes that file for each node.
 
-```sh
-cargo build --locked --release --package zakura
-```
+## Yellowback and vault RPCs
 
-This selects assembly at build time, with no CPU detection in arithmetic calls.
-The node checks CPU compatibility once at startup and exits with a clear error
-when either extension is missing. Official release binaries and Docker images
-use the same default. AArch64 assembly selection is unchanged.
+`koganyd` answers the stock Ycash RPCs as ycashd does, plus the vault primitive's `set_*` and
+`vault_*` RPCs and the Yellowback `yed_*` RPCs, at `rpcversion` 8:
 
-For an older x86-64 CPU, enable the `portable` override:
+- [`doc/yellowback-spec.md`](doc/yellowback-spec.md): the vault upgrade and Yellowback
+  specification, generated from the workspace plans;
+- [`doc/yellowback-rpc-contract.json`](doc/yellowback-rpc-contract.json) and
+  [`doc/vault-rpc-contract.json`](doc/vault-rpc-contract.json): the RPC contracts shared with
+  ycash6 and ycash-dd;
+- [`doc/kogany-rpc-openrpc.json`](doc/kogany-rpc-openrpc.json): kogany's OpenRPC document.
 
-```sh
-cargo build --locked --release --package zakura --features portable
-```
+## Upstream documentation
 
-The `portable` feature wins when both Cargo features are enabled, including
-with `--all-features`. It only affects Pasta arithmetic: CPU-specific compiler
-flags such as `-C target-cpu=native` can still emit instructions elsewhere that
-require the build machine's CPU. Omit such flags when building a portable binary.
-
-Builds that disable default features can still select assembly explicitly with
-`--features x86_64-asm`, or through compiler target flags that enable BMI2 and ADX.
-
-You can start Zakura by running
-
-```sh
-zakurad start
-```
-
-Run `zakurad start --help` for optional features and configuration details.
-
-## Documentation
-
-The Zakura maintainers provide the following resources:
-
-- The [Zakura website](https://zakura.com/) for user guides and announcements.
-
-- The [documentation of the public
-  APIs](https://docs.rs/zakura/latest/zakurad/#zakura-crates) for the latest
-  releases of the individual Zakura crates.
-
-- The [documentation of the internal APIs](https://zakura-core.github.io/zakura/internal)
-  for the `main` branch of the whole Zakura monorepo.
-
-## User support
-
-If Zakura doesn't behave the way you expected, [open an
-issue](https://github.com/zakura-core/zakura/issues/new/choose). We regularly
-triage new issues and we will respond.
-
-If you want to chat with us, use the GitHub issues for now.
-
-## Security
-
-Zakura has a [responsible disclosure
-policy](docs/security.md), which
-we encourage security researchers to follow.
+- [README-zakura.md](README-zakura.md): upstream's README (installer, Docker image and
+  instructions for the Zcash node).
+- [`docs/`](docs/): Zakura's design, specs and decisions, unchanged.
+- [CHANGELOG.md](CHANGELOG.md): kogany's entries first, then Zakura's.
+- [`.github/README-kogany.md`](.github/README-kogany.md): which CI workflows run on kogany.
+- `AGENTS.md`: upstream's contributor guidelines; the Yellowback workspace's rules come first.
 
 ## License
 
-Zakura is distributed under the terms of both the MIT license and the Apache
-License (Version 2.0). Some Zakura crates are distributed under the [MIT license
-only](LICENSE-MIT), because some of their code was originally from MIT-licensed
-projects. See each crate's directory for details.
-
-See [LICENSE-APACHE](LICENSE-APACHE) and [LICENSE-MIT](LICENSE-MIT).
+kogany, like Zakura, is distributed under the terms of both the MIT license and the Apache License
+(Version 2.0). See [LICENSE-APACHE](LICENSE-APACHE) and [LICENSE-MIT](LICENSE-MIT).

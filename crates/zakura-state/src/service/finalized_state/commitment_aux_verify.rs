@@ -106,6 +106,8 @@ pub(crate) enum CommitmentRootVerificationError {
 
 impl CommitmentRootVerificationError {
     #[cfg(test)]
+    // kogany: used only by tests not built with `ycash`.
+    #[cfg_attr(feature = "ycash", allow(dead_code))]
     fn failure_kind(&self) -> crate::error::VctCommitFailure {
         match self {
             Self::CurrentRoots { .. } => crate::error::VctCommitFailure::CurrentRoots,
@@ -341,6 +343,8 @@ where
 }
 
 #[cfg(test)]
+// kogany: the Zcash-fixture tests are not built with `ycash`.
+#[cfg_attr(feature = "ycash", allow(unused_imports, dead_code))]
 mod tests {
     use super::*;
 
@@ -470,6 +474,9 @@ mod tests {
     /// header commitment (or pinned to empty before Sapling). At/above Heartwood,
     /// the MMR path authenticates it instead, so this direct check accepts.
     #[test]
+    // kogany: Zcash Mainnet and Testnet block vectors (NU5 branch IDs, Zcash Heartwood and NU5
+    // heights); not run on Ycash.
+    #[cfg(not(feature = "ycash"))]
     fn pins_sapling_root_below_heartwood_to_header_or_empty() {
         let empty = sapling::tree::NoteCommitmentTree::default().root();
         let sapling_root = mainnet_sapling_root_at(419_200);
@@ -534,6 +541,9 @@ mod tests {
     /// commits to it there), and any other root is rejected. At/above NU5 the MMR
     /// authenticates it, so this check accepts unconditionally.
     #[test]
+    // kogany: Zcash Mainnet and Testnet block vectors (NU5 branch IDs, Zcash Heartwood and NU5
+    // heights); not run on Ycash.
+    #[cfg(not(feature = "ycash"))]
     fn pins_orchard_root_to_empty_below_nu5_and_defers_above() {
         let nu5 = NetworkUpgrade::Nu5
             .activation_height(&Mainnet)
@@ -681,6 +691,9 @@ mod tests {
     /// next block (the V1 `ChainHistoryRoot` path), and rejects a wrong root at the
     /// *next* block (the one-block lag).
     #[test]
+    // kogany: Zcash Mainnet and Testnet block vectors (NU5 branch IDs, Zcash Heartwood and NU5
+    // heights); not run on Ycash.
+    #[cfg(not(feature = "ycash"))]
     fn verifies_real_roots_with_header_only_successor_and_rejects_a_wrong_root() {
         let activation = NetworkUpgrade::Heartwood
             .activation_height(&Mainnet)

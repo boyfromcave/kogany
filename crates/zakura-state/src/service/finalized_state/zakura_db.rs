@@ -60,6 +60,10 @@ pub mod prune;
 pub mod rollback;
 pub mod shielded;
 pub mod transparent;
+// kogany (W4-c): the Vault upgrade's set state column families and its total transition.
+pub mod vault;
+// kogany (W5-e): the Yellowback (YED) index column families and its evaluation.
+pub mod yed;
 
 #[cfg(any(test, feature = "proptest-impl"))]
 // TODO: when the database is split out of zakura-state, always expose these methods.

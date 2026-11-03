@@ -1,6 +1,6 @@
 [package]
 name = "zakura-chain"
-version = "11.0.0-rc0"
+version = "11.0.0-rc1"
 authors.workspace = true
 description = "Core Zcash data structures for the Zakura node. Internal crate, published to support cargo install zakura"
 license.workspace = true
@@ -16,6 +16,18 @@ categories = ["asynchronous", "cryptography::cryptocurrencies", "encoding"]
 
 [features]
 default = []
+
+# The Ycash network profile (kogany): Ycash mainnet, testnet profiles and regtest replace the Zcash
+# networks, and the forked librustzcash crates switch to their Ycash values. Off, this crate is
+# upstream Zakura with the Ycash upgrade present as an inert variant.
+ycash = [
+    "zcash_protocol/ycash",
+    "zcash_primitives/ycash",
+    "zcash_address/ycash",
+    "zcash_transparent/ycash",
+    "dep:kogany-vault",
+    "dep:kogany-yellowback",
+]
 
 # Production features that activate extra functionality
 
@@ -68,6 +80,10 @@ sha2 = { workspace = true, features = ["compress"] }
 uint = { workspace = true }
 bech32 = { workspace = true }
 zcash_script.workspace = true
+
+# Ycash (kogany): the TX_PQPKH shape and the vault primitive's byte types (`ycash` only).
+kogany-vault = { path = "../kogany-vault", optional = true }
+kogany-yellowback = { path = "../kogany-yellowback", optional = true }
 
 # ECC deps
 halo2 = { workspace = true }

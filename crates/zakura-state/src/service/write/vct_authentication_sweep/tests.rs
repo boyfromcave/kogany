@@ -4,6 +4,8 @@
 //! Each header carries its exact ZIP-221 commitment.
 //! The fixture commits a body prefix.
 //! The fixture admits the remaining headers with auxiliary deliveries.
+// kogany: the Zcash-fixture tests are not built with `ycash`, leaving their helpers unused.
+#![cfg_attr(feature = "ycash", allow(unused_imports, dead_code))]
 
 mod writer_fallback;
 
@@ -101,6 +103,9 @@ fn empty_ironwood_root() -> ironwood::tree::Root {
 fn parameters(checkpoint_blocks: Option<&[Arc<Block>]>) -> Network {
     let builder = ParametersBuilder::default()
         .with_activation_heights(ConfiguredActivationHeights {
+            ycash: None,
+            vault: None,
+            pq_falcon: None,
             before_overwinter: Some(1),
             overwinter: Some(2),
             sapling: Some(3),
@@ -182,9 +187,11 @@ fn generate_chain(network: &Network) -> Vec<Arc<Block>> {
                 joinsplit_data: None,
             },
             NetworkUpgrade::Sapling
+            | NetworkUpgrade::Ycash
             | NetworkUpgrade::Blossom
             | NetworkUpgrade::Heartwood
-            | NetworkUpgrade::Canopy => Transaction::V4 {
+            | NetworkUpgrade::Canopy
+            | NetworkUpgrade::Vault => Transaction::V4 {
                 inputs: vec![input],
                 outputs: Vec::new(),
                 lock_time: LockTime::unlocked(),
@@ -227,7 +234,9 @@ fn generate_chain(network: &Network) -> Vec<Arc<Block>> {
             transactions,
         });
         let commitment = match upgrade {
-            NetworkUpgrade::Sapling | NetworkUpgrade::Blossom => <[u8; 32]>::from(sapling_root),
+            NetworkUpgrade::Sapling | NetworkUpgrade::Ycash | NetworkUpgrade::Blossom => {
+                <[u8; 32]>::from(sapling_root)
+            }
             NetworkUpgrade::Heartwood if height == Height(HEARTWOOD) => [0; 32],
             NetworkUpgrade::Heartwood | NetworkUpgrade::Canopy => history_tree
                 .hash()
@@ -739,6 +748,9 @@ impl Fixture {
 const LAST_PROVABLE: u32 = TOP - 1;
 
 #[test]
+// kogany: generated Zcash Mainnet headers (Equihash (200, 9)) on the VCT and header-chain paths;
+// not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn authenticates_every_supplied_delivery_ahead_of_its_body() {
     let _init_guard = zakura_test::init();
     let mut fixture = Fixture::new();
@@ -774,6 +786,9 @@ fn authenticates_every_supplied_delivery_ahead_of_its_body() {
 }
 
 #[test]
+// kogany: generated Zcash Mainnet headers (Equihash (200, 9)) on the VCT and header-chain paths;
+// not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn queued_commit_work_yields_before_authentication() {
     let _init_guard = zakura_test::init();
     let mut fixture = Fixture::new();
@@ -796,6 +811,9 @@ fn queued_commit_work_yields_before_authentication() {
 }
 
 #[test]
+// kogany: generated Zcash Mainnet headers (Equihash (200, 9)) on the VCT and header-chain paths;
+// not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn stops_below_a_height_with_no_supplied_metadata() {
     let _init_guard = zakura_test::init();
     let hole = Height(BODY_TIP + 4);
@@ -836,6 +854,9 @@ fn stops_below_a_height_with_no_supplied_metadata() {
 }
 
 #[test]
+// kogany: generated Zcash Mainnet headers (Equihash (200, 9)) on the VCT and header-chain paths;
+// not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn disputes_an_ambiguous_note_commitment_boundary_and_arms_repair() {
     let _init_guard = zakura_test::init();
     let bad = Height(BODY_TIP + 3);
@@ -869,6 +890,9 @@ fn disputes_an_ambiguous_note_commitment_boundary_and_arms_repair() {
 }
 
 #[test]
+// kogany: generated Zcash Mainnet headers (Equihash (200, 9)) on the VCT and header-chain paths;
+// not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn an_ambiguous_boundary_disputes_both_deliveries_without_rejecting_them() {
     let _init_guard = zakura_test::init();
     // A wrong authorizing-data root at H first shows up in H's own commitment check, which
@@ -916,6 +940,9 @@ fn an_ambiguous_boundary_disputes_both_deliveries_without_rejecting_them() {
 }
 
 #[test]
+// kogany: generated Zcash Mainnet headers (Equihash (200, 9)) on the VCT and header-chain paths;
+// not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn a_replacement_successor_preserves_and_authenticates_the_honest_predecessor() {
     let _init_guard = zakura_test::init();
     let bad = Height(BODY_TIP + 4);
@@ -939,6 +966,9 @@ fn a_replacement_successor_preserves_and_authenticates_the_honest_predecessor() 
 }
 
 #[test]
+// kogany: generated Zcash Mainnet headers (Equihash (200, 9)) on the VCT and header-chain paths;
+// not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn a_corrupt_successor_recovers_through_the_requested_ambiguous_repair() {
     let _init_guard = zakura_test::init();
     // A wrong authorizing-data root at H + 1 disputes H and H + 1 together, and repair starts at
@@ -980,6 +1010,9 @@ fn a_corrupt_successor_recovers_through_the_requested_ambiguous_repair() {
 }
 
 #[test]
+// kogany: generated Zcash Mainnet headers (Equihash (200, 9)) on the VCT and header-chain paths;
+// not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn crossed_ambiguous_disputes_still_authenticate_the_honest_pair() {
     let _init_guard = zakura_test::init();
     // A wrong auth-data root at H + 1 disputes the honest H row with it. A repair supplier then
@@ -1021,6 +1054,9 @@ fn crossed_ambiguous_disputes_still_authenticate_the_honest_pair() {
 }
 
 #[test]
+// kogany: generated Zcash Mainnet headers (Equihash (200, 9)) on the VCT and header-chain paths;
+// not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn advertised_ambiguous_capacity_retains_a_new_payload_at_both_headers() {
     let _init_guard = zakura_test::init();
     // Neither bucket is full, so both headers draw on the same aggregate slots. State must not
@@ -1064,6 +1100,9 @@ fn advertised_ambiguous_capacity_retains_a_new_payload_at_both_headers() {
 }
 
 #[test]
+// kogany: generated Zcash Mainnet headers (Equihash (200, 9)) on the VCT and header-chain paths;
+// not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn an_ambiguous_repair_replaces_input_in_full_buckets() {
     let _init_guard = zakura_test::init();
     // Each disputed header fills a one-row bucket, so each can only replace its own row. The
@@ -1105,6 +1144,9 @@ fn an_ambiguous_repair_replaces_input_in_full_buckets() {
 }
 
 #[test]
+// kogany: generated Zcash Mainnet headers (Equihash (200, 9)) on the VCT and header-chain paths;
+// not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn a_replacement_predecessor_preserves_the_honest_successor() {
     let _init_guard = zakura_test::init();
     let bad = Height(BODY_TIP + 3);
@@ -1128,6 +1170,9 @@ fn a_replacement_predecessor_preserves_the_honest_successor() {
 }
 
 #[test]
+// kogany: generated Zcash Mainnet headers (Equihash (200, 9)) on the VCT and header-chain paths;
+// not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn a_fresh_manager_recreates_repair_from_a_durable_dispute() {
     let _init_guard = zakura_test::init();
     let bad = Height(BODY_TIP + 3);
@@ -1152,6 +1197,9 @@ fn a_fresh_manager_recreates_repair_from_a_durable_dispute() {
 }
 
 #[test]
+// kogany: generated Zcash Mainnet headers (Equihash (200, 9)) on the VCT and header-chain paths;
+// not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn a_transient_anchor_gate_preserves_an_existing_repair() {
     let _init_guard = zakura_test::init();
     let repair_height = Height(BODY_TIP + 2);
@@ -1176,6 +1224,9 @@ fn a_transient_anchor_gate_preserves_an_existing_repair() {
 }
 
 #[test]
+// kogany: generated Zcash Mainnet headers (Equihash (200, 9)) on the VCT and header-chain paths;
+// not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn a_sweep_repair_need_survives_a_successful_commit() {
     let _init_guard = zakura_test::init();
     let bad = Height(BODY_TIP + 3);
@@ -1200,6 +1251,9 @@ fn a_sweep_repair_need_survives_a_successful_commit() {
 }
 
 #[test]
+// kogany: generated Zcash Mainnet headers (Equihash (200, 9)) on the VCT and header-chain paths;
+// not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn a_committer_stall_below_the_sweep_takes_priority() {
     let _init_guard = zakura_test::init();
     let bad = Height(BODY_TIP + 6);
@@ -1226,6 +1280,9 @@ fn a_committer_stall_below_the_sweep_takes_priority() {
 }
 
 #[test]
+// kogany: generated Zcash Mainnet headers (Equihash (200, 9)) on the VCT and header-chain paths;
+// not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn a_fresh_sweeper_resumes_from_the_durable_authentication_marks() {
     let _init_guard = zakura_test::init();
     let mut fixture = Fixture::new();
@@ -1252,6 +1309,9 @@ fn a_fresh_sweeper_resumes_from_the_durable_authentication_marks() {
 }
 
 #[test]
+// kogany: generated Zcash Mainnet headers (Equihash (200, 9)) on the VCT and header-chain paths;
+// not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn does_nothing_outside_the_fast_path() {
     let _init_guard = zakura_test::init();
     let mut fixture = Fixture::new();
@@ -1386,6 +1446,9 @@ proptest! {
     ///
     /// A permanent rejection must identify the rejected delivery.
     #[test]
+    // kogany: generated Zcash Mainnet headers (Equihash (200, 9)) on the VCT and header-chain
+    // paths; not run on Ycash.
+    #[cfg(not(feature = "ycash"))]
     fn never_authenticates_or_over_rejects_a_corrupted_delivery(
         offset in 1u32..(TOP - BODY_TIP),
         corruption in prop_oneof![
@@ -1464,6 +1527,9 @@ proptest! {
 }
 
 #[test]
+// kogany: generated Zcash Mainnet headers (Equihash (200, 9)) on the VCT and header-chain paths;
+// not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn missing_branch_id_does_not_implicate_auxiliary_deliveries() {
     use zakura_chain::history_tree::HistoryTreeError;
 
@@ -1502,6 +1568,9 @@ fn missing_branch_id_does_not_implicate_auxiliary_deliveries() {
 
 /// Boundary recovery needs only H and H+1, and reports progress only once.
 #[test]
+// kogany: generated Zcash Mainnet headers (Equihash (200, 9)) on the VCT and header-chain paths;
+// not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn commit_boundary_recovery_is_local_and_idempotent() {
     let _init_guard = zakura_test::init();
     let mut fixture = Fixture::new();
@@ -1532,6 +1601,9 @@ fn commit_boundary_recovery_is_local_and_idempotent() {
 
 /// Exhausting a bad pair must not report progress or mutate the header state.
 #[test]
+// kogany: generated Zcash Mainnet headers (Equihash (200, 9)) on the VCT and header-chain paths;
+// not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn commit_boundary_recovery_exhausts_bad_pairs_without_progress() {
     let _init_guard = zakura_test::init();
     let mut fixture = Fixture::new();
@@ -1550,6 +1622,9 @@ fn commit_boundary_recovery_exhausts_bad_pairs_without_progress() {
 
 /// The committed history tree cannot authorize recovery on another branch or above the next body.
 #[test]
+// kogany: generated Zcash Mainnet headers (Equihash (200, 9)) on the VCT and header-chain paths;
+// not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn commit_boundary_recovery_requires_the_next_selected_body() {
     let _init_guard = zakura_test::init();
     let mut fixture = Fixture::new();
@@ -1572,6 +1647,9 @@ fn commit_boundary_recovery_requires_the_next_selected_body() {
 
 /// The candidate-count bound must permit the honest pair at the end of a full search.
 #[test]
+// kogany: generated Zcash Mainnet headers (Equihash (200, 9)) on the VCT and header-chain paths;
+// not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn boundary_search_reaches_the_last_of_1024_pairs() {
     let _init_guard = zakura_test::init();
     let mut fixture = Fixture::new();

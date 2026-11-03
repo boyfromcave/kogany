@@ -2,6 +2,7 @@
 //!
 //! Turns Zakura version information into build-time environmental variables,
 //! so that it can be compiled into `zakurad`, and used in diagnostics.
+//! kogany: also kogany's own `git describe` (`KOGANY_GIT_DESCRIBE`), for `koganyd`'s version.
 
 #[path = "build/metadata.rs"]
 mod metadata;

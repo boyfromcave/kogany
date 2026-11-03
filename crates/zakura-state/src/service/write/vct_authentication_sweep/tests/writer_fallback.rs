@@ -1,4 +1,6 @@
 //! Exercise metadata availability through the production checkpoint write queue.
+// kogany: the Zcash-fixture tests are not built with `ycash`, leaving their helpers unused.
+#![cfg_attr(feature = "ycash", allow(unused_imports, dead_code))]
 
 // Every height-to-usize cast below indexes the fixed fixture through TOP (24),
 // so the values fit in usize on every supported target.
@@ -130,16 +132,25 @@ impl Drop for RunningWriter {
 }
 
 #[tokio::test]
+// kogany: generated Zcash Mainnet headers (Equihash (200, 9)) on the VCT and header-chain paths;
+// not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn writer_recomputes_without_native_headers() {
     assert_writer_recomputes(None).await;
 }
 
 #[tokio::test]
+// kogany: generated Zcash Mainnet headers (Equihash (200, 9)) on the VCT and header-chain paths;
+// not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn writer_recomputes_missing_roots_before_freezing() {
     assert_writer_recomputes(Some(Height(BODY_TIP + 1))).await;
 }
 
 #[tokio::test]
+// kogany: generated Zcash Mainnet headers (Equihash (200, 9)) on the VCT and header-chain paths;
+// not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn writer_recomputes_missing_successor_before_freezing() {
     assert_writer_recomputes(Some(Height(BODY_TIP + 2))).await;
 }
@@ -203,6 +214,9 @@ async fn assert_writer_recomputes(missing: Option<Height>) {
 }
 
 #[tokio::test]
+// kogany: generated Zcash Mainnet headers (Equihash (200, 9)) on the VCT and header-chain paths;
+// not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn writer_waits_for_missing_successor_after_freezing() {
     let _init_guard = zakura_test::init();
     let mut fixture = Fixture::new();
@@ -232,6 +246,9 @@ async fn writer_waits_for_missing_successor_after_freezing() {
 }
 
 #[tokio::test]
+// kogany: generated Zcash Mainnet headers (Equihash (200, 9)) on the VCT and header-chain paths;
+// not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn writer_keeps_bad_roots_pending_after_freezing() {
     let _init_guard = zakura_test::init();
     let mut fixture = Fixture::new();
@@ -269,12 +286,18 @@ async fn writer_keeps_bad_roots_pending_after_freezing() {
 
 /// A parked checkpoint must authenticate an available honest pair while more bodies are queued.
 #[tokio::test]
+// kogany: generated Zcash Mainnet headers (Equihash (200, 9)) on the VCT and header-chain paths;
+// not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn writer_recovers_crossed_disputes_without_an_idle_sweep() {
     assert_writer_recovers_crossed_disputes(false).await;
 }
 
 /// Recovery must not require metadata beyond the blocked commit's successor.
 #[tokio::test]
+// kogany: generated Zcash Mainnet headers (Equihash (200, 9)) on the VCT and header-chain paths;
+// not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn writer_recovers_crossed_disputes_without_following_metadata() {
     assert_writer_recovers_crossed_disputes(true).await;
 }

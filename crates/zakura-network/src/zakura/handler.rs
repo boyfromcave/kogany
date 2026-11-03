@@ -107,6 +107,16 @@ pub const DEFAULT_ZAKURA_MESSAGE_RATE_PER_SECOND: u32 = 2048;
 pub const DEFAULT_ZAKURA_LISTEN_ADDR: SocketAddr =
     SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, 8234));
 /// Default native Zakura bootstrap peers for Mainnet.
+///
+/// kogany: none in a `ycash` build. These are Zcash Zakura nodes, and the v2 overlay is off on
+/// Ycash (decision K-11), so a generated `kogany.toml` names no Zcash node.
+#[cfg(feature = "ycash")]
+pub const DEFAULT_MAINNET_ZAKURA_BOOTSTRAP_PEERS: &[&str] = &[];
+/// Default native Zakura bootstrap peers for Testnet (kogany: none, as for Mainnet).
+#[cfg(feature = "ycash")]
+pub const DEFAULT_TESTNET_ZAKURA_BOOTSTRAP_PEERS: &[&str] = &[];
+/// Default native Zakura bootstrap peers for Mainnet.
+#[cfg(not(feature = "ycash"))]
 pub const DEFAULT_MAINNET_ZAKURA_BOOTSTRAP_PEERS: &[&str] = &[
     "1398f62c6d1a457c51ba6a4b5f3dbd2f69fca93216218dc8997e416bd17d93ca@165.22.54.66:8234",
     "fd1724385aa0c75b64fb78cd602fa1d991fdebf76b13c58ed702eac835e9f618@104.131.184.123:8234",
@@ -119,6 +129,7 @@ pub const DEFAULT_MAINNET_ZAKURA_BOOTSTRAP_PEERS: &[&str] = &[
     "85e425233a68697d4be91dd5d542305a8a327cd06d992d53c0913cef2fa75084@168.144.173.250:8234",
 ];
 /// Default native Zakura bootstrap peers for Testnet.
+#[cfg(not(feature = "ycash"))]
 pub const DEFAULT_TESTNET_ZAKURA_BOOTSTRAP_PEERS: &[&str] = &[
     "57ad39fad4f0bca46cf1ea831772a99d5027b372fef2be5a0ea68e1b5bb4da49@167.99.103.111:8234",
     "2bbb907b5d90598ef49f2e637066586b311a64587479be6ed43e8388587fcd2a@164.92.209.78:8234",
@@ -919,6 +930,8 @@ impl ZakuraEndpoint {
 
     /// Returns how many maintained upgrade dials this endpoint owns.
     #[cfg(test)]
+    // kogany: used only by the Zakura v2 tests, which are not built with `ycash` (K-11).
+    #[cfg_attr(feature = "ycash", allow(dead_code))]
     pub(crate) fn upgrade_dial_count(&self) -> usize {
         self.upgrade_dials
             .lock()
@@ -6812,6 +6825,8 @@ impl ZakuraHandlerError {
 }
 
 #[cfg(test)]
+// kogany: the Zcash-fixture tests are not built with `ycash`.
+#[cfg_attr(feature = "ycash", allow(unused_imports, dead_code))]
 mod tests {
     mod bounded_decoding;
     pub(super) mod connection;
@@ -8143,6 +8158,8 @@ mod tests {
     }
 
     #[tokio::test]
+    // kogany: the Zakura P2P v2 stack, which is off on Ycash (K-11); not run on Ycash.
+    #[cfg(not(feature = "ycash"))]
     async fn an_unfundable_block_sync_config_fails_before_the_endpoint_binds() {
         let _guard = zakura_test::init();
         let mut config = Config::for_test(P2pStack::Dual);
@@ -8163,6 +8180,8 @@ mod tests {
     }
 
     #[tokio::test]
+    // kogany: the Zakura P2P v2 stack, which is off on Ycash (K-11); not run on Ycash.
+    #[cfg(not(feature = "ycash"))]
     async fn v2_p2p_true_starts_header_sync_handle() -> Result<(), BoxError> {
         let _guard = zakura_test::init();
         let config = Config::for_test(P2pStack::Dual);
@@ -8182,6 +8201,8 @@ mod tests {
     /// remain, so the dialer can't spin on `ConnectionLimit` (zakura-quic
     /// ADM-12).
     #[tokio::test]
+    // kogany: the Zakura P2P v2 stack, which is off on Ycash (K-11); not run on Ycash.
+    #[cfg(not(feature = "ycash"))]
     async fn a_full_transport_reports_no_dial_capacity() -> Result<(), BoxError> {
         let _guard = zakura_test::init();
         let mut config = Config::for_test(P2pStack::Dual);
@@ -8234,6 +8255,8 @@ mod tests {
     }
 
     #[tokio::test]
+    // kogany: the Zakura P2P v2 stack, which is off on Ycash (K-11); not run on Ycash.
+    #[cfg(not(feature = "ycash"))]
     async fn endpoint_shutdown_stops_header_sync_task() -> Result<(), BoxError> {
         let _guard = zakura_test::init();
         let config = Config::for_test(P2pStack::Dual);
@@ -8270,6 +8293,8 @@ mod tests {
     /// and only the endpoint shutdown token can end the loop. Without that
     /// signal the detached loop outlives shutdown and keeps dialing.
     #[tokio::test]
+    // kogany: the Zakura P2P v2 stack, which is off on Ycash (K-11); not run on Ycash.
+    #[cfg(not(feature = "ycash"))]
     async fn endpoint_shutdown_stops_maintained_native_dial_loop() -> Result<(), BoxError> {
         let _guard = zakura_test::init();
         let config = Config::for_test(P2pStack::Dual);
@@ -8310,6 +8335,8 @@ mod tests {
     /// shutdown token; otherwise it outlives teardown, polling the discovery
     /// book and attempting dials against a torn-down router.
     #[tokio::test]
+    // kogany: the Zakura P2P v2 stack, which is off on Ycash (K-11); not run on Ycash.
+    #[cfg(not(feature = "ycash"))]
     async fn endpoint_shutdown_stops_discovery_candidate_dialer() -> Result<(), BoxError> {
         let _guard = zakura_test::init();
         let config = Config::for_test(P2pStack::Dual);
@@ -8364,6 +8391,8 @@ mod tests {
     /// paused clock so the 15s appear-timeout elapses without real waiting; the
     /// dial target is RFC 5737 TEST-NET-1, which never connects.
     #[tokio::test(start_paused = true)]
+    // kogany: the Zakura P2P v2 stack, which is off on Ycash (K-11); not run on Ycash.
+    #[cfg(not(feature = "ycash"))]
     async fn failed_legacy_upgrade_does_not_leak_maintained_dial() -> Result<(), BoxError> {
         let _guard = zakura_test::init();
         let config = Config::for_test(P2pStack::Dual);
@@ -8407,6 +8436,8 @@ mod tests {
     }
 
     #[tokio::test]
+    // kogany: the Zakura P2P v2 stack, which is off on Ycash (K-11); not run on Ycash.
+    #[cfg(not(feature = "ycash"))]
     async fn maintained_upgrade_dial_keeps_its_original_handoff_owner() -> Result<(), BoxError> {
         let _guard = zakura_test::init();
         let config = Config::for_test(P2pStack::Dual);
@@ -8437,6 +8468,8 @@ mod tests {
     }
 
     #[tokio::test]
+    // kogany: the Zakura P2P v2 stack, which is off on Ycash (K-11); not run on Ycash.
+    #[cfg(not(feature = "ycash"))]
     async fn custom_ordered_service_round_trips_over_zakura() -> Result<(), BoxError> {
         const CUSTOM_STREAM: Stream = Stream {
             kind: 64,
@@ -11769,6 +11802,8 @@ mod tests {
     /// F-37: the transport-level check rejects a valid transaction padded with
     /// junk bytes as a fatal peer fault.
     #[test]
+    // kogany: the Zakura P2P v2 stack, which is off on Ycash (K-11); not run on Ycash.
+    #[cfg(not(feature = "ycash"))]
     fn legacy_completed_item_rejects_trailing_bytes() -> Result<(), BoxError> {
         let limits = test_connection_limits();
         let request_id = 99;
@@ -12244,6 +12279,8 @@ mod tests {
     }
 
     #[tokio::test]
+    // kogany: the Zakura P2P v2 stack, which is off on Ycash (K-11); not run on Ycash.
+    #[cfg(not(feature = "ycash"))]
     async fn nat_traversal_fails_startup_and_names_the_spec() {
         let mut config = Config::for_test(P2pStack::Zakura);
         config.zakura.nat_traversal = true;

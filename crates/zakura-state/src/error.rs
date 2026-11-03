@@ -816,6 +816,44 @@ pub enum ValidateContextError {
         created_height: block::Height,
     },
 
+    // kogany (W3-d): BIP68 relative lock-times from the Vault upgrade, height-based only.
+    #[error(
+        "time-based relative lock-time: input {input_index} has nSequence {sequence:#010x} \
+         with BIP68's type flag set, which the Vault upgrade makes invalid \
+         (bad-txns-vault-timelock)"
+    )]
+    #[non_exhaustive]
+    VaultTimeLock { input_index: usize, sequence: u32 },
+
+    #[error(
+        "unsatisfied relative lock-time: a spend at {spend_height:?} is invalid \
+         before {min_spend_height:?} (bad-txns-nonfinal; non-BIP68-final in the mempool)"
+    )]
+    #[non_exhaustive]
+    UnsatisfiedSequenceLock {
+        spend_height: block::Height,
+        min_spend_height: block::Height,
+    },
+
+    // kogany (W4-d): the Vault upgrade's sequential act and template rules (ycash6 DoS 100).
+    #[error("vault rule violation in block {hash} at {height:?}: {reason}")]
+    #[non_exhaustive]
+    VaultRejected {
+        reason: String,
+        height: block::Height,
+        hash: block::Hash,
+    },
+
+    // kogany (W5-f): the YED module's block verdict (ycash6 DoS 100, `bad-yellowback-<verdict>`).
+    #[error("YED rule violation in block {hash} at {height:?}: {reason} ({detail})")]
+    #[non_exhaustive]
+    YedRejected {
+        reason: String,
+        detail: String,
+        height: block::Height,
+        hash: block::Hash,
+    },
+
     #[error("sprout double-spend: duplicate nullifier: {nullifier:?}, in finalized state: {in_finalized_state:?}")]
     #[non_exhaustive]
     DuplicateSproutNullifier {
@@ -983,6 +1021,18 @@ pub enum ValidateContextError {
 }
 
 impl ValidateContextError {
+    /// kogany (F-S5-4): a YED block verdict, for tests outside this crate (the variant is
+    /// `#[non_exhaustive]`; `service::check::yed` builds it in this crate).
+    #[cfg(any(test, feature = "proptest-impl"))]
+    pub fn yed_rejected_for_test(reason: &str, detail: &str, height: block::Height) -> Self {
+        Self::YedRejected {
+            reason: reason.to_owned(),
+            detail: detail.to_owned(),
+            height,
+            hash: block::Hash([0; 32]),
+        }
+    }
+
     /// Classify contextual validation without conflating peer data and local availability.
     pub fn body_verification_class(&self) -> zakura_header_chain::BodyVerificationClass {
         use zakura_chain::block::CommitmentError;
@@ -1074,6 +1124,10 @@ impl ValidateContextError {
             Self::ImmatureTransparentCoinbaseSpend { .. } => {
                 consensus("context.immature_transparent_coinbase_spend")
             }
+            Self::VaultTimeLock { .. } => consensus("context.vault_timelock"),
+            Self::UnsatisfiedSequenceLock { .. } => consensus("context.unsatisfied_sequence_lock"),
+            Self::VaultRejected { .. } => consensus("context.vault_rejected"),
+            Self::YedRejected { .. } => consensus("context.yed_rejected"),
             Self::DuplicateSproutNullifier { .. } => {
                 consensus("context.duplicate_sprout_nullifier")
             }
@@ -1122,6 +1176,10 @@ impl ValidateContextError {
             | ValidateContextError::EarlyTransparentSpend { .. }
             | ValidateContextError::UnshieldedTransparentCoinbaseSpend { .. }
             | ValidateContextError::ImmatureTransparentCoinbaseSpend { .. }
+            | ValidateContextError::VaultTimeLock { .. }
+            | ValidateContextError::UnsatisfiedSequenceLock { .. }
+            | ValidateContextError::VaultRejected { .. }
+            | ValidateContextError::YedRejected { .. }
             | ValidateContextError::DuplicateSproutNullifier { .. }
             | ValidateContextError::DuplicateSaplingNullifier { .. }
             | ValidateContextError::DuplicateOrchardNullifier { .. }
@@ -1549,6 +1607,25 @@ mod tests {
                 spend_height: height,
                 min_spend_height: Height(100),
                 created_height: Height(1),
+            },
+            ValidateContextError::VaultTimeLock {
+                input_index: 0,
+                sequence: 1 << 22,
+            },
+            ValidateContextError::UnsatisfiedSequenceLock {
+                spend_height: height,
+                min_spend_height: Height(100),
+            },
+            ValidateContextError::VaultRejected {
+                reason: "bad-vault-act-sigs".to_owned(),
+                height,
+                hash: block::Hash([0; 32]),
+            },
+            ValidateContextError::YedRejected {
+                reason: "bad-yellowback-bad-mint-amount".to_owned(),
+                detail: "bad-mint-amount:00".to_owned(),
+                height,
+                hash: block::Hash([0; 32]),
             },
             ValidateContextError::DuplicateSproutNullifier {
                 nullifier: sprout::Nullifier::from([0; 32]),

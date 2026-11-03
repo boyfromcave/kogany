@@ -35,7 +35,7 @@ use zakura_chain::{
 };
 
 use zakura_node_services::mempool;
-use zakura_script::{CachedFfiTransaction, Sigops};
+use zakura_script::{CachedFfiTransaction, ScriptContext, Sigops, VaultStateSnapshot};
 use zakura_state as zs;
 
 use crate::{error::TransactionError, primitives, script, BoxError};
@@ -43,6 +43,9 @@ use crate::{error::TransactionError, primitives, script, BoxError};
 pub mod check;
 #[cfg(test)]
 mod tests;
+/// kogany (W6-c): the Vault and YED mempool checks for the next block.
+#[cfg(feature = "ycash")]
+pub mod vault_mempool;
 
 /// A timeout applied to UTXO lookup requests.
 ///
@@ -199,6 +202,9 @@ impl
 /// Transaction verification has slightly different consensus rules, depending on
 /// whether the transaction is to be included in a block on in the mempool.
 #[derive(Clone, Debug, Eq, PartialEq)]
+// kogany: the `Block` variant carries the Vault set snapshot (W4-d); boxing it would change the
+// request every caller builds, so the size is accepted (CI clippy runs with `-D warnings`).
+#[allow(clippy::large_enum_variant)]
 pub enum Request {
     /// Verify the supplied transaction as part of a block.
     Block {
@@ -214,6 +220,11 @@ pub enum Request {
         height: block::Height,
         /// The time that the block was mined.
         time: DateTime<Utc>,
+        /// kogany (W4-d): the Vault set state after the block's parent, which the scripts of the
+        /// block read (ycash6 `ConnectBlock`'s `vaultSnapshot`). `None` where the Vault upgrade is
+        /// not active at `height`, or where the parent's state is unknown: every set opcode then
+        /// fails closed. Fetched once per block by the block verifier.
+        vault_snapshot: Option<zs::vault::VaultSnapshot>,
     },
     /// Verify the supplied transaction as part of the mempool.
     ///
@@ -496,6 +507,10 @@ where
                 Err(error) => return Err(error),
                 Ok(()) => {}
             }
+            // This is the only check on Sapling `cv` encodings before proof
+            // verification: librustzcash keeps `cv` as bytes when it parses, so
+            // `to_librustzcash` no longer rejects an invalid one. Keep it here,
+            // ahead of every conversion and proof.
             check::sapling_point_encodings_are_valid(&tx)?;
 
             // A transaction whose own shielded counts exceed a per-block ZIP 218
@@ -604,11 +619,28 @@ where
             //       the state once #2336 has been implemented?
             if req.is_mempool() {
                 Self::check_maturity_height(&network, &req, &spent_utxos)?;
+                // kogany (W3-d): BIP68 relative lock-times at the next block's height.
+                check::tx_transparent_sequence_locks(&network, &tx, req.height(), &spent_utxos)?;
 
                 // Reject non-standard input scripts (oversized or non-push-only
                 // scriptSigs, and high-sigop P2SH redeem scripts) *before*
                 // doing expensive script verification, to avoid DoS attacks on
                 // the script interpreter.
+                //
+                // Ycash (W1-Y9, W6-a): ycashd checks standardness only where `RequireStandard()`,
+                // which regtest is not unless `-acceptnonstdtxn=0` (ycash6 `chainparams.cpp:839`,
+                // `main.cpp:1979,2070`), and with its own rules from the Vault height: the
+                // mempool's configuration selects it (`ycash_standard::require_standard`).
+                #[cfg(feature = "ycash")]
+                if check::ycash_standard::require_standard(&network) {
+                    check::ycash_standard::mempool_standard_checks(
+                        tx.as_ref(),
+                        &spent_outputs,
+                        &network,
+                        req.height(),
+                    )?;
+                }
+                #[cfg(not(feature = "ycash"))]
                 check::mempool_standard_input_scripts(tx.as_ref(), &spent_outputs)?;
             }
 
@@ -619,9 +651,14 @@ where
                 // VerifiedUnminedTx::new() repeats this check to preserve its constructor
                 // invariant.
                 let fee = Self::miner_fee(tx.as_ref(), &spent_utxos)?;
+                #[cfg(not(feature = "ycash"))]
                 let unpaid_actions = transaction::zip317::unpaid_actions(unmined_tx, fee);
 
+                #[cfg(not(feature = "ycash"))]
                 transaction::zip317::mempool_checks(unpaid_actions, fee, unmined_tx.size())?;
+                // A Ycash network replaces ZIP-317 with its own fee rules (W1-Y9).
+                #[cfg(feature = "ycash")]
+                transaction::ycash_relay::mempool_checks(unmined_tx, fee)?;
                 miner_fee = Some(fee);
             }
 
@@ -630,6 +667,59 @@ where
                 Arc::new(CachedFfiTransaction::new(tx.clone(), Arc::new(spent_outputs), nu).map_err(|_| TransactionError::UnsupportedByNetworkUpgrade(tx.version(), nu))?);
 
             tracing::trace!(?tx_id, "got state UTXOs");
+
+            // kogany (W4-d): the set state the scripts read.
+            let (vault_state, vault_yed_params) =
+                Self::vault_script_state(&req, &network, state.clone()).await?;
+            // kogany (W4-d): the mempool's vault rules at the next height over the tip's set state
+            // (ycash6 `vault::CheckTx`, unscored); a block's run in contextual validation.
+            if let (true, Some(tip_state)) = (req.is_mempool(), vault_state.as_ref()) {
+                zakura_state::vault::mempool_vault_check(
+                    &network,
+                    tip_state.as_ref(),
+                    vault_yed_params,
+                    &tx,
+                    &req.tx_mined_id(),
+                    req.height(),
+                    &spent_utxos,
+                )
+                .map_err(|reason| {
+                    // kogany (W6-c): ycashd scores a byte-level act failure 10, and reports a
+                    // non-standard transaction as such before the vault rules.
+                    #[cfg(feature = "ycash")]
+                    if let Some(error) = vault_mempool::non_standard_first(&network, &tx, req.height()) {
+                        return error;
+                    }
+                    #[cfg(feature = "ycash")]
+                    let byte_level = vault_mempool::is_byte_level_act_failure(
+                        &reason,
+                        tx.outputs().iter().map(|o| o.lock_script.as_raw_bytes()),
+                    );
+                    #[cfg(not(feature = "ycash"))]
+                    let byte_level = false;
+                    TransactionError::VaultRejected {
+                        reason,
+                        height: req.height(),
+                        byte_level,
+                    }
+                })?;
+            }
+
+            #[cfg(feature = "ycash")]
+            let mempool_vault_state = vault_state.clone();
+
+            // kogany (W6-c): the template input's script for the next block over the tip's set
+            // state (ycash6 `AcceptToMemoryPool`, after `vault::CheckTx`).
+            #[cfg(feature = "ycash")]
+            if let (true, Some(vault_state)) = (req.is_mempool(), &vault_state) {
+                vault_mempool::check_template_input(
+                    &network,
+                    &tx,
+                    &cached_ffi_transaction,
+                    req.height(),
+                    vault_state,
+                )?;
+            }
 
             let mut async_checks = match tx.as_ref() {
                 Transaction::V1 { .. } | Transaction::V2 { .. } | Transaction::V3 { .. } => {
@@ -646,6 +736,7 @@ where
                     cached_ffi_transaction.clone(),
                     joinsplit_data.as_deref(),
                     tx_id,
+                    vault_state,
                 )?,
                 Transaction::V5 {
                     ..
@@ -655,6 +746,7 @@ where
                     script_verifier,
                     cached_ffi_transaction.clone(),
                     wtx_id.expect("a v5 transaction has a witnessed transaction ID"),
+                    vault_state,
                 )?,
                 Transaction::V6 {
                     ..
@@ -664,6 +756,7 @@ where
                     script_verifier,
                     cached_ffi_transaction.clone(),
                     wtx_id.expect("a v6 transaction has a witnessed transaction ID"),
+                    vault_state,
                 )?,
             };
 
@@ -689,9 +782,46 @@ where
 
             tracing::trace!(?tx_id, "awaiting async checks...");
 
-            async_checks.check(block_batch_flush_key).await?;
+            let checked = async_checks.check(block_batch_flush_key).await;
+            // kogany (W6-c, W6-a finding F-4): a mempool script failure that ycashd's retry
+            // without the standard-not-mandatory flags (CLTV included) passes is policy there.
+            #[cfg(feature = "ycash")]
+            if let (Err(error), true) = (&checked, req.is_mempool()) {
+                let script_failure = error
+                    .downcast_ref::<zakura_script::Error>()
+                    .or_else(|| match error.downcast_ref::<TransactionError>() {
+                        Some(TransactionError::Script(e)) => Some(e),
+                        _ => None,
+                    })
+                    .is_some_and(zakura_script::Error::is_script_failure);
+                if script_failure {
+                    if let Some(error) = vault_mempool::non_mandatory_script_failure(
+                        &network,
+                        &tx,
+                        &cached_ffi_transaction,
+                        req.height(),
+                        mempool_vault_state.clone(),
+                    ) {
+                        return Err(error);
+                    }
+                }
+            }
+            checked?;
 
             tracing::trace!(?tx_id, "finished async checks");
+
+            // kogany (W6-c): the YED module's verdict for the next block, after the scripts
+            // (ycash6 `AcceptToMemoryPool`'s `MempoolCheckReason`).
+            #[cfg(feature = "ycash")]
+            if req.is_mempool() && network.is_vault_active(req.height()) {
+                vault_mempool::yed_mempool_check(
+                    state.clone(),
+                    &tx,
+                    &tx_id.mined_id(),
+                    req.height(),
+                )
+                .await?;
+            }
 
             // Mempool fees were calculated before the expensive async checks.
             // Calculate the fee here only for non-coinbase block transactions.
@@ -1004,6 +1134,7 @@ where
         cached_ffi_transaction: Arc<CachedFfiTransaction>,
         joinsplit_data: Option<&transaction::JoinSplitData<Groth16Proof>>,
         tx_id: UnminedTxId,
+        vault_state: Option<VaultStateSnapshot>,
     ) -> Result<AsyncChecks, TransactionError> {
         let tx = request.transaction();
         let nu = request.upgrade(network);
@@ -1018,8 +1149,10 @@ where
 
         Ok(Self::verify_transparent_inputs_and_outputs(
             request,
+            network,
             script_verifier,
             cached_ffi_transaction,
+            vault_state,
         )?
         .and(Self::verify_sprout_shielded_data(joinsplit_data, &sighash)?)
         .and(Self::verify_sapling_bundle(sapling_bundle, &sighash, tx_id)))
@@ -1069,9 +1202,11 @@ where
             // Note: Here we verify the transaction version number of the above two rules, the group
             // id is checked in zakura-chain crate, in the transaction serialize.
             NetworkUpgrade::Sapling
+            | NetworkUpgrade::Ycash
             | NetworkUpgrade::Blossom
             | NetworkUpgrade::Heartwood
             | NetworkUpgrade::Canopy
+            | NetworkUpgrade::Vault
             | NetworkUpgrade::Nu5
             | NetworkUpgrade::Nu6
             | NetworkUpgrade::Nu6_1
@@ -1117,6 +1252,7 @@ where
         script_verifier: script::Verifier,
         cached_ffi_transaction: Arc<CachedFfiTransaction>,
         wtx_id: transaction::WtxId,
+        vault_state: Option<VaultStateSnapshot>,
     ) -> Result<AsyncChecks, TransactionError> {
         let transaction = request.transaction();
         let nu = request.upgrade(network);
@@ -1132,8 +1268,10 @@ where
 
         Ok(Self::verify_transparent_inputs_and_outputs(
             request,
+            network,
             script_verifier,
             cached_ffi_transaction,
+            vault_state,
         )?
         .and(Self::verify_sapling_bundle(
             sapling_bundle,
@@ -1181,9 +1319,12 @@ where
             | NetworkUpgrade::BeforeOverwinter
             | NetworkUpgrade::Overwinter
             | NetworkUpgrade::Sapling
+            | NetworkUpgrade::Ycash
             | NetworkUpgrade::Blossom
             | NetworkUpgrade::Heartwood
-            | NetworkUpgrade::Canopy => Err(TransactionError::UnsupportedByNetworkUpgrade(
+            | NetworkUpgrade::Canopy
+            // kogany: v4 only under Vault (U-26, ycash6 `bad-vault-tx-version-group-id`).
+            | NetworkUpgrade::Vault => Err(TransactionError::UnsupportedByNetworkUpgrade(
                 transaction.version(),
                 network_upgrade,
             )),
@@ -1197,6 +1338,7 @@ where
         script_verifier: script::Verifier,
         cached_ffi_transaction: Arc<CachedFfiTransaction>,
         wtx_id: transaction::WtxId,
+        vault_state: Option<VaultStateSnapshot>,
     ) -> Result<AsyncChecks, TransactionError> {
         let transaction = request.transaction();
         let nu = request.upgrade(network);
@@ -1213,8 +1355,10 @@ where
 
         Ok(Self::verify_transparent_inputs_and_outputs(
             request,
+            network,
             script_verifier,
             cached_ffi_transaction,
+            vault_state,
         )?
         .and(Self::verify_sapling_bundle(
             sapling_bundle,
@@ -1256,10 +1400,16 @@ where
     /// Returns script verification responses via the `utxo_sender`.
     fn verify_transparent_inputs_and_outputs(
         request: &Request,
+        network: &Network,
         script_verifier: script::Verifier,
         cached_ffi_transaction: Arc<CachedFfiTransaction>,
+        vault_state: Option<VaultStateSnapshot>,
     ) -> Result<AsyncChecks, TransactionError> {
         let transaction = request.transaction();
+        // kogany W3-c: every input is verified with the flags of this network and height and the
+        // set state after the parent block (ycash6 `CScriptCheck` with `GetVaultScriptFlags` and
+        // `vault::SetSigChecker`).
+        let script_context = ScriptContext::new(network.clone(), request.height(), vault_state);
 
         if transaction.is_coinbase() {
             // The script verifier only verifies PrevOut inputs and their corresponding UTXOs.
@@ -1274,6 +1424,7 @@ where
                     let request = script::Request {
                         cached_ffi_transaction: cached_ffi_transaction.clone(),
                         input_index,
+                        context: script_context.clone(),
                     };
 
                     script_verifier.oneshot(request)
@@ -1282,6 +1433,64 @@ where
 
             Ok(script_checks)
         }
+    }
+
+    /// The set state the scripts of `request` read (ycash6's `SetSnapshot`): for a block request
+    /// the state after the block's parent, which the block verifier fetched once for the block;
+    /// for a mempool request the state at the best chain tip, the parent of the next block.
+    ///
+    /// `None` where the Vault upgrade is not active at the request's height (no set opcode
+    /// evaluates), and for a block whose parent's state is unknown: every set opcode then fails
+    /// closed (no threshold, never released). Never an empty `SetState`, in which every unknown
+    /// set is released (W3-c finding F-2).
+    ///
+    /// A mempool request whose tip moved past the request's height gets a retryable error.
+    async fn vault_script_state(
+        request: &Request,
+        network: &Network,
+        state: Timeout<ZS>,
+    ) -> Result<
+        (
+            Option<VaultStateSnapshot>,
+            Option<zakura_state::vault::YedModuleParams>,
+        ),
+        TransactionError,
+    > {
+        let height = request.height();
+        if !network.is_vault_active(height) {
+            return Ok((None, None));
+        }
+        let snapshot = match request {
+            Request::Block { vault_snapshot, .. } => vault_snapshot.clone(),
+            Request::Mempool { .. } => {
+                let zs::Response::VaultSnapshot(snapshot) = state
+                    .oneshot(zs::Request::BestChainVaultSnapshot)
+                    .await
+                    .map_err(|e| TransactionError::Other(e.to_string()))?
+                else {
+                    unreachable!(
+                        "Request::BestChainVaultSnapshot always responds with VaultSnapshot"
+                    )
+                };
+                let at_parent = snapshot
+                    .as_ref()
+                    .and_then(|s| s.tip)
+                    .and_then(|(tip, _)| tip.next().ok())
+                    == Some(height);
+                if !at_parent {
+                    return Err(TransactionError::Other(format!(
+                        "the vault set state is not at the parent of height {height:?}: \
+                         the chain tip moved, retry"
+                    )));
+                }
+                snapshot
+            }
+        };
+        // kogany (W5-f): with the YED parameters its module table is built from.
+        Ok(match snapshot {
+            Some(s) => (Some(s.state as VaultStateSnapshot), s.yed_params),
+            None => (None, None),
+        })
     }
 
     /// Verifies a transaction's Sprout shielded join split data.

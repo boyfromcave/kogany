@@ -101,10 +101,11 @@ COPY --link --chown=${UID}:${GID} ./ ${HOME}
 # Build Zebra test binaries using nextest, but don't run them.
 # This also copies the necessary binaries to /usr/local/bin.
 RUN [ -n "${SHORT_SHA}" ] && export SHORT_SHA="${SHORT_SHA}" || true; \
-    cargo build --locked --release --features "${FEATURES}" --package zakura --bin zakurad --bin zakura-rollback-state --bin zakura-prune-state && \
+    case ",${FEATURES// /,}," in *,ycash,*) NODE_BIN=koganyd ;; *) NODE_BIN=zakurad ;; esac; \
+    cargo build --locked --release --features "${FEATURES}" --package kogany --bin "${NODE_BIN}" --bin zakura-rollback-state --bin zakura-prune-state && \
     cargo nextest run --locked --release --no-run --features "${FEATURES}" && \
     # Copy binaries to standard location
-    cp ${CARGO_TARGET_DIR}/release/zakurad /usr/local/bin && \
+    cp "${CARGO_TARGET_DIR}/release/${NODE_BIN}" /usr/local/bin && \
     cp ${CARGO_TARGET_DIR}/release/zakura-rollback-state /usr/local/bin && \
     cp ${CARGO_TARGET_DIR}/release/zakura-prune-state /usr/local/bin && \
     # Only copy zakura-checkpoints if the feature is enabled
@@ -120,7 +121,7 @@ COPY --link --chown=${UID}:${GID} ./docker/entrypoint.sh /usr/local/bin/entrypoi
 ENTRYPOINT [ "entrypoint.sh", "test" ]
 CMD [ "cargo", "test" ]
 
-# This stage builds the zakurad release binaries.
+# This stage builds the zakurad (or, with the `ycash` feature, koganyd) release binaries.
 #
 # It also adds `cache mounts` as this stage is completely independent from the
 # `test` stage. The resulting binaries are used in the `runtime` stage.
@@ -132,6 +133,9 @@ FROM deps AS release
 ARG SHORT_SHA
 ARG FEATURES
 ENV FEATURES=${FEATURES}
+# kogany: cap cargo's parallel jobs (default: one per CPU). A Docker Desktop VM of 8 GB runs out of
+# memory at ten rustc/cc1plus jobs (rocksdb, the LTO crates), so ycash-infra's image-koganyd passes it.
+ARG CARGO_BUILD_JOBS
 # Compress debug sections with zlib, roughly 275 MB -> 110 MB on disk.
 # Not zstd: std's backtrace symbolizer only reads zlib, and file:line would be lost.
 ENV RUSTFLAGS="-C link-arg=-Wl,--compress-debug-sections=zlib"
@@ -163,13 +167,20 @@ RUN --mount=type=bind,source=crates/xtask,target=crates/xtask \
     --mount=type=bind,source=crates/zakura-test,target=crates/zakura-test \
     --mount=type=bind,source=crates/zakura-utils,target=crates/zakura-utils \
     --mount=type=bind,source=crates/zakurad,target=crates/zakurad \
+    --mount=type=bind,source=crates/kogany-pq,target=crates/kogany-pq \
+    --mount=type=bind,source=crates/kogany-rpc,target=crates/kogany-rpc \
+    --mount=type=bind,source=crates/kogany-vault,target=crates/kogany-vault \
+    --mount=type=bind,source=crates/kogany-yellowback,target=crates/kogany-yellowback \
     --mount=type=bind,source=Cargo.toml,target=Cargo.toml \
     --mount=type=bind,source=Cargo.lock,target=Cargo.lock \
     --mount=type=cache,target=${CARGO_TARGET_DIR} \
     --mount=type=cache,target=${CARGO_HOME} \
     [ -n "${SHORT_SHA}" ] && export SHORT_SHA="${SHORT_SHA}" || true; \
-    cargo build --locked --release --features "${FEATURES}" --package zakura --bin zakurad --bin zakura-rollback-state --bin zakura-prune-state && \
-    cp ${CARGO_TARGET_DIR}/release/zakurad /usr/local/bin && \
+    if [ -n "${CARGO_BUILD_JOBS}" ]; then export CARGO_BUILD_JOBS; else unset CARGO_BUILD_JOBS; fi; \
+    case ",${FEATURES// /,}," in *,ycash,*) NODE_BIN=koganyd ;; *) NODE_BIN=zakurad ;; esac; \
+    cargo build --locked --release --features "${FEATURES}" --package kogany --bin "${NODE_BIN}" --bin zakura-rollback-state --bin zakura-prune-state && \
+    mkdir -p /opt/node-bin && \
+    cp "${CARGO_TARGET_DIR}/release/${NODE_BIN}" /opt/node-bin/ && \
     cp ${CARGO_TARGET_DIR}/release/zakura-rollback-state /usr/local/bin && \
     cp ${CARGO_TARGET_DIR}/release/zakura-prune-state /usr/local/bin
 
@@ -224,13 +235,18 @@ RUN chown -R ${UID}:${GID} ${HOME}
 # User with UID=${UID} is created above and used via setpriv in entrypoint.sh.
 # setpriv is part of util-linux, already included in debian:trixie-slim.
 
-COPY --link --from=release /usr/local/bin/zakurad /usr/local/bin/
+# The node binary: `koganyd` when FEATURES has `ycash` (kogany, the Ycash node; its `zakurad`
+# refuses to run there), `zakurad` otherwise. The release stage stages exactly one of them.
+COPY --link --from=release /opt/node-bin/ /usr/local/bin/
 COPY --link --from=release /usr/local/bin/zakura-rollback-state /usr/local/bin/
 COPY --link --from=release /usr/local/bin/zakura-prune-state /usr/local/bin/
 COPY --link --chown=${UID}:${GID} ./docker/entrypoint.sh /usr/local/bin/entrypoint.sh
 
+# kogany: a Dockerfile cannot pick a CMD from a build argument's content, so the image's
+# default command is "node", which entrypoint.sh resolves to the one node binary installed
+# (`koganyd` in a `ycash` image, `zakurad` otherwise). `zakurad` and `koganyd` stay explicit.
 ENTRYPOINT [ "entrypoint.sh" ]
-CMD ["zakurad"]
+CMD ["node"]
 
 # zcashd-compat runtime image, expects an externally prepared build context named
 # `zcashd_compat` with a Linux executable at /bin/zcashd.

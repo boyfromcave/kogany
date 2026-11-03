@@ -1,5 +1,6 @@
 //! Fixed test vectors for mempool storage.
-
+// kogany: the Zcash-fixture tests are not built with `ycash`, leaving their helpers unused.
+#![cfg_attr(feature = "ycash", allow(unused_imports, dead_code))]
 #![allow(clippy::unwrap_in_result)]
 
 use std::iter;
@@ -89,6 +90,9 @@ fn verified_ironwood_v6_tx(
 }
 
 #[test]
+// kogany: Zcash Mainnet block and transaction vectors (NU5-and-later branch IDs, Zcash-only
+// heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn oversized_policy_rejection_is_cached_by_exact_id() {
     let mut storage = Storage::new(&config::Config::default());
     let transaction = Network::Mainnet
@@ -123,6 +127,9 @@ fn oversized_policy_rejection_is_cached_by_exact_id() {
 }
 
 #[test]
+// kogany: Zcash Mainnet block and transaction vectors (NU5-and-later branch IDs, Zcash-only
+// heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn mempool_storage_crud_exact_mainnet() {
     let _init_guard = zakura_test::init();
 
@@ -158,6 +165,9 @@ fn mempool_storage_crud_exact_mainnet() {
 /// `transactions_exact` must not return a same-effects variant whose authorizing
 /// data differs from the requested ID.
 #[test]
+// kogany: Zcash Mainnet block and transaction vectors (NU5-and-later branch IDs, Zcash-only
+// heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn transactions_exact_ignores_different_authorizing_data() {
     let _init_guard = zakura_test::init();
 
@@ -284,6 +294,9 @@ fn mempool_storage_basic_for_network(network: Network) -> Result<()> {
 }
 
 #[test]
+// kogany: Zcash Mainnet block and transaction vectors (NU5-and-later branch IDs, Zcash-only
+// heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn mempool_storage_crud_same_effects_mainnet() {
     let _init_guard = zakura_test::init();
 
@@ -495,7 +508,15 @@ fn mempool_expired_basic_for_network(network: Network) -> Result<()> {
     assert!(everything_in_mempool.contains(&tx_id));
 
     // remove_expired_transactions() will return what was removed
-    let expired = storage.remove_expired_transactions(Height(1));
+    //
+    // kogany (W6-c): on Ycash a transaction is expired once the tip is past its expiry height
+    // (ycashd `removeExpired`), so the tip here is one higher.
+    let tip = if cfg!(feature = "ycash") {
+        Height(2)
+    } else {
+        Height(1)
+    };
+    let expired = storage.remove_expired_transactions(tip);
     assert!(expired.contains(&tx_id));
     let everything_in_mempool: HashSet<UnminedTxId> = storage.tx_ids().collect();
     assert_eq!(everything_in_mempool.len(), 0);
@@ -544,7 +565,13 @@ fn mempool_expiration_reports_removed_dependent_transactions() -> Result<()> {
         None,
     )?;
 
-    let removed = storage.remove_expired_transactions(Height(1));
+    // kogany (W6-c): on Ycash the parent expires once the tip passes its expiry height.
+    let tip = if cfg!(feature = "ycash") {
+        Height(2)
+    } else {
+        Height(1)
+    };
+    let removed = storage.remove_expired_transactions(tip);
 
     assert_eq!(removed, HashSet::from([parent_id, dependent_id]));
     assert_eq!(storage.transaction_count(), 0);

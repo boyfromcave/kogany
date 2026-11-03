@@ -171,6 +171,8 @@ pub fn budgeted_max_connections(
 }
 
 #[cfg(test)]
+// kogany: the Zcash-fixture tests are not built with `ycash`.
+#[cfg_attr(feature = "ycash", allow(unused_imports, dead_code))]
 mod tests {
     use zakura_quic::{NodeId, NodeSecretKey, QuicConfig};
 
@@ -258,6 +260,8 @@ mod tests {
     }
 
     #[test]
+    // kogany: the Zakura P2P v2 stack, which is off on Ycash (K-11); not run on Ycash.
+    #[cfg(not(feature = "ycash"))]
     fn the_floor_leaves_a_discovery_dial_slot_with_every_bootstrap_peer_connected() {
         assert_eq!(
             min_budgeted_connections(DEFAULT_MAINNET_ZAKURA_BOOTSTRAP_PEERS.len()),
@@ -364,6 +368,8 @@ mod tests {
     }
 
     #[test]
+    // kogany: the Zakura P2P v2 stack, which is off on Ycash (K-11); not run on Ycash.
+    #[cfg(not(feature = "ycash"))]
     fn a_budget_below_the_floor_names_the_key() {
         let config = ZakuraConfig {
             quic: QuicConfig {

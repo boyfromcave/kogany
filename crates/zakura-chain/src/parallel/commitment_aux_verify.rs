@@ -455,6 +455,8 @@ pub fn verify_supplied_ironwood_tx_below_nu6_3(
 }
 
 #[cfg(test)]
+// kogany: the Zcash-fixture tests are not built with `ycash`.
+#[cfg_attr(feature = "ycash", allow(unused_imports, dead_code))]
 mod tests {
     use super::*;
 
@@ -548,6 +550,9 @@ mod tests {
     }
 
     #[test]
+    // kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, Equihash (200, 9),
+    // Zcash Mainnet heights); not run on Ycash.
+    #[cfg(not(feature = "ycash"))]
     fn pins_sapling_root_below_heartwood_to_header_or_empty() {
         let empty = sapling::tree::NoteCommitmentTree::default().root();
         let sapling_root = mainnet_sapling_root_at(419_200);
@@ -622,6 +627,9 @@ mod tests {
     }
 
     #[test]
+    // kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, Equihash (200, 9),
+    // Zcash Mainnet heights); not run on Ycash.
+    #[cfg(not(feature = "ycash"))]
     fn pins_orchard_root_to_empty_below_nu5_and_defers_above() {
         let nu5 = NetworkUpgrade::Nu5
             .activation_height(&Mainnet)
@@ -667,6 +675,9 @@ mod tests {
     }
 
     #[test]
+    // kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, Equihash (200, 9),
+    // Zcash Mainnet heights); not run on Ycash.
+    #[cfg(not(feature = "ycash"))]
     fn pins_orchard_tx_to_zero_below_nu5_and_defers_above() {
         let nu5 = NetworkUpgrade::Nu5
             .activation_height(&Mainnet)
@@ -717,6 +728,9 @@ mod tests {
     }
 
     #[test]
+    // kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, Equihash (200, 9),
+    // Zcash Mainnet heights); not run on Ycash.
+    #[cfg(not(feature = "ycash"))]
     fn clears_unauthenticated_fields_when_confirming_roots() {
         let sapling = NetworkUpgrade::Sapling
             .activation_height(&Mainnet)
@@ -864,6 +878,9 @@ mod tests {
     }
 
     #[test]
+    // kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, Equihash (200, 9),
+    // Zcash Mainnet heights); not run on Ycash.
+    #[cfg(not(feature = "ycash"))]
     fn verifies_real_roots_and_reports_confirmed_tip_with_one_block_lag() {
         let activation = NetworkUpgrade::Heartwood
             .activation_height(&Mainnet)
@@ -991,6 +1008,9 @@ mod tests {
     }
 
     #[test]
+    // kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, Equihash (200, 9),
+    // Zcash Mainnet heights); not run on Ycash.
+    #[cfg(not(feature = "ycash"))]
     fn rejects_wrong_root_at_successor_height() {
         let activation = NetworkUpgrade::Heartwood
             .activation_height(&Mainnet)
@@ -1022,6 +1042,9 @@ mod tests {
     }
 
     #[test]
+    // kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, Equihash (200, 9),
+    // Zcash Mainnet heights); not run on Ycash.
+    #[cfg(not(feature = "ycash"))]
     fn rejects_empty_history_tree_when_header_requires_parent_root() {
         let heartwood_successor = NetworkUpgrade::Heartwood
             .activation_height(&Mainnet)

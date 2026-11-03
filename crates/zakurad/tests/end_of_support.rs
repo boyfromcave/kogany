@@ -1,5 +1,6 @@
 //! Testing the end of support feature.
-
+// kogany: the Zcash-fixture tests are not built with `ycash`, leaving their helpers unused.
+#![cfg_attr(feature = "ycash", allow(unused_imports, dead_code))]
 #![allow(clippy::unwrap_in_result)]
 
 use std::time::Duration;
@@ -24,7 +25,7 @@ use zakurad::components::sync::end_of_support::{
 
 /// The release supports this height and halts at the next block.
 fn last_supported_height() -> Height {
-    Height(3_640_098)
+    Height(3_643_309)
 }
 
 /// The number of blocks per day at the halt height, which is past the ZIP 259
@@ -43,6 +44,8 @@ fn end_of_support_panic() {
 
 /// Test that the `end_of_support` function is working as expected.
 #[test]
+// kogany: Zcash Mainnet's release and end-of-support heights (NU7 on Mainnet); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn end_of_support_function() {
     let (logs, dispatch) = log_capture::capture_logs();
     let _log_guard = tracing::dispatcher::set_default(&dispatch);
@@ -67,6 +70,8 @@ fn end_of_support_function() {
 
 /// Test that end of support is only reported and enforced on Mainnet.
 #[test]
+// kogany: Zcash Mainnet's release and end-of-support heights (NU7 on Mainnet); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn end_of_support_height_per_network() {
     let last_supported_height = last_supported_height();
     assert_eq!(
@@ -82,6 +87,8 @@ fn end_of_support_height_per_network() {
 
 /// Test the end of support values reported to the metrics endpoint.
 #[test]
+// kogany: Zcash Mainnet's release and end-of-support heights (NU7 on Mainnet); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn end_of_support_remaining_blocks() {
     let last_supported_height = last_supported_height();
     let warning_height = Height(last_supported_height.0 - 3 * EOS_BLOCKS_PER_DAY);
@@ -134,20 +141,22 @@ fn end_of_support_date() {
     assert!(!logs.contains(EOS_WARN_MESSAGE_HEADER));
 }
 
-/// Keep Mainnet EOS within two days before December 5, 2026.
+/// Keep Mainnet EOS within one target-spaced block of December 5, 2026.
 #[test]
-fn mainnet_end_of_support_precedes_december_5() {
+// kogany: Zcash Mainnet's release and end-of-support heights (NU7 on Mainnet); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
+fn mainnet_end_of_support_targets_december_5() {
     let network = Network::Mainnet;
-    // Fixed projection anchor: the block timestamp of the September 22
-    // Mainnet release-state bundle's finalized height. Keep this independent
-    // of release height bumps and later bundle imports so they cannot move
-    // the deadline. The block's own timestamp is about a day before the
-    // bundle's `generated_at`, which must not be used as an anchor.
+    // Fixed projection anchor: Mainnet block 3,539,449, hash
+    // 000000000038f877e08b47ee92a5d1d99856b160471d4697dad11344cdc712ba,
+    // read from Mainnet RPC on November 3, 2026 (KST). Keep its block timestamp
+    // independent of release height bumps and later bundle imports so they
+    // cannot move the deadline.
     let reference_time = Utc
-        .with_ymd_and_hms(2026, 9, 21, 2, 29, 57)
+        .with_ymd_and_hms(2026, 11, 2, 15, 49, 5)
         .single()
         .expect("the reference timestamp is valid");
-    let reference_height = Height(3_490_665);
+    let reference_height = Height(3_539_449);
     let deadline = Utc
         .with_ymd_and_hms(2026, 12, 5, 0, 0, 0)
         .single()
@@ -170,8 +179,10 @@ fn mainnet_end_of_support_precedes_december_5() {
         + chrono::Duration::seconds(post_nu7_blocks * i64::from(POST_NU7_POW_TARGET_SPACING));
 
     assert!(
-        estimated_halt < deadline && deadline - estimated_halt < chrono::Duration::days(2),
-        "Mainnet EOS must be within two days before {deadline}; estimated halt \
+        estimated_halt >= deadline
+            && estimated_halt - deadline
+                < chrono::Duration::seconds(i64::from(POST_NU7_POW_TARGET_SPACING)),
+        "Mainnet EOS must be within one target-spaced block after {deadline}; estimated halt \
          is {estimated_halt} at {first_unsupported_height:?}.",
     );
 }

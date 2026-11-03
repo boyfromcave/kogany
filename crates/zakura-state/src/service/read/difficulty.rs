@@ -267,6 +267,25 @@ fn difficulty_time_and_history_tree(
         .checked_add(Duration32::from_seconds(BLOCK_MAX_TIME_SINCE_MEDIAN))
         .expect("a valid block time plus a small constant is in-range");
 
+    // kogany (S5, yellowback_stratum): ycashd's miner caps the time at median-time-past + 90 min
+    // only where the rule is enforced (`FutureTimestampSoftForkActive`, ycash6 `src/miner.cpp`
+    // `UpdateTime`: from height 2 on regtest and mainnet), so its block 1 takes the clock time.
+    // Below that height the bound is the header rule's two hours past the clock. Template policy
+    // only: the header validation (`zakura-header-chain` contextual `validate`) is unchanged.
+    #[cfg(feature = "ycash")]
+    let max_time = {
+        let candidate_height = (tip_height + 1).ok_or("candidate height is out of range")?;
+        let enforced = network.is_max_block_time_enforced(candidate_height)
+            && !(matches!(network, Network::Mainnet) && candidate_height == Height(1));
+        if enforced {
+            max_time
+        } else {
+            cur_time
+                .saturating_add(Duration32::from_seconds(2 * 60 * 60))
+                .max(min_time)
+        }
+    };
+
     let cur_time = cur_time.clamp(min_time, max_time);
 
     // Now that we have a valid time, get the difficulty for that time.
@@ -743,6 +762,40 @@ mod tests {
                     );
                 }
             }
+        }
+    }
+
+    /// kogany (S5, yellowback_stratum): on the Ycash build a regtest template for block 1 takes
+    /// the clock time, as ycashd's `UpdateTime` caps at median-time-past + 90 min only from
+    /// height 2; block 2 is capped.
+    #[cfg(feature = "ycash")]
+    #[test]
+    fn ycash_template_time_is_uncapped_below_the_max_time_height() {
+        let _init_guard = zakura_test::init();
+        let network = Network::new_regtest(Default::default());
+        let mut header = *zakura_test::vectors::BLOCK_MAINNET_GENESIS_BYTES
+            .zcash_deserialize_into::<block::Block>()
+            .expect("the genesis vector is valid")
+            .header;
+        let tip_time = DateTime32::from(1_300_000_000);
+        header.time = tip_time.to_chrono();
+        header.difficulty_threshold = network.target_difficulty_limit().to_compact();
+        let now = DateTime32::from(1_800_000_000);
+        let mtp_cap = tip_time
+            .checked_add(Duration32::from_seconds(BLOCK_MAX_TIME_SINCE_MEDIAN))
+            .unwrap();
+        for (tip_height, expected) in [(Height(0), now), (Height(1), mtp_cap)] {
+            let result = difficulty_time_and_history_tree(
+                (0..=tip_height.0).map(|_| Arc::new(header)).collect(),
+                tip_height,
+                block::Hash([0; 32]),
+                &network,
+                now,
+                Arc::new(HistoryTree::default()),
+                ValueBalance::zero(),
+            )
+            .expect("the template context is complete");
+            assert_eq!(result.cur_time, expected, "tip {tip_height:?}");
         }
     }
 }

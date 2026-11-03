@@ -129,6 +129,7 @@ impl NonEmptyHistoryTree {
             | NetworkUpgrade::BeforeOverwinter
             | NetworkUpgrade::Overwinter
             | NetworkUpgrade::Sapling
+            | NetworkUpgrade::Ycash
             | NetworkUpgrade::Blossom => {
                 return Err(HistoryTreeError::InvalidCachedTree {
                     reason: "history trees do not exist before Heartwood",
@@ -138,7 +139,7 @@ impl NonEmptyHistoryTree {
             _ if network_upgrade.branch_id().is_none() => {
                 return Err(HistoryTreeError::MissingBranchId { network_upgrade });
             }
-            NetworkUpgrade::Heartwood | NetworkUpgrade::Canopy => {
+            NetworkUpgrade::Heartwood | NetworkUpgrade::Canopy | NetworkUpgrade::Vault => {
                 let tree = Tree::<PreOrchard>::new_from_cache(
                     network,
                     network_upgrade,
@@ -228,6 +229,7 @@ impl NonEmptyHistoryTree {
             | NetworkUpgrade::BeforeOverwinter
             | NetworkUpgrade::Overwinter
             | NetworkUpgrade::Sapling
+            | NetworkUpgrade::Ycash
             | NetworkUpgrade::Blossom => {
                 panic!("HistoryTree does not exist for pre-Heartwood upgrades")
             }
@@ -236,7 +238,7 @@ impl NonEmptyHistoryTree {
             _ if network_upgrade.branch_id().is_none() => {
                 return Err(HistoryTreeError::MissingBranchId { network_upgrade });
             }
-            NetworkUpgrade::Heartwood | NetworkUpgrade::Canopy => {
+            NetworkUpgrade::Heartwood | NetworkUpgrade::Canopy | NetworkUpgrade::Vault => {
                 let (tree, entry) = Tree::<PreOrchard>::new_from_parts(
                     network,
                     HistoryTreeBlockParts {

@@ -6,6 +6,7 @@ use std::{
     time::{Duration, Instant},
 };
 
+use tokio::task::AbortHandle;
 use zakura_chain::block;
 
 use crate::{
@@ -61,6 +62,13 @@ struct RegistryState {
     active_connections: HashMap<ConnectionKey, ConnectedPeer>,
     native_conn_ids: HashMap<ZakuraPeerId, ZakuraConnId>,
     retained_native_metadata: HashMap<ZakuraPeerId, ConnectedPeer>,
+    /// The connection task of each legacy connection, so an operator can close it
+    /// (`disconnectnode`, kogany F-S5-6).
+    legacy_connection_tasks: HashMap<ConnectionKey, AbortHandle>,
+    /// A side channel into each legacy connection, for the messages kogany sends a peer outside
+    /// a request (ycashd's `reject` for a refused transaction, kogany S5).
+    legacy_message_senders:
+        HashMap<ConnectionKey, tokio::sync::mpsc::Sender<crate::protocol::external::Message>>,
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
@@ -197,6 +205,67 @@ impl PeerRegistry {
             .remove(peer_id);
     }
 
+    /// Close every legacy connection whose remote address is `addr`, as ycashd's
+    /// `disconnectnode` (`ycash6` at `65cb4ae0f`, `src/rpc/net.cpp:224-245`) closes the node it
+    /// names. Returns the number of connections closed.
+    ///
+    /// The connection task is aborted, which drops the TCP stream and the connection's
+    /// [`PeerRegistryGuard`]; the peer set then drops the client as it would after any other
+    /// disconnect.
+    pub(crate) fn disconnect(&self, addr: PeerSocketAddr) -> usize {
+        let state = self
+            .inner
+            .lock()
+            .expect("peer registry mutex is never poisoned");
+        let mut closed = 0;
+        for (key, peer) in &state.active_connections {
+            if peer.addr != addr {
+                continue;
+            }
+            if let Some(task) = state.legacy_connection_tasks.get(key) {
+                task.abort();
+                closed += 1;
+            }
+        }
+        closed
+    }
+
+    /// Queues `message` on every legacy connection to `addr` (dropped when its queue is full).
+    /// Returns the number of connections it was queued on.
+    #[cfg(feature = "ycash")]
+    pub(crate) fn send_legacy(
+        &self,
+        addr: PeerSocketAddr,
+        message: &crate::protocol::external::Message,
+    ) -> usize {
+        let state = self
+            .inner
+            .lock()
+            .expect("peer registry mutex is never poisoned");
+        let mut queued = 0;
+        for (key, peer) in &state.active_connections {
+            if peer.addr != addr {
+                continue;
+            }
+            if let Some(sender) = state.legacy_message_senders.get(key) {
+                if sender.try_send(message.clone()).is_ok() {
+                    queued += 1;
+                }
+            }
+        }
+        queued
+    }
+
+    /// Is an outbound connection to `addr` open?
+    pub(crate) fn has_outbound(&self, addr: PeerSocketAddr) -> bool {
+        self.inner
+            .lock()
+            .expect("peer registry mutex is never poisoned")
+            .active_connections
+            .values()
+            .any(|peer| peer.addr == addr && !peer.is_inbound)
+    }
+
     fn update_connection(&self, key: &ConnectionKey, update: impl FnOnce(&mut ConnectedPeer)) {
         if let Some(connected_peer) = self
             .inner
@@ -210,11 +279,13 @@ impl PeerRegistry {
     }
 
     fn remove_connection(&self, key: &ConnectionKey) {
-        self.inner
+        let mut state = self
+            .inner
             .lock()
-            .expect("peer registry mutex is never poisoned")
-            .active_connections
-            .remove(key);
+            .expect("peer registry mutex is never poisoned");
+        state.active_connections.remove(key);
+        state.legacy_connection_tasks.remove(key);
+        state.legacy_message_senders.remove(key);
     }
 }
 
@@ -234,6 +305,38 @@ impl PeerRegistryUpdater {
             .active_connections
             .get(&self.key)
             .and_then(|peer| peer.rtt)
+    }
+
+    /// Attach the connection task of this legacy connection, so
+    /// [`PeerRegistry::disconnect`] can close it. Does nothing once the connection has left the
+    /// registry.
+    pub(crate) fn attach_connection_task(&self, task: AbortHandle) {
+        let mut state = self
+            .registry
+            .inner
+            .lock()
+            .expect("peer registry mutex is never poisoned");
+        if state.active_connections.contains_key(&self.key) {
+            state.legacy_connection_tasks.insert(self.key.clone(), task);
+        }
+    }
+
+    /// Attach the side channel of this legacy connection, so [`PeerRegistry::send_legacy`] can
+    /// queue messages on it. Does nothing once the connection has left the registry.
+    pub(crate) fn attach_message_sender(
+        &self,
+        sender: tokio::sync::mpsc::Sender<crate::protocol::external::Message>,
+    ) {
+        let mut state = self
+            .registry
+            .inner
+            .lock()
+            .expect("peer registry mutex is never poisoned");
+        if state.active_connections.contains_key(&self.key) {
+            state
+                .legacy_message_senders
+                .insert(self.key.clone(), sender);
+        }
     }
 
     pub(crate) fn record_ping_sent(&self, now: Instant) {

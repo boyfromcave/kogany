@@ -480,6 +480,15 @@ pub struct ContextuallyVerifiedBlock {
     pub(crate) chain_value_pool_change: ValueBalance<NegativeAllowed>,
     /// Original verifier receipt order, retained through forks and reconsideration.
     pub(crate) receipt_order: Option<u64>,
+
+    /// kogany (W4-c): the block's Vault set-state change set over its parent's state (empty
+    /// before the Vault activation height). Pushed onto and reverted from the chain's overlay.
+    pub(crate) vault_delta: Arc<crate::service::non_finalized_state::VaultDelta>,
+
+    /// kogany (W5-e): the block's Yellowback (YED) effect over its parent's index state: its
+    /// delta (pushed onto and reverted from the chain's overlay) and the module's verdict (not
+    /// yet a rejection: W5-f).
+    pub(crate) yed_effect: Arc<crate::service::yed::YedBlockEffect>,
 }
 
 /// Wraps note commitment trees and the history tree together.
@@ -680,6 +689,8 @@ impl ContextuallyVerifiedBlock {
             transaction_hashes,
             chain_value_pool_change,
             receipt_order,
+            vault_delta: Default::default(),
+            yed_effect: Default::default(),
         })
     }
 }
@@ -825,6 +836,9 @@ mod tests {
     use zakura_chain::serialization::ZcashDeserializeInto;
 
     #[test]
+    // kogany: Zcash Mainnet and Testnet block vectors (NU5 branch IDs, Zcash Heartwood and NU5
+    // heights); not run on Ycash.
+    #[cfg(not(feature = "ycash"))]
     fn transaction_hashes_and_auth_data_root_matches_separate_computation() {
         let _init_guard = zakura_test::init();
 
@@ -883,6 +897,9 @@ mod tests {
     }
 
     #[test]
+    // kogany: Zcash Mainnet and Testnet block vectors (NU5 branch IDs, Zcash Heartwood and NU5
+    // heights); not run on Ycash.
+    #[cfg(not(feature = "ycash"))]
     fn checkpoint_precomputed_auth_data_root_matches_its_block() {
         let _init_guard = zakura_test::init();
 
@@ -1388,6 +1405,42 @@ pub enum Request {
     /// has committed, and [`Response::BlockInfo(None)`](Response::BlockInfo) otherwise.
     BlockInfo(block::Hash),
 
+    /// kogany (W4-d): the Vault set state after the block `parent_hash` (fork-aware: the
+    /// finalized tip or a block of any non-finalized chain), without waiting.
+    ///
+    /// Returns [`Response::VaultSnapshot(Some(snapshot))`](Response::VaultSnapshot) if the block
+    /// has committed and its state is known, and [`Response::VaultSnapshot(None)`](Response::VaultSnapshot)
+    /// otherwise (a finalized block below the finalized tip has no stored state, K-14).
+    VaultSnapshot {
+        /// The block the state is after: the parent of the block whose scripts read it.
+        parent_hash: block::Hash,
+    },
+
+    /// kogany (W4-d): [`Request::VaultSnapshot`], waiting until the block `parent_hash` commits,
+    /// as [`Request::AwaitBlockInfo`] does.
+    ///
+    /// Returns [`AwaitBlockInfoError`](crate::AwaitBlockInfoError) if the state rejects the
+    /// block or the block does not commit within the wait limit.
+    AwaitVaultSnapshot {
+        /// The block the state is after.
+        parent_hash: block::Hash,
+    },
+
+    /// kogany (W4-d): the Vault set state at the best chain tip (the mempool's and the vault
+    /// read RPCs' snapshot).
+    ///
+    /// Returns [`Response::VaultSnapshot(Some(snapshot))`](Response::VaultSnapshot), whose `tip`
+    /// is `None` before the state has a block.
+    BestChainVaultSnapshot,
+
+    /// kogany (W6-c): the Yellowback (YED) module's mempool check (ycash6 `MempoolCheckLocked`)
+    /// of each transaction, for the block after the best chain tip, over the YED state at that
+    /// tip. Each entry is the transaction in the vault rules' form and its `nExpiryHeight`
+    /// (0 = none).
+    ///
+    /// Returns [`Response::YedMempoolCheck`].
+    BestChainYedMempoolCheck(Vec<(kogany_vault::state::VaultTx, u32)>),
+
     /// Looks up a block by hash in any current chain or by height in the current best chain.
     ///
     /// Returns
@@ -1485,6 +1538,12 @@ pub enum Request {
     /// Checks the expected work, body commitment, parent history, and selected tip.
     CheckPreparedMinedRelayEligibility(BlockCommitmentData),
 
+    /// Checks whether the block's header commits to the authorizing data in its body,
+    /// using the history tree of the block's parent.
+    ///
+    /// Returns [`Response::AuthDataCommitment`].
+    CheckAuthDataCommitment(BlockCommitmentData),
+
     /// Calculates the median-time-past for the *next* block on the best chain.
     ///
     /// Returns [`Response::BestChainNextMedianTimePast`] when successful.
@@ -1571,6 +1630,10 @@ impl Request {
             Request::Block(_) => "block",
             Request::AwaitBlockInfo(_) => "await_block_info",
             Request::BlockInfo(_) => "block_info",
+            Request::VaultSnapshot { .. } => "vault_snapshot",
+            Request::AwaitVaultSnapshot { .. } => "await_vault_snapshot",
+            Request::BestChainVaultSnapshot => "best_chain_vault_snapshot",
+            Request::BestChainYedMempoolCheck(_) => "best_chain_yed_mempool_check",
             Request::AnyChainBlock(_) => "any_chain_block",
             Request::BlockHeader(_) => "block_header",
             Request::FindBlockHashes { .. } => "find_block_hashes",
@@ -1581,6 +1644,7 @@ impl Request {
             Request::CheckPreparedMinedRelayEligibility(_) => {
                 "check_prepared_mined_relay_eligibility"
             }
+            Request::CheckAuthDataCommitment(_) => "check_auth_data_commitment",
             Request::BestChainNextMedianTimePast => "best_chain_next_median_time_past",
             Request::BestChainBlockHash(_) => "best_chain_block_hash",
             Request::KnownBlock(_) => "known_block",
@@ -1636,6 +1700,52 @@ pub enum ReadRequest {
     /// * [`ReadResponse::BlockInfo(Some(pool_values))`](ReadResponse::BlockInfo) if the block is found;
     /// * [`ReadResponse::BlockInfo(None)`](ReadResponse::BlockInfo) otherwise.
     BlockInfo(HashOrHeight),
+
+    /// kogany (W4-d): the Vault set state after the block `parent_hash`, fork-aware; see
+    /// [`Request::VaultSnapshot`].
+    ///
+    /// Returns [`ReadResponse::VaultSnapshot`].
+    VaultSnapshot {
+        /// The block the state is after.
+        parent_hash: block::Hash,
+    },
+
+    /// kogany (W4-d): the Vault set state at the best chain tip; see
+    /// [`Request::BestChainVaultSnapshot`].
+    ///
+    /// Returns [`ReadResponse::VaultSnapshot`].
+    BestChainVaultSnapshot,
+
+    /// kogany (W5-f): the Yellowback (YED) index state at the best chain tip (the `yed_*` read
+    /// RPCs' snapshot).
+    ///
+    /// Returns [`ReadResponse::YedSnapshot(Some(snapshot))`](ReadResponse::YedSnapshot), whose
+    /// `tip` is `None` before the state has a block.
+    BestChainYedSnapshot,
+
+    /// kogany (W5-f): the YED index state after the block `hash` (fork-aware: a block of any
+    /// non-finalized chain, the finalized tip, or a finalized block up to `UNDO_KEEP` below it).
+    ///
+    /// Returns [`ReadResponse::YedSnapshot`], `None` when the block is none of these.
+    YedSnapshot {
+        /// The block the state is after.
+        hash: block::Hash,
+    },
+
+    /// kogany (W6-c): the YED module's mempool check at the best chain tip; see
+    /// [`Request::BestChainYedMempoolCheck`].
+    ///
+    /// Returns [`ReadResponse::YedMempoolCheck`].
+    BestChainYedMempoolCheck(Vec<(kogany_vault::state::VaultTx, u32)>),
+
+    /// kogany (S5, F-S5-19): the block `hash` off the best chain: in a non-finalized side
+    /// chain, in an `invalidateblock` record, or (Ycash build) a block contextual validation
+    /// rejected recently. ycashd's block index keeps every such block, and `getblock` answers it
+    /// with `confirmations: -1`.
+    ///
+    /// Returns [`ReadResponse::OffChainBlock`], `None` when the block is none of these (a block
+    /// of the best chain included: ask [`ReadRequest::BlockHeader`] first).
+    OffChainBlock(block::Hash),
 
     /// Computes the depth in the current best chain of the block identified by the given hash.
     ///
@@ -2066,6 +2176,12 @@ pub enum ReadRequest {
     /// Checks the expected work, body commitment, parent history, and selected tip.
     CheckPreparedMinedRelayEligibility(BlockCommitmentData),
 
+    /// Checks whether the block's header commits to the authorizing data in its body,
+    /// using the history tree of the block's parent.
+    ///
+    /// Returns [`ReadResponse::AuthDataCommitment`].
+    CheckAuthDataCommitment(BlockCommitmentData),
+
     /// Calculates the median-time-past for the *next* block on the best chain.
     ///
     /// Returns [`ReadResponse::BestChainNextMedianTimePast`] when successful.
@@ -2149,6 +2265,12 @@ impl ReadRequest {
             ReadRequest::FinalizedTip => "finalized_tip",
             ReadRequest::TipPoolValues => "tip_pool_values",
             ReadRequest::BlockInfo(_) => "block_info",
+            ReadRequest::VaultSnapshot { .. } => "vault_snapshot",
+            ReadRequest::BestChainVaultSnapshot => "best_chain_vault_snapshot",
+            ReadRequest::BestChainYedSnapshot => "best_chain_yed_snapshot",
+            ReadRequest::YedSnapshot { .. } => "yed_snapshot",
+            ReadRequest::BestChainYedMempoolCheck(_) => "best_chain_yed_mempool_check",
+            ReadRequest::OffChainBlock(_) => "off_chain_block",
             ReadRequest::Depth(_) => "depth",
             ReadRequest::Block(_) => "block",
             ReadRequest::AnyChainBlock(_) => "any_chain_block",
@@ -2194,6 +2316,7 @@ impl ReadRequest {
             ReadRequest::CheckPreparedMinedRelayEligibility(_) => {
                 "check_prepared_mined_relay_eligibility"
             }
+            ReadRequest::CheckAuthDataCommitment(_) => "check_auth_data_commitment",
             ReadRequest::BestChainNextMedianTimePast => "best_chain_next_median_time_past",
             ReadRequest::BestChainBlockHash(_) => "best_chain_block_hash",
             #[cfg(feature = "indexer")]
@@ -2233,6 +2356,13 @@ impl TryFrom<Request> for ReadRequest {
 
             Request::Block(hash_or_height) => Ok(ReadRequest::Block(hash_or_height)),
             Request::BlockInfo(hash) => Ok(ReadRequest::BlockInfo(hash.into())),
+            Request::VaultSnapshot { parent_hash } => {
+                Ok(ReadRequest::VaultSnapshot { parent_hash })
+            }
+            Request::BestChainVaultSnapshot => Ok(ReadRequest::BestChainVaultSnapshot),
+            Request::BestChainYedMempoolCheck(txs) => {
+                Ok(ReadRequest::BestChainYedMempoolCheck(txs))
+            }
             Request::AnyChainBlock(hash_or_height) => {
                 Ok(ReadRequest::AnyChainBlock(hash_or_height))
             }
@@ -2258,6 +2388,9 @@ impl TryFrom<Request> for ReadRequest {
             Request::CheckPreparedMinedRelayEligibility(block) => {
                 Ok(ReadRequest::CheckPreparedMinedRelayEligibility(block))
             }
+            Request::CheckAuthDataCommitment(block) => {
+                Ok(ReadRequest::CheckAuthDataCommitment(block))
+            }
 
             Request::ApplyHeaderChainInsert { .. }
             | Request::RecordHeaderChainBodyUnavailable { .. }
@@ -2276,7 +2409,9 @@ impl TryFrom<Request> for ReadRequest {
                      Manually convert the request to ReadRequest::AnyChainUtxo, \
                      and handle pending UTXOs"),
 
-            Request::AwaitBlockInfo(_) => Err("ReadService does not track pending block commits"),
+            Request::AwaitBlockInfo(_) | Request::AwaitVaultSnapshot { .. } => {
+                Err("ReadService does not track pending block commits")
+            }
 
             Request::KnownBlock(_) => Err("ReadService does not track queued blocks"),
 

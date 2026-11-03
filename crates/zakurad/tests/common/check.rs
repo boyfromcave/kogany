@@ -31,5 +31,6 @@ pub enum EphemeralCheck {
 /// line that contains the version. In particular, this check will fail if `s`
 /// includes any terminal formatting.
 pub fn is_zakurad_version(s: &str) -> bool {
-    semver::Version::parse(s.replace("zakurad", "").trim()).is_ok()
+    // kogany: a `ycash` build prints `koganyd <version>`.
+    semver::Version::parse(s.replace("koganyd", "").replace("zakurad", "").trim()).is_ok()
 }

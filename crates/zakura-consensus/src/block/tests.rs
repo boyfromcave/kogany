@@ -1,5 +1,6 @@
 //! Tests for block verification
-
+// kogany: the Zcash-fixture tests are not built with `ycash`, leaving their helpers unused.
+#![cfg_attr(feature = "ycash", allow(unused_imports, dead_code))]
 #![allow(clippy::unwrap_in_result)]
 
 use chrono::DateTime;
@@ -50,6 +51,10 @@ fn prepared_test_verifier(
             zs::Request::CheckBlockProposalValidity(_) => zs::Response::ValidBlockProposal,
             zs::Request::CheckParentInputs { .. } => {
                 zs::Response::ParentInputs(zs::ParentInputs::Inconclusive)
+            }
+            // A rejected candidate confirms that its header commits to its body.
+            zs::Request::CheckAuthDataCommitment(_) => {
+                zs::Response::AuthDataCommitment(zs::AuthDataCommitment::Bound)
             }
             _ => panic!("prepared-path test received an unexpected state request: {request:?}"),
         };
@@ -185,6 +190,190 @@ async fn missing_input_requires_committed_parent_evidence() {
                 assert_eq!(error.misbehavior_score(), 0);
             }
         }
+    }
+}
+
+/// A semantic failure on an NU5 block is only intrinsic once its header commits to the
+/// delivered authorizing data.
+///
+/// From NU5, transaction IDs do not commit to signatures, proofs, or scripts (ZIP 244), so a
+/// body can differ in one of them under the same block hash. The verifier must then report the
+/// commitment mismatch rather than the rule the differing data fails.
+///
+/// The check must not wait for the parent: a parent that failed semantic verification never
+/// reaches state, so the state mock panics on `AwaitBlockInfo`. A stalled check leaves the
+/// binding unconfirmed.
+#[tokio::test(start_paused = true)]
+async fn nu5_semantic_failures_defer_to_the_auth_data_commitment() {
+    use zakura_header_chain::{BodyVerificationClass, TransientBodyFailureKind};
+
+    #[derive(Clone, Copy, Debug)]
+    enum Binding {
+        Bound,
+        Mismatch,
+        Unavailable,
+        Stalled,
+    }
+
+    let _init_guard = zakura_test::init();
+    let network = librustzcash_conversion_test_network(NetworkUpgrade::Nu5);
+    let block = Arc::new(nu5_prepared_test_block(
+        &network,
+        Some(LockTime::unlocked()),
+    ));
+
+    for binding in [
+        Binding::Bound,
+        Binding::Mismatch,
+        Binding::Unavailable,
+        Binding::Stalled,
+    ] {
+        let state = service_fn(move |request: zs::Request| async move {
+            Ok::<_, BoxError>(match request {
+                zs::Request::KnownBlock(_) => zs::Response::KnownBlock(None),
+                zs::Request::CheckParentInputs { .. } => {
+                    zs::Response::ParentInputs(zs::ParentInputs::Inconclusive)
+                }
+                zs::Request::CheckAuthDataCommitment(_) if matches!(binding, Binding::Stalled) => {
+                    std::future::pending().await
+                }
+                zs::Request::CheckAuthDataCommitment(_) => {
+                    zs::Response::AuthDataCommitment(match binding {
+                        Binding::Bound => zs::AuthDataCommitment::Bound,
+                        Binding::Mismatch => zs::AuthDataCommitment::Mismatch(
+                            block::CommitmentError::InvalidChainHistoryBlockTxAuthCommitment {
+                                actual: [0x42; 32],
+                                expected: [0x24; 32],
+                            },
+                        ),
+                        Binding::Unavailable | Binding::Stalled => {
+                            zs::AuthDataCommitment::Unavailable
+                        }
+                    })
+                }
+                _ => panic!("unexpected state request: {request:?}"),
+            })
+        });
+        let transaction = service_fn(|request: tx::Request| async move {
+            let tx::Request::Block { transaction, .. } = &request else {
+                panic!("block verification sent a mempool transaction request");
+            };
+            if transaction.is_coinbase() {
+                Ok(accept_block_transaction(request))
+            } else {
+                Err::<tx::Response, BoxError>(TransactionError::Halo2VerificationFailed.into())
+            }
+        });
+
+        let error = SemanticBlockVerifier::new(
+            &network,
+            crate::transaction::boxed_state(state),
+            crate::transaction::boxed_transaction_verifier(transaction),
+        )
+        .oneshot(Request::Commit(block.clone()))
+        .await
+        .expect_err("the altered proof fails verification");
+        let class = error.body_verification_class();
+
+        match binding {
+            Binding::Bound => assert!(
+                matches!(class, BodyVerificationClass::ConsensusInvalid(_)),
+                "{binding:?}: {error:?}"
+            ),
+            Binding::Mismatch => {
+                assert!(
+                    matches!(class, BodyVerificationClass::PayloadMismatch(kind)
+                        if kind.proves_tampered_body()),
+                    "{binding:?}: {error:?}"
+                );
+                assert!(error.is_auth_commitment_mismatch(), "{error:?}");
+            }
+            Binding::Unavailable | Binding::Stalled => {
+                assert_eq!(
+                    class,
+                    BodyVerificationClass::Retryable(TransientBodyFailureKind::MissingContext),
+                    "{binding:?}: {error:?}"
+                );
+                assert_eq!(error.misbehavior_score(), 0, "{binding:?}");
+            }
+        }
+    }
+}
+
+/// Duplicate spends and nullifiers are part of the transaction ID, so a semantic duplicate stays
+/// the block's own failure without asking state for the authorizing data binding.
+#[tokio::test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
+async fn txid_committed_semantic_failures_skip_the_binding_check() {
+    use zakura_header_chain::BodyVerificationClass;
+
+    let _init_guard = zakura_test::init();
+    let network = librustzcash_conversion_test_network(NetworkUpgrade::Nu5);
+    let block = Arc::new(nu5_prepared_test_block(
+        &network,
+        Some(LockTime::unlocked()),
+    ));
+    let orchard_nullifier = orchard::Nullifier::try_from([0; 32])
+        .expect("zero is a canonical Orchard nullifier encoding");
+
+    for duplicate in [
+        TransactionError::DuplicateTransparentSpend(transparent::OutPoint {
+            hash: zakura_chain::transaction::Hash([1; 32]),
+            index: 0,
+        }),
+        TransactionError::DuplicateSproutNullifier(zakura_chain::sprout::Nullifier::from([0; 32])),
+        TransactionError::DuplicateSaplingNullifier(zakura_chain::sapling::Nullifier::from(
+            [0; 32],
+        )),
+        TransactionError::DuplicateOrchardNullifier(orchard_nullifier),
+        TransactionError::DuplicateIronwoodNullifier(orchard_nullifier),
+    ] {
+        let state = service_fn(|request: zs::Request| async move {
+            Ok::<_, BoxError>(match request {
+                zs::Request::KnownBlock(_) => zs::Response::KnownBlock(None),
+                zs::Request::CheckParentInputs { .. } => {
+                    zs::Response::ParentInputs(zs::ParentInputs::Inconclusive)
+                }
+                _ => panic!("unexpected state request: {request:?}"),
+            })
+        });
+        let failure = duplicate.clone();
+        let transaction = service_fn(move |request: tx::Request| {
+            let failure = failure.clone();
+            async move {
+                let tx::Request::Block { transaction, .. } = &request else {
+                    panic!("block verification sent a mempool transaction request");
+                };
+                if transaction.is_coinbase() {
+                    Ok(accept_block_transaction(request))
+                } else {
+                    Err::<tx::Response, BoxError>(failure.into())
+                }
+            }
+        });
+
+        let error = SemanticBlockVerifier::new(
+            &network,
+            crate::transaction::boxed_state(state),
+            crate::transaction::boxed_transaction_verifier(transaction),
+        )
+        .oneshot(Request::Commit(block.clone()))
+        .await
+        .expect_err("the duplicate fails verification");
+
+        assert!(
+            matches!(&error, VerifyBlockError::Transaction(found) if *found == duplicate),
+            "{error:?}"
+        );
+        assert!(
+            matches!(
+                error.body_verification_class(),
+                BodyVerificationClass::ConsensusInvalid(_)
+            ),
+            "{error:?}"
+        );
     }
 }
 
@@ -409,6 +598,9 @@ async fn prepared_mined_commit_rechecks_difficulty() {
 }
 
 #[tokio::test]
+// kogany: Zcash coinbases and subsidies on Zcash schedules (no Ycash YDF output, funding streams,
+// ZIP 234); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn prepared_mined_commit_rechecks_header_time() {
     let _init_guard = zakura_test::init();
     let network = librustzcash_conversion_test_network(NetworkUpgrade::Nu5);
@@ -428,6 +620,9 @@ async fn prepared_mined_commit_rechecks_header_time() {
 }
 
 #[tokio::test]
+// kogany: Zcash coinbases and subsidies on Zcash schedules (no Ycash YDF output, funding streams,
+// ZIP 234); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn prepared_mined_commit_rechecks_transaction_lock_time() {
     let _init_guard = zakura_test::init();
     let network = librustzcash_conversion_test_network(NetworkUpgrade::Nu5);
@@ -499,12 +694,16 @@ async fn preparation_rejects_invalid_merkle_content_before_caching() {
         ] {
             let candidate = Arc::new(candidate.clone());
             let state = service_fn(|request: zs::Request| async move {
-                let zs::Request::KnownBlock(hash) = request else {
-                    panic!("invalid content must be rejected before contextual validation");
-                };
-                Ok::<_, BoxError>(zs::Response::KnownBlock(
-                    (hash == block::Hash([0; 32])).then_some(zs::KnownBlock::Finalized),
-                ))
+                Ok::<_, BoxError>(match request {
+                    zs::Request::KnownBlock(hash) => zs::Response::KnownBlock(
+                        (hash == block::Hash([0; 32])).then_some(zs::KnownBlock::Finalized),
+                    ),
+                    // A mined commit's rejection confirms the auth data binding afterwards.
+                    zs::Request::CheckAuthDataCommitment(_) => {
+                        zs::Response::AuthDataCommitment(zs::AuthDataCommitment::Bound)
+                    }
+                    _ => panic!("invalid content must be rejected before contextual validation"),
+                })
             });
             let transaction =
                 service_fn(|_| -> std::future::Ready<Result<tx::Response, BoxError>> {
@@ -549,6 +748,9 @@ async fn preparation_rejects_invalid_merkle_content_before_caching() {
 }
 
 #[tokio::test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn failed_preparation_does_not_populate_the_cache() {
     use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -830,6 +1032,9 @@ async fn cache_eviction_between_resolution_and_commit_uses_full_verification() {
 }
 
 #[tokio::test]
+// kogany: Zcash coinbases and subsidies on Zcash schedules (no Ycash YDF output, funding streams,
+// ZIP 234); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn proposal_validation_succeeds_when_cache_insertion_conflicts() {
     use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -995,6 +1200,9 @@ async fn prepared_and_full_commits_produce_the_same_state_input() {
 }
 
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn coinbase_is_first_for_historical_blocks() -> Result<(), Report> {
     let _init_guard = zakura_test::init();
 
@@ -1013,6 +1221,9 @@ fn coinbase_is_first_for_historical_blocks() -> Result<(), Report> {
 }
 
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn difficulty_is_valid_for_historical_blocks() -> Result<(), Report> {
     let _init_guard = zakura_test::init();
     for network in Network::iter() {
@@ -1099,6 +1310,9 @@ fn difficulty_validation_failure() -> Result<(), Report> {
 }
 
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn equihash_is_valid_for_historical_blocks() -> Result<(), Report> {
     let _init_guard = zakura_test::init();
 
@@ -1109,7 +1323,10 @@ fn equihash_is_valid_for_historical_blocks() -> Result<(), Report> {
             .zcash_deserialize_into::<Block>()
             .expect("block is structurally valid");
 
-        check::equihash_solution_is_valid(&block.header, &Network::Mainnet)
+        let height = block
+            .coinbase_height()
+            .expect("block test vectors have a coinbase height");
+        check::equihash_solution_is_valid(&block.header, &Network::Mainnet, &height)
             .expect("the equihash solution from a historical block should be valid");
     }
 
@@ -1117,6 +1334,9 @@ fn equihash_is_valid_for_historical_blocks() -> Result<(), Report> {
 }
 
 #[test]
+// kogany: Zcash coinbases and subsidies on Zcash schedules (no Ycash YDF output, funding streams,
+// ZIP 234); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn subsidy_is_valid_for_historical_blocks() -> Result<(), Report> {
     let _init_guard = zakura_test::init();
     for network in Network::iter() {
@@ -1162,6 +1382,9 @@ fn subsidy_is_valid_for_network(network: Network) -> Result<(), Report> {
 /// for this, so a coinbase that pays that marker must pass with no deferred
 /// pool change.
 #[test]
+// kogany: Zcash coinbases and subsidies on Zcash schedules (no Ycash YDF output, funding streams,
+// ZIP 234); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn local_genesis_nu6_3_activation_has_satisfiable_lockbox_rule() -> Result<(), Report> {
     let generated = generate_local_testnet_with_funded_keys(
         vec!["alice".to_string(), "bob".to_string()],
@@ -1216,6 +1439,9 @@ fn local_genesis_nu6_3_activation_has_satisfiable_lockbox_rule() -> Result<(), R
 }
 
 #[test]
+// kogany: Zcash coinbases and subsidies on Zcash schedules (no Ycash YDF output, funding streams,
+// ZIP 234); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn coinbase_validation_failure() -> Result<(), Report> {
     let _init_guard = zakura_test::init();
     let network = Network::Mainnet;
@@ -1311,6 +1537,9 @@ fn coinbase_validation_failure() -> Result<(), Report> {
 }
 
 #[test]
+// kogany: Zcash coinbases and subsidies on Zcash schedules (no Ycash YDF output, funding streams,
+// ZIP 234); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn funding_stream_validation() -> Result<(), Report> {
     let _init_guard = zakura_test::init();
     for network in Network::iter() {
@@ -1346,6 +1575,9 @@ fn funding_stream_validation_for_network(network: Network) -> Result<(), Report>
 }
 
 #[test]
+// kogany: Zcash coinbases and subsidies on Zcash schedules (no Ycash YDF output, funding streams,
+// ZIP 234); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn funding_stream_validation_failure() -> Result<(), Report> {
     let _init_guard = zakura_test::init();
     let network = Network::Mainnet;
@@ -1400,6 +1632,9 @@ fn funding_stream_validation_failure() -> Result<(), Report> {
 }
 
 #[test]
+// kogany: Zcash coinbases and subsidies on Zcash schedules (no Ycash YDF output, funding streams,
+// ZIP 234); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn miner_fees_validation_success() -> Result<(), Report> {
     let _init_guard = zakura_test::init();
     for network in Network::iter() {
@@ -1488,6 +1723,9 @@ struct LibrustzcashConversionFailure {
 /// Every consensus branch ID in Zakura's table is known to librustzcash, so the
 /// conversion can only fail on malformed Orchard data.
 #[tokio::test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn block_rejects_transactions_failing_librustzcash_conversion() {
     let _init_guard = zakura_test::init();
 
@@ -1684,6 +1922,9 @@ fn orchard_fixture() -> orchard::ShieldedData {
 }
 
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn miner_fees_validation_includes_ironwood_balance() {
     let _init_guard = zakura_test::init();
 
@@ -1753,6 +1994,9 @@ fn ironwood_shielded_data(value_balance: i64) -> ironwood::ShieldedData {
 }
 
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn time_is_valid_for_historical_blocks() -> Result<(), Report> {
     let _init_guard = zakura_test::init();
 
@@ -1782,6 +2026,9 @@ fn time_is_valid_for_historical_blocks() -> Result<(), Report> {
 }
 
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn merkle_root_is_valid() -> Result<(), Report> {
     let _init_guard = zakura_test::init();
 
@@ -1932,6 +2179,9 @@ fn legacy_sigops_count_for_large_generated_blocks() {
 }
 
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn legacy_sigops_count_for_historic_blocks() {
     let _init_guard = zakura_test::init();
 
@@ -1953,6 +2203,9 @@ fn legacy_sigops_count_for_historic_blocks() {
 }
 
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn transaction_expiration_height_validation() -> Result<(), Report> {
     let _init_guard = zakura_test::init();
 
@@ -2124,6 +2377,9 @@ fn zip234_parent_pools(
 /// Semantic verification checks the coinbase against the ZIP 234 subsidy, which depends on
 /// the parent's chain value pools.
 #[tokio::test]
+// kogany: Zcash coinbases and subsidies on Zcash schedules (no Ycash YDF output, funding streams,
+// ZIP 234); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn zip234_block_verification_checks_the_reissuance_bonus() {
     use zakura_chain::{block_info::BlockInfo, parameters::subsidy::halving_block_subsidy};
 
@@ -2153,6 +2409,9 @@ async fn zip234_block_verification_checks_the_reissuance_bonus() {
                     }
                     zs::Request::CommitSemanticallyVerifiedBlock(block) => {
                         zs::Response::Committed(block.hash)
+                    }
+                    zs::Request::CheckAuthDataCommitment(_) => {
+                        zs::Response::AuthDataCommitment(zs::AuthDataCommitment::Bound)
                     }
                     _ => panic!("ZIP 234 test received an unexpected state request: {request:?}"),
                 };
@@ -2302,6 +2561,10 @@ async fn derived_nsm_crossing_gates_block_verification() {
                         assert_eq!(block.hash, hash);
                         zs::Response::Committed(block.hash)
                     }
+                    zs::Request::CheckAuthDataCommitment(_) => {
+                        assert!(!valid, "a valid block needs no binding check");
+                        zs::Response::AuthDataCommitment(zs::AuthDataCommitment::Bound)
+                    }
                     _ => panic!("unexpected state request: {request:?}"),
                 })
             });
@@ -2343,6 +2606,9 @@ async fn derived_nsm_crossing_gates_block_verification() {
 
 /// A proposal uses its committed parent's balance and rejects an excessive bonus.
 #[tokio::test]
+// kogany: Zcash coinbases and subsidies on Zcash schedules (no Ycash YDF output, funding streams,
+// ZIP 234); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn zip234_proposal_with_committed_parent_checks_the_bonus_without_waiting() {
     use zakura_chain::{block_info::BlockInfo, parameters::subsidy::halving_block_subsidy};
 
@@ -2515,6 +2781,9 @@ fn zip234_test_block(
 /// they dispatched, so the RPC would release its one speculative worker while compute continues
 /// and let the next preparation overlap it.
 #[tokio::test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn a_server_template_error_waits_for_the_checks_it_dispatched() {
     use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -2726,6 +2995,9 @@ mod zip218_shielded_action_limits {
     /// Mainnet. A block with no shielded data also satisfies them once NU7 is
     /// active.
     #[test]
+    // kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+    // Mainnet heights, Equihash (200, 9)); not run on Ycash.
+    #[cfg(not(feature = "ycash"))]
     fn historical_blocks_satisfy_the_limits() {
         let _init_guard = zakura_test::init();
 
@@ -3141,6 +3413,9 @@ async fn malformed_headers_do_not_stop_buffered_verification() {
 }
 
 #[tokio::test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn receipt_order_precedes_polling_and_cached_mining_uses_solved_submission() {
     use std::sync::{
         atomic::{AtomicUsize, Ordering},
@@ -3227,6 +3502,9 @@ async fn receipt_order_precedes_polling_and_cached_mining_uses_solved_submission
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+// kogany: Zcash coinbases and subsidies on Zcash schedules (no Ycash YDF output, funding streams,
+// ZIP 234); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn duplicate_receipt_keeps_first_priority_through_real_state_deduplication() {
     use zakura_chain::chain_tip::ChainTip;
 

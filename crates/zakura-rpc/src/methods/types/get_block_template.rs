@@ -7,6 +7,10 @@ pub mod parameters;
 pub mod proposal;
 pub mod zip317;
 
+// kogany W8: the Ycash coinbase tag, health refusal, sigops and template filter.
+#[cfg(feature = "ycash")]
+pub mod ycash;
+
 #[cfg(test)]
 mod tests;
 
@@ -68,8 +72,8 @@ use crate::{
 };
 
 use constants::{
-    CAPABILITIES_FIELD, MAX_ESTIMATED_DISTANCE_TO_NETWORK_CHAIN_TIP, MUTABLE_FIELD,
-    NONCE_RANGE_FIELD, NOT_SYNCED_ERROR_CODE,
+    CAPABILITIES_FIELD, MAX_TIME_SINCE_CHAIN_TIP, MUTABLE_FIELD, NONCE_RANGE_FIELD,
+    NOT_SYNCED_ERROR_CODE,
 };
 pub use miner_address::MinerAddress;
 pub use parameters::{
@@ -431,12 +435,23 @@ pub struct BlockTemplateResponse {
     /// fixed 90 minute consensus rule, or a smaller fixed interval (like 1000s).
     /// Some miners don't check the maximum time. This can cause invalid blocks after network downtime,
     /// a significant drop in the hash rate, or after the testnet minimum difficulty interval.
+    ///
+    /// Ycash (S5 parity): ycashd's template has no `maxtime` (ycash6 `src/rpc/mining.cpp`), so a
+    /// Ycash build keeps it for its own use (proposals) and does not send it.
     #[serde(rename = "maxtime")]
+    #[cfg_attr(
+        feature = "ycash",
+        serde(skip_serializing, default = "ycash_absent_max_time")
+    )]
     #[getset(get_copy = "pub")]
     pub(crate) max_time: DateTime32,
 
     /// Identifies this prepared mining candidate.
+    ///
+    /// Ycash (S5 parity): not in ycashd's template either; `submitblock` finds the candidate by
+    /// its bytes, so a Ycash build does not send it.
     #[serde(rename = "workid")]
+    #[cfg_attr(feature = "ycash", serde(skip_serializing, default))]
     #[getset(get = "pub")]
     pub(crate) work_id: String,
 
@@ -456,6 +471,24 @@ pub struct BlockTemplateResponse {
     #[serde(rename = "submitold")]
     #[getset(get_copy = "pub")]
     pub(crate) submit_old: Option<bool>,
+
+    /// Ycash (W8-b): the coinbase flags (the Yellowback tag), sent while Yellowback is live
+    /// (`ycash6 src/rpc/mining.cpp:830-832`).
+    #[cfg(feature = "ycash")]
+    #[serde(
+        rename = "coinbaseaux",
+        skip_serializing_if = "Option::is_none",
+        default
+    )]
+    #[new(default)]
+    pub(crate) coinbase_aux: Option<ycash::CoinbaseAux>,
+
+    /// Ycash (W8-b): the template's Yellowback tag and miner status, sent while Yellowback is
+    /// live (`ycash6 src/rpc/mining.cpp:847`).
+    #[cfg(feature = "ycash")]
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    #[new(default)]
+    pub(crate) yellowback: Option<ycash::YellowbackTemplateInfo>,
 }
 
 impl fmt::Debug for BlockTemplateResponse {
@@ -561,6 +594,18 @@ impl BlockTemplateResponse {
                 .unzip()
         };
 
+        // Ycash: `depends` as ycashd reports it (template policy).
+        #[cfg(feature = "ycash")]
+        let mempool_tx_templates = {
+            let mut templates = mempool_tx_templates;
+            let txs: Vec<_> = mempool_txs
+                .iter()
+                .map(|tx| tx.transaction.transaction().as_ref())
+                .collect();
+            ycash::fill_depends(&mut templates, &txs);
+            templates
+        };
+
         let txs_fee = mempool_txs
             .iter()
             .map(|tx| tx.miner_fee)
@@ -586,6 +631,17 @@ impl BlockTemplateResponse {
             )?,
         };
 
+        // Ycash (W8-b): the coinbase fields while Yellowback is live, read back from the coinbase.
+        #[cfg(feature = "ycash")]
+        let ycash_fields = miner_params.yellowback().map(|miner| {
+            ycash::template_fields(
+                net,
+                height,
+                &ycash::coinbase_script_sig(&coinbase_txn).unwrap_or_default(),
+                miner,
+            )
+        });
+
         let default_roots = DefaultRoots::from_coinbase(
             net,
             height,
@@ -594,15 +650,27 @@ impl BlockTemplateResponse {
             &mempool_txs,
         );
 
+        let expected_difficulty = chain_info.expected_difficulty;
+        // Ycash (W1-Y6): ycashd's regtest never adjusts the difficulty.
+        #[cfg(feature = "ycash")]
+        let expected_difficulty = super::ycash::expected_difficulty(net, expected_difficulty);
+
         // Convert difficulty
-        let target = chain_info
-            .expected_difficulty
+        let target = expected_difficulty
             .to_expanded()
             .expect("state always returns a valid difficulty value");
 
         // Convert default values
         let capabilities: Vec<String> = Self::all_capabilities();
         let mutable: Vec<String> = MUTABLE_FIELD.iter().map(ToString::to_string).collect();
+        #[cfg(feature = "ycash")]
+        let mutable = {
+            let mut mutable = mutable;
+            if ycash_fields.is_some() {
+                mutable.push(ycash::MUTABLE_COINBASE_APPEND.to_string());
+            }
+            mutable
+        };
 
         tracing::debug!(
             selected_txs = ?mempool_txs
@@ -643,7 +711,7 @@ impl BlockTemplateResponse {
 
             cur_time: chain_info.cur_time,
 
-            bits: chain_info.expected_difficulty,
+            bits: expected_difficulty,
 
             height: height.0,
 
@@ -652,6 +720,12 @@ impl BlockTemplateResponse {
             work_id: new_work_id(),
 
             submit_old,
+
+            #[cfg(feature = "ycash")]
+            coinbase_aux: ycash_fields.as_ref().map(|(aux, _)| aux.clone()),
+
+            #[cfg(feature = "ycash")]
+            yellowback: ycash_fields.map(|(_, info)| info),
         })
     }
 }
@@ -696,6 +770,16 @@ pub struct MinerParams {
     ///
     /// Applies only if [`Self::addr`] contains a shielded component.
     memo: Option<MemoBytes>,
+
+    /// Ycash (W8-b): the miner's Yellowback state for this template, `None` while Yellowback is
+    /// not live. Its tag is appended to the coinbase input script.
+    #[cfg(feature = "ycash")]
+    yellowback: Option<ycash::YellowbackMiner>,
+
+    /// Ycash: the most unpaid ZIP-317 actions a template carries (`mining.block_unpaid_action_limit`,
+    /// ycashd `-blockunpaidactionlimit`); no limit by default.
+    #[cfg(feature = "ycash")]
+    block_unpaid_action_limit: u32,
 }
 
 /// Builds the coinbase input data for a block Zakura constructs.
@@ -731,13 +815,30 @@ impl MinerParams {
             push_value(&coinbase_data(user_data.as_bytes()))
                 .expect("coinbase data fits in a push: extra_coinbase_data is length-validated"),
         );
+        // Ycash (S5): template policy, not consensus. Without `extra_coinbase_data` the coinbase
+        // input script is ycashd's `<height> OP_0 <COINBASE_FLAGS>` (`src/miner.cpp`), so a stratum
+        // pool that leaves the script untouched mines the same bytes as on ycashd.
+        #[cfg(feature = "ycash")]
+        let data = if user_data.is_empty() {
+            push_value(&[])
+        } else {
+            data
+        };
 
         let memo = conf
             .miner_memo
             .map(|memo| MemoBytes::from_bytes(memo.as_bytes()))
             .transpose()?;
 
-        Ok(Self { addr, data, memo })
+        Ok(Self {
+            addr,
+            data,
+            memo,
+            #[cfg(feature = "ycash")]
+            yellowback: None,
+            #[cfg(feature = "ycash")]
+            block_unpaid_action_limit: conf.block_unpaid_action_limit.unwrap_or(u32::MAX),
+        })
     }
 
     /// Returns the miner address.
@@ -753,6 +854,32 @@ impl MinerParams {
     /// Returns the miner memo.
     pub fn memo(&self) -> Option<&MemoBytes> {
         self.memo.as_ref()
+    }
+
+    /// Ycash (W8-b): the miner's Yellowback state, `None` while Yellowback is not live.
+    #[cfg(feature = "ycash")]
+    pub fn yellowback(&self) -> Option<&ycash::YellowbackMiner> {
+        self.yellowback.as_ref()
+    }
+
+    /// Ycash (W8-b): these parameters with the miner's Yellowback state for one template.
+    #[cfg(feature = "ycash")]
+    pub fn with_yellowback(mut self, yellowback: Option<ycash::YellowbackMiner>) -> Self {
+        self.yellowback = yellowback;
+        self
+    }
+
+    /// Ycash: the most unpaid ZIP-317 actions a template carries.
+    #[cfg(feature = "ycash")]
+    pub fn block_unpaid_action_limit(&self) -> u32 {
+        self.block_unpaid_action_limit
+    }
+
+    /// Ycash: these parameters with another template unpaid-action limit.
+    #[cfg(feature = "ycash")]
+    pub fn with_block_unpaid_action_limit(mut self, limit: u32) -> Self {
+        self.block_unpaid_action_limit = limit;
+        self
     }
 
     /// Randomizes the memo.
@@ -776,6 +903,10 @@ impl From<MinerAddress> for MinerParams {
             addr,
             data: None,
             memo: None,
+            #[cfg(feature = "ycash")]
+            yellowback: None,
+            #[cfg(feature = "ycash")]
+            block_unpaid_action_limit: u32::MAX,
         }
     }
 }
@@ -814,6 +945,7 @@ where
     prepared_candidates: PreparedCandidateResolver,
 
     /// The chain sync status, used for checking if Zebra is likely close to the network chain tip.
+    #[allow(dead_code)]
     sync_status: SyncStatus,
 
     /// A channel to send successful block submissions to the block gossip task,
@@ -921,6 +1053,7 @@ where
     }
 
     /// Returns the sync status.
+    #[allow(dead_code)]
     pub fn sync_status(&self) -> SyncStatus {
         self.sync_status.clone()
     }
@@ -1029,13 +1162,13 @@ pub fn check_parameters(parameters: &Option<GetBlockTemplateParameters>) -> RpcR
 }
 
 /// Validates a proposal, registering its work ID only after successful verification.
-pub(crate) async fn validate_block_proposal<BlockVerifierRouter, Tip, SyncStatus>(
+pub(crate) async fn validate_block_proposal<BlockVerifierRouter, Tip>(
     mut block_verifier_router: BlockVerifierRouter,
     block_proposal_bytes: Vec<u8>,
     net: &Network,
     latest_chain_tip: Tip,
-    sync_status: SyncStatus,
-    prepared_work: Option<(PreparedCandidateResolver, &str)>,
+    prepared_candidates: PreparedCandidateResolver,
+    work_id: Option<&str>,
 ) -> RpcResult<GetBlockTemplateResponse>
 where
     BlockVerifierRouter: Service<
@@ -1047,9 +1180,8 @@ where
         + Sync
         + 'static,
     Tip: ChainTip + Clone + Send + Sync + 'static,
-    SyncStatus: ChainSyncStatus + Clone + Send + Sync + 'static,
 {
-    check_synced_to_tip(net, latest_chain_tip, sync_status)?;
+    check_synced_to_tip(net, latest_chain_tip)?;
 
     let block: Block = match block_proposal_bytes.zcash_deserialize_into() {
         Ok(block) => block,
@@ -1079,13 +1211,18 @@ where
         .await;
 
     if block_verifier_router_response.is_ok() {
-        if let Some((prepared_candidates, work_id)) = prepared_work {
-            prepared_candidates.insert(
+        // Keep the proposal so that submitting it solved, by work ID or in full, reuses it.
+        match work_id {
+            Some(work_id) => prepared_candidates.insert(
                 block,
                 work_id,
                 zakura_consensus::PreparedCandidateSource::ClientProposal,
                 net,
-            );
+            ),
+            None => prepared_candidates.retain(
+                block,
+                zakura_consensus::PreparedCandidateSource::ClientProposal,
+            ),
         }
     }
 
@@ -1104,33 +1241,27 @@ where
 
 // - State and syncer checks
 
-/// Returns an error if Zebra is not synced to the consensus chain tip.
-/// Returns early with `Ok(())` if Proof-of-Work is disabled on the provided `network`.
+/// Returns an error if the local best tip's block time is more than
+/// [`MAX_TIME_SINCE_CHAIN_TIP`] older than the local clock.
+///
+/// Returns early with `Ok(())` on test networks.
 /// This error might be incorrect if the local clock is skewed.
-pub fn check_synced_to_tip<Tip, SyncStatus>(
-    network: &Network,
-    latest_chain_tip: Tip,
-    sync_status: SyncStatus,
-) -> RpcResult<()>
+pub fn check_synced_to_tip<Tip>(network: &Network, latest_chain_tip: Tip) -> RpcResult<()>
 where
     Tip: ChainTip + Clone + Send + Sync + 'static,
-    SyncStatus: ChainSyncStatus + Clone + Send + Sync + 'static,
 {
     if network.is_a_test_network() {
         return Ok(());
     }
 
-    // The tip estimate may not be the same as the one coming from the state
-    // but this is ok for an estimate
-    let (estimated_distance_to_chain_tip, local_tip_height) = latest_chain_tip
-        .estimate_distance_to_network_chain_tip(network)
+    let (local_tip_height, local_tip_time) = latest_chain_tip
+        .best_tip_height_and_block_time()
         .ok_or_misc_error("no chain tip available yet")?;
+    let time_since_tip = chrono::Utc::now() - local_tip_time;
 
-    if !sync_status.is_close_to_tip()
-        || estimated_distance_to_chain_tip > MAX_ESTIMATED_DISTANCE_TO_NETWORK_CHAIN_TIP
-    {
+    if time_since_tip > MAX_TIME_SINCE_CHAIN_TIP {
         tracing::info!(
-            ?estimated_distance_to_chain_tip,
+            ?time_since_tip,
             ?local_tip_height,
             "Zakura has not synced to the chain tip. \
              Hint: check your network connection, clock, and time zone settings."
@@ -1140,7 +1271,7 @@ where
             NOT_SYNCED_ERROR_CODE,
             format!(
                 "Zakura has not synced to the chain tip, \
-                 estimated distance: {estimated_distance_to_chain_tip:?}, \
+                 time since local tip: {time_since_tip}, \
                  local tip: {local_tip_height:?}. \
                  Hint: check your network connection, clock, and time zone settings."
             ),
@@ -1177,6 +1308,10 @@ where
         zakura_state::ReadResponse::ChainInfo(chain_info) => chain_info,
         _ => unreachable!("incorrect response to {request:?}"),
     };
+
+    // Ycash (W7-e): ycashd's `curtime` reads the mock clock `setmocktime` sets.
+    #[cfg(feature = "ycash")]
+    let chain_info = super::ycash_reject::with_mock_cur_time(chain_info);
 
     Ok(chain_info)
 }
@@ -1216,4 +1351,10 @@ where
 
     // Check that the mempool and state were in sync when we made the requests
     Ok((last_seen_tip_hash == chain_tip_hash).then_some((transactions, transaction_dependencies)))
+}
+
+/// The `maxtime` a Ycash template read back from JSON carries: ycashd sends none (S5 parity).
+#[cfg(feature = "ycash")]
+fn ycash_absent_max_time() -> DateTime32 {
+    DateTime32::MAX
 }

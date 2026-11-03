@@ -1,0 +1,13 @@
+# gitleaks configuration (the `gitleaks` job of .github/workflows/secops.yml; .github/README-kogany.md).
+# The default rule set, plus one path allowlist. Individual accepted findings live in
+# .gitleaksignore, each under a reason.
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Cross-line golden vectors pinned byte for byte from ycash6 (testdata/yellowback/, SHA-256 in its PIN): fixed regtest/test keys, signatures and hashes; never keys of a live network."
+paths = ['''^testdata/yellowback/[^/]+\.json$''']
+
+[[allowlists]]
+description = "Vault script fuzz verdicts (qa/fuzz/vault/verdicts/*.tsv): hex scripts and their verdicts, generated fuzz vectors; no secrets."
+paths = ['''^qa/fuzz/vault/verdicts/[^/]+\.tsv$''']

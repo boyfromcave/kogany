@@ -1,0 +1,172 @@
+# Copyright (c) 2026 The Ycash developers
+# Distributed under the MIT software license, see the accompanying
+# file COPYING or https://www.opensource.org/licenses/mit-license.php .
+#
+name: kogany-audit
+
+# kogany's audit legs (plan docs/plans/kogany/kogany-yellowback-plan.md §5; .github/README-kogany.md).
+# One job per leg and no `needs:` between them: a failed leg is re-run alone ("Re-run failed jobs"),
+# and no leg's failure skips another. The logic is in qa/ (stdlib Python, tested by `selftest`).
+#
+#   selftest        qa/test_kogany_*.py                                          blocking
+#   leg (matrix)    consensus-diff (a)  report-only: the consensus path set vs kogany-baseline
+#                   frozen (b)          report-only: qa/kogany-frozen-files.txt vs the upstream pin
+#                   greps (e)           blocking: naming (rule 6) and attribution (rule 8), in
+#                                       kogany's commits only (not upstream's, merged by a sync)
+#                   dormancy            blocking: no upstream test function (at the pin) deleted
+#                   (the upstream pin: the commit qa/UPSTREAM_PIN names, see qa/kogany_audit.py)
+#                   workflows           blocking: every workflow classified, `off` ones in
+#                                       .github/workflows-off/, every trigger within the policy
+#   cross-line (c)  the pinned vectors equal ycash6's at YCASH6_REV              blocking
+#   vault-params (d) kogany's Vault parameters (the Rust extractor) equal ycash6's  blocking
+#
+# Each leg's report is its own artifact (kogany-audit-<leg>) and the step summary.
+on:
+  push:
+    branches: [upgrade/vault, "vaults/**"]
+  pull_request:
+    branches: [upgrade/vault, "vaults/**", "kc/**"]
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  CARGO_INCREMENTAL: '0'
+  # The ycash6 commit the pinned vectors and the parameter comparison come from: the commit
+  # testdata/yellowback/PIN names (the `cross-line` job checks they agree). A PIN bump moves both.
+  YCASH6_REPO: boyfromcave/ycash6
+  YCASH6_REV: 65cb4ae0ff19094d9185b00c264c7dc8c1610f63
+
+jobs:
+  selftest:
+    name: audit self-test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - name: qa/test_kogany_*.py
+        run: python3 -m unittest discover -s qa -p 'test_kogany_*.py' -v
+
+  leg:
+    name: audit ${{ matrix.leg }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        leg: [consensus-diff, frozen, greps, dormancy, workflows]
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0  # the legs diff against the upstream pin / kogany-baseline and read the commit log
+          persist-credentials: false
+      - name: Fetch the baselines
+        # kogany-legacy is a branch and kogany-baseline a tag; a pull_request checkout has neither
+        # as a local ref, so name them explicitly.
+        run: |
+          git fetch --no-tags origin '+refs/heads/kogany-legacy:refs/remotes/origin/kogany-legacy'
+          git fetch --no-tags origin '+refs/tags/kogany-baseline:refs/tags/kogany-baseline' || echo "no kogany-baseline tag: consensus-diff uses the upstream pin"
+      - name: Fetch the upstream pin
+        # The legs' default upstream is the commit qa/UPSTREAM_PIN names: the upstream Zakura commit
+        # this tree is synced to, not upstream's moving main (which runs ahead of the sync and would
+        # count tests upstream added or deleted since). A synced tree already holds it (the sync
+        # merged it); fetch it from zakura-core/zakura otherwise.
+        run: |
+          pin=$(sed -e 's/#.*//' -e '/^[[:space:]]*$/d' qa/UPSTREAM_PIN)
+          if git cat-file -e "${pin}^{commit}" 2>/dev/null; then
+            echo "upstream pin $pin is in the checkout"
+          else
+            git fetch --no-tags https://github.com/zakura-core/zakura.git "$pin"
+          fi
+      - name: audit ${{ matrix.leg }}
+        env:
+          LEG: ${{ matrix.leg }}
+        run: python3 qa/kogany_audit.py --out kogany-audit-out "$LEG"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: ${{ !cancelled() }}
+        with:
+          name: kogany-audit-${{ matrix.leg }}
+          path: kogany-audit-out
+          retention-days: 30
+          if-no-files-found: ignore
+
+  cross-line:
+    name: audit cross-line (c)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          repository: ${{ env.YCASH6_REPO }}
+          ref: ${{ env.YCASH6_REV }}
+          path: ycash6
+          persist-credentials: false
+          sparse-checkout: src/test/data
+      - name: PIN names YCASH6_REV
+        run: |
+          pinned=$(sed -n 's/^# Source: boyfromcave\/ycash6 @ \([0-9a-f]*\).*/\1/p' testdata/yellowback/PIN)
+          case "$YCASH6_REV" in
+            "$pinned"*) [ -n "$pinned" ] && echo "PIN names ycash6 $pinned = $YCASH6_REV" ;;
+            *) echo "::error::testdata/yellowback/PIN names ycash6 '$pinned', this workflow YCASH6_REV $YCASH6_REV: bump them together"; exit 1 ;;
+          esac
+      - name: qa/yellowback-cross-line.py --this-line kogany
+        run: python3 qa/yellowback-cross-line.py --this-line kogany --other-dir ycash6 --other-rev "$YCASH6_REV"
+
+  vault-params:
+    name: audit vault-params (d)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          repository: ${{ env.YCASH6_REPO }}
+          ref: ${{ env.YCASH6_REV }}
+          path: ycash6
+          persist-credentials: false
+          sparse-checkout: |
+            qa
+            src/chainparams.cpp
+            src/consensus/params.h
+            src/version.h
+            src/yellowback/params.cpp
+          sparse-checkout-cone-mode: false
+      - uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f #v2.0.0 # zizmor: ignore[cache-poisoning] -- builds one example that prints constants; nothing published or released
+        with:
+          toolchain: stable
+          cache-key: kogany-audit-vault-params
+          cache-on-failure: true
+          cache-save-if: ${{ github.ref == 'refs/heads/upgrade/vault' || startsWith(github.ref, 'refs/heads/vaults/') }}
+      - uses: ./.github/actions/setup-zakura-build
+      - name: kogany's parameters (the Rust extractor)
+        run: cargo run --locked -q -p zakura-chain --features ycash --example kogany_vault_params > kogany-vault-params.json
+      - name: ycash6's parameters (its extractor, at YCASH6_REV)
+        run: python3 ycash6/qa/yellowback-vault-params.py extract --root ycash6 > ycash6-vault-params.json
+      - name: compare
+        run: python3 qa/kogany_vault_params.py compare kogany-vault-params.json ycash6-vault-params.json | tee -a "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: ${{ !cancelled() }}
+        with:
+          name: kogany-audit-vault-params
+          path: '*-vault-params.json'
+          retention-days: 30
+          if-no-files-found: ignore

@@ -32,7 +32,14 @@ mod tests;
 use ZakuradCmd::*;
 
 /// Zakura configuration filename.
+#[cfg(not(feature = "ycash"))]
 pub const CONFIG_FILE: &str = "zakura.toml";
+
+/// kogany's configuration filename, `kogany.toml`: a kogany node never reads a Zcash `zakurad`'s
+/// `zakura.toml` from the same preference directory
+/// (`zakura_chain::parameters::ycash::dirs::CONFIG_FILE`).
+#[cfg(feature = "ycash")]
+pub const CONFIG_FILE: &str = zakura_chain::parameters::ycash::dirs::CONFIG_FILE;
 
 /// Legacy Zebra configuration filename.
 const LEGACY_CONFIG_FILE: &str = "zebrad.toml";
@@ -47,6 +54,10 @@ pub enum ZakuradCmd {
     VerifyHistoricalTreestates(VerifyHistoricalTreestatesCmd),
 
     /// Generate a default `zakura.toml` configuration
+    #[cfg_attr(
+        feature = "ycash",
+        command(about = "Generate a default `kogany.toml` configuration (Ycash mainnet)")
+    )]
     Generate(GenerateCmd),
 
     /// Prune Zebra's finalized raw transaction data on disk
@@ -158,6 +169,9 @@ impl ZakuradCmd {
     ///
     /// Prefers `zakura.toml`, and falls back to a legacy `zebrad.toml` with a
     /// deprecation warning.
+    ///
+    /// kogany: only `kogany.toml` in a `ycash` build ([`CONFIG_FILE`]).
+    #[cfg_attr(feature = "ycash", allow(unreachable_code))]
     pub(crate) fn config_path(&self) -> Option<PathBuf> {
         let if_exists = |f: PathBuf| if f.exists() { Some(f) } else { None };
 
@@ -166,6 +180,11 @@ impl ZakuradCmd {
             if let Some(config_path) = if_exists(config_path) {
                 return Some(config_path);
             }
+
+            // kogany: no fallback. A `zebrad.toml` in the preference directory is a Zcash
+            // node's configuration, never a Ycash one.
+            #[cfg(feature = "ycash")]
+            return None;
 
             let legacy_config_path = path.join(LEGACY_CONFIG_FILE);
             if let Some(legacy_config_path) = if_exists(legacy_config_path) {

@@ -3,6 +3,8 @@
 //!
 //! The expected values restate the specification formulas with literals, independently of
 //! the production constants.
+// kogany: the Zcash-fixture tests are not built with `ycash`, leaving their helpers unused.
+#![cfg_attr(feature = "ycash", allow(unused_imports, dead_code))]
 
 use std::collections::HashMap;
 
@@ -118,6 +120,9 @@ fn rounding_loss_over_every_block_until_the_third_halving(nu7_heights: &[u32]) {
 /// One group of three NU7 blocks, and a thousand groups, before the old third halving, on
 /// every pull request.
 #[test]
+// kogany: Zcash funding streams, lockbox, NU6.3/NU7 and ZIP 218/234 schedules (a Ycash network
+// rejects NU5 with Vault); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn nu7_rounding_loss_over_every_block_until_the_third_halving() {
     rounding_loss_over_every_block_until_the_third_halving(&[
         TESTNET_THIRD_HALVING - 3,
@@ -139,6 +144,9 @@ fn nu7_rounding_loss_over_every_block_from_the_planned_heights() {
 /// block, where `V` is the 75-second subsidy of that era. The loop runs until the subsidy
 /// is zero.
 #[test]
+// kogany: Zcash funding streams, lockbox, NU6.3/NU7 and ZIP 218/234 schedules (a Ycash network
+// rejects NU5 with Vault); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn nu7_subsidy_rounding_in_every_halving_era() {
     let _init_guard = zakura_test::init();
 
@@ -201,6 +209,9 @@ fn nu7_subsidy_rounding_in_every_halving_era() {
 /// Public networks reach reissuance only after the ZIP 218 third halving, where the
 /// streams have ended, so this uses a Regtest lockbox stream that overlaps reissuance.
 #[test]
+// kogany: Zcash funding streams, lockbox, NU6.3/NU7 and ZIP 218/234 schedules (a Ycash network
+// rejects NU5 with Vault); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn funding_streams_round_once_over_the_reissuance_bonus() {
     let _init_guard = zakura_test::init();
 

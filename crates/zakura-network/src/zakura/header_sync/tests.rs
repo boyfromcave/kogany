@@ -1,3 +1,5 @@
+// kogany: the Zcash-fixture tests are not built with `ycash`, leaving their helpers unused.
+#![cfg_attr(feature = "ycash", allow(unused_imports, dead_code))]
 use zakura_chain::{
     block::merkle::AuthDataRoot,
     ironwood, orchard,
@@ -130,6 +132,9 @@ fn empty_aux(height: block::Height) -> TreeAuxRecordV1 {
 }
 
 #[test]
+// kogany: Zcash upgrade schedules (NU5 to NU7, NU6.3 protocol versions; a Ycash network rejects NU5
+// with Vault); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn tree_aux_records_need_their_header_height_and_activation_defaults() {
     let height = block::Height(7);
     assert!(matches!(

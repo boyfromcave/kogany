@@ -8,6 +8,11 @@
 //! bundles also appear in v4 transactions, which have no witnessed ID. These tests pin both
 //! forms: that a v4 transaction's legacy ID covers its Sapling proofs and signatures, and that a
 //! v5 transaction's authorizing-data digest does, since its txid does not.
+//!
+//! The service regressions also cover offloaded preparation, explicit flushing,
+//! fallback isolation and response cancellation over real Mainnet bundles.
+// kogany: the Zcash-fixture tests are not built with `ycash`, leaving their helpers unused.
+#![cfg_attr(feature = "ycash", allow(unused_imports, dead_code))]
 
 use std::{
     future,
@@ -34,6 +39,275 @@ use crate::BoxError;
 
 use super::{verifying_keys, Authorized, Bundle, CacheKey, Cached, CachedItem, Item, ZatBalance};
 
+/// Enough time for real verification, without depending on the batch timer.
+const VERIFICATION_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
+
+/// Verifies uncached items with an explicit flush and counts fallback calls.
+///
+/// The one-hour batch timer cannot complete a partial batch within the test
+/// timeout. This exercises the same queued flush used at block boundaries.
+async fn explicitly_flushed_batch(items: Vec<Item>) -> (Vec<Result<(), BoxError>>, usize) {
+    use futures::future::join_all;
+
+    use super::{Batch, Fallback, Verifier};
+
+    let primary = Batch::new(
+        Verifier::default(),
+        super::super::MAX_BATCH_SIZE,
+        None,
+        std::time::Duration::from_secs(60 * 60),
+    );
+    let calls = Arc::new(AtomicUsize::new(0));
+    let fallback_calls = calls.clone();
+    let mut verifier = Fallback::new(
+        primary.clone(),
+        tower::service_fn(move |item| {
+            fallback_calls.fetch_add(1, Ordering::SeqCst);
+            super::verify_single(item)
+        }),
+    );
+
+    let results = tokio::time::timeout(VERIFICATION_TIMEOUT, async move {
+        let mut pending = Vec::new();
+        for item in items {
+            pending.push(
+                verifier
+                    .ready()
+                    .await
+                    .expect("the batch worker is running")
+                    .call(item),
+            );
+        }
+        let flush = async move {
+            while !primary.clone().try_flush().expect("the worker is running") {
+                tokio::task::yield_now().await;
+            }
+        };
+        let (results, ()) = futures::join!(join_all(pending), flush);
+        results
+    })
+    .await
+    .expect("an explicit flush completes without the one-hour batch timer");
+
+    (results, calls.load(Ordering::SeqCst))
+}
+
+/// Real fixtures verify across partial and automatically full batches.
+#[tokio::test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
+async fn explicit_flush_verifies_partial_and_multiple_sapling_batches() {
+    let _guard = zakura_test::init();
+    let source: Vec<_> = mined_sapling_transactions()
+        .iter()
+        .map(|(nu, tx)| item(tx, *nu).expect("the fixture has a Sapling bundle"))
+        .collect();
+
+    for count in [1, super::super::MAX_BATCH_SIZE * 2] {
+        let items = source.iter().cycle().take(count).cloned().collect();
+        let (results, fallbacks) = explicitly_flushed_batch(items).await;
+        assert!(results.iter().all(Result::is_ok));
+        assert_eq!(fallbacks, 0, "valid batches need no individual retries");
+    }
+}
+
+/// Failed preparation must not force valid neighbors into single-item retries.
+#[tokio::test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
+async fn malformed_sapling_bundle_does_not_retry_valid_neighbors() {
+    let _guard = zakura_test::init();
+    let (nu, tx) = mined_v4_sapling_transaction_with_spends();
+    let valid = item(&tx, nu).expect("the fixture has a Sapling bundle");
+    let malformed = mutated_spend(&tx, |spend| spend.zkproof.0.fill(u8::MAX));
+    let malformed = item(&malformed, nu).expect("proof decoding occurs during preparation");
+
+    for index in [0, 3] {
+        let mut items = vec![valid.clone(); 4];
+        items[index] = malformed.clone();
+        let (results, fallbacks) = explicitly_flushed_batch(items).await;
+        for (position, result) in results.into_iter().enumerate() {
+            assert_eq!(result.is_err(), position == index);
+        }
+        assert_eq!(fallbacks, 1, "only the malformed item is retried");
+    }
+}
+
+/// Cryptographic failures trigger retries and preserve good items.
+#[tokio::test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
+async fn invalid_sapling_signature_retries_batch_and_rejects_only_bad_item() {
+    let _guard = zakura_test::init();
+    let (nu, tx) = mined_v4_sapling_transaction_with_spends();
+    let valid = item(&tx, nu).expect("the fixture has a Sapling bundle");
+    let mut bad = valid.clone();
+    bad.sighash.0[0] ^= 1;
+    let (results, fallbacks) = explicitly_flushed_batch(vec![valid.clone(), bad, valid]).await;
+    assert_eq!(fallbacks, results.len());
+    for (index, result) in results.into_iter().enumerate() {
+        assert_eq!(result.is_err(), index == 1);
+    }
+}
+
+/// Dropped response futures preserve the remaining items' admission indices.
+#[tokio::test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
+async fn dropping_sapling_response_preserves_other_batch_results() {
+    use super::{BatchControl, Verifier};
+
+    let _guard = zakura_test::init();
+    let (nu, tx) = mined_v4_sapling_transaction_with_spends();
+    let valid = item(&tx, nu).expect("the fixture has a Sapling bundle");
+    let mut verifier = Verifier::default();
+    let first = verifier.call(BatchControl::Item(valid.clone()));
+    let cancelled = verifier.call(BatchControl::Item(valid.clone()));
+    let last = verifier.call(BatchControl::Item(valid));
+    drop(cancelled);
+    let flush = verifier.call(BatchControl::Flush);
+    tokio::time::timeout(VERIFICATION_TIMEOUT, async {
+        let (first, last, flush) = futures::join!(first, last, flush);
+        first.expect("the first item is valid");
+        last.expect("the last item is valid despite its dropped neighbor");
+        flush.expect("the batch finishes");
+    })
+    .await
+    .expect("flushing completes within the timeout");
+}
+
+/// The last batch completes if its verifier is dropped before an explicit flush.
+#[tokio::test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
+async fn dropping_sapling_verifier_flushes_unprepared_items() {
+    use super::{BatchControl, Verifier};
+
+    let _guard = zakura_test::init();
+    let (nu, tx) = mined_v4_sapling_transaction_with_spends();
+    let valid = item(&tx, nu).expect("the fixture has a Sapling bundle");
+    let malformed = mutated_spend(&tx, |spend| spend.zkproof.0.fill(u8::MAX));
+    let malformed = item(&malformed, nu).expect("proof decoding occurs during preparation");
+    let mut verifier = Verifier::default();
+    let good_response = verifier.call(BatchControl::Item(valid));
+    let bad_response = verifier.call(BatchControl::Item(malformed));
+    drop(verifier);
+    tokio::time::timeout(VERIFICATION_TIMEOUT, async {
+        let (good, bad) = futures::join!(good_response, bad_response);
+        good.expect("dropping the verifier still validates its pending batch");
+        assert!(
+            bad.is_err(),
+            "failed preparation still rejects its own item"
+        );
+    })
+    .await
+    .expect("drop-flushing completes within the timeout");
+}
+
+/// Early rejection waits for the configured CPU worker rather than preparing the
+/// bundle while polling its async response.
+#[tokio::test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
+async fn sapling_fallback_preparation_waits_for_the_rayon_worker() {
+    let _guard = zakura_test::init();
+    let (nu, tx) = mined_v4_sapling_transaction_with_spends();
+    let malformed = mutated_spend(&tx, |spend| spend.zkproof.0.fill(u8::MAX));
+    let malformed = item(&malformed, nu).expect("proof decoding occurs during preparation");
+    let pool = rayon::ThreadPoolBuilder::new()
+        .num_threads(1)
+        .build()
+        .expect("a one-worker test pool can be created");
+    let mut response = super::verify_single(malformed);
+
+    // This closure occupies the only worker. Preparation queued by the first
+    // poll cannot run until the closure returns, even for a malformed proof.
+    pool.install(|| {
+        let mut cx = Context::from_waker(futures::task::noop_waker_ref());
+        assert!(
+            response.as_mut().poll(&mut cx).is_pending(),
+            "fallback preparation must wait for the configured Rayon worker"
+        );
+    });
+
+    tokio::time::timeout(VERIFICATION_TIMEOUT, response)
+        .await
+        .expect("the fallback completes once its worker is free")
+        .expect_err("the malformed proof is rejected on the CPU worker");
+}
+
+/// A panic in a fallback CPU job must become an error and leave the pool usable.
+#[tokio::test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
+async fn sapling_fallback_contains_worker_panics() {
+    let _guard = zakura_test::init();
+    let result = tokio::time::timeout(
+        VERIFICATION_TIMEOUT,
+        super::spawn_fallback(|| panic!("deliberate fallback verification panic")),
+    )
+    .await
+    .expect("the panic is reported without waiting for a channel timeout");
+    assert!(
+        result.is_err(),
+        "a panicking verifier never returns success"
+    );
+
+    let (nu, tx) = mined_v4_sapling_transaction_with_spends();
+    let valid = item(&tx, nu).expect("the fixture has a Sapling bundle");
+    tokio::time::timeout(VERIFICATION_TIMEOUT, super::verify_single(valid))
+        .await
+        .expect("the pool remains usable after catching a verification panic")
+        .expect("a valid bundle still verifies after the panicking job");
+}
+
+/// A manual, uncached service benchmark without exposing a benchmark-only API.
+///
+/// Run this test alone with `--ignored --exact --nocapture`, and set
+/// `RAYON_NUM_THREADS` to the desired CPU-worker budget. Items are cloned before
+/// timing. The first three iterations of each workload warm the service; the
+/// remaining twelve print CSV samples. Batch timers cannot finish the work.
+#[tokio::test]
+#[ignore = "manual Sapling service benchmark; run on an idle benchmark server"]
+#[allow(clippy::print_stdout, reason = "manual benchmark emits CSV samples")]
+async fn benchmark_uncached_sapling_service() {
+    let _guard = zakura_test::init();
+    let source: Vec<_> = mined_sapling_transactions()
+        .iter()
+        .map(|(nu, tx)| item(tx, *nu).expect("the fixture has a Sapling bundle"))
+        .collect();
+
+    for count in [
+        1,
+        super::super::MAX_BATCH_SIZE,
+        super::super::MAX_BATCH_SIZE * 6,
+    ] {
+        for iteration in 0..15 {
+            let items = source.iter().cycle().take(count).cloned().collect();
+            let start = std::time::Instant::now();
+            let (results, fallbacks) = explicitly_flushed_batch(items).await;
+            let elapsed = start.elapsed();
+            assert!(results.iter().all(Result::is_ok));
+            assert_eq!(fallbacks, 0);
+            if iteration >= 3 {
+                println!(
+                    "sapling_service_bench,workers={},bundles={count},sample={},wall_ns={}",
+                    rayon::current_num_threads(),
+                    iteration - 3,
+                    elapsed.as_nanos(),
+                );
+            }
+        }
+    }
+}
+
 /// The `verifier` label the test caches report their metrics under.
 ///
 /// Test caches use their own label so their counts never land in the series the production
@@ -46,6 +320,9 @@ fn sapling_verifying_keys_are_reused() {
 }
 
 #[tokio::test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn historical_sapling_coinbase_verifies_without_proving_parameters() {
     let _guard = zakura_test::init();
     let height = 949_496;
@@ -261,6 +538,9 @@ fn as_fake_v5(tx: &Transaction) -> Transaction {
 }
 
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn cache_key_is_deterministic() {
     let tx = sapling_transaction();
 
@@ -273,6 +553,9 @@ fn cache_key_is_deterministic() {
 
 /// Two different Sapling bundles get different keys.
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn cache_key_distinguishes_different_transactions() {
     let transactions = sapling_transactions();
 
@@ -299,6 +582,9 @@ fn cache_key_distinguishes_different_transactions() {
 /// It is not a function of the transaction alone: the amounts and scripts of the spent
 /// transparent outputs enter it, and those come from the verification context.
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn cache_key_commits_to_the_sighash() {
     let tx = sapling_transaction();
     let original = item(&tx, NetworkUpgrade::Nu5).expect("the transaction has a bundle");
@@ -320,6 +606,9 @@ fn cache_key_commits_to_the_sighash() {
 /// binding signature, and `value_balance` enters the binding verification key. A v1-v4
 /// transaction ID is the hash of the whole serialized transaction, so each of those is inside it.
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn v4_cache_key_changes_with_every_piece_of_authorizing_data() {
     let tx = sapling_transaction_with_spends();
     let original = cache_key(&tx, NetworkUpgrade::Nu5);
@@ -351,6 +640,9 @@ fn v4_cache_key_changes_with_every_piece_of_authorizing_data() {
 /// The [`WtxId`](zakura_chain::transaction::WtxId) in the key carries the authorizing-data digest
 /// as well, which is what makes it complete.
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn v5_cache_key_changes_with_authorizing_data_its_txid_ignores() {
     let v4 = sapling_transaction_with_spends();
     let v5 = as_fake_v5(&v4);
@@ -444,6 +736,9 @@ fn mutated_value_balance(tx: &Transaction) -> Transaction {
 /// automatic. It is pinned because the two bundles verify identically, which is exactly when a
 /// key that named the bundle instead of the transaction could collide.
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn cache_key_distinguishes_v4_and_v5_carrying_the_same_bundle() {
     let v4 = sapling_transactions()
         .into_iter()
@@ -508,6 +803,9 @@ impl Service<Item> for CountingVerifier {
 }
 
 #[tokio::test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn cache_skips_the_inner_service_for_an_already_verified_bundle() {
     let tx = sapling_transaction();
     let inner = CountingVerifier::new(true);
@@ -531,6 +829,9 @@ async fn cache_skips_the_inner_service_for_an_already_verified_bundle() {
 }
 
 #[tokio::test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn cache_does_not_reuse_a_result_across_bundles() {
     let transactions = sapling_transactions();
     let inner = CountingVerifier::new(true);
@@ -559,6 +860,9 @@ async fn cache_does_not_reuse_a_result_across_bundles() {
 /// gives the benchmarks: a workload replayed against a cleared cache measures verification, not
 /// hits.
 #[tokio::test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn clearing_the_cache_forces_reverification() {
     let tx = sapling_transaction();
     let inner = CountingVerifier::new(true);
@@ -597,6 +901,9 @@ async fn clearing_the_cache_forces_reverification() {
 /// and an error can report that the batch worker shut down rather than that a proof is invalid.
 /// Remembering either as "invalid" would make the node reject valid blocks.
 #[tokio::test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn cache_does_not_remember_failures() {
     let tx = sapling_transaction();
     let inner = CountingVerifier::new(false);
@@ -660,6 +967,9 @@ impl Service<Item> for UnreadyVerifier {
 /// and a `Batch` whose worker has exited would otherwise turn a remembered `Ok` into a
 /// verification failure.
 #[tokio::test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn cache_hit_survives_an_inner_service_that_never_becomes_ready() {
     let tx = sapling_transaction();
 
@@ -695,6 +1005,9 @@ async fn cache_hit_survives_an_inner_service_that_never_becomes_ready() {
 /// A Sapling cache miss still propagates an inner readiness failure, and does not record it as a
 /// success.
 #[tokio::test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn cache_miss_propagates_an_inner_readiness_failure() {
     let tx = sapling_transaction();
     let dead = UnreadyVerifier::new();
@@ -756,6 +1069,9 @@ fn uncached_verification_behind_a_fresh_cache() -> Cached<super::BatchFallbackSe
 /// signatures do not verify against another era's sighash, and the rejection proves the bundle
 /// was actually checked rather than answered from the cache.
 #[tokio::test(flavor = "multi_thread")]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn a_bundle_verified_under_one_upgrade_is_not_reused_under_another() {
     use crate::error::TransactionError;
 
@@ -817,6 +1133,9 @@ async fn a_bundle_verified_under_one_upgrade_is_not_reused_under_another() {
 /// The corruption keeps the proof well-formed, so it passes `check_bundle`'s synchronous checks
 /// and can only be caught by the batch validation the cache would have skipped.
 #[tokio::test(flavor = "multi_thread")]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn cached_verifier_still_rejects_a_corrupted_proof_after_verifying_a_valid_one() {
     use crate::error::TransactionError;
 
@@ -860,4 +1179,70 @@ async fn cached_verifier_still_rejects_a_corrupted_proof_after_verifying_a_valid
         matches!(*error, TransactionError::SaplingVerificationFailed),
         "expected SaplingVerificationFailed, got: {error:?}"
     );
+}
+
+/// Since Common's sapling-crypto keeps value commitments as bytes, a Sapling `cv` that is not a
+/// valid, non-small-order point converts through librustzcash, and the library verifier is what
+/// rejects it.
+///
+/// The transaction verifier rejects such a transaction earlier, in
+/// `check::sapling_point_encodings_are_valid` (see
+/// `sapling_spends_with_invalid_value_commitments_are_rejected_after_roundtrip`). This pins the
+/// second layer: if a bundle with an invalid `cv` reaches the Sapling verifier anyway,
+/// `check_bundle` fails closed before it batches any proof or signature.
+#[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, V5 transactions, Zcash
+// Mainnet heights, Equihash (200, 9)); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
+fn library_verifier_rejects_invalid_value_commitments_that_now_convert() {
+    let _init_guard = zakura_test::init();
+
+    let (nu, tx) = mined_sapling_transactions()
+        .into_iter()
+        .find(|(_, tx)| {
+            matches!(tx, Transaction::V4 { .. })
+                && tx.sapling_spends_per_anchor().next().is_some()
+                && tx.sapling_outputs().next().is_some()
+        })
+        .expect(
+            "mainnet test blocks must contain a V4 Sapling transaction with spends and outputs",
+        );
+
+    let check_bundle = |tx: &Transaction| {
+        let item = item(tx, nu).expect(
+            "librustzcash conversion keeps a Sapling cv as bytes, so even an invalid cv converts",
+        );
+        sapling_crypto::BatchValidator::new().check_bundle(item.bundle, item.sighash.into())
+    };
+
+    assert!(
+        check_bundle(&tx),
+        "the unmodified bundle must pass check_bundle, so a failure below is the cv's"
+    );
+
+    // The identity, (u, v) = (0, 1), which is on the curve but of small order, and bytes that
+    // decode to no point.
+    let mut identity = [0u8; 32];
+    identity[0] = 1;
+    let off_curve = [0xffu8; 32];
+
+    for (bad, kind) in [(identity, "small-order"), (off_curve, "off-curve")] {
+        let bad_cv = bad[..]
+            .zcash_deserialize_into::<zakura_chain::sapling::ValueCommitment>()
+            .expect("deserialization defers point validation, so it stores the bytes");
+
+        let spend_corrupted = mutated_spend(&tx, |spend| spend.cv = bad_cv);
+        assert!(!spend_corrupted.sapling_point_encodings_are_valid());
+        assert!(
+            !check_bundle(&spend_corrupted),
+            "check_bundle must reject a {kind} spend cv"
+        );
+
+        let output_corrupted = mutated_output(&tx, |output| output.cv = bad_cv);
+        assert!(!output_corrupted.sapling_point_encodings_are_valid());
+        assert!(
+            !check_bundle(&output_corrupted),
+            "check_bundle must reject a {kind} output cv"
+        );
+    }
 }

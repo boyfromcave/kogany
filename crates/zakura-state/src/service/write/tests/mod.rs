@@ -1,4 +1,6 @@
 //! Tests for the state write task.
+// kogany: the Zcash-fixture tests are not built with `ycash`, leaving their helpers unused.
+#![cfg_attr(feature = "ycash", allow(unused_imports, dead_code))]
 
 mod attachment_and_vct_aux;
 mod deferred;
@@ -276,4 +278,62 @@ fn expiring_a_block_write_attempt_preserves_its_newer_retry() {
         !receiver.borrow().is_rejected(&hash),
         "a late result cannot reinsert an evicted attempt"
     );
+}
+
+/// Duplicate spends and nullifiers are part of the transaction ID, so they stay the block's
+/// failure without a binding check when the body's authorizing data doesn't match its header.
+/// Other consensus failures become the commitment mismatch.
+#[test]
+fn txid_committed_spend_failures_survive_an_auth_data_mismatch() {
+    let mismatch = || {
+        crate::AuthDataCommitment::Mismatch(
+            block::CommitmentError::InvalidChainHistoryBlockTxAuthCommitment {
+                actual: [0x42; 32],
+                expected: [0x24; 32],
+            },
+        )
+    };
+    let orchard_nullifier = zakura_chain::orchard::Nullifier::try_from([0; 32])
+        .expect("zero is a canonical Orchard nullifier encoding");
+    for error in [
+        ValidateContextError::DuplicateTransparentSpend {
+            outpoint: transparent::OutPoint {
+                hash: zakura_chain::transaction::Hash([9; 32]),
+                index: 0,
+            },
+            location: "test",
+        },
+        ValidateContextError::DuplicateSproutNullifier {
+            nullifier: zakura_chain::sprout::Nullifier::from([0; 32]),
+            in_finalized_state: true,
+        },
+        ValidateContextError::DuplicateSaplingNullifier {
+            nullifier: zakura_chain::sapling::Nullifier::from([0; 32]),
+            in_finalized_state: true,
+        },
+        ValidateContextError::DuplicateOrchardNullifier {
+            nullifier: orchard_nullifier,
+            in_finalized_state: true,
+        },
+        ValidateContextError::DuplicateIronwoodNullifier {
+            nullifier: orchard_nullifier,
+            in_finalized_state: true,
+        },
+    ] {
+        assert_eq!(
+            attribute_contextual_failure(error.clone(), || panic!(
+                "a txid-committed failure needs no binding check"
+            )),
+            error
+        );
+    }
+
+    let missing_output = ValidateContextError::MissingTransparentOutput {
+        outpoint: transparent::OutPoint {
+            hash: zakura_chain::transaction::Hash([9; 32]),
+            index: 0,
+        },
+        location: "test",
+    };
+    assert!(attribute_contextual_failure(missing_output, mismatch).is_auth_commitment_mismatch());
 }

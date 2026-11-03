@@ -133,7 +133,15 @@ impl P2pStack {
     /// Mainnet defaults to [`P2pStack::Legacy`] until Zakura P2P v2 is proven there. Every other
     /// network defaults to [`P2pStack::Dual`], so Zakura P2P v2 gets exercised while legacy
     /// peers stay reachable.
+    ///
+    /// kogany: on Ycash every stack resolves to [`P2pStack::Legacy`]: the Zakura P2P v2 stack is
+    /// off (decision K-11, `crate::ycash::P2P_V2_REFUSED`), and a configuration that asks for it
+    /// is refused when it is read.
+    #[cfg_attr(feature = "ycash", allow(unreachable_code, unused_variables))]
     pub fn resolve(self, network: &Network) -> P2pStack {
+        #[cfg(feature = "ycash")]
+        return P2pStack::Legacy;
+
         match self {
             P2pStack::Default if matches!(network, Network::Mainnet) => P2pStack::Legacy,
             P2pStack::Default => P2pStack::Dual,
@@ -882,6 +890,7 @@ fn restrict_secret_key_file_permissions(_path: &Path) -> io::Result<()> {
 
 impl Default for Config {
     fn default() -> Config {
+        #[cfg(not(feature = "ycash"))]
         let mainnet_peers = [
             "dnsseed.str4d.xyz:8233",
             "dnsseed.z.cash:8233",
@@ -892,6 +901,7 @@ impl Default for Config {
         .map(|&s| String::from(s))
         .collect();
 
+        #[cfg(not(feature = "ycash"))]
         let testnet_peers = [
             "dnsseed.testnet.z.cash:18233",
             "testnet.seeder.zfnd.org:18233",
@@ -900,7 +910,17 @@ impl Default for Config {
         .map(|&s| String::from(s))
         .collect();
 
+        // kogany: ycashd's seeds and port (`crate::ycash`).
+        #[cfg(feature = "ycash")]
+        let (mainnet_peers, testnet_peers) = (
+            crate::ycash::default_initial_mainnet_peers(),
+            crate::ycash::default_initial_testnet_peers(),
+        );
+
         Config {
+            #[cfg(feature = "ycash")]
+            listen_addr: crate::ycash::default_listen_addr(),
+            #[cfg(not(feature = "ycash"))]
             listen_addr: "[::]:8233"
                 .parse()
                 .expect("Hardcoded address should be parseable"),
@@ -1160,7 +1180,20 @@ impl From<Arc<testnet::Parameters>> for DTestnetParameters {
             disable_pow: Some(params.disable_pow()),
             max_block_time_start_height: Some(params.max_block_time_start_height().0),
             genesis_hash: Some(params.genesis_hash().to_string()),
-            activation_heights: Some(params.activation_heights().into()),
+            activation_heights: Some({
+                let mut heights: ConfiguredActivationHeights = params.activation_heights().into();
+                // kogany: the Falcon height, written only where it differs from the network's
+                // default (none on Regtest, 0 on a Ycash testnet).
+                let default_falcon = if params.is_regtest() {
+                    None
+                } else {
+                    testnet::Parameters::default().pq_falcon_height()
+                };
+                if params.pq_falcon_height() != default_falcon {
+                    heights.pq_falcon = params.pq_falcon_height().map(|h| h.0);
+                }
+                heights
+            }),
             inherit_activation_heights: None,
             pre_nu6_funding_streams: None,
             post_nu6_funding_streams: None,
@@ -1286,6 +1319,11 @@ impl<'de> Deserialize<'de> for Config {
         } = DConfig::deserialize(deserializer)?;
 
         let p2p_stack = p2p_stack_from_config::<D>(p2p_stack, legacy_p2p, v2_p2p)?;
+        // kogany: a configured Zakura P2P v2 stack is refused on Ycash (decision K-11).
+        #[cfg(feature = "ycash")]
+        if matches!(p2p_stack, P2pStack::Zakura | P2pStack::Dual) {
+            return Err(de::Error::custom(crate::ycash::P2P_V2_REFUSED));
+        }
 
         let network = match (dnetwork, testnet_parameters) {
             (DNetwork::ConfiguredTestnet(params), None) => {

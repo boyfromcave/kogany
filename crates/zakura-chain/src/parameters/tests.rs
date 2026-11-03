@@ -228,6 +228,12 @@ fn branch_id_consistent(network: Network) {
     let network_upgrades: HashSet<&NetworkUpgrade> = branch_id_list.keys().collect();
 
     for &network_upgrade in network_upgrades {
+        // kogany: an unscheduled Ycash (a Zcash build) or Vault upgrade has only the fallback to
+        // the next upgrade's height, where that upgrade's branch ID is current.
+        if !network.is_kogany_upgrade_scheduled(network_upgrade) {
+            continue;
+        }
+
         let height = network_upgrade.activation_height(&network);
 
         // Skip network upgrades that don't have activation heights yet
@@ -264,9 +270,13 @@ const NETWORK_UPGRADES_IN_ORDER: &[NetworkUpgrade] = &[
     BeforeOverwinter,
     Overwinter,
     Sapling,
+    // kogany: the Ycash upgrade, between Sapling and Blossom (plan K-1).
+    Ycash,
     Blossom,
     Heartwood,
     Canopy,
+    // kogany: the Vault upgrade, between Canopy and NU5 (plan K-1).
+    Vault,
     Nu5,
     Nu6,
     Nu6_1,
@@ -285,11 +295,20 @@ fn network_upgrade_iter_matches_order_constant() {
 }
 
 #[test]
+// kogany: Zcash Mainnet/Testnet schedules (halvings, subsidies, activation list, value pools); not
+// run on Ycash, whose schedule tests are parameters/ycash/tests.rs.
+#[cfg(not(feature = "ycash"))]
 fn full_activation_list_contains_all_upgrades() {
     let network = Network::Mainnet;
     let full_list = network.full_activation_list();
 
     // ZIP 259 schedules every upgrade through NU7 on Mainnet, so the full
     // activation list and the iter cover the same upgrades.
-    assert_eq!(full_list.len(), NetworkUpgrade::iter().count());
+    // kogany: except Ycash's own upgrades, which Zcash Mainnet never schedules.
+    assert_eq!(
+        full_list.len(),
+        NetworkUpgrade::iter()
+            .filter(|&nu| network.is_kogany_upgrade_scheduled(nu))
+            .count()
+    );
 }

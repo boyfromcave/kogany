@@ -104,7 +104,7 @@ use zakura::{
 };
 
 use crate::{
-    application::{build_version, user_agent, LAST_WARN_ERROR_LOG_SENDER},
+    application::{build_version, user_agent, LAST_WARN_ERROR_LOG_SENDER, NODE_NAME, PRODUCT_NAME},
     components::{
         health,
         inbound::{self, InboundSetupData, MAX_INBOUND_RESPONSE_TIME},
@@ -233,6 +233,19 @@ impl StartCmd {
             .consensus
             .validate()
             .map_err(|error| eyre!("invalid consensus configuration: {error}"))
+    }
+
+    /// kogany S5 (MINER-2, K22): ycashd's init refuses a `-yellowbackpayoutaddress` that is not
+    /// a transparent P2PKH address, with this text (ycash6 `src/init.cpp`).
+    #[cfg(feature = "ycash")]
+    fn validate_yellowback_payout_address(config: &ZakuradConfig) -> Result<(), Report> {
+        match config.mining.yellowback_payout_address.as_ref() {
+            Some(address) if !kogany_rpc::yed::live::is_p2pkh_address(address) => Err(eyre!(
+                "-yellowbackpayoutaddress must be a transparent P2PKH address: '{}'",
+                address.encode()
+            )),
+            _ => Ok(()),
+        }
     }
 
     fn validate_debug_blocksync_throughput_config(config: &ZakuradConfig) -> Result<(), Report> {
@@ -368,7 +381,17 @@ impl StartCmd {
 
         Self::validate_consensus_config(&config)?;
         Self::validate_debug_blocksync_throughput_config(&config)?;
+        #[cfg(feature = "ycash")]
+        Self::validate_yellowback_payout_address(&config)?;
         config.rpc.validate().map_err(|error| eyre!(error))?;
+        // kogany (W6-b): the network-fee policy `yed_getinfo` reports, as ycashd's init sets it.
+        #[cfg(feature = "ycash")]
+        kogany_rpc::yed::fees::install_node_policy(
+            config
+                .mempool
+                .yed_node_policy()
+                .map_err(|error| eyre!(error))?,
+        );
 
         if config.zcashd_compat.enabled {
             zcashd_compat::run_preflight(&config, self.unsafe_low_specs)?;
@@ -667,9 +690,23 @@ impl StartCmd {
             latest_chain_tip.clone(),
             misbehavior_sender.clone(),
         );
+        // Ycash (kogany S5-K11): a newly connected peer starts a sync round at once.
+        #[cfg(feature = "ycash")]
+        syncer.set_peer_connected_watch(
+            address_book
+                .lock()
+                .expect("address book lock is not poisoned")
+                .address_metrics_watcher(),
+        );
+        // Ycash (kogany S5-K12): a gossiped block that cannot connect starts a sync round at once.
+        #[cfg(feature = "ycash")]
+        let gossip_gap = std::sync::Arc::new(tokio::sync::Notify::new());
+        #[cfg(feature = "ycash")]
+        syncer.set_gossip_gap_notify(gossip_gap.clone());
 
         info!("initializing mempool");
-        let (mempool, mempool_transaction_subscriber) = Mempool::new(
+        #[allow(unused_mut)]
+        let (mut mempool, mempool_transaction_subscriber) = Mempool::new(
             &config.mempool,
             config.network.expose_peer_addresses,
             peer_set.clone(),
@@ -681,6 +718,14 @@ impl StartCmd {
             chain_tip_change.clone(),
             misbehavior_sender.clone(),
             zcashd_compat_block_gossip_peer_ips.clone(),
+        );
+        // Ycash (kogany S5): ycashd's `reject` for a refused relayed transaction.
+        #[cfg(feature = "ycash")]
+        mempool.set_legacy_reject_sender(
+            address_book
+                .lock()
+                .expect("address book lock is not poisoned")
+                .legacy_reject_sender(),
         );
         let mempool_verification_finished = mempool.verification_finished();
         let mempool = spawn_buffer(
@@ -703,6 +748,8 @@ impl StartCmd {
             latest_chain_tip: latest_chain_tip.clone(),
             network: config.network.network.clone(),
             misbehavior_sender,
+            #[cfg(feature = "ycash")]
+            gossip_gap: Some(gossip_gap),
         };
         setup_tx
             .send(setup_data)
@@ -735,6 +782,29 @@ impl StartCmd {
             sync::end_of_support::end_of_support_height(&config.network.network),
         );
         node_tasks.track(&rpc_tx_queue_handle);
+        // kogany W8-b: the coinbase tag and the template filter read the node's Yellowback state.
+        // kogany W5-f: the YED payout key is the miner address's (ycashd -yellowbackpayoutaddress).
+        // kogany F-S5-9: `mining.yellowback_payout_default = false` (ycashd
+        // `-yellowbackpayoutdefault=0`) leaves the node without a payout key.
+        // kogany S5: `mining.yellowback_payout_address` (ycashd -yellowbackpayoutaddress) wins.
+        #[cfg(feature = "ycash")]
+        kogany_rpc::yed::live::set_payout_address(
+            config.mining.yellowback_payout_address.as_ref().or(config
+                .mining
+                .miner_address
+                .as_ref()
+                .filter(|_| config.mining.yellowback_payout_default)),
+        );
+        #[cfg(not(feature = "ycash"))]
+        kogany_rpc::yed::live::set_payout_address(config.mining.miner_address.as_ref());
+        // kogany S5 (F-S5-5): the extension's mempool reads (yed_getvault.spendPending,
+        // getaddressmempool).
+        kogany_rpc::mempool::set_mempool(mempool.clone());
+        #[cfg(feature = "ycash")]
+        let rpc_impl = rpc_impl.with_ycash_mining(kogany_rpc::mining_hooks(
+            latest_chain_tip.clone(),
+            read_only_state_service.clone(),
+        ));
 
         let node_services = ready.as_ref().map(|_| crate::node::NodeServices {
             read_state: read_only_state_service.clone(),
@@ -745,18 +815,34 @@ impl StartCmd {
         });
 
         let rpc_task_handle = if config.rpc.listen_addr.is_some() {
-            zakura_rpc::node::start_server(&rpc_impl, config.rpc.clone())
-                .await
-                .expect("server should start")
+            zakura_rpc::server::kogany_extension::start_node_server(
+                &rpc_impl,
+                kogany_rpc::node_extension(
+                    &config.network.network,
+                    latest_chain_tip.clone(),
+                    read_only_state_service.clone(),
+                ),
+                config.rpc.clone(),
+            )
+            .await
+            .expect("server should start")
         } else {
             spawn_erased(std::future::pending().in_current_span())
         };
         node_tasks.track(&rpc_task_handle);
 
         let admin_rpc_task_handle = if config.rpc.admin_listen_addr.is_some() {
-            zakura_rpc::node::start_admin_server(&rpc_impl, config.rpc.clone())
-                .await
-                .expect("admin server should start")
+            zakura_rpc::server::kogany_extension::start_node_admin_server(
+                &rpc_impl,
+                kogany_rpc::node_extension(
+                    &config.network.network,
+                    latest_chain_tip.clone(),
+                    read_only_state_service.clone(),
+                ),
+                config.rpc.clone(),
+            )
+            .await
+            .expect("admin server should start")
         } else {
             spawn_erased(std::future::pending().in_current_span())
         };
@@ -989,7 +1075,7 @@ impl StartCmd {
             spawn_erased(std::future::pending().in_current_span());
         node_tasks.track(&miner_task_handle);
 
-        info!("spawned initial Zakura tasks");
+        info!("spawned initial {PRODUCT_NAME} tasks");
 
         let (zcashd_compat_shutdown_tx, zcashd_compat_shutdown_rx) = watch::channel(false);
         let mut zcashd_compat_task_handle =
@@ -1205,7 +1291,7 @@ impl StartCmd {
             }
         };
 
-        info!("exiting Zakura: asking other tasks to stop");
+        info!("exiting {PRODUCT_NAME}: asking other tasks to stop");
         shutdown.cancel();
         zakura_chain::shutdown::set_shutting_down();
 
@@ -1264,7 +1350,7 @@ impl StartCmd {
         old_databases_task_handle.abort();
 
         info!(
-            "exiting Zakura: all tasks have been asked to stop, waiting for remaining tasks to finish"
+            "exiting {PRODUCT_NAME}: all tasks have been asked to stop, waiting for remaining tasks to finish"
         );
 
         Self::finish_shutdown(exit_status, writer_health.writer_failure())
@@ -1363,7 +1449,7 @@ impl StartCmd {
     pub(crate) fn run(&self, config: Arc<ZakuradConfig>) -> Result<(), Report> {
         let runtime = new_runtime();
 
-        info!("Starting zakurad");
+        info!("Starting {NODE_NAME}");
 
         runtime.run_with_graceful_shutdown(|shutdown, shutdown_cleanup_required| {
             self.start(
@@ -1375,7 +1461,7 @@ impl StartCmd {
             )
         })?;
 
-        info!("stopping zakurad");
+        info!("stopping {NODE_NAME}");
 
         Ok(())
     }
@@ -1438,9 +1524,32 @@ impl StartCmd {
 
         Self::validate_consensus_config(&config).map_err(config_error)?;
         Self::validate_debug_blocksync_throughput_config(&config).map_err(config_error)?;
+        #[cfg(feature = "ycash")]
+        Self::validate_yellowback_payout_address(&config).map_err(config_error)?;
         config.rpc.validate().map_err(config_error)?;
+        #[cfg(feature = "ycash")]
+        config.mempool.yed_node_policy().map_err(config_error)?;
+        #[cfg(feature = "ycash")]
+        Self::separate_default_cookie_dir(&mut config);
 
         Ok(config)
+    }
+
+    /// kogany: gives each test network its own default RPC cookie directory,
+    /// `<cache>/kogany/<network>/`, as ycashd writes its cookie into the network's datadir
+    /// (`<datadir>/regtest/.cookie`: `GetAuthCookieFile`, `ycash6 src/rpc/protocol.cpp:73-80`).
+    /// Zakura writes every network's cookie to `<cache>/zakura/.cookie`, so a mainnet and a
+    /// testnet node on one host overwrote each other's cookie, and the first to stop deleted the
+    /// other's. Mainnet keeps `<cache>/kogany/.cookie`; a configured `rpc.cookie_dir` other than
+    /// the default is kept.
+    #[cfg(feature = "ycash")]
+    fn separate_default_cookie_dir(config: &mut ZakuradConfig) {
+        let network = &config.network.network;
+        if network.is_a_test_network()
+            && config.rpc.cookie_dir == zakura_chain::common::default_cache_dir()
+        {
+            config.rpc.cookie_dir = config.rpc.cookie_dir.join(network.lowercase_name());
+        }
     }
 }
 
@@ -1456,6 +1565,65 @@ mod tests {
     use zakura_network::types::PeerServices;
     use zakura_network::P2pStack;
     use zakura_state::{PruningConfig, StorageMode};
+
+    /// kogany S5 (MINER-2): a non-P2PKH `mining.yellowback_payout_address` is refused at
+    /// startup with ycashd's text; a P2PKH one and none are accepted.
+    #[cfg(feature = "ycash")]
+    #[test]
+    fn ycash_yellowback_payout_address_must_be_p2pkh() {
+        let with = |address: Option<&str>| {
+            let mut config = ZakuradConfig::default();
+            config.mining.yellowback_payout_address = address.map(|a| a.parse().expect("address"));
+            StartCmd::validate_yellowback_payout_address(&config)
+        };
+        assert!(with(None).is_ok());
+        assert!(with(Some("s1WUAp94K9NPDh2S1GAYtWDRg7bzUSmZCNP")).is_ok());
+        let error = with(Some("s2xZAA8goa4uw6xXmWhBWFFzn9382MuGiZS"))
+            .expect_err("a P2SH payout address is refused")
+            .to_string();
+        assert!(
+            error.starts_with("-yellowbackpayoutaddress must be a transparent P2PKH address"),
+            "{error}"
+        );
+    }
+
+    /// kogany: each Ycash test network's default RPC cookie is in its own directory, mainnet's
+    /// stays at the cache root, and a configured directory is kept.
+    #[cfg(feature = "ycash")]
+    #[test]
+    fn ycash_default_cookie_dir_is_per_network() {
+        use zakura_chain::{common::default_cache_dir, parameters::Network};
+
+        let cookie_dir = |network: Network, configured: Option<&str>| {
+            let mut config = ZakuradConfig::default();
+            config.network.network = network;
+            if let Some(dir) = configured {
+                config.rpc.cookie_dir = dir.into();
+            }
+            StartCmd::separate_default_cookie_dir(&mut config);
+            config.rpc.cookie_dir
+        };
+
+        let cache = default_cache_dir();
+        assert!(cache.ends_with("kogany"));
+        assert_eq!(cookie_dir(Network::Mainnet, None), cache);
+        assert_eq!(
+            cookie_dir(Network::new_default_testnet(), None),
+            cache.join("testnet")
+        );
+        assert_eq!(
+            cookie_dir(Network::new_ycash_testnet_slow(), None),
+            cache.join("testnetslow")
+        );
+        assert_eq!(
+            cookie_dir(Network::new_regtest(Default::default()), None),
+            cache.join("regtest")
+        );
+        assert_eq!(
+            cookie_dir(Network::new_regtest(Default::default()), Some("/srv/rpc")),
+            std::path::PathBuf::from("/srv/rpc")
+        );
+    }
 
     #[tokio::test]
     async fn shutdown_cannot_mask_a_ready_writer_failure() {
@@ -1616,6 +1784,8 @@ mod tests {
     }
 
     #[test]
+    // kogany: the Zakura P2P v2 stack, which is off on Ycash (K-11); not run on Ycash.
+    #[cfg(not(feature = "ycash"))]
     fn zcashd_compat_config_rejects_disabled_legacy_p2p() {
         let cmd = StartCmd {
             filters: Vec::new(),
@@ -1904,6 +2074,8 @@ mod tests {
 }
 
 #[cfg(test)]
+// kogany: the Zcash-fixture tests are not built with `ycash`.
+#[cfg_attr(feature = "ycash", allow(unused_imports, dead_code))]
 mod zakura_header_sync_driver_tests {
     use super::*;
     use std::{
@@ -2740,6 +2912,8 @@ mod zakura_header_sync_driver_tests {
     }
 
     #[test]
+    // kogany: the Zakura P2P v2 stack, which is off on Ycash (K-11); not run on Ycash.
+    #[cfg(not(feature = "ycash"))]
     fn zakura_block_sync_replaces_chain_sync_when_v2_p2p_is_enabled() {
         let mut config = zakura_network::Config::for_test(P2pStack::Dual);
 
@@ -5508,6 +5682,9 @@ mod zakura_header_sync_driver_tests {
     /// parent commits. Legacy fallback is how a stalled native sync gets that parent, so the
     /// fallback handoff must transfer the waiting commit instead of draining it.
     #[tokio::test(flavor = "multi_thread")]
+    // kogany: Zcash Mainnet block and transaction vectors (NU5-and-later branch IDs, Zcash-only
+    // heights); not run on Ycash.
+    #[cfg(not(feature = "ycash"))]
     async fn legacy_fallback_transfers_full_commit_waiting_for_parent() {
         let network = zakura_chain::parameters::Network::Mainnet;
         let (write_state, read_state, latest_tip, _tip_change) =

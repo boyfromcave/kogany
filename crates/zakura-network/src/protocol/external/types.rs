@@ -55,7 +55,12 @@ impl Version {
     /// - during the initial block download,
     /// - after Zebra restarts, and
     /// - after Zebra's local network is slow or shut down.
+    #[cfg_attr(feature = "ycash", allow(unreachable_code, unused_variables))]
     fn initial_min_for_network(network: &Network) -> Version {
+        // kogany: ycashd's `MIN_PEER_PROTO_VERSION` floor on every Ycash network.
+        #[cfg(feature = "ycash")]
+        return crate::ycash::MIN_PEER_PROTO_VERSION;
+
         *constants::INITIAL_MIN_NETWORK_PROTOCOL_VERSION
             .get(&network.kind())
             .expect("We always have a value for testnet or mainnet")
@@ -85,10 +90,15 @@ impl Version {
     ///
     /// - The citation above is a generalization of a statement in ZIP-253 since that ZIP is
     ///   concerned only with NU6 on Mainnet and Testnet.
+    #[cfg_attr(feature = "ycash", allow(unreachable_code))]
     pub(crate) fn min_specified_for_upgrade(
         network: &Network,
         network_upgrade: NetworkUpgrade,
     ) -> Version {
+        // kogany: ycashd's per-upgrade versions (`crate::ycash::min_specified_for_upgrade`).
+        #[cfg(feature = "ycash")]
+        return crate::ycash::min_specified_for_upgrade(network, network_upgrade);
+
         Version(match (network, network_upgrade) {
             (_, Genesis) | (_, BeforeOverwinter) => 170_002,
             (Testnet(_), Overwinter) => 170_003,
@@ -96,12 +106,20 @@ impl Version {
             (Testnet(params), Sapling) if params.is_regtest() => 170_006,
             (Testnet(_), Sapling) => 170_007,
             (Mainnet, Sapling) => 170_007,
+            // ycashd's `UPGRADE_YCASH.nProtocolVersion` on every network
+            // (`ycash6 src/chainparams.cpp:129,436`). Only a `ycash` build schedules it; W1-Y5
+            // replaces this table there.
+            (_, Ycash) => 270_007,
             (Testnet(_), Blossom) => 170_008,
             (Mainnet, Blossom) => 170_009,
             (Testnet(_), Heartwood) => 170_010,
             (Mainnet, Heartwood) => 170_011,
             (Testnet(_), Canopy) => 170_012,
             (Mainnet, Canopy) => 170_013,
+            // ycashd's `UPGRADE_VAULT.nProtocolVersion` on every network
+            // (`ycash6 src/chainparams.cpp:154,463,766`). Only a network that schedules Vault
+            // reaches it; W1-Y5 owns the rest of this table.
+            (_, Vault) => 270_200,
             (Testnet(_), Nu5) => 170_050,
             (Mainnet, Nu5) => 170_100,
             (Testnet(_), Nu6) => 170_110,
@@ -161,6 +179,8 @@ impl Default for Nonce {
 }
 
 #[cfg(test)]
+// kogany: the Zcash-fixture tests are not built with `ycash`.
+#[cfg_attr(feature = "ycash", allow(unused_imports, dead_code))]
 mod test {
     use super::*;
     use crate::constants::CURRENT_NETWORK_PROTOCOL_VERSION;
@@ -194,11 +214,17 @@ mod test {
     }
 
     #[test]
+    // kogany: Zcash upgrade schedules (NU5 to NU7, NU6.3 protocol versions; a Ycash network rejects
+    // NU5 with Vault); not run on Ycash.
+    #[cfg(not(feature = "ycash"))]
     fn version_consistent_mainnet() {
         version_consistent(&Mainnet)
     }
 
     #[test]
+    // kogany: Zcash upgrade schedules (NU5 to NU7, NU6.3 protocol versions; a Ycash network rejects
+    // NU5 with Vault); not run on Ycash.
+    #[cfg(not(feature = "ycash"))]
     fn version_consistent_testnet() {
         version_consistent(&Network::new_default_testnet())
     }
@@ -242,6 +268,9 @@ mod test {
     /// Checks that Zakura advertises the Mainnet NU7 version, which meets the NU7
     /// minimum on every network.
     #[test]
+    // kogany: Zcash upgrade schedules (NU5 to NU7, NU6.3 protocol versions; a Ycash network rejects
+    // NU5 with Vault); not run on Ycash.
+    #[cfg(not(feature = "ycash"))]
     fn nu7_protocol_versions_match_current_version() {
         let _init_guard = zakura_test::init();
 
@@ -262,6 +291,9 @@ mod test {
 
     /// Checks the NU7 protocol versions against the ZIP 204 assignment rule.
     #[test]
+    // kogany: Zcash upgrade schedules (NU5 to NU7, NU6.3 protocol versions; a Ycash network rejects
+    // NU5 with Vault); not run on Ycash.
+    #[cfg(not(feature = "ycash"))]
     fn nu7_protocol_versions_follow_zip_204() {
         let _init_guard = zakura_test::init();
 
@@ -296,6 +328,9 @@ mod test {
     }
 
     #[test]
+    // kogany: Zcash upgrade schedules (NU5 to NU7, NU6.3 protocol versions; a Ycash network rejects
+    // NU5 with Vault); not run on Ycash.
+    #[cfg(not(feature = "ycash"))]
     fn custom_network_minimum_follows_activation_heights() {
         use zakura_chain::parameters::testnet::{ConfiguredActivationHeights, Parameters};
 
@@ -356,5 +391,40 @@ mod test {
         let decoded =
             PeerServices::from_bits_truncate(PeerServices::NODE_NETWORK.bits() | (1 << 25));
         assert_eq!(decoded, PeerServices::NODE_NETWORK);
+    }
+
+    /// kogany: ycashd's Vault-era protocol version, 270200, from the Vault activation height on
+    /// a network that schedules Vault, and never on one that does not (W2-b).
+    #[test]
+    fn vault_protocol_version_is_ycashd_s() {
+        let _init_guard = zakura_test::init();
+
+        let network = Network::new_regtest(
+            zakura_chain::parameters::testnet::ConfiguredActivationHeights {
+                vault: Some(10),
+                ..Default::default()
+            }
+            .into(),
+        );
+        assert_eq!(
+            Version::min_specified_for_upgrade(&network, Vault),
+            Version(270_200)
+        );
+        assert_eq!(
+            Version::min_specified_for_height(&network, block::Height(9)),
+            Version::min_specified_for_upgrade(&network, Canopy)
+        );
+        for height in [10, 11, u32::MAX >> 1] {
+            assert_eq!(
+                Version::min_specified_for_height(&network, block::Height(height)),
+                Version(270_200)
+            );
+        }
+        for network in [Mainnet, Network::new_regtest(Default::default())] {
+            assert_ne!(
+                Version::min_specified_for_height(&network, block::Height::MAX),
+                Version(270_200)
+            );
+        }
     }
 }

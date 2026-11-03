@@ -22,7 +22,7 @@ pub(crate) fn validate_trusted_anchor_observables(
         validate_hash_filter(hash, target).map_err(|_| "header hash filter")?;
     }
     pow_policy
-        .validate_solution(header)
+        .validate_solution(header, height)
         .map_err(|_| "Equihash solution shape or proof")?;
     Ok(hash)
 }

@@ -1,6 +1,8 @@
 //! Transparent-related (Bitcoin-inherited) functionality.
 
 mod address;
+#[cfg(feature = "ycash")]
+mod destination;
 mod keys;
 mod opcodes;
 mod script;
@@ -10,7 +12,6 @@ mod utxo;
 use std::{collections::HashMap, fmt, ops::AddAssign};
 
 use zcash_script::{opcode::Evaluable as _, pattern::push_num};
-use zcash_transparent::{address::TransparentAddress, bundle::TxOut};
 
 use crate::{
     amount::{Amount, NonNegative},
@@ -21,7 +22,11 @@ use crate::{
     transaction,
 };
 
+#[cfg(all(feature = "ycash", test))]
+pub(crate) use address::plain_pq_address_version;
 pub use address::Address;
+#[cfg(feature = "ycash")]
+pub use destination::{Destination, PqKeyId};
 pub use script::Script;
 pub use serialize::GENESIS_COINBASE_SCRIPT_SIG;
 pub use utxo::{
@@ -347,14 +352,36 @@ impl Output {
     /// Return the destination address from a transparent output.
     ///
     /// Returns None if the address type is not valid or unrecognized.
+    ///
+    /// Matches the canonical P2PKH and P2SH scripts directly on the script bytes, the same
+    /// shapes `zcash_script`'s standard solver recognizes (a direct 20-byte push), without
+    /// converting the output: the state's address indexes call this for every transparent
+    /// output and spent input in each committed block.
     pub fn address(&self, net: &Network) -> Option<Address> {
-        match TxOut::try_from(self).ok()?.recipient_address()? {
-            TransparentAddress::PublicKeyHash(pkh) => {
-                Some(Address::from_pub_key_hash(net.t_addr_kind(), pkh))
-            }
-            TransparentAddress::ScriptHash(sh) => {
-                Some(Address::from_script_hash(net.t_addr_kind(), sh))
-            }
+        // Ycash (kogany W7-b): a TX_PQPKH output is indexed under its post-quantum key (ycash6's
+        // insightexplorer `CScript::AddressIndexKey`, D-Q-20).
+        #[cfg(feature = "ycash")]
+        if let Some(id) = self.lock_script.pq_key_id() {
+            return Some(Address::PayToPqKeyHash {
+                // the plain post-quantum versions differ on Regtest (`rq…`), unlike t-addresses
+                network_kind: net.kind(),
+                scheme: id.scheme,
+                key_hash: id.key_hash,
+            });
+        }
+        // A librustzcash `TxOut` only holds a valid amount, so keep rejecting invalid values.
+        zcash_protocol::value::Zatoshis::try_from(self.value).ok()?;
+
+        match self.lock_script.as_raw_bytes() {
+            [0x76, 0xa9, 0x14, hash @ .., 0x88, 0xac] => Some(Address::from_pub_key_hash(
+                net.t_addr_kind(),
+                hash.try_into().ok()?,
+            )),
+            [0xa9, 0x14, hash @ .., 0x87] => Some(Address::from_script_hash(
+                net.t_addr_kind(),
+                hash.try_into().ok()?,
+            )),
+            _ => None,
         }
     }
 

@@ -22,8 +22,11 @@ done < <(compgen -e ZEBRA_)
 # Default cache directories for Zakura components.
 # These use the config-rs ZAKURA_SECTION__KEY format and will be picked up
 # by zakurad's configuration system automatically.
-: "${ZAKURA_STATE__CACHE_DIR:=${HOME}/.cache/zakura}"
-: "${ZAKURA_RPC__COOKIE_DIR:=${HOME}/.cache/zakura}"
+# kogany: koganyd's own default is ~/.cache/kogany (crates/zakurad, the `ycash` feature); these
+# variables override it and a config file's cache_dir alike, so a koganyd image defaults to that.
+if command -v koganyd >/dev/null 2>&1; then CACHE_NAME=kogany; else CACHE_NAME=zakura; fi
+: "${ZAKURA_STATE__CACHE_DIR:=${HOME}/.cache/${CACHE_NAME}}"
+: "${ZAKURA_RPC__COOKIE_DIR:=${HOME}/.cache/${CACHE_NAME}}"
 export ZAKURA_STATE__CACHE_DIR ZAKURA_RPC__COOKIE_DIR
 
 # Leave zcashd-compat disabled unless the container runtime explicitly opts in.
@@ -97,21 +100,37 @@ if [[ -n ${CONFIG_FILE_PATH} && -f ${CONFIG_FILE_PATH} ]]; then
     CONFIG_ARGS=(--config "${CONFIG_FILE_PATH}")
 fi
 
+# kogany: the image ships one node binary, `koganyd` when built with the `ycash` feature (its
+# `zakurad` refuses to run there) and `zakurad` otherwise. "node" (the image's CMD) and bare
+# flags run whichever is installed.
+if command -v koganyd >/dev/null 2>&1; then
+  NODE_BIN=koganyd
+else
+  NODE_BIN=zakurad
+fi
+
 # Main Script Logic
-# - If "$1" is "--", "-", or "zakurad", run `zakurad`
+# - If "$1" is "node", "--" or "-", run the installed node binary
 #   with the remaining params.
+# - If "$1" is "zakurad" or "koganyd", run that binary with the remaining params.
 # - If "$1" is "test", handle test execution
 # - Otherwise run "$@" directly.
 case "$1" in
---* | -* | zakurad)
+node | --* | -*)
   shift
-  exec_as_user zakurad "${CONFIG_ARGS[@]}" "$@"
+  exec_as_user "${NODE_BIN}" "${CONFIG_ARGS[@]}" "$@"
+  ;;
+zakurad | koganyd)
+  bin="$1"
+  shift
+  exec_as_user "${bin}" "${CONFIG_ARGS[@]}" "$@"
   ;;
 test)
   shift
-  if [[ "$1" == "zakurad" ]]; then
+  if [[ "$1" == "zakurad" || "$1" == "koganyd" ]]; then
+    bin="$1"
     shift
-    exec_as_user zakurad "${CONFIG_ARGS[@]}" "$@"
+    exec_as_user "${bin}" "${CONFIG_ARGS[@]}" "$@"
   elif [[ -n "${NEXTEST_PROFILE}" ]]; then
     # All test filtering and scoping logic is handled by .config/nextest.toml
     echo "Running tests with nextest profile: ${NEXTEST_PROFILE}"

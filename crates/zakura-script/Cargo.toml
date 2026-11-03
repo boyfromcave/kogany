@@ -1,6 +1,6 @@
 [package]
 name = "zakura-script"
-version = "5.0.1-rc0"
+version = "5.0.1-rc1"
 authors.workspace = true
 description = "Zakura transparent script verification. Internal crate, published to support cargo install zakura"
 license.workspace = true
@@ -14,10 +14,19 @@ keywords.workspace = true
 # Must be one of <https://crates.io/category_slugs>
 categories = ["cryptography::cryptocurrencies"]
 
+[features]
+# The Ycash network profile (kogany), see zakura-chain's `ycash` feature. Gates the W3-c
+# `ycash_tests`, which need the Ycash network parameters.
+ycash = ["zakura-chain/ycash"]
+
 [dependencies]
 zcash_script = { workspace = true }
 zcash_primitives = { workspace = true }
 zakura-chain = { path = "../zakura-chain", version = "11.0.0-rc0" }
+# kogany W3-c: the Ycash checker's set state and set-signature message, and OP_CHECKPQSIG's
+# verification (K-4, K-8).
+kogany-vault = { path = "../kogany-vault" }
+kogany-pq = { path = "../kogany-pq" }
 
 thiserror = { workspace = true }
 
@@ -25,6 +34,7 @@ thiserror = { workspace = true }
 hex = { workspace = true }
 ripemd = { workspace = true }
 secp256k1 = { workspace = true }
+serde_json = { workspace = true }
 sha2 = { workspace = true }
 zakura-test = { path = "../zakura-test", version = "4.0.0-rc0" }
 

@@ -166,6 +166,34 @@ pub const MAX_INBOUND_CONCURRENCY: usize = 500;
 /// transactions have no source peer and are not counted against the cap.
 pub const MAX_INBOUND_CONCURRENCY_PER_PEER: usize = 5;
 
+/// kogany (F-S5-16): the most inv-announced transaction ids one peer may have waiting for a
+/// download slot after [`MAX_INBOUND_CONCURRENCY_PER_PEER`] refused them.
+///
+/// ycashd keeps every announced id in its per-peer request queue (`mapAskFor`), so a burst of
+/// announcements is fully downloaded; Zakura dropped the ids past the per-peer cap, and neither
+/// side announced them again (a burst of 7 `z_sendmany` transactions lost 2). The cap stays
+/// (`GHSA-4fc2-h7jh-287c`); the refused ids wait here, bounded, and are queued again as the
+/// peer's slots free.
+#[cfg(feature = "ycash")]
+pub const MAX_DEFERRED_PER_PEER: usize = 100;
+
+/// kogany (F-S5-16): the most deferred ids across all peers ([`MAX_DEFERRED_PER_PEER`]).
+#[cfg(feature = "ycash")]
+pub const MAX_DEFERRED: usize = MAX_INBOUND_CONCURRENCY;
+
+/// Ycash: how long a download waits before re-requesting an announced id after a `notfound`.
+#[cfg(feature = "ycash")]
+pub const NOTFOUND_RETRY_DELAY: Duration = Duration::from_secs(1);
+
+/// Ycash: whether a download failed because the peer answered `notfound`.
+#[cfg(feature = "ycash")]
+fn is_not_found_response(error: &BoxError) -> bool {
+    error
+        .downcast_ref::<zn::SharedPeerError>()
+        .and_then(zn::SharedPeerError::not_found_class)
+        == Some(zn::NotFoundClass::Response)
+}
+
 /// A marker struct for the oneshot channels which cancel a pending download and verify.
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 struct CancelDownloadAndVerify;
@@ -281,6 +309,21 @@ where
     /// has it as the third tuple element. Enforces
     /// [`MAX_INBOUND_CONCURRENCY_PER_PEER`]. See `GHSA-4fc2-h7jh-287c`.
     pending_per_peer: HashMap<QueueSource, usize>,
+
+    /// kogany (W9-a/F-6): each task whose verification fails on the tip's state sends the
+    /// transaction here before its result, so the mempool can verify it again
+    /// ([`super::state_retry`]). Replaced by [`Self::cancel_all`], like [`Self::results_tx`].
+    #[cfg(feature = "ycash")]
+    state_failures_tx: mpsc::UnboundedSender<super::state_retry::Retry>,
+
+    /// Receives [`Self::state_failures_tx`]'s transactions.
+    #[cfg(feature = "ycash")]
+    state_failures: mpsc::UnboundedReceiver<super::state_retry::Retry>,
+
+    /// kogany (F-S5-16): inv-announced ids the per-peer cap refused, oldest first, with their
+    /// announcing peer ([`MAX_DEFERRED_PER_PEER`]).
+    #[cfg(feature = "ycash")]
+    deferred: std::collections::VecDeque<(UnminedTxId, QueueSource)>,
 }
 
 impl<ZN, ZV, ZS> Stream for Downloads<ZN, ZV, ZS>
@@ -411,6 +454,8 @@ where
         verification_finished: Arc<Notify>,
     ) -> Self {
         let (results_tx, results) = mpsc::unbounded_channel();
+        #[cfg(feature = "ycash")]
+        let (state_failures_tx, state_failures) = mpsc::unbounded_channel();
         Self {
             network,
             verifier,
@@ -425,6 +470,12 @@ where
             in_flight: 0,
             cancel_handles: HashMap::new(),
             pending_per_peer: HashMap::new(),
+            #[cfg(feature = "ycash")]
+            state_failures_tx,
+            #[cfg(feature = "ycash")]
+            state_failures,
+            #[cfg(feature = "ycash")]
+            deferred: Default::default(),
         }
     }
 
@@ -512,6 +563,10 @@ where
                     "too many transactions queued for this peer: ignored transaction"
                 );
                 metrics::counter!("mempool.full_queue.per_peer.total").increment(1);
+                #[cfg(feature = "ycash")]
+                if let Gossip::Id(txid) = &gossiped_tx {
+                    self.defer(*txid, source.clone());
+                }
                 return Err(MempoolError::FullQueue);
             }
         }
@@ -523,11 +578,15 @@ where
         let verifier = self.verifier.clone();
         let mut state = self.state.clone();
         let download_source = source.as_ref().and_then(peer_source_from_queue_source);
+        #[cfg(feature = "ycash")]
+        let inv_announced = source.is_some();
         let pushed_advertiser_addr = source.as_ref().and_then(advertiser_addr_from_queue_source);
         let max_transaction_bytes = self.max_transaction_bytes;
         let peer_cooldowns = self.peer_cooldowns.clone();
 
         let gossiped_tx_req = gossiped_tx.clone();
+        #[cfg(feature = "ycash")]
+        let (state_failures_tx, retry_source) = (self.state_failures_tx.clone(), source.clone());
 
         let fut = async move {
             if let Gossip::Tx(tx) = &gossiped_tx {
@@ -563,9 +622,23 @@ where
                         None => zn::Request::TransactionsById(request_ids),
                     };
 
-                    let tx = match network
-                        .oneshot(req)
-                        .await
+                    #[cfg(feature = "ycash")]
+                    let retry_req = inv_announced.then(|| req.clone());
+                    let response = network.clone().oneshot(req).await;
+                    // Ycash: a `notfound` for an announced id is retried once after a short
+                    // delay, as ycashd re-requests from its advertiser. A legacy download is
+                    // routed by the inventory registry, which can lag the `inv` that queued it,
+                    // so the first request can reach a peer without the tx; by the retry the
+                    // advertiser is registered. Otherwise the id waits for the crawler.
+                    #[cfg(feature = "ycash")]
+                    let response = match (response, retry_req) {
+                        (Err(e), Some(retry_req)) if is_not_found_response(&e) => {
+                            tokio::time::sleep(NOTFOUND_RETRY_DELAY).await;
+                            network.oneshot(retry_req).await
+                        }
+                        (response, _) => response,
+                    };
+                    let tx = match response
                         .map_err(CloneError::from)
                         .map_err(TransactionDownloadVerifyError::DownloadFailed)?
                     {
@@ -641,14 +714,24 @@ where
             // Hide the transaction data to avoid filling the logs
             trace!(?txid, result = ?result.as_ref().map(|_tx| ()), "verified transaction for the mempool");
 
-            result.map_err(|e| TransactionDownloadVerifyError::Invalid {
+            let result = result.map_err(|e| TransactionDownloadVerifyError::Invalid {
                 error: e.into(),
                 advertiser_addr,
                 tip_height,
                 transaction_version,
                 transaction_network_upgrade,
                 retried_after_tip_reset,
-            })
+            });
+
+            // kogany (W9-a/F-6): keep the bytes of a failure on the tip's state for another try.
+            #[cfg(feature = "ycash")]
+            if let Err(TransactionDownloadVerifyError::Invalid { error, .. }) = &result {
+                if super::state_retry::is_tip_state_dependent(error) {
+                    let _ = state_failures_tx.send((tx, retry_source));
+                }
+            }
+
+            result
         }
         .map_ok(|(tx, spent_mempool_outpoints, tip_height)| {
             metrics::counter!(
@@ -700,6 +783,16 @@ where
                                     if let Some(rsp_tx) = rsp_tx.take() {
                                         let error_msg = format!(
                                             "failed to validate tx: {tx_id}, error: {tx_verifier_error}"
+                                        );
+                                        // Ycash (kogany W7-e): the same text, with ycashd's
+                                        // reject code and reason taken from the typed error.
+                                        #[cfg(feature = "ycash")]
+                                        let error_msg = zakura_rpc::methods::ycash_reject::MempoolRejection::new(
+                                            error_msg,
+                                            match &tx_verifier_error {
+                                                TransactionDownloadVerifyError::Invalid { error, .. } => Some(error),
+                                                _ => None,
+                                            },
                                         );
                                         let _ = rsp_tx.send(Err(error_msg.into()));
                                     };
@@ -772,6 +865,10 @@ where
         // queued results.
         let _ = std::mem::take(&mut self.pending);
         (self.results_tx, self.results) = mpsc::unbounded_channel();
+        #[cfg(feature = "ycash")]
+        {
+            (self.state_failures_tx, self.state_failures) = mpsc::unbounded_channel();
+        }
         self.in_flight = 0;
         // Signal cancellation to all running tasks.
         // Since we already replaced the result channel above, their results
@@ -780,9 +877,55 @@ where
             let _ = cancel_tx.send(CancelDownloadAndVerify);
         }
         self.pending_per_peer.clear();
+        #[cfg(feature = "ycash")]
+        self.deferred.clear();
         assert!(self.pending.is_empty());
         assert!(self.cancel_handles.is_empty());
         metrics::gauge!("mempool.currently.queued.transactions",).set(self.in_flight as f64);
+    }
+
+    /// kogany (F-S5-16): keeps an inv-announced id the per-peer cap refused, within the bounds.
+    #[cfg(feature = "ycash")]
+    fn defer(&mut self, txid: UnminedTxId, source: QueueSource) {
+        if self.deferred.len() >= MAX_DEFERRED
+            || self.deferred.iter().any(|(id, _)| *id == txid)
+            || self
+                .deferred
+                .iter()
+                .filter(|(_, peer)| *peer == source)
+                .count()
+                >= MAX_DEFERRED_PER_PEER
+        {
+            return;
+        }
+        self.deferred.push_back((txid, source));
+    }
+
+    /// kogany (F-S5-16): the deferred ids whose peer has a free download slot now, oldest first,
+    /// at most as many per peer as it has free slots. The caller queues each again with
+    /// [`Self::download_if_needed_and_verify`] unless the mempool already has or refused it.
+    #[cfg(feature = "ycash")]
+    pub fn take_deferred_ready(&mut self) -> Vec<(Gossip, QueueSource)> {
+        let mut free: HashMap<QueueSource, usize> = HashMap::new();
+        let mut ready = Vec::new();
+        let pending_per_peer = &self.pending_per_peer;
+        let cancel_handles = &self.cancel_handles;
+        self.deferred.retain(|(txid, source)| {
+            if cancel_handles.contains_key(txid) {
+                return false;
+            }
+            let slots = free.entry(source.clone()).or_insert_with(|| {
+                MAX_INBOUND_CONCURRENCY_PER_PEER
+                    .saturating_sub(pending_per_peer.get(source).copied().unwrap_or(0))
+            });
+            if *slots == 0 {
+                return true;
+            }
+            *slots -= 1;
+            ready.push((Gossip::Id(*txid), source.clone()));
+            false
+        });
+        ready
     }
 
     /// Decrement the per-peer pending count for `source`, removing the entry
@@ -794,6 +937,17 @@ where
                 pending_per_peer.remove(&source);
             }
         }
+    }
+
+    /// kogany (W9-a/F-6): the transactions whose verification failed on the tip's state since the
+    /// last call (each is sent before its task's result).
+    #[cfg(feature = "ycash")]
+    pub fn take_state_failures(&mut self) -> Vec<super::state_retry::Retry> {
+        let mut failures = Vec::new();
+        while let Ok(failure) = self.state_failures.try_recv() {
+            failures.push(failure);
+        }
+        failures
     }
 
     /// Get the number of currently in-flight download tasks.
@@ -961,6 +1115,69 @@ mod tests {
                 && retry_source.as_ref() == Some(&source)));
     }
 
+    /// kogany F-S5-16: a burst of 7 inv-announced ids from one peer with the per-peer cap at 5:
+    /// the 2 refused ids are kept and queued again once the peer's slots free, so all 7 are
+    /// downloaded; the deferred ids stay bounded per peer.
+    #[cfg(feature = "ycash")]
+    #[tokio::test]
+    async fn ycash_burst_past_the_per_peer_cap_is_downloaded_when_slots_free() {
+        assert_eq!(MAX_INBOUND_CONCURRENCY_PER_PEER, 5);
+        let mut downloads = pending_downloads();
+        let source = QueueSource::LegacySocket(([127, 0, 0, 1], 18344).into());
+        let ids: Vec<UnminedTxId> = (0..7).map(tx_id).collect();
+
+        let refused = ids
+            .iter()
+            .filter(|id| {
+                downloads
+                    .download_if_needed_and_verify(Gossip::Id(**id), Some(source.clone()), None)
+                    .is_err()
+            })
+            .count();
+        assert_eq!(refused, 2, "the cap refuses the 6th and 7th");
+        assert!(
+            downloads.take_deferred_ready().is_empty(),
+            "no slot is free yet"
+        );
+
+        // Two downloads finish (here: cancelled as mined), freeing two slots.
+        let finished: HashSet<transaction::Hash> =
+            ids[..2].iter().map(|id| id.mined_id()).collect();
+        downloads.cancel(&finished);
+        let ready = downloads.take_deferred_ready();
+        assert_eq!(
+            ready
+                .iter()
+                .map(|(gossip, _)| gossip.id())
+                .collect::<Vec<_>>(),
+            ids[5..].to_vec()
+        );
+        for (gossip, peer) in ready {
+            downloads
+                .download_if_needed_and_verify(gossip, Some(peer), None)
+                .expect("a freed slot takes the deferred id");
+        }
+        for id in &ids[2..] {
+            assert!(
+                downloads.cancel_handles.contains_key(id),
+                "{id:?} is downloading"
+            );
+        }
+        assert!(downloads.take_deferred_ready().is_empty());
+
+        // The deferred ids are bounded per peer.
+        for index in 100..(100 + u64::try_from(MAX_DEFERRED_PER_PEER).unwrap() + 10) {
+            let _ = downloads.download_if_needed_and_verify(
+                Gossip::Id(tx_id(index)),
+                Some(source.clone()),
+                None,
+            );
+        }
+        assert_eq!(downloads.deferred.len(), MAX_DEFERRED_PER_PEER);
+        downloads.cancel_all();
+        assert!(downloads.deferred.is_empty());
+    }
+
     #[tokio::test]
     async fn zakura_queue_source_is_counted_by_per_peer_cap() {
         let mut downloads = pending_downloads();
@@ -1054,6 +1271,62 @@ mod tests {
                 ),
             }
         );
+        poll_task.abort();
+    }
+
+    /// Ycash: a `notfound` for an id announced by a legacy peer is re-requested once after
+    /// [`NOTFOUND_RETRY_DELAY`], instead of failing the download until the crawler.
+    #[cfg(feature = "ycash")]
+    #[tokio::test]
+    async fn notfound_from_advertiser_is_retried_once_from_it() {
+        tokio::time::pause();
+        let txid = tx_id(7);
+        let advertiser: std::net::SocketAddr = ([127, 0, 0, 1], 8233).into();
+        let (network_tx, mut network_rx) = tokio::sync::mpsc::unbounded_channel();
+        let calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let mut downloads = Downloads::new(
+            BoxCloneService::new(service_fn(move |request: zn::Request| {
+                let (network_tx, calls) = (network_tx.clone(), calls.clone());
+                async move {
+                    network_tx.send((request, tokio::time::Instant::now()))?;
+                    if calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst) == 0 {
+                        let error = zn::PeerError::NotFoundResponse(vec![txid.into()]);
+                        return Err(zn::SharedPeerError::from(error).into());
+                    }
+                    future::pending::<Result<zn::Response, BoxError>>().await
+                }
+            })),
+            BoxCloneService::new(service_fn(|_request| {
+                future::pending::<Result<tx::Response, BoxError>>()
+            })),
+            BoxCloneService::new(service_fn(|request| async move {
+                match request {
+                    zs::ReadRequest::Transaction(_) => Ok(zs::ReadResponse::Transaction(None)),
+                    zs::ReadRequest::Tip => Ok(zs::ReadResponse::Tip(None)),
+                    request => Err(format!("unexpected state request: {request:?}").into()),
+                }
+            })),
+            false,
+            u64::MAX,
+            PeerCooldowns::default(),
+            Arc::new(Notify::new()),
+        );
+
+        downloads
+            .download_if_needed_and_verify(
+                Gossip::Id(txid),
+                Some(QueueSource::LegacySocket(advertiser)),
+                None,
+            )
+            .expect("download is queued");
+        let poll_task = tokio::spawn(async move {
+            let _ = downloads.next().await;
+        });
+        let (first, first_at) = network_rx.recv().await.expect("first request");
+        let (second, second_at) = network_rx.recv().await.expect("retried request");
+        assert_eq!(first, zn::Request::TransactionsById(HashSet::from([txid])));
+        assert_eq!(first, second, "the same request is sent again");
+        assert!(second_at - first_at >= NOTFOUND_RETRY_DELAY);
         poll_task.abort();
     }
 

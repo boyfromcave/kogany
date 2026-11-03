@@ -24,6 +24,8 @@ use zakura_node_services::mempool::QueueSource;
 use zakura_state::{ChainTipBlock, ChainTipSender};
 
 mod prop;
+// kogany: the Vault activation's grace period (W2-c).
+mod vault;
 mod vector;
 
 #[test]
@@ -87,9 +89,7 @@ fn lock_time_and_maturity_failures_start_no_cooldown() {
 
     assert_eq!(
         transaction_cooldown_peer(
-            &invalid(TransactionError::Script(
-                zakura_script::Error::ScriptInvalid
-            )),
+            &invalid(TransactionError::SaplingVerificationFailed),
             tip_height,
             NetworkUpgrade::Nu6_3,
             None
@@ -170,9 +170,7 @@ fn lock_time_and_maturity_failures_start_no_cooldown() {
     };
     assert_eq!(
         transaction_cooldown_peer(
-            &unattributed(TransactionError::Script(
-                zakura_script::Error::ScriptInvalid
-            )),
+            &unattributed(TransactionError::SaplingVerificationFailed),
             tip_height,
             NetworkUpgrade::Nu6_3,
             None
@@ -357,6 +355,16 @@ pub fn standard_verified_unmined_tx_strategy() -> BoxedStrategy<VerifiedUnminedT
 
             let unmined_tx = UnminedTx::from(transaction);
             let miner_fee = unmined_tx.conventional_fee();
+            // Ycash: the conventional fee may be below the per-Sapling-output floor (W1-Y9).
+            #[cfg(feature = "ycash")]
+            let miner_fee = {
+                use zakura_chain::transaction::ycash_relay;
+                let floor = ycash_relay::per_sapling_output_fees(unmined_tx.transaction())
+                    .max(ycash_relay::min_relay_fee(unmined_tx.size()));
+                let floor = i64::try_from(floor).expect("the floor is at most a block of outputs");
+                zakura_chain::amount::Amount::try_from(i64::from(miner_fee).max(floor))
+                    .expect("the floor is a valid amount")
+            };
 
             VerifiedUnminedTx::new(unmined_tx, miner_fee, 0, 0, std::sync::Arc::new(vec![]))
                 .expect("standardized transaction should pass ZIP-317 checks")

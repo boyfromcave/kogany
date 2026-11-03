@@ -1,3 +1,5 @@
+// kogany: the Zcash-fixture tests are not built with `ycash`, leaving their helpers unused.
+#![cfg_attr(feature = "ycash", allow(unused_imports, dead_code))]
 use crate::{
     block::Commitment::{self, ChainHistoryActivationReserved},
     serialization::ZcashDeserializeInto,
@@ -17,6 +19,9 @@ const V3_EXTRA_FIXED_NODE_DATA_SIZE: usize = HISTORY_HASH_SIZE * 2;
 /// Test the MMR tree using the activation block of a network upgrade
 /// and its next block.
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, Equihash (200, 9), Zcash
+// Mainnet heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn tree() -> Result<()> {
     for network in Network::iter() {
         tree_for_network_upgrade(&network, NetworkUpgrade::Heartwood)?;
@@ -100,6 +105,9 @@ fn tree_for_network_upgrade(network: &Network, network_upgrade: NetworkUpgrade) 
 }
 
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, Equihash (200, 9), Zcash
+// Mainnet heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn old_history_versions_ignore_ironwood_root() -> Result<()> {
     let network = Network::Mainnet;
     let (block, sapling_root) = block_and_sapling_root(&network, NetworkUpgrade::Canopy)?;
@@ -159,6 +167,9 @@ fn old_history_versions_ignore_ironwood_root() -> Result<()> {
 }
 
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, Equihash (200, 9), Zcash
+// Mainnet heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn v3_history_node_hash_input_has_exact_serialized_size() -> Result<()> {
     let network = Network::Mainnet;
     let (block, sapling_root) = block_and_sapling_root(&network, NetworkUpgrade::Canopy)?;

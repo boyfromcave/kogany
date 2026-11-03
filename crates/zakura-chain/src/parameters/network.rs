@@ -23,11 +23,13 @@ mod tests;
 // This is DISTINCT from the NU6.2 *activation* (re-enable) height (3_364_600, see
 // `network_upgrade.rs`), which lands 1_174 blocks later. Do NOT change this value: it is
 // already deployed, so changing it would fork from live v4.5.3 nodes in the disable window.
+#[cfg_attr(feature = "ycash", allow(dead_code))]
 const MAINNET_TEMPORARY_ORCHARD_DISABLING_SOFT_FORK_HEIGHT: Height = Height(3_363_426);
 
 // Default Testnet temporary Orchard-disabling soft-fork height. As on Mainnet, this is DISTINCT
 // from the NU6.2 *activation* (re-enable) height (4_052_000, see `network_upgrade.rs`), which
 // lands 3_500 blocks later.
+#[cfg_attr(feature = "ycash", allow(dead_code))]
 const TESTNET_TEMPORARY_ORCHARD_DISABLING_SOFT_FORK_HEIGHT: Height = Height(4_048_500);
 
 /// An enum describing the kind of network, whether it's the production mainnet or a testnet.
@@ -253,8 +255,14 @@ impl Network {
     /// Get the default port associated to this network.
     pub fn default_port(&self) -> u16 {
         match self {
+            #[cfg(feature = "ycash")]
+            Network::Mainnet => super::ycash::ports::MAINNET,
+            #[cfg(feature = "ycash")]
+            Network::Testnet(params) => super::ycash::testnet_default_port(params),
+            #[cfg(not(feature = "ycash"))]
             Network::Mainnet => 8233,
             // TODO: Add a `default_port` field to `testnet::Parameters` to return here. (zcashd uses 18344 for Regtest)
+            #[cfg(not(feature = "ycash"))]
             Network::Testnet(_params) => 18233,
         }
     }
@@ -351,6 +359,10 @@ impl Network {
     /// actions in transactions activates, if it is configured for this network.
     pub fn temporary_orchard_disabling_soft_fork_height(&self) -> Option<Height> {
         match self {
+            // Ycash mainnet never had this Zcash soft fork.
+            #[cfg(feature = "ycash")]
+            Network::Mainnet => None,
+            #[cfg(not(feature = "ycash"))]
             Network::Mainnet => Some(MAINNET_TEMPORARY_ORCHARD_DISABLING_SOFT_FORK_HEIGHT),
             Network::Testnet(parameters) => {
                 parameters.temporary_orchard_disabling_soft_fork_height()
@@ -417,6 +429,11 @@ impl zcash_protocol::consensus::Parameters for Network {
         &self,
         nu: zcash_protocol::consensus::NetworkUpgrade,
     ) -> Option<zcash_protocol::consensus::BlockHeight> {
+        // kogany: Vault (and, in a Zcash build, Ycash) only where this network schedules it,
+        // never through the fallback to a later upgrade's height (plan §2.2).
+        if !self.is_kogany_upgrade_scheduled(NetworkUpgrade::from(nu)) {
+            return None;
+        }
         NetworkUpgrade::from(nu)
             .activation_height(self)
             .map(|Height(h)| zcash_protocol::consensus::BlockHeight::from_u32(h))

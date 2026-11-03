@@ -470,6 +470,9 @@ mod tests {
     }
 
     #[test]
+    // kogany: Zcash Mainnet embedded VCT frontier, grid and subtree artefacts, which a Ycash
+    // network has none of (K-12); not run on Ycash.
+    #[cfg(not(feature = "ycash"))]
     fn exporter_rejects_a_vct_database_with_a_newer_handoff() {
         let _init_guard = zakura_test::init();
         let db = ephemeral_db();

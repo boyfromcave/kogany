@@ -1,0 +1,15 @@
+# Determinism disciplines for consensus code (kogany-yellowback plan §4.2 rule 6).
+# Iteration order must never depend on a hasher seed, and consensus results must never depend
+# on the clock or the network. The crate root also denies float arithmetic, unchecked
+# arithmetic, unwrap/expect and slice indexing.
+disallowed-types = [
+    { path = "std::collections::HashMap", reason = "iteration order is seeded: use BTreeMap" },
+    { path = "std::collections::HashSet", reason = "iteration order is seeded: use BTreeSet" },
+    { path = "std::time::SystemTime", reason = "consensus never reads the clock" },
+    { path = "std::time::Instant", reason = "consensus never reads the clock" },
+    { path = "std::net::TcpStream", reason = "consensus never touches the network" },
+    { path = "std::net::TcpListener", reason = "consensus never touches the network" },
+    { path = "std::net::UdpSocket", reason = "consensus never touches the network" },
+    { path = "f32", reason = "no floating point in consensus" },
+    { path = "f64", reason = "no floating point in consensus" },
+]

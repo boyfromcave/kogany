@@ -31,7 +31,12 @@ use std::{
 
 use futures::{future::FutureExt, stream::Stream};
 use tokio::sync::{broadcast, mpsc, oneshot, Notify};
-use tower::{buffer::Buffer, timeout::Timeout, util::BoxCloneService, Service, ServiceExt};
+use tower::{
+    buffer::Buffer,
+    timeout::Timeout,
+    util::{BoxCloneService, BoxCloneSyncService},
+    Service, ServiceExt,
+};
 
 use zakura_chain::{
     block::{self, Height},
@@ -61,6 +66,15 @@ mod peer_cooldown;
 mod pending_outputs;
 mod queue_checker;
 mod storage;
+// kogany (W6-c): the Ycash re-check after the tip grows.
+#[cfg(feature = "ycash")]
+mod tip_recheck;
+// kogany (W9-a/F-6): failures on the tip's state are verified again, not cached.
+#[cfg(feature = "ycash")]
+mod state_retry;
+// kogany (F-S5-7): a disconnected block's transactions return to the mempool.
+#[cfg(feature = "ycash")]
+mod reorg_resurrect;
 
 /// Supplies named, timed storage operations to a benchmark harness.
 #[cfg(feature = "mempool-bench")]
@@ -120,8 +134,7 @@ fn transaction_error_peer_log_label(
     }
 }
 
-type Outbound =
-    Buffer<zn::Request, futures::future::BoxFuture<'static, Result<zn::Response, zn::BoxError>>>;
+type Outbound = BoxCloneSyncService<zn::Request, zn::Response, zn::BoxError>;
 type State =
     Buffer<zs::Request, futures::future::BoxFuture<'static, Result<zs::Response, zs::BoxError>>>;
 type ReadState = BoxCloneService<zs::ReadRequest, zs::ReadResponse, zs::BoxError>;
@@ -135,7 +148,6 @@ type InboundTxDownloads = TxDownloads<Timeout<Outbound>, Timeout<TxVerifier>, Re
 /// mempool and its crawler activate, and at which the mempool starts peer
 /// transaction cooldowns.
 ///
-/// This matches `getblocktemplate`'s `MAX_ESTIMATED_DISTANCE_TO_NETWORK_CHAIN_TIP`.
 /// An active mempool only disables beyond [`zs::MAX_BLOCK_REORG_HEIGHT`], so
 /// the gap between the two thresholds keeps the mempool from flapping.
 const MAX_ESTIMATED_DISTANCE_TO_ENABLE: block::HeightDiff = 100;
@@ -359,6 +371,9 @@ fn peer_action(error: &TransactionError) -> PeerAction {
         // Halo2 proofs use that upgrade's verifying key. The Sapling verifier
         // checks proofs and signatures together. Only v4 transactions have
         // Sprout signatures, so Ed25519 failures never ban.
+        // kogany (S5): ycashd's score table (`tip_recheck::ycash_script_ban`).
+        #[cfg(feature = "ycash")]
+        Script(_) if tip_recheck::ycash_script_ban(error) => Ban,
         Script(script_error) if script_error.is_script_failure() => BanV5AndLater,
         SaplingVerificationFailed
         | Halo2VerificationFailed
@@ -402,6 +417,9 @@ fn peer_action(error: &TransactionError) -> PeerAction {
         // can fail.
         TransparentInputNotFound | ValidateMempoolLockTimeError(_) => Ignore,
 
+        // kogany (W4-d): the vault rules depend on the tip's set state (ycash6 DoS 0).
+        VaultRejected { .. } => Ignore,
+
         // Policy rejections: blocks can contain these transactions.
         Zip317(_)
         | NonStandardScriptSigSize { .. }
@@ -423,6 +441,20 @@ fn peer_action(error: &TransactionError) -> PeerAction {
         | CoinbaseExpiryBlockHeight { .. }
         | CoinbaseConstruction(_)
         | Subsidy(_) => Ignore,
+
+        // kogany (W6-c): the vault and YED verdicts depend on the set state and the module state
+        // at this node's tip (ycashd DoS 0), and a standard-flag failure is policy; a byte-level
+        // act failure gets ycashd's score of 10 (`tip_recheck::extra_misbehavior_score`), not a
+        // ban.
+        #[cfg(feature = "ycash")]
+        VaultTemplateSetState { .. }
+        | NonMandatoryScriptFlag { .. }
+        | NonStandardTransaction { .. }
+        | YellowbackRejected { .. } => Ignore,
+        // kogany (S5): signatures for the previous epoch's branch ID; ycashd scores it 10 and asks
+        // the sender to upgrade, which is no proof the relaying peer misbehaved.
+        #[cfg(feature = "ycash")]
+        OldConsensusBranchId { .. } => Ignore,
 
         // The verifier failed, or the error does not name the rule that failed.
         Script(_)
@@ -626,9 +658,43 @@ pub struct Mempool {
     /// Signalled after each transaction download and verify task finishes.
     /// Shared with every downloader, and kept across mempool resets.
     verification_finished: Arc<Notify>,
+
+    /// Ycash: the running re-check of the stored transactions at the new tip (kogany W6-c).
+    #[cfg(feature = "ycash")]
+    tip_recheck: tip_recheck::TipRecheck,
+
+    /// Ycash: the transactions kept for another verification after a failure on the tip's state
+    /// (kogany W9-a/F-6). Kept across mempool resets.
+    #[cfg(feature = "ycash")]
+    state_retries: state_retry::StateRetries,
+
+    /// Ycash: the recent best-chain blocks' transactions, returned to the mempool when their
+    /// block is disconnected (kogany F-S5-7). Kept across mempool resets.
+    #[cfg(feature = "ycash")]
+    reorg_resurrect: reorg_resurrect::ReorgResurrect,
+
+    /// Ycash: sends ycashd's `reject` to the legacy peer that relayed a refused transaction
+    /// (kogany S5). Sends nothing until [`Mempool::set_legacy_reject_sender`].
+    #[cfg(feature = "ycash")]
+    legacy_reject: zn::ycash::LegacyRejectSender,
+
+    /// Ycash: the transactions refused with no relaying peer, verified again when a legacy peer
+    /// pushes them (kogany S5). At most [`MAX_LOCAL_REJECTIONS`].
+    #[cfg(feature = "ycash")]
+    local_rejections: HashSet<UnminedTxId>,
 }
 
+/// Ycash: the bound on [`Mempool`]'s locally refused transaction ids (cleared when reached).
+#[cfg(feature = "ycash")]
+const MAX_LOCAL_REJECTIONS: usize = 1000;
+
 impl Mempool {
+    /// Ycash: the handle that sends ycashd's transaction `reject` to legacy peers (kogany S5).
+    #[cfg(feature = "ycash")]
+    pub(crate) fn set_legacy_reject_sender(&mut self, sender: zn::ycash::LegacyRejectSender) {
+        self.legacy_reject = sender;
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         config: &Config,
@@ -667,6 +733,16 @@ impl Mempool {
                 .map(|ip| ip.to_canonical())
                 .collect(),
             verification_finished: Arc::new(Notify::new()),
+            #[cfg(feature = "ycash")]
+            tip_recheck: Default::default(),
+            #[cfg(feature = "ycash")]
+            state_retries: Default::default(),
+            #[cfg(feature = "ycash")]
+            reorg_resurrect: Default::default(),
+            #[cfg(feature = "ycash")]
+            legacy_reject: Default::default(),
+            #[cfg(feature = "ycash")]
+            local_rejections: Default::default(),
         };
 
         // Make sure `is_enabled` is accurate.
@@ -761,7 +837,14 @@ impl Mempool {
             self.verification_finished.clone(),
         ));
         self.active_state = ActiveState::Enabled {
+            #[cfg(not(feature = "ycash"))]
             storage: storage::Storage::new(&self.config),
+            // Ycash: the network selects the standardness policy (kogany W1-Y9).
+            #[cfg(feature = "ycash")]
+            storage: storage::Storage::new_for_network(
+                &self.config,
+                self.chain_tip_change.network(),
+            ),
             tx_downloads,
             pending_gossip_tx_ids: HashSet::new(),
             last_seen_tip_hash,
@@ -872,8 +955,20 @@ impl Service<Request> for Mempool {
                 "resetting mempool: switched best chain, skipped blocks, or activated network upgrade"
             );
 
+            // Ycash: the tip the mempool last saw, the start of a kept-nothing walk back (F-S5-7).
+            #[cfg(feature = "ycash")]
+            let previous_tip_hash = match &self.active_state {
+                ActiveState::Enabled {
+                    last_seen_tip_hash, ..
+                } => Some(*last_seen_tip_hash),
+                ActiveState::Disabled => None,
+            };
             let previous_state = self.active_state.take();
             let tx_retries = previous_state.transaction_retry_requests();
+            // Ycash: the retries below re-verify every transaction at the new tip, BIP68 and the
+            // vault and YED checks included (kogany W6-c).
+            #[cfg(feature = "ycash")]
+            self.tip_recheck.clear();
 
             // Use the same code for dropping and resetting the mempool,
             // to avoid subtle bugs.
@@ -906,6 +1001,26 @@ impl Service<Request> for Mempool {
                     // transaction requests fails.
                     let _result = tx_downloads.retry_after_tip_reset(tx, source);
                 }
+
+                // Ycash: the kept orphans too, at the new tip (kogany W9-a/F-6).
+                #[cfg(feature = "ycash")]
+                for (tx, source) in self.state_retries.take_orphans() {
+                    if self.state_retries.count_attempt(tx.id()) {
+                        let _result = tx_downloads.retry_after_tip_reset(Gossip::Tx(tx), source);
+                    }
+                }
+            }
+
+            // Ycash: find the blocks that left the best chain; their transactions are queued when
+            // the lookup finishes (ycashd `DisconnectTip`, kogany F-S5-7).
+            #[cfg(feature = "ycash")]
+            if let Some(TipAction::Reset { height, hash }) = &tip_action {
+                self.reorg_resurrect.reset(
+                    (*height, *hash),
+                    previous_tip_hash,
+                    self.read_state.clone(),
+                    self.verification_finished.clone(),
+                );
             }
 
             return Poll::Ready(Ok(()));
@@ -924,6 +1039,27 @@ impl Service<Request> for Mempool {
             let mut send_to_peers_ids = HashSet::<_>::new();
             let mut invalidated_ids = HashSet::<_>::new();
             let mut mined_mempool_ids = HashSet::<_>::new();
+            // Ycash: the transactions inserted in this pass, whose kept orphans are verified again.
+            #[cfg(feature = "ycash")]
+            let mut inserted_parents = HashSet::new();
+
+            // Ycash: the transactions of the blocks a reset disconnected, verified at the new tip
+            // as ycashd's `DisconnectTip` hands them to `AcceptToMemoryPool` (kogany F-S5-7).
+            #[cfg(feature = "ycash")]
+            if let Some(transactions) = self.reorg_resurrect.poll_disconnected(cx) {
+                if !transactions.is_empty() {
+                    info!(
+                        transactions = transactions.len(),
+                        "returning the transactions of disconnected blocks to the mempool"
+                    );
+                }
+                for tx in transactions {
+                    let _result = tx_downloads.retry_after_tip_reset(
+                        Gossip::Tx(zakura_chain::transaction::UnminedTx::from(tx)),
+                        None,
+                    );
+                }
+            }
 
             let best_tip_height = self.latest_chain_tip.best_tip_height();
             let next_height = best_tip_height
@@ -960,6 +1096,11 @@ impl Service<Request> for Mempool {
                             if let Ok(inserted_id) = insert_result {
                                 // Save transaction ids that we will send to peers
                                 send_to_peers_ids.insert(inserted_id);
+                                #[cfg(feature = "ycash")]
+                                {
+                                    self.state_retries.accepted(&inserted_id);
+                                    inserted_parents.insert(inserted_id.mined_id());
+                                }
                             } else {
                                 invalidated_ids.insert(tx_id);
                             }
@@ -989,6 +1130,35 @@ impl Service<Request> for Mempool {
                     }
                     Ok(Err(boxed_err)) => {
                         let (tx_id, error) = *boxed_err;
+                        // Ycash: ycashd's `reject` to the relaying peer, before any ban
+                        // (`ycash6 src/main.cpp:8937-8947`; kogany S5).
+                        #[cfg(feature = "ycash")]
+                        if let TransactionDownloadVerifyError::Invalid {
+                            error,
+                            advertiser_addr: Some(peer),
+                            ..
+                        } = &error
+                        {
+                            use zakura_rpc::methods::ycash_reject::{
+                                transaction_reject, Context, CxxReject, REJECT_INVALID,
+                            };
+                            let (code, reason) = match transaction_reject(error, Context::Mempool) {
+                                CxxReject::Reject { code, reason } => (code, reason),
+                                CxxReject::Unmapped(text) => (REJECT_INVALID, text),
+                                // ycashd's orphan and duplicate paths send no reject.
+                                CxxReject::MissingInputs
+                                | CxxReject::AlreadyInChain
+                                | CxxReject::InMempool => {
+                                    (zn::ycash::REJECT_INTERNAL, String::new())
+                                }
+                            };
+                            self.legacy_reject.reject_transaction(
+                                *peer,
+                                code,
+                                &reason,
+                                tx_id.mined_id().0,
+                            );
+                        }
                         let zcashd_compat_peer_ips = &self.zcashd_compat_peer_ips;
                         let ban_peer = transaction_ban_peer(&error)
                             .filter(|peer| !is_zcashd_compat_peer(zcashd_compat_peer_ips, *peer));
@@ -996,6 +1166,20 @@ impl Service<Request> for Mempool {
                             let _ = self
                                 .misbehavior_sender
                                 .try_send((peer, zn::constants::MAX_PEER_MISBEHAVIOR_SCORE));
+                        }
+                        // Ycash: ycashd's DoS 10 for a byte-level act failure (kogany W6-c).
+                        #[cfg(feature = "ycash")]
+                        if let TransactionDownloadVerifyError::Invalid {
+                            error,
+                            advertiser_addr: Some(peer),
+                            ..
+                        } = &error
+                        {
+                            if let Some(score) = tip_recheck::extra_misbehavior_score(error)
+                                .filter(|_| !is_zcashd_compat_peer(zcashd_compat_peer_ips, *peer))
+                            {
+                                let _ = self.misbehavior_sender.try_send((*peer, score));
+                            }
                         }
 
                         // Only start cooldowns while this node's validation context is
@@ -1052,7 +1236,64 @@ impl Service<Request> for Mempool {
                             .increment(1),
                         }
 
+                        // Ycash: a failure on the tip's state is verified again (kogany W9-a/F-6):
+                        // at once if this node's tip moved during the verification, and, for a
+                        // missing input, when a parent arrives or the tip changes.
+                        #[cfg(feature = "ycash")]
+                        {
+                            self.state_retries
+                                .record_failed(tx_downloads.take_state_failures());
+                            if let TransactionDownloadVerifyError::Invalid {
+                                error: tx_error,
+                                tip_height,
+                                ..
+                            } = &error
+                            {
+                                if let Some((tx, source)) =
+                                    state_retry::is_tip_state_dependent(tx_error)
+                                        .then(|| self.state_retries.take_failed(&tx_id))
+                                        .flatten()
+                                {
+                                    if state_retry::is_stale(tx_error, *tip_height, best_tip_height)
+                                    {
+                                        tracing::debug!(
+                                            ?tx_id,
+                                            ?tip_height,
+                                            ?best_tip_height,
+                                            "the tip moved during verification: verifying again"
+                                        );
+                                        storage.forget_tip_rejection(&tx_id);
+                                        if self.state_retries.count_attempt(tx_id) {
+                                            let _ = tx_downloads
+                                                .retry_after_tip_reset(Gossip::Tx(tx), source);
+                                        }
+                                        continue;
+                                    }
+                                    if state_retry::is_missing_input(tx_error) {
+                                        self.state_retries.keep_orphan((tx, source));
+                                    }
+                                }
+                            }
+                        }
+
                         invalidated_ids.insert(tx_id);
+                        // Ycash: a transaction refused with no relaying peer (a local
+                        // `sendrawtransaction`) is verified again when a legacy peer relays it:
+                        // ycashd fills `recentRejects` only from P2P (`ycash6 src/main.cpp:
+                        // 8829-8947`), so that peer gets the `reject` and the score (kogany S5).
+                        #[cfg(feature = "ycash")]
+                        if matches!(
+                            &error,
+                            TransactionDownloadVerifyError::Invalid {
+                                advertiser_addr: None,
+                                ..
+                            }
+                        ) {
+                            if self.local_rejections.len() >= MAX_LOCAL_REJECTIONS {
+                                self.local_rejections.clear();
+                            }
+                            self.local_rejections.insert(tx_id);
+                        }
                         storage.reject_if_needed(tx_id, error);
                     }
                     Err((tx_id, _elapsed)) => {
@@ -1068,16 +1309,54 @@ impl Service<Request> for Mempool {
                 };
             }
 
+            // Ycash: the kept orphans that spend from a transaction inserted above (ycashd's orphan
+            // processing after `AcceptToMemoryPool`, kogany W9-a/F-6).
+            #[cfg(feature = "ycash")]
+            for (tx, source) in self.state_retries.take_children_of(&inserted_parents) {
+                storage.forget_tip_rejection(&tx.id());
+                if self.state_retries.count_attempt(tx.id()) {
+                    let _ = tx_downloads.retry_after_tip_reset(Gossip::Tx(tx), source);
+                }
+            }
+
+            // Ycash: inv-announced ids the per-peer download cap refused are queued again as
+            // their peer's slots free (kogany F-S5-16).
+            #[cfg(feature = "ycash")]
+            for (gossip, source) in tx_downloads.take_deferred_ready() {
+                if storage.should_download_or_verify(gossip.id()).is_ok() {
+                    let _ = tx_downloads.download_if_needed_and_verify(gossip, Some(source), None);
+                }
+            }
+
             // Handle best chain tip changes
             if let Some(TipAction::Grow { block }) = tip_action {
                 tracing::trace!(block_height = ?block.height, "handling blocks added to tip");
                 *last_seen_tip_hash = block.hash;
+
+                // Ycash: kept, in case a reorg disconnects it (kogany F-S5-7).
+                #[cfg(feature = "ycash")]
+                self.reorg_resurrect
+                    .grew(block.height, block.hash, &block.transactions);
 
                 // Cancel downloads/verifications/storage of transactions
                 // with the same mined IDs as recently mined transactions.
                 let mined_ids = block.transaction_hashes.iter().cloned().collect();
                 tx_downloads.cancel(&mined_ids);
                 storage.clear_mined_dependencies(&mined_ids);
+
+                // Ycash (kogany W9-a/F-6): a verification waiting for an output this block created
+                // gets it now rather than at its timeout. Its result is from the old tip, so the
+                // mempool verifies the transaction again at this one.
+                #[cfg(feature = "ycash")]
+                for tx in &block.transactions {
+                    let hash = tx.hash();
+                    for (index, output) in tx.outputs().iter().enumerate() {
+                        storage.pending_outputs.respond(
+                            &zakura_chain::transparent::OutPoint::from_usize(hash, index),
+                            output.clone(),
+                        );
+                    }
+                }
 
                 let storage::RemovedTransactionIds { mined, invalidated } =
                     storage.reject_and_remove_same_effects(&mined_ids, block.transactions);
@@ -1086,8 +1365,27 @@ impl Service<Request> for Mempool {
                 // the new block was added to the tip.
                 storage.clear_tip_rejections();
 
+                // Ycash: the kept orphans are verified at this tip (kogany W9-a/F-6).
+                #[cfg(feature = "ycash")]
+                for (tx, source) in self.state_retries.take_orphans() {
+                    if self.state_retries.count_attempt(tx.id()) {
+                        let _ = tx_downloads.retry_after_tip_reset(Gossip::Tx(tx), source);
+                    }
+                }
+
                 mined_mempool_ids.extend(mined);
                 invalidated_ids.extend(invalidated);
+
+                // Ycash: re-check what is left at the new tip (kogany W6-c, below).
+                #[cfg(feature = "ycash")]
+                self.tip_recheck.schedule(
+                    network.clone(),
+                    (block.height, block.hash),
+                    storage.transactions().values().cloned().collect(),
+                    self.tx_verifier.clone(),
+                    self.read_state.clone(),
+                    self.verification_finished.clone(),
+                );
             }
 
             // Remove expired transactions from the mempool.
@@ -1106,6 +1404,25 @@ impl Service<Request> for Mempool {
                     );
 
                     invalidated_ids.extend(expired_transactions);
+                }
+            }
+
+            // Ycash: re-check the stored transactions at the new tip, and evict what the last
+            // re-check refused (ycashd `ConnectTip`'s `RemoveInvalidVaultSpends` and
+            // `RecheckMempool`, kogany W6-c).
+            #[cfg(feature = "ycash")]
+            {
+                if let Some(evictions) = self.tip_recheck.poll_evictions(cx, *last_seen_tip_hash) {
+                    let evicted = storage.evict_after_tip_recheck(evictions);
+                    if !evicted.is_empty() {
+                        info!(
+                            transactions = evicted.len(),
+                            ?evicted,
+                            "evicted mempool transactions the new tip makes invalid"
+                        );
+                        send_to_peers_ids.retain(|id| !evicted.contains(id));
+                        invalidated_ids.extend(evicted);
+                    }
                 }
             }
 
@@ -1262,6 +1579,21 @@ impl Service<Request> for Mempool {
                     trace!(?req, "got mempool request");
 
                     let transactions: Vec<_> = storage.transactions().values().cloned().collect();
+                    // Ycash: a transaction whose expiry is the tip stays stored (ycashd's
+                    // `removeExpired`), but no block after the tip may include it (`CreateNewBlock`
+                    // skips `IsExpiredTx`); its dependents keep their dependency on it, so the
+                    // template leaves them out too (kogany W6-c).
+                    #[cfg(feature = "ycash")]
+                    let transactions = {
+                        let next_height = self
+                            .latest_chain_tip
+                            .best_tip_height()
+                            .and_then(|height| height.next().ok())
+                            .unwrap_or(Height(0));
+                        let mut transactions = transactions;
+                        transactions.retain(|tx| !tip_recheck::is_expired_at(tx, next_height));
+                        transactions
+                    };
                     let transaction_dependencies = storage.transaction_dependencies().clone();
 
                     trace!(?req, transactions_count = ?transactions.len(), "answered mempool request");
@@ -1360,6 +1692,16 @@ impl Service<Request> for Mempool {
                             .increment(u64::try_from(transactions.len()).unwrap_or(u64::MAX));
                     } else {
                         for gossiped_tx in transactions {
+                            // Ycash: a pushed transaction refused only locally is verified
+                            // again (see `local_rejections`).
+                            #[cfg(feature = "ycash")]
+                            if matches!(
+                                (&gossiped_tx, &source),
+                                (Gossip::Tx(_), QueueSource::LegacySocket(_))
+                            ) && self.local_rejections.remove(&gossiped_tx.id())
+                            {
+                                storage.forget_tip_rejection(&gossiped_tx.id());
+                            }
                             if storage.should_download_or_verify(gossiped_tx.id()).is_err() {
                                 continue;
                             }
@@ -1380,6 +1722,18 @@ impl Service<Request> for Mempool {
 
                     // all the work for this request is done in poll_ready
                     async move { Ok(Response::CheckedForVerifiedTransactions) }.boxed()
+                }
+
+                // Ycash: caught up with the best tip (`invalidateblock` / `reconsiderblock`).
+                Request::Settled => {
+                    let tip_seen =
+                        self.latest_chain_tip.best_tip_hash() == Some(*last_seen_tip_hash);
+                    #[cfg(feature = "ycash")]
+                    let resurrect_idle = self.reorg_resurrect.is_idle();
+                    #[cfg(not(feature = "ycash"))]
+                    let resurrect_idle = true;
+                    let settled = tip_seen && resurrect_idle && tx_downloads.in_flight() == 0;
+                    async move { Ok(Response::Settled(settled)) }.boxed()
                 }
 
                 // Summary statistics for the mempool: count, total size, and memory usage.
@@ -1499,6 +1853,9 @@ impl Service<Request> for Mempool {
                         // all the work for this request is done in poll_ready
                         Response::CheckedForVerifiedTransactions
                     }
+
+                    // Nothing to catch up with.
+                    Request::Settled => Response::Settled(true),
 
                     // Return empty mempool stats
                     Request::QueueStats => Response::QueueStats {

@@ -9,7 +9,79 @@ release-policy exceptions for backwards-compatible additions. These exceptions
 do not apply to published library crates, whose API versions are evaluated
 independently.
 
+## kogany (Ycash) - unreleased
+
+kogany is the Ycash developers' fork of Zakura: built with the `ycash` cargo feature it is
+`koganyd`, a Ycash full node carrying the vault network upgrade and the Ycash Yellowback (YED)
+rule module, the third Ycash node line beside ycashd 4.5.0 (`ycash-dd`) and ycashd 6.20
+(`ycash6`). [README.md](README.md) describes it; the entries below this section are upstream
+Zakura's, which kogany follows.
+
+### Added
+
+- The Ycash networks: mainnet, the re-forked testnet's `fast` and `slow` profiles and regtest,
+  with ycashd's upgrades and branch IDs, Equihash (192,7) from the Ycash fork, the development
+  fund (YDF), checkpoints, address prefixes and HRPs, ports, magics and P2P versions.
+- The vault primitive (`set_*`, `vault_*` RPCs), post-quantum owners and the Yellowback module
+  (`yed_*` RPCs), `rpcversion` 8, as on ycash6 and ycash-dd.
+
+### Changed
+
+- The `ycash` build's binary is `koganyd`, its user agent `/koganyd:<version>/`; its `zakurad`
+  binary refuses to run. The CI artifact other repositories download is `koganyd-bin`
+  (`koganyd-bin.tgz` with `koganyd` and `koganyd-bin.json`; it was `zakurad-bin`).
+- A `ycash` build never uses Zakura's file-system names: the config file is `kogany.toml`, the
+  cache directory (state, peer cache, RPC cookie) is `kogany`, the network identity directory is
+  `~/.kogany`, and each test network's default RPC cookie is in its own subdirectory. The
+  generated config names Ycash's seeds and ports only, and the Zakura P2P v2 overlay has no
+  bootstrap peers. Peers on Zcash's ports or on another Ycash network's port are refused.
+
 ## [Unreleased]
+
+## [1.8.0-rc1] - 2026-11-01
+
+### Changed
+
+- Enable BMI2/ADX Pasta assembly in default node and release builds, without
+  global CPU compiler flags or per-operation runtime CPU detection. Default
+  x86-64 binaries now require both CPU extensions and check compatibility at
+  startup, including in the standalone rollback utility. Build with
+  `--features portable` for older x86-64 CPUs
+  ([#1893](https://github.com/zakura-core/zakura/pull/1893)).
+- Committing a block no longer opens INFO tracing spans for each transaction, which made
+  large blocks slower to accept. At INFO, logs from inside block commits lose the
+  per-transaction span names, hashes and indexes; TRACE keeps them
+  ([#1894](https://github.com/zakura-core/zakura/pull/1894)).
+- Sapling value commitments are now held as bytes through librustzcash
+  conversion, following Common's sapling-crypto change; the set of accepted
+  `cv` encodings is unchanged, and an invalid one is still rejected by the
+  semantic verifier before any proof work
+  ([#1907](https://github.com/zakura-core/zakura/pull/1907)).
+- Reduced parent-input check latency for blocks with large batches of transparent inputs by overlapping reads ([#1908](https://github.com/zakura-core/zakura/pull/1908)).
+- Verifying a block the node has not seen before is faster for blocks with many
+  transactions: about a third faster for a 1.9 MB transparent block
+  ([#1909](https://github.com/zakura-core/zakura/pull/1909)).
+- `getblocktemplate` now reports `-10` (not synced) only when the local chain
+  tip's block time is more than 6 hours old. The threshold is now a fixed
+  duration rather than a block count, so it no longer shrinks when block
+  spacing changes ([#1911](https://github.com/zakura-core/zakura/pull/1911)).
+- Require a minimum claimed proof-of-work difficulty for recent Mainnet block
+  downloads as a defense-in-depth admission policy
+  ([#1915](https://github.com/zakura-core/zakura/pull/1915)).
+
+### Fixed
+
+- A gossiped block that arrives before its parent now immediately requests the
+  missing parent, or waits on the parent's existing download, instead of waiting
+  for another peer or the next sync round. The request goes to a peer that
+  advertised the parent, or otherwise to the peer that sent the block. The block
+  must have valid proof of work to start a request
+  ([#1873](https://github.com/zakura-core/zakura/pull/1873)).
+- A newly mined or received block is announced to peers right away, instead of
+  waiting up to several seconds for an earlier block's announcements to
+  finish ([#1874](https://github.com/zakura-core/zakura/pull/1874)).
+- Smoothed short-term variation in sync progress reporting
+  ([#1913](https://github.com/zakura-core/zakura/pull/1913)).
 
 ## [1.8.0-rc0] - 2026-11-01
 

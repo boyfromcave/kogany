@@ -45,6 +45,8 @@ mod eviction_list;
 mod fixtures;
 mod policy;
 mod verified_set;
+#[cfg(feature = "ycash")]
+mod ycash_policy;
 
 #[cfg(feature = "mempool-bench")]
 pub(super) use verified_set::benchmarks::mempool_eviction_benchmarks;
@@ -192,6 +194,19 @@ pub enum NonStandardTransactionError {
     TooManySigops,
     #[error("transaction has non-standard inputs")]
     NonStandardInputs,
+    /// Ycash `tx-expiring-soon` (kogany W1-Y9).
+    #[cfg(feature = "ycash")]
+    #[error("transaction is expiring soon")]
+    ExpiringSoon,
+    /// Ycash `-txunpaidactionlimit` (kogany W1-Y9).
+    #[cfg(feature = "ycash")]
+    #[error("transaction has more unpaid actions than the configured limit")]
+    UnpaidActionLimit,
+    /// Ycash `non-mandatory-script-verify-flag`: the scripts pass the consensus flags but not
+    /// `STANDARD_SCRIPT_VERIFY_FLAGS` (kogany W6-a).
+    #[cfg(feature = "ycash")]
+    #[error("transaction scripts fail a standard script verification flag (non-mandatory-script-verify-flag): {0}")]
+    NonMandatoryScriptVerifyFlag(String),
 }
 
 /// Represents a set of transactions that have been removed from the mempool, either because
@@ -255,6 +270,10 @@ pub struct Storage {
 
     /// Maximum allowed size of OP_RETURN scripts, in bytes.
     max_datacarrier_bytes: u32,
+
+    /// The Ycash policy that depends on the configuration and the network (kogany W1-Y9).
+    #[cfg(feature = "ycash")]
+    ycash: ycash_policy::Policy,
 }
 
 impl Drop for Storage {
@@ -290,12 +309,26 @@ impl Storage {
             max_datacarrier_bytes: config
                 .max_datacarrier_bytes
                 .unwrap_or(config::DEFAULT_MAX_DATACARRIER_BYTES),
+            #[cfg(feature = "ycash")]
+            ycash: ycash_policy::Policy::new(config, None),
             verified: Default::default(),
             pending_outputs: Default::default(),
             tip_rejected_exact: Default::default(),
             tip_rejected_same_effects: Default::default(),
             chain_rejected_same_effects: Default::default(),
         }
+    }
+
+    /// The Ycash storage for `network`: as [`Storage::new`], with the policy `network` selects
+    /// (regtest accepts non-standard transactions unless configured otherwise). (kogany W1-Y9)
+    #[cfg(feature = "ycash")]
+    pub(crate) fn new_for_network(
+        config: &config::Config,
+        network: &zakura_chain::parameters::Network,
+    ) -> Self {
+        let mut storage = Self::new(config);
+        storage.ycash = ycash_policy::Policy::new(config, Some(network));
+        storage
     }
 
     /// Check and reject non-standard transaction.
@@ -311,6 +344,13 @@ impl Storage {
     /// limits), and dust checks.
     fn reject_if_non_standard_tx(&mut self, tx: &VerifiedUnminedTx) -> Result<(), MempoolError> {
         use zcash_script::script::{self, Evaluable as _};
+
+        // Ycash: `RequireStandard()` is false (regtest), kogany W1-Y9; with a network, the
+        // Ycash rules in `ycash_policy::Policy::check` replace these (kogany W6-a).
+        #[cfg(feature = "ycash")]
+        if self.ycash.accept_non_standard || self.ycash.replaces_standardness() {
+            return Ok(());
+        }
 
         let transaction = tx.transaction.transaction().as_ref();
         let spent_outputs = &tx.spent_outputs;
@@ -532,6 +572,15 @@ impl Storage {
             return (Err(MempoolError::InMempool), HashSet::new());
         }
 
+        // Ycash: the standardness rules where required, the expiring-soon rule, the sigop limit,
+        // `-txunpaidactionlimit` and the standard script flags (kogany W1-Y9, W6-a).
+        #[cfg(feature = "ycash")]
+        if let Err(rejection_error) = self.ycash.check(&tx, height) {
+            if let Err(error) = self.reject_non_standard(&tx, rejection_error) {
+                return (Err(error), HashSet::new());
+            }
+        }
+
         // Check that the transaction is standard.
         if let Err(error) = self.reject_if_non_standard_tx(&tx) {
             return (Err(error), HashSet::new());
@@ -583,6 +632,7 @@ impl Storage {
     ///
     /// Returns the IDs of the evicted transactions. Returns an error, and evicts nothing, if
     /// `tx` does not pay enough to evict them.
+    #[cfg_attr(feature = "ycash", allow(unreachable_code))]
     fn make_room(
         &mut self,
         tx: &VerifiedUnminedTx,
@@ -592,6 +642,11 @@ impl Storage {
             metrics::gauge!("zcash.mempool.eviction_cost.floor").set(0.0);
             return Ok(HashSet::new());
         }
+
+        // Ycash: ycashd's ZIP-401 limiter (`src/mempool_limit.cpp`, `CTxMemPool::EnsureSizeLimit`)
+        // admits the newcomer and evicts at random by eviction weight.
+        #[cfg(feature = "ycash")]
+        return self.make_room_zip401(tx, ancestors);
 
         let victims = self
             .verified
@@ -620,6 +675,70 @@ impl Storage {
         // A `usize` always fits in a `u64` on supported platforms.
         metrics::counter!("zcash.mempool.evicted").increment(evicted_ids.len() as u64);
 
+        Ok(evicted_ids)
+    }
+
+    /// Ycash (kogany S5): ycashd's ZIP-401 eviction (`src/mempool_limit.{h,cpp}`). Each stored
+    /// transaction weighs its cost (`max(size, MIN_TX_COST)`) plus `LOW_FEE_PENALTY` when it pays
+    /// less than its conventional fee; while the mempool with `tx` is over the cost limit, one
+    /// stored transaction is drawn at random by weight and removed with its descendants. The
+    /// newcomer's mempool ancestors are never drawn (removing them would invalidate it); ycashd
+    /// may draw the newcomer itself, kogany keeps it, so each round still evicts exactly one.
+    #[cfg(feature = "ycash")]
+    fn make_room_zip401(
+        &mut self,
+        tx: &VerifiedUnminedTx,
+        ancestors: &HashSet<transaction::Hash>,
+    ) -> Result<HashSet<UnminedTxId>, ExactTipRejectionError> {
+        use rand_10::RngExt;
+
+        /// ycashd `LOW_FEE_PENALTY` (`src/mempool_limit.h`).
+        const LOW_FEE_PENALTY: u64 = 40_000;
+
+        let mut rng = rand_10::rng();
+        let mut evicted_ids = HashSet::new();
+        while self.verified.total_cost().saturating_add(tx.cost()) > self.tx_cost_limit {
+            let candidates: Vec<(transaction::Hash, u64, u64)> = self
+                .verified
+                .transactions()
+                .iter()
+                .filter(|(hash, _)| !ancestors.contains(*hash))
+                .map(|(hash, stored)| {
+                    let cost = stored.cost();
+                    let penalty = if !stored.pays_conventional_fee() {
+                        LOW_FEE_PENALTY
+                    } else {
+                        0
+                    };
+                    (*hash, cost, cost.saturating_add(penalty))
+                })
+                .collect();
+            let total: u64 = candidates.iter().map(|c| c.2).sum();
+            if total == 0 {
+                metrics::counter!("zcash.mempool.rejected.below_eviction_cost").increment(1);
+                return Err(ExactTipRejectionError::BelowEvictionCost);
+            }
+            let mut pick = rng.random_range(0..total);
+            let &(victim, cost, weight) = candidates
+                .iter()
+                .find(|c| {
+                    if pick < c.2 {
+                        true
+                    } else {
+                        pick -= c.2;
+                        false
+                    }
+                })
+                .expect("pick is below the total weight");
+            tracing::info!("Evicting transaction (txid={victim}, cost={cost}, weight={weight})");
+            for evicted_tx in self.verified.remove(&victim) {
+                let evicted_id = evicted_tx.transaction.id();
+                self.reject(evicted_id, ExactTipRejectionError::Evicted.into());
+                evicted_ids.insert(evicted_id);
+            }
+        }
+        // A `usize` always fits in a `u64` on supported platforms.
+        metrics::counter!("zcash.mempool.evicted").increment(evicted_ids.len() as u64);
         Ok(evicted_ids)
     }
 
@@ -971,6 +1090,15 @@ impl Storage {
         None
     }
 
+    /// kogany (W9-a/F-6): forgets the exact-tip rejection of `txid`, which is about to be verified
+    /// again ([`super::state_retry`]).
+    #[cfg(feature = "ycash")]
+    pub fn forget_tip_rejection(&mut self, txid: &UnminedTxId) {
+        if self.tip_rejected_exact.remove(txid).is_some() {
+            self.update_rejected_metrics();
+        }
+    }
+
     /// Returns the set of [`UnminedTxId`]s matching `tx_ids` in the rejected list.
     ///
     /// This matches transactions based on each rejection list's matching rule.
@@ -1045,7 +1173,15 @@ impl Storage {
 
         for (&tx_id, tx) in self.transactions() {
             if let Some(expiry_height) = tx.transaction.transaction().expiry_height() {
-                if tip_height >= expiry_height {
+                // Ycash: ycashd's `removeExpired(tip)` drops a transaction only once the tip is
+                // past its expiry height (`IsExpiredTx`: `height > nExpiryHeight`), so one whose
+                // expiry is the tip stays for one more block; no template includes it (kogany
+                // W6-c, mapping W1-Y9 open row).
+                #[cfg(feature = "ycash")]
+                let expired = tip_height > expiry_height;
+                #[cfg(not(feature = "ycash"))]
+                let expired = tip_height >= expiry_height;
+                if expired {
                     tx_ids.insert(tx_id);
                 }
             }
@@ -1067,6 +1203,44 @@ impl Storage {
         }
 
         removed_tx_ids
+    }
+
+    /// Ycash (kogany W6-c): evicts the transactions the tip re-check refused at the new tip,
+    /// with their descendants (ycashd `pool.remove(tx, removed, true)`), and rejects each
+    /// refused one until the next tip block. Returns every removed id.
+    #[cfg(feature = "ycash")]
+    pub(super) fn evict_after_tip_recheck(
+        &mut self,
+        evictions: Vec<super::tip_recheck::Eviction>,
+    ) -> HashSet<UnminedTxId> {
+        let mut removed = HashSet::new();
+        for eviction in evictions {
+            let Some(tx_id) = self
+                .verified
+                .transactions()
+                .get(&eviction.mined_id)
+                .map(|tx| tx.transaction.id())
+            else {
+                continue;
+            };
+            tracing::debug!(?tx_id, error = %eviction.error, "evicting a mempool transaction at the new tip");
+            // ycashd's MP-1 sweep line (`src/yellowback/index.cpp` RemoveInvalidVaultSpends).
+            tracing::info!(
+                "yellowback: dropping {} from the mempool at the new tip: {}",
+                eviction.mined_id,
+                eviction.error
+            );
+            removed.extend(
+                self.verified
+                    .remove_all_that(|tx| tx.transaction.id().mined_id() == eviction.mined_id),
+            );
+            self.reject(
+                tx_id,
+                ExactTipRejectionError::FailedVerification(eviction.error).into(),
+            );
+        }
+        self.pending_outputs.prune();
+        removed
     }
 
     /// Check if transaction should be downloaded and/or verified.

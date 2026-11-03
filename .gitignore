@@ -111,6 +111,11 @@ target/
 /qa/fuzz/rpc/coverage/
 /qa/fuzz/rpc/*.profdata
 /qa/fuzz/rpc/*.profraw
+/qa/fuzz/vault/artifacts/
+/qa/fuzz/vault/corpus/
+/qa/fuzz/vault/coverage/
+/qa/fuzz/vault/*.profdata
+/qa/fuzz/vault/*.profraw
 
 # Remove Cargo.lock from gitignore if creating an executable, leave it for libraries
 # More information here https://doc.rust-lang.org/cargo/guide/cargo-toml-vs-cargo-lock.html
@@ -181,3 +186,6 @@ perf-artifacts/**/*
 # local VCT fast-sync run artifacts (state cache, config, logs, traces)
 .zakurad-vct-local-cache/
 zakurad-vct-local*
+
+# kogany audit output (qa/kogany_audit.py)
+kogany-audit-out/

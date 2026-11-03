@@ -227,6 +227,12 @@ where
     S: Service<zs::Request, Response = zs::Response, Error = BoxError> + Send + Clone + 'static,
     S::Future: Send + 'static,
 {
+    /// kogany: the network this verifier checks blocks for (the router's partial-list arm).
+    #[cfg(feature = "ycash")]
+    pub(crate) fn network(&self) -> &Network {
+        &self.network
+    }
+
     /// Return a checkpoint verification service for `network`, using the
     /// hard-coded checkpoint list, and the provided `state_service`.
     ///
@@ -666,7 +672,7 @@ where
             )?;
         } else {
             crate::block::check::difficulty_is_valid(&block.header, &self.network, &height, &hash)?;
-            crate::block::check::equihash_solution_is_valid(&block.header, &self.network)?;
+            crate::block::check::equihash_solution_is_valid(&block.header, &self.network, &height)?;
         }
 
         // The commit task calculates this value after the parent commits at ZIP 234 heights.

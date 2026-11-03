@@ -67,9 +67,9 @@ pub use request::{
 pub use request::Spend;
 
 pub use response::{
-    AnyTx, BlockSyncBodyMetadata, GetBlockTemplateChainInfo, KnownBlock, MinedTx,
-    NonFinalizedBlock, NonFinalizedBlocksListener, ParentInputs, PreparedMinedRelayEligibility,
-    ReadResponse, Response,
+    AnyTx, AuthDataCommitment, BlockSyncBodyMetadata, GetBlockTemplateChainInfo, KnownBlock,
+    MinedTx, NonFinalizedBlock, NonFinalizedBlocksListener, ParentInputs,
+    PreparedMinedRelayEligibility, ReadResponse, Response,
 };
 #[cfg(any(test, feature = "header-fuzz"))]
 pub use service::finalized_state::{replay_recovery_rows_bytes, RecoveryRowsReplaySummary};
@@ -87,6 +87,10 @@ pub use service::{
 // Allow use in the scanner and external tests
 #[cfg(any(test, feature = "proptest-impl"))]
 pub use service::finalized_state::{ReadDisk, TypedColumnFamily, WriteTypedBatch};
+// kogany (W4-c): the Vault upgrade's set state (read API for W4-d and W7).
+pub use service::vault;
+// kogany (W5-e): the Yellowback (YED) index (read API for W5-f and W6-b).
+pub use service::yed;
 
 // Lets tests above this crate drive real RPC handlers over a fast-synced node's absent band.
 #[cfg(any(test, feature = "proptest-impl"))]

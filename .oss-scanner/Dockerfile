@@ -47,7 +47,7 @@ RUN cargo fetch --locked
 # Build as CI does: the ci-tests profile and the release feature set. `portable` selects
 # Pasta arithmetic that runs on any x86-64 CPU, not only the one that built it.
 RUN cargo build --locked --profile ci-tests --features default-release-binaries,portable \
-      --package zakura --bins \
+      --package kogany --bins \
     && ls -l target/ci-tests/zakurad
 
 # Compile every test binary without running it, so the whole suite is runnable offline.

@@ -12,7 +12,7 @@ use chrono::{Duration, Utc};
 use tokio::time;
 use tower::{
     buffer::Buffer,
-    util::{BoxCloneService, BoxService},
+    util::{BoxCloneService, BoxCloneSyncService, BoxService},
 };
 
 use zakura_chain::{
@@ -340,6 +340,22 @@ fn is_scored_but_never_bans(error: &TransactionError) -> bool {
             | CoinbaseOutputsNotDecryptable
             | CoinbaseExpiryBlockHeight { .. }
             | Subsidy(_)
+    ) || is_scored_ycash_verdict(error)
+}
+
+/// kogany (W6-c): a byte-level act failure scores 10 (ycashd) without a ban. kogany (S5): so
+/// does a signature over the previous epoch's branch ID (`old-consensus-branch-id`).
+fn is_scored_ycash_verdict(error: &TransactionError) -> bool {
+    #[cfg(feature = "ycash")]
+    if matches!(error, TransactionError::OldConsensusBranchId { .. }) {
+        return true;
+    }
+    matches!(
+        error,
+        TransactionError::VaultRejected {
+            byte_level: true,
+            ..
+        }
     )
 }
 
@@ -578,7 +594,7 @@ fn setup(
             ..Default::default()
         },
         false,
-        Buffer::new(BoxService::new(peer_set.clone()), 1),
+        BoxCloneSyncService::new(Buffer::new(BoxService::new(peer_set.clone()), 1)),
         Buffer::new(BoxService::new(state_guard.clone()), 1),
         BoxCloneService::new(state_service.clone()),
         Buffer::new(BoxService::new(tx_verifier.clone()), 1),

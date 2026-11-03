@@ -21,6 +21,20 @@ use zakura_chain::{
 };
 use zakura_node_services::task::spawn_erased;
 
+/// kogany (S5, F-S5-19): how many rejected blocks are kept for `getblock`.
+#[cfg(feature = "ycash")]
+const MAX_REJECTED_BLOCKS: usize = 32;
+
+/// kogany (S5, F-S5-19): the blocks contextual validation rejected most recently, keyed by hash,
+/// with their heights, in rejection order (Ycash build only). ycashd keeps a rejected block in its
+/// block index (`BLOCK_FAILED_VALID`) and `getblock` answers it with `confirmations: -1`; Zakura
+/// dropped it. Process-wide, because the write task validates on a staged copy that an invalid
+/// block never replaces the state with. A read-side record only: validation never consults it.
+#[allow(clippy::type_complexity)]
+static REJECTED_BLOCKS: std::sync::LazyLock<
+    std::sync::Mutex<IndexMap<block::Hash, (Arc<zakura_chain::block::Block>, Height)>>,
+> = std::sync::LazyLock::new(Default::default);
+
 use crate::{
     constants::{MAX_INVALIDATED_BLOCKS, MAX_NON_FINALIZED_CHAIN_FORKS},
     error::ReconsiderError,
@@ -46,6 +60,10 @@ pub(crate) use backup::write_semantically_verified_backup_block;
 #[cfg(feature = "internal-bench")]
 pub use chain::{benchmark_height_map, HeightMapBenchmarkSample};
 pub(crate) use chain::{Chain, SpendingTransactionId};
+// kogany (W4-c)
+pub use chain::vault::{ChainVaultOverlay, ChainVaultView, VaultDelta};
+// kogany (W5-e)
+pub use chain::yed::{ChainYedOverlay, ChainYedView};
 pub(crate) use created_utxos::CreatedUtxos;
 pub(crate) use shared_map::SharedMap;
 
@@ -101,8 +119,13 @@ pub struct NonFinalizedState {
     chain_set: BTreeSet<Arc<Chain>>,
 
     /// Blocks that have been invalidated in, and removed from, the non finalized
-    /// state.
-    invalidated_blocks: IndexMap<Height, Arc<Vec<ContextuallyVerifiedBlock>>>,
+    /// state: each invalidated branch, keyed by the hash of its root (the block `invalidateblock`
+    /// named), in invalidation order.
+    ///
+    /// kogany (S5, `vault_pq_reorg`): keyed by hash, not height, so two branches invalidated at one
+    /// height are both kept and each can be reconsidered, as ycashd keeps a failure flag per
+    /// block index entry; keyed by height the second record overwrote the first.
+    invalidated_blocks: IndexMap<block::Hash, Arc<Vec<ContextuallyVerifiedBlock>>>,
 
     /// The sequence of the latest `preciousblock` call, so later calls win equal-work ties.
     ///
@@ -352,6 +375,63 @@ impl NonFinalizedState {
         }
     }
 
+    /// kogany (S5, F-S5-19): the block `hash` if it is off the best chain: in a side chain, in
+    /// an `invalidateblock` record, or a recently rejected block. `None` for a best-chain block
+    /// and for an unknown one.
+    pub fn off_chain_block(
+        &self,
+        hash: &block::Hash,
+    ) -> Option<(Arc<zakura_chain::block::Block>, Height)> {
+        let in_best_chain = self
+            .best_chain()
+            .is_some_and(|best| best.contains_block_hash(*hash));
+        self.chain_iter()
+            .skip(1)
+            .filter(|_| !in_best_chain)
+            .find_map(|chain| chain.block((*hash).into()))
+            .map(|block| (block.block.clone(), block.height))
+            .or_else(|| {
+                self.invalidated_blocks.values().find_map(|blocks| {
+                    blocks
+                        .iter()
+                        .find(|block| block.hash == *hash)
+                        .map(|block| (block.block.clone(), block.height))
+                })
+            })
+            .or_else(|| {
+                REJECTED_BLOCKS
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .get(hash)
+                    .cloned()
+            })
+    }
+
+    /// kogany (S5, F-S5-19): keeps a block contextual validation rejected for
+    /// [`Self::off_chain_block`]. A re-delivered invalidated block is already on record.
+    #[cfg(feature = "ycash")]
+    fn record_rejected_block(
+        &self,
+        hash: block::Hash,
+        rejected: (Arc<zakura_chain::block::Block>, Height),
+        error: &ValidateContextError,
+    ) {
+        if matches!(
+            error,
+            ValidateContextError::BlockPreviouslyInvalidated { .. }
+        ) {
+            return;
+        }
+        let mut rejected_blocks = REJECTED_BLOCKS
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        rejected_blocks.shift_remove(&hash);
+        rejected_blocks.insert(hash, rejected);
+        while rejected_blocks.len() > MAX_REJECTED_BLOCKS {
+            rejected_blocks.shift_remove_index(0);
+        }
+    }
+
     /// Returns true if `hash` is in `invalidated_blocks`.
     fn is_invalidated(&self, hash: &block::Hash) -> bool {
         self.invalidated_blocks
@@ -447,7 +527,7 @@ impl NonFinalizedState {
 
         // Remove all invalidated_blocks at or below the finalized height
         self.invalidated_blocks
-            .retain(|height, _blocks| *height >= best_chain_root.height);
+            .retain(|_root, blocks| invalidated_height(blocks) >= best_chain_root.height);
         self.retain_precious_blocks();
 
         self.update_metrics_for_chains();
@@ -492,8 +572,15 @@ impl NonFinalizedState {
 
         // If the block is invalid, return the error,
         // and drop the cloned parent Arc, or newly created chain fork.
+        #[cfg(feature = "ycash")]
+        let rejected = (prepared.block.clone(), height);
         let modified_chain =
-            self.validate_and_commit(parent_chain, prepared, finalized_state, contextual_metrics)?;
+            self.validate_and_commit(parent_chain, prepared, finalized_state, contextual_metrics);
+        #[cfg(feature = "ycash")]
+        if let Err(error) = &modified_chain {
+            self.record_rejected_block(hash, rejected, error);
+        }
+        let modified_chain = modified_chain?;
 
         // If the block is valid:
         // - add the new chain fork or updated chain to the set of recent chains
@@ -540,13 +627,13 @@ impl NonFinalizedState {
             invalidated_blocks
         };
 
-        // TODO: Allow for invalidating multiple block hashes at a given height (#9552).
+        // Keyed by the root's hash, so several blocks invalidated at one height are all kept
+        // (#9552).
         self.invalidated_blocks.insert(
             invalidated_blocks
                 .first()
                 .expect("should not be empty")
-                .clone()
-                .height,
+                .hash,
             Arc::new(invalidated_blocks),
         );
 
@@ -629,16 +716,10 @@ impl NonFinalizedState {
         // Locate the record but keep it live until replay succeeds, so a
         // recoverable error can't lose it; it is `shift_remove`d atomically with
         // the insert below.
-        let (height, invalidated_blocks) = self
+        let invalidated_blocks = self
             .invalidated_blocks
-            .iter()
-            .find_map(|(height, blocks)| {
-                if blocks.first()?.hash == block_hash {
-                    Some((*height, (**blocks).clone()))
-                } else {
-                    None
-                }
-            })
+            .get(&block_hash)
+            .map(|blocks| (**blocks).clone())
             .ok_or(ReconsiderError::MissingInvalidatedBlock(block_hash))?;
 
         let invalidated_block_hashes = invalidated_blocks
@@ -689,13 +770,13 @@ impl NonFinalizedState {
         // All fallible steps have succeeded; remove the invalidation record
         // atomically with installing the restored chain so a failed attempt
         // does not destroy the record.
-        self.invalidated_blocks.shift_remove(&height);
+        self.invalidated_blocks.shift_remove(&block_hash);
 
         // Only track invalidated_blocks that are not yet finalized. Once blocks are finalized (below the best_chain_root_height)
         // we can discard the block.
         if let Some(best_chain_root_height) = finalized_state.finalized_tip_height() {
             self.invalidated_blocks
-                .retain(|height, _blocks| *height >= best_chain_root_height);
+                .retain(|_root, blocks| invalidated_height(blocks) >= best_chain_root_height);
         }
 
         self.insert_with(Arc::new(modified_chain), |chain_set| {
@@ -765,12 +846,19 @@ impl NonFinalizedState {
         let (height, hash) = (prepared.height, prepared.hash);
 
         // If the block is invalid, return the error, and drop the newly created chain fork
+        #[cfg(feature = "ycash")]
+        let rejected = (prepared.block.clone(), height);
         let chain = self.validate_and_commit(
             Arc::new(chain),
             prepared,
             finalized_state,
             contextual_metrics,
-        )?;
+        );
+        #[cfg(feature = "ycash")]
+        if let Err(error) = &chain {
+            self.record_rejected_block(hash, rejected, error);
+        }
+        let chain = chain?;
 
         // If the block is valid, add the new chain fork to the set of recent chains.
         self.insert(chain);
@@ -825,6 +913,13 @@ impl NonFinalizedState {
         );
         let spent_utxos = spent_utxos?;
 
+        // kogany (W3-d): BIP68 relative lock-times at the block's height, on this fork.
+        check::sequence_locks::block_sequence_locks_are_satisfied(
+            &self.network,
+            &prepared,
+            &spent_utxos,
+        )?;
+
         // Reads from disk
         let shielded_anchor_start = Instant::now();
         let shielded_anchors =
@@ -878,7 +973,46 @@ impl NonFinalizedState {
             "state.contextual.mined.block_construction.duration_seconds",
             contextual_block_start.elapsed(),
         );
-        let contextual = contextual?;
+        let mut contextual = contextual?;
+
+        // kogany (S5): `yellowback.test_fault` fires on a block being committed (not a
+        // template check, which runs on a copy without metrics), before its vault and YED
+        // verdicts (ycash6 `index.cpp:523`: "crash before judging block").
+        if self.should_count_metrics {
+            crate::service::yed::maybe_inject_yed_test_fault(
+                &finalized_state.config().yellowback,
+                contextual.height,
+                contextual.hash,
+            )
+            .unwrap_or_else(|e| e.stop_the_node("contextual validation"));
+        }
+
+        // kogany (W4-c, W4-d): the block's vault delta over the parent fork's set state, pushed
+        // onto the chain's overlay with the block; a vault rule violation rejects the block.
+        contextual.vault_delta = Arc::new(check::vault::block_vault_delta(
+            &self.network,
+            &new_chain,
+            finalized_state,
+            &contextual,
+        )?);
+
+        // kogany (W5-e, W5-f): the block's YED effect over the parent fork's index state, pushed
+        // onto the chain's overlay with the block; stops the node when it cannot be evaluated,
+        // and a module verdict rejects the block (U-21).
+        let yed_effect =
+            check::yed::block_yed_effect(&self.network, &new_chain, finalized_state, &contextual);
+        // ycashd's line for a block the module judges invalid (`index.cpp:544`, not on a
+        // template check).
+        if let (true, Err(ValidateContextError::YedRejected { detail, .. })) =
+            (self.should_count_metrics, &yed_effect)
+        {
+            tracing::info!(
+                "yellowback: block {} at {} is invalid: {detail}",
+                contextual.hash,
+                contextual.height.0
+            );
+        }
+        contextual.yed_effect = Arc::new(yed_effect?);
 
         let parallel_update_start = Instant::now();
         let result = Self::validate_and_update_parallel(
@@ -1121,7 +1255,7 @@ impl NonFinalizedState {
     }
 
     /// Return the invalidated blocks.
-    pub fn invalidated_blocks(&self) -> IndexMap<Height, Arc<Vec<ContextuallyVerifiedBlock>>> {
+    pub fn invalidated_blocks(&self) -> IndexMap<block::Hash, Arc<Vec<ContextuallyVerifiedBlock>>> {
         self.invalidated_blocks.clone()
     }
 
@@ -1197,4 +1331,9 @@ impl Drop for NonFinalizedState {
     fn drop(&mut self) {
         self.disable_metrics();
     }
+}
+
+/// The height of an invalidated branch: its root's, the first block.
+fn invalidated_height(blocks: &[ContextuallyVerifiedBlock]) -> Height {
+    blocks.first().map_or(Height(0), |block| block.height)
 }

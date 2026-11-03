@@ -621,6 +621,12 @@ fn address_variant(address: &transparent::Address) -> u8 {
         // TEX address variants
         (Mainnet, Tex { .. }) => 4,
         (Testnet | Regtest, Tex { .. }) => 5,
+        // kogany W7-b: the Ycash post-quantum key (`transparent::Address::PayToPqKeyHash`,
+        // only in a `ycash` build of zakura-chain), keyed by its Hash160 (ycash6 `P2PQPKH`).
+        #[allow(unreachable_patterns)]
+        (Mainnet, _) => 6,
+        #[allow(unreachable_patterns)]
+        (Testnet | Regtest, _) => 7,
     }
 }
 

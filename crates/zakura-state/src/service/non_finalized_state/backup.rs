@@ -42,6 +42,19 @@ pub(super) fn restore_backup(
         store.entry(block.height).or_default().push(block);
     }
 
+    // kogany (S5): replayed blocks were committed before; `yellowback.test_fault` skips them.
+    crate::service::yed::without_yed_test_fault(|| {
+        restore_blocks(&mut non_finalized_state, store, finalized_state)
+    });
+
+    non_finalized_state
+}
+
+fn restore_blocks(
+    non_finalized_state: &mut NonFinalizedState,
+    store: BTreeMap<Height, Vec<SemanticallyVerifiedBlock>>,
+    finalized_state: &ZakuraDb,
+) {
     for (height, blocks) in store {
         for block in blocks {
             #[cfg(test)]
@@ -55,7 +68,7 @@ pub(super) fn restore_backup(
 
             #[cfg(not(test))]
             let commit_result =
-                validate_and_commit_non_finalized(finalized_state, &mut non_finalized_state, block);
+                validate_and_commit_non_finalized(finalized_state, non_finalized_state, block);
 
             // Re-computes the block hash in case the hash from the filename is wrong.
             if let Err(commit_error) = commit_result {
@@ -67,8 +80,6 @@ pub(super) fn restore_backup(
             }
         }
     }
-
-    non_finalized_state
 }
 
 /// Updates the non-finalized state backup cache by writing any blocks that are in the

@@ -1,12 +1,18 @@
 //! Inbound service tests with a fake peer set.
-
+// kogany: the Zcash-fixture tests are not built with `ycash`, leaving their helpers unused.
+#![cfg_attr(feature = "ycash", allow(unused_imports, dead_code))]
 #![allow(clippy::unwrap_in_result)]
 
 use std::{collections::HashSet, iter, net::SocketAddr, str::FromStr, sync::Arc, time::Duration};
 
 use futures::FutureExt;
 use tokio::{sync::oneshot, task::JoinHandle, time::timeout};
-use tower::{buffer::Buffer, builder::ServiceBuilder, util::BoxService, Service, ServiceExt};
+use tower::{
+    buffer::Buffer,
+    builder::ServiceBuilder,
+    util::{BoxCloneSyncService, BoxService},
+    Service, ServiceExt,
+};
 use tracing::{Instrument, Span};
 
 use zakura_chain::{
@@ -165,6 +171,9 @@ async fn mempool_requests_for_transactions() {
 }
 
 #[tokio::test(flavor = "current_thread", start_paused = true)]
+// kogany: Zcash Mainnet block and transaction vectors (NU5-and-later branch IDs, Zcash-only
+// heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn mempool_push_transaction() -> Result<(), crate::BoxError> {
     // get a block that has at least one non coinbase transaction
     let block: Arc<Block> =
@@ -260,6 +269,9 @@ async fn mempool_push_transaction() -> Result<(), crate::BoxError> {
 }
 
 #[tokio::test(flavor = "current_thread", start_paused = true)]
+// kogany: Zcash Mainnet block and transaction vectors (NU5-and-later branch IDs, Zcash-only
+// heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn peer_pushed_transaction_is_verified_without_redownload() -> Result<(), crate::BoxError> {
     let block: Arc<Block> =
         zakura_test::vectors::BLOCK_MAINNET_982681_BYTES.zcash_deserialize_into()?;
@@ -422,6 +434,9 @@ async fn peer_pushed_transactions_are_limited_by_per_peer_cap() -> Result<(), cr
 }
 
 #[tokio::test(flavor = "current_thread", start_paused = true)]
+// kogany: Zcash Mainnet block and transaction vectors (NU5-and-later branch IDs, Zcash-only
+// heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn mempool_advertise_transaction_ids() -> Result<(), crate::BoxError> {
     // get a block that has at least one non coinbase transaction
     let block: Block = zakura_test::vectors::BLOCK_MAINNET_982681_BYTES.zcash_deserialize_into()?;
@@ -616,6 +631,9 @@ async fn peer_mempool_full_queue_is_refused_without_disconnect() -> Result<(), c
 // Use real time until the expected gossip is observed. The state writer acknowledges
 // commits before publishing tips, so a paused clock can reach the gossip timeout first.
 #[tokio::test(flavor = "current_thread")]
+// kogany: Zcash Mainnet block and transaction vectors (NU5-and-later branch IDs, Zcash-only
+// heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn mempool_transaction_expiration() -> Result<(), crate::BoxError> {
     // Get a block that has at least one non coinbase transaction
     let block: Block = zakura_test::vectors::BLOCK_MAINNET_982681_BYTES.zcash_deserialize_into()?;
@@ -1030,6 +1048,88 @@ async fn inbound_poisoned_coinbase_height_scores_and_requeues() -> Result<(), cr
     Ok(())
 }
 
+/// Test that a poisoned parent recovery scores its supplying peer without re-requesting the parent.
+///
+/// A re-request would be an ordinary download, outside the recovery bounds.
+#[tokio::test(flavor = "current_thread")]
+async fn inbound_poisoned_parent_recovery_scores_and_is_not_requeued() -> Result<(), crate::BoxError>
+{
+    let (
+        inbound_service,
+        _mempool,
+        _committed_blocks,
+        _added_transactions,
+        _tx_verifier,
+        mut peer_set,
+        _state_service,
+        _chain_tip_change,
+        _sync_gossip_task_handle,
+        _tx_gossip_task_handle,
+        mut misbehavior_rx,
+    ) = setup_with_misbehavior_receiver(false).await;
+
+    // `setup` commits genesis and block 1, so block 3 is one hop from the tip, and its parent is
+    // the tip child.
+    let parent: Arc<Block> =
+        zakura_test::vectors::BLOCK_MAINNET_2_BYTES.zcash_deserialize_into()?;
+    let child: Arc<Block> = zakura_test::vectors::BLOCK_MAINNET_3_BYTES.zcash_deserialize_into()?;
+    let child_hash = child.hash();
+    let parent_hash = parent.hash();
+    let poisoned_parent = poison_coinbase_height(&parent, Height(1));
+
+    let advertiser_addr: PeerSocketAddr = "127.0.0.1:8233".parse()?;
+    let source = zakura_network::PeerSource::LegacySocket(advertiser_addr);
+
+    let _request = inbound_service
+        .clone()
+        .oneshot(Request::AdvertiseBlock(child_hash, Some(source.clone())))
+        .await?;
+
+    peer_set
+        .expect_request(Request::BlocksByHashFrom {
+            hashes: iter::once(child_hash).collect(),
+            source: source.clone(),
+        })
+        .await
+        .respond(Response::Blocks(vec![Available((
+            child,
+            Some(advertiser_addr),
+        ))]));
+
+    peer_set
+        .expect_request(Request::BlocksByHashFrom {
+            hashes: iter::once(parent_hash).collect(),
+            source,
+        })
+        .await
+        .respond(Response::Blocks(vec![Available((
+            poisoned_parent,
+            Some(advertiser_addr),
+        ))]));
+
+    // The score is sent from `Inbound::poll_ready`, so drive it until the report lands.
+    let mut report = None;
+    for _ in 0..50 {
+        let _ = inbound_service
+            .clone()
+            .oneshot(Request::MempoolTransactionIds)
+            .await;
+
+        if let Ok(received) = timeout(Duration::from_millis(100), misbehavior_rx.recv()).await {
+            report = Some(received);
+            break;
+        }
+    }
+    assert_eq!(
+        report.expect("a poisoned parent recovery must score its supplier"),
+        Some((advertiser_addr, 100)),
+    );
+
+    peer_set.expect_no_requests().await;
+
+    Ok(())
+}
+
 /// Test that the inbound downloader rejects blocks above the lookahead limit.
 ///
 /// TODO: also test that it rejects blocks behind the tip limit. (Needs ~100 fake blocks.)
@@ -1185,8 +1285,9 @@ async fn caches_getaddr_response() {
 
         let peer_set = MockService::build()
             .with_max_request_delay(MAX_PEER_SET_REQUEST_DELAY)
-            .for_unit_tests();
-        let buffered_peer_set = Buffer::new(BoxService::new(peer_set.clone()), 10);
+            .for_unit_tests::<zakura_network::Request, zakura_network::Response, crate::BoxError>();
+        let buffered_peer_set =
+            BoxCloneSyncService::new(Buffer::new(BoxService::new(peer_set.clone()), 10));
 
         let buffered_mempool_service =
             Buffer::new(BoxService::new(MockService::build().for_unit_tests()), 10);
@@ -1212,6 +1313,8 @@ async fn caches_getaddr_response() {
             latest_chain_tip,
             network: network.clone(),
             misbehavior_sender,
+            #[cfg(feature = "ycash")]
+            gossip_gap: None,
         };
         let r = setup_tx.send(setup_data);
         // We can't expect or unwrap because the returned Result does not implement Debug
@@ -1368,7 +1471,8 @@ async fn setup_with_misbehavior_receiver(
     let mut peer_set = MockService::build()
         .with_max_request_delay(MAX_PEER_SET_REQUEST_DELAY)
         .for_unit_tests();
-    let buffered_peer_set = Buffer::new(BoxService::new(peer_set.clone()), 10);
+    let buffered_peer_set =
+        BoxCloneSyncService::new(Buffer::new(BoxService::new(peer_set.clone()), 10));
 
     let mock_tx_verifier = MockService::build().for_unit_tests();
     let buffered_tx_verifier = Buffer::new(BoxService::new(mock_tx_verifier.clone()), 10);
@@ -1511,6 +1615,8 @@ async fn setup_with_misbehavior_receiver(
         latest_chain_tip,
         network: network.clone(),
         misbehavior_sender,
+        #[cfg(feature = "ycash")]
+        gossip_gap: None,
     };
     let r = setup_tx.send(setup_data);
     // We can't expect or unwrap because the returned Result does not implement Debug

@@ -229,11 +229,18 @@ proptest! {
             );
 
             let expected_result = new_addr;
+            // kogany (F-S5-6): with `ycash` the book drops a gossiped unroutable address.
+            #[cfg(feature = "ycash")]
+            let dropped_unroutable = matches!(change, MetaAddrChange::NewGossiped { .. })
+                && !crate::ycash::is_routable(change.addr().ip());
+            #[cfg(not(feature = "ycash"))]
+            let dropped_unroutable = false;
             let book_result = address_book.update(change);
             let book_contents: Vec<MetaAddr> = address_book.peers().collect();
 
             // Ignore the same addresses that the address book ignores
-            let expected_result = if !expected_result.address_is_valid_for_outbound(&Mainnet)
+            let expected_result = if dropped_unroutable
+                || !expected_result.address_is_valid_for_outbound(&Mainnet)
                 || ( !expected_result.last_known_info_is_valid_for_outbound(&Mainnet)
                       && expected_result.last_connection_state.is_never_attempted())
             {

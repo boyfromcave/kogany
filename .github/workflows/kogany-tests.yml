@@ -1,0 +1,169 @@
+# Copyright (c) 2026 The Ycash developers
+# Distributed under the MIT software license, see the accompanying
+# file COPYING or https://www.opensource.org/licenses/mit-license.php .
+#
+name: kogany-tests
+
+# kogany's test legs (plan §5; .github/README-kogany.md). Every job builds what it tests and has no
+# `needs:`, so a failure re-runs only that job (one matrix entry is one job). The feature-off
+# workspace suite stays upstream's tests-unit.yml; these are the per-crate and Ycash slices.
+#
+#   kogany-crates (matrix)    kogany-pq, kogany-vault, kogany-yellowback in dev, release and
+#                             ci-tests (plan §4.2 rule 6: math and state tests also release-like)
+#   upstream (matrix)         one upstream crate, feature off, nextest profile all-tests
+#   ycash (matrix)            one crate's full suite with --features ycash, nextest profile
+#                             kogany-ycash (a deny-list; Zcash-fixture tests are cfg-gated)
+#   vault-fuzz-verdicts       the ycash6 fuzz verdict replay (W3-e)
+#   kogany-regtest            nextest profile kogany-regtest (W4-e), report-only until the W4 gate
+on:
+  push:
+    branches: [upgrade/vault, "vaults/**"]
+  pull_request:
+    branches: [upgrade/vault, "vaults/**", "kc/**"]
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  CARGO_INCREMENTAL: '0'
+  CARGO_TERM_COLOR: always
+
+jobs:
+  kogany-crates:
+    name: kogany crates (${{ matrix.profile }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        profile: [dev, release, ci-tests]
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f #v2.0.0 # zizmor: ignore[cache-poisoning] -- test-only build, nothing published or released
+        with:
+          toolchain: stable
+          cache-key: kogany-tests-crates-${{ matrix.profile }}
+          cache-on-failure: true
+          cache-save-if: ${{ github.ref == 'refs/heads/upgrade/vault' || startsWith(github.ref, 'refs/heads/vaults/') }}
+      - uses: taiki-e/install-action@a4d3f3f761dcd95cce1b72cb61cb6d1963438177 #v2.87.30
+        with:
+          tool: cargo-nextest
+      - name: nextest kogany-pq, kogany-vault, kogany-yellowback (${{ matrix.profile }})
+        env:
+          PROFILE: ${{ matrix.profile }}
+        run: |
+          cargo nextest run --locked --no-fail-fast --cargo-profile "$PROFILE" \
+            -p kogany-pq -p kogany-vault -p kogany-yellowback
+
+  upstream:
+    name: ${{ matrix.crate }} (feature off)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        crate: [zakura-chain, zakura-state, zakura-consensus, zakura-rpc, zakura-network]
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f #v2.0.0 # zizmor: ignore[cache-poisoning] -- test-only build, nothing published or released
+        with:
+          toolchain: stable
+          cache-key: kogany-tests-upstream-${{ matrix.crate }}
+          cache-on-failure: true
+          cache-save-if: ${{ github.ref == 'refs/heads/upgrade/vault' || startsWith(github.ref, 'refs/heads/vaults/') }}
+      - uses: ./.github/actions/setup-zakura-build
+      - uses: taiki-e/install-action@a4d3f3f761dcd95cce1b72cb61cb6d1963438177 #v2.87.30
+        with:
+          tool: cargo-nextest
+      - name: nextest ${{ matrix.crate }} (profile all-tests, feature off)
+        env:
+          CRATE: ${{ matrix.crate }}
+        run: cargo nextest run --locked --profile all-tests -p "$CRATE"
+
+  ycash:
+    name: ${{ matrix.crate }} (ycash)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        crate: [zakura-chain, zakura-header-chain, zakura-consensus, zakura-network, zakura-rpc, zakura-script, kogany-rpc, kogany, zakura-state]
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f #v2.0.0 # zizmor: ignore[cache-poisoning] -- test-only build, nothing published or released
+        with:
+          toolchain: stable
+          cache-key: kogany-tests-ycash-${{ matrix.crate }}
+          cache-on-failure: true
+          cache-save-if: ${{ github.ref == 'refs/heads/upgrade/vault' || startsWith(github.ref, 'refs/heads/vaults/') }}
+      - uses: ./.github/actions/setup-zakura-build
+      - uses: taiki-e/install-action@a4d3f3f761dcd95cce1b72cb61cb6d1963438177 #v2.87.30
+        with:
+          tool: cargo-nextest
+      - name: nextest ${{ matrix.crate }} (profile kogany-ycash, --features ycash)
+        env:
+          CRATE: ${{ matrix.crate }}
+        run: cargo nextest run --locked --profile kogany-ycash -p "$CRATE" --features "$CRATE/ycash"
+
+  vault-fuzz-verdicts:
+    name: vault fuzz verdicts
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f #v2.0.0 # zizmor: ignore[cache-poisoning] -- test-only build, nothing published or released
+        with:
+          toolchain: stable
+          cache-key: kogany-tests-vault-fuzz-verdicts
+          cache-on-failure: true
+          cache-save-if: ${{ github.ref == 'refs/heads/upgrade/vault' || startsWith(github.ref, 'refs/heads/vaults/') }}
+      - uses: ./.github/actions/setup-zakura-build
+      - name: replay qa/fuzz/vault/verdicts (zakura-consensus, --features ycash)
+        run: cargo test --locked -p zakura-consensus --features ycash --test vault_fuzz_verdicts
+
+  kogany-regtest:
+    # Plan W4-e: crates/zakurad/tests/kogany_regtest.rs on a running koganyd (Vault activation, a
+    # set-signed vault spend, invalidateblock/reconsiderblock, a restart). Report-only until the
+    # coordinator makes it the W4 gate: drop continue-on-error then.
+    name: kogany-regtest (report-only)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    continue-on-error: true
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f #v2.0.0 # zizmor: ignore[cache-poisoning] -- test-only build, nothing published or released
+        with:
+          toolchain: stable
+          cache-key: kogany-tests-regtest
+          cache-on-failure: true
+          cache-save-if: ${{ github.ref == 'refs/heads/upgrade/vault' || startsWith(github.ref, 'refs/heads/vaults/') }}
+      - uses: ./.github/actions/setup-zakura-build
+      - uses: taiki-e/install-action@a4d3f3f761dcd95cce1b72cb61cb6d1963438177 #v2.87.30
+        with:
+          tool: cargo-nextest
+      - name: nextest profile kogany-regtest (ycash feature)
+        run: cargo nextest run --locked --profile kogany-regtest -p kogany --features ycash

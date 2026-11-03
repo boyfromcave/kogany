@@ -30,3 +30,13 @@ pub use methods::types::{
         PendingBlockSignal, SubmitBlockChannel,
     },
 };
+
+// kogany W8: the Ycash `getblocktemplate` hooks the node installs (`RpcImpl::with_ycash_mining`).
+#[cfg(feature = "ycash")]
+pub use methods::types::get_block_template::ycash as ycash_mining;
+// kogany W7-b: ycashd's `ScriptErrorString` text for `yed_validaterawtransaction`.
+#[cfg(feature = "ycash")]
+pub use methods::types::ycash_reject::script_error_string as ycash_script_error_string;
+// kogany S5: the insight reads' address parameter, YED forms included.
+#[cfg(feature = "ycash")]
+pub use methods::types::ycash::insight_address as ycash_insight_address;

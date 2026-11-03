@@ -70,7 +70,7 @@ what prevents collisions with an embargoed hotfix.
 
 ### Package versions
 
-Always update the `zakura` package version in `crates/zakurad/Cargo.toml`; release
+Always update the `kogany` package version in `crates/zakurad/Cargo.toml`; release
 binaries self-report `CARGO_PKG_VERSION`.
 
 Stable releases always publish to crates.io. Release candidates decide
@@ -125,7 +125,7 @@ For crates.io publishing:
    cannot merge. It is also step 5 of `make pre-release`.
 
 Partial version graphs are allowed, but all tooling must handle them. Do not
-assume every publishable crate has the `zakura` package version.
+assume every publishable crate has the `kogany` package version.
 
 ### Release metadata
 
@@ -150,10 +150,10 @@ config defaults or fields changed. Run the exact acceptance config test to
 verify both the generated fixture and the retained fixture set:
 
 ```bash
-cargo test -p zakura --test acceptance config_tests -- --exact
+cargo test -p kogany --test acceptance config_tests -- --exact
 ```
 
-After the `zakura` package version bump is final, run:
+After the `kogany` package version bump is final, run:
 
 ```bash
 make prepare-release-changelog RELEASE_TAG=<tag>
@@ -248,7 +248,7 @@ gh workflow run create-release.yml \
 
 The workflow must:
 
-1. validate the tag against the `zakura` package version
+1. validate the tag against the `kogany` package version
 2. boot from a retained Mainnet state below the VCT handoff and prove finalized
    state crosses it using the Zakura P2P stack
 3. deploy the release commit to `us-east-0` and verify that the service remains

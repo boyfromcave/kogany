@@ -1,0 +1,316 @@
+#!/usr/bin/env python3
+# Copyright (c) 2026 The Ycash developers
+# Distributed under the MIT software license, see the accompanying
+# file COPYING or https://www.opensource.org/licenses/mit-license.php .
+"""Tests for qa/kogany_audit.py (run: python3 -m unittest discover -s qa -p 'test_kogany_*.py')."""
+
+import os
+import subprocess
+import sys
+import tempfile
+import unittest
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import kogany_audit as audit  # noqa: E402
+
+# Built from parts, as in kogany_audit.py, so this file does not match the greps leg itself.
+RETIRED = "Digi" + "Dollar"
+TOOL = "Clau" + "de"
+
+
+class LineFindingsTest(unittest.TestCase):
+    def test_a_retired_name_in_code_is_a_finding(self):
+        self.assertEqual(audit.line_findings("let x = %s::new();" % RETIRED), [RETIRED])
+
+    def test_a_citation_of_an_upstream_file_is_allowed(self):
+        line = "// as ref/digibyte/src/%s/validation.cpp:120 does" % RETIRED.lower()
+        self.assertEqual(audit.line_findings(line), [])
+
+    def test_a_url_is_not_a_citation(self):
+        line = "see https://example.org/%s" % RETIRED
+        self.assertEqual(audit.line_findings(line), [RETIRED])
+
+    def test_attribution_is_never_allowed(self):
+        line = "Co-" + "Authored-By: %s <noreply@example.org>" % TOOL
+        self.assertEqual(len(audit.line_findings(line)), 2)
+        self.assertEqual(audit.line_findings("path/to/%s.md" % TOOL.upper()), [])
+        self.assertEqual(audit.line_findings("docs/%s/notes.md" % TOOL), [TOOL])
+
+    def test_the_retired_rpc_prefix_matches_only_at_a_word_start(self):
+        self.assertEqual(audit.line_findings("y" + "d_mint()"), ["y" + "d_"])
+        self.assertEqual(audit.line_findings("let ready_set = 1;"), [])
+
+
+class TestFunctionsTest(unittest.TestCase):
+    def test_attributes_and_comments_between_test_and_fn(self):
+        text = """
+#[test]
+fn plain() {}
+
+#[tokio::test(flavor = "multi_thread")]
+#[ignore]
+// a comment
+async fn awaited() {}
+
+#[cfg(test)]
+mod tests {}
+
+#[test_case(1)]
+fn not_counted(_: u8) {}
+
+proptest! {
+    #[test]
+    fn property(x in 0u8..) {}
+}
+"""
+        self.assertEqual(audit.test_functions(text), ["plain", "awaited", "property"])
+
+
+class ListTest(unittest.TestCase):
+    def test_prefix_and_glob_entries(self):
+        entries = ["crates/zakura-script/", "crates/*/snapshots/*orchard*", "crates/zakura-chain/src/work.rs"]
+        self.assertTrue(audit.matches("crates/zakura-script/src/lib.rs", entries))
+        self.assertTrue(audit.matches("crates/zakura-rpc/src/methods/tests/snapshots/x_orchard@mainnet.snap", entries))
+        self.assertTrue(audit.matches("crates/zakura-chain/src/work.rs", entries))
+        self.assertFalse(audit.matches("crates/zakura-chain/src/work/difficulty.rs", entries))
+
+    def test_lock_packages(self):
+        lock = ('version = 4\n\n[[package]]\nname = "zakura-protocol"\nversion = "5.0.0-rc.2"\n'
+                'source = "registry+https://github.com/rust-lang/crates.io-index"\n\n'
+                '[[package]]\nname = "other"\nversion = "1.0.0"\n')
+        found = audit.lock_packages(lock, {"zakura-protocol"})
+        self.assertEqual(list(found), ["zakura-protocol"])
+        self.assertIn('version = "5.0.0-rc.2"', found["zakura-protocol"][0])
+
+
+GOOD_WORKFLOW = """name: Lint
+on:
+  push:
+    branches: [upgrade/vault, "vaults/**"]
+    paths:
+      - "**/*.rs"
+  pull_request:
+    branches:
+      - upgrade/vault
+      - 'vaults/**'
+      - kc/**  # stacked PRs
+  schedule:
+    - cron: "0 8 * * 0"
+  workflow_dispatch:
+    inputs:
+      tier:
+        type: string
+        default: all
+jobs: {}
+"""
+
+
+class TriggerParserTest(unittest.TestCase):
+    def test_block_mapping_lists_and_comments(self):
+        t = audit.workflow_triggers(GOOD_WORKFLOW)
+        self.assertEqual(t["push"]["branches"], ["upgrade/vault", "vaults/**"])
+        self.assertEqual(t["pull_request"]["branches"], ["upgrade/vault", "vaults/**", "kc/**"])
+        self.assertEqual(t["schedule"], [{"cron": "0 8 * * 0"}])
+        self.assertEqual(t["workflow_dispatch"]["inputs"]["tier"]["default"], "all")
+
+    def test_scalar_and_flow_forms(self):
+        self.assertEqual(audit.workflow_triggers("on: push\n"), {"push": None})
+        self.assertEqual(audit.workflow_triggers("'on': [push, delete]\n"), {"push": None, "delete": None})
+
+    def test_unreadable_fails_closed(self):
+        with self.assertRaises(audit.AuditError):
+            audit.workflow_triggers("name: x\n")
+
+
+class TriggerPolicyTest(unittest.TestCase):
+    """The lead architect's policy, and the branch cleanup's preconditions (no create/delete)."""
+
+    def problems(self, text):
+        return audit.trigger_problems("w.yml", audit.workflow_triggers(text))
+
+    def test_the_good_workflow_complies(self):
+        self.assertEqual(self.problems(GOOD_WORKFLOW), [])
+
+    def test_create_and_delete_events_fail(self):
+        for event in ("create", "delete"):
+            self.assertTrue(self.problems("on:\n  %s:\n  workflow_dispatch:\n" % event), event)
+            self.assertTrue(self.problems("on: [%s]\n" % event), event)
+
+    def test_other_events_fail(self):
+        for event in ("merge_group", "pull_request_target", "workflow_run", "repository_dispatch", "release"):
+            self.assertTrue(self.problems("on:\n  %s:\n" % event), event)
+
+    def test_a_bare_push_or_pull_request_fails(self):
+        self.assertTrue(self.problems("on: push\n"))
+        self.assertTrue(self.problems("on: [push, pull_request]\n"))
+        self.assertTrue(self.problems("on:\n  push:\n  pull_request:\n"))
+        self.assertTrue(self.problems("on:\n  push:\n    paths: ['**/*.rs']\n"))
+
+    def test_wide_or_foreign_branches_fail(self):
+        for branches in ("['**']", "['*']", "[main]", "['feat/**']", "['kc/**']"):
+            self.assertTrue(self.problems("on:\n  push:\n    branches: %s\n" % branches), branches)
+        self.assertTrue(self.problems("on:\n  pull_request:\n    branches: ['**']\n"))
+        self.assertTrue(self.problems("on:\n  push:\n    branches-ignore: ['semgrep/**']\n"))
+        self.assertTrue(self.problems("on:\n  push:\n    branches: [upgrade/vault]\n    tags: ['v*']\n"))
+
+    def test_a_named_branch_under_ours_complies(self):
+        self.assertEqual(self.problems("on:\n  push:\n    branches: ['vaults/kogany-compat']\n"), [])
+
+
+class ThisRepositoryTest(unittest.TestCase):
+    def test_every_workflow_here_complies(self):
+        repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        with tempfile.TemporaryDirectory() as out, open(os.devnull, "w") as null:
+            stdout, sys.stdout = sys.stdout, null
+            try:
+                rc = audit.leg_workflows(repo, "HEAD", "HEAD", out, None)
+            finally:
+                sys.stdout = stdout
+            with open(os.path.join(out, "workflows.md"), encoding="utf-8") as f:
+                report = f.read()
+        self.assertEqual(rc, 0, report)
+
+
+class RepositoryTest(unittest.TestCase):
+    """The legs against a throwaway repository with a `kogany-legacy` branch."""
+
+    def setUp(self):
+        self.dir = tempfile.TemporaryDirectory()
+        self.repo = self.dir.name
+        self.git("init", "-q", "-b", "kogany-legacy")
+        self.git("config", "user.name", "test")
+        self.git("config", "user.email", "test@example.org")
+        self.write("crates/zakura-chain/src/lib.rs", "#[test]\nfn kept() {}\n#[test]\nfn dropped() {}\n")
+        self.write("crates/zakura-chain/src/orchard.rs", "pub struct Action;\n")
+        self.write("qa/kogany-consensus-paths.txt", "crates/zakura-chain/src/orchard.rs\nlock: zakura-protocol\n")
+        self.write("qa/kogany-frozen-files.txt", "crates/zakura-chain/src/orchard.rs\n")
+        self.write(".github/kogany-workflows.txt", "kept lint.yml reason\n")
+        self.write(".github/workflows/lint.yml", GOOD_WORKFLOW)
+        self.git("add", "-A")
+        self.git("commit", "-q", "-m", "upstream")
+        self.git("checkout", "-q", "-b", "work")
+        self.out = os.path.join(self.repo, "out")
+
+    def tearDown(self):
+        self.dir.cleanup()
+
+    def git(self, *args):
+        subprocess.run(["git", "-C", self.repo, *args], check=True, capture_output=True)
+
+    def write(self, rel, text):
+        path = os.path.join(self.repo, rel)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(text)
+
+    def run_legs(self, *legs):
+        with open(os.devnull, "w") as null:
+            stdout, sys.stdout = sys.stdout, null
+            try:
+                return audit.main(["--repo", self.repo, "--out", self.out, *legs])
+            finally:
+                sys.stdout = stdout
+
+    def test_a_clean_tree_passes_every_leg(self):
+        self.assertEqual(self.run_legs("all"), 0)
+
+    def test_report_only_legs_report_but_pass(self):
+        self.write("crates/zakura-chain/src/orchard.rs", "pub struct Action2;\n")
+        self.git("commit", "-q", "-am", "touch a frozen consensus file")
+        self.assertEqual(self.run_legs("consensus-diff", "frozen"), 0)
+        with open(os.path.join(self.out, "frozen.md"), encoding="utf-8") as f:
+            self.assertIn("orchard.rs", f.read())
+        with open(os.path.join(self.out, "consensus-diff.patch"), encoding="utf-8") as f:
+            self.assertIn("Action2", f.read())
+
+    def test_a_deleted_upstream_test_fails_dormancy(self):
+        self.write("crates/zakura-chain/src/lib.rs", "#[test]\nfn kept() {}\n")
+        self.git("commit", "-q", "-am", "drop a test")
+        self.assertEqual(self.run_legs("dormancy"), 1)
+
+    def test_an_added_retired_name_or_attribution_fails_greps(self):
+        self.write("crates/zakura-chain/src/new.rs", "// %s\n" % RETIRED)
+        self.git("add", "-A")
+        self.git("commit", "-q", "-m", "add a file")
+        self.assertEqual(self.run_legs("greps"), 1)
+
+    def test_attribution_in_a_commit_message_fails_greps(self):
+        self.write("crates/zakura-chain/src/new.rs", "pub fn f() {}\n")
+        self.git("add", "-A")
+        self.git("commit", "-q", "-m", "add\n\nCo-" + "authored-by: someone")
+        self.assertEqual(self.run_legs("greps"), 1)
+
+    def upstream_sync(self, message):
+        """An upstream commit past the pin (on branch `upstream-next`), merged into `work`."""
+        self.git("checkout", "-q", "-b", "upstream-next", "kogany-legacy")
+        self.write("crates/zakura-chain/src/lib.rs", "#[test]\nfn kept() {}\n")
+        self.git("commit", "-q", "-am", message)
+        self.git("checkout", "-q", "work")
+        self.git("merge", "-q", "--no-edit", "upstream-next")
+
+    def pin(self, ref):
+        sha = subprocess.run(["git", "-C", self.repo, "rev-parse", ref], check=True,
+                             capture_output=True, text=True).stdout.strip()
+        self.write("qa/UPSTREAM_PIN", "# the upstream commit\n%s\n" % sha)
+        self.git("add", "qa/UPSTREAM_PIN")
+        self.git("commit", "-q", "-m", "pin the upstream sync")
+
+    def test_upstream_commits_and_deletions_after_a_sync_are_not_ours(self):
+        self.upstream_sync("upstream drops a test\n\nCo-" + "authored-by: someone")
+        # Against the old pin (kogany-legacy) the sync's commit and deletion look like ours.
+        self.assertEqual(self.run_legs("greps"), 1)
+        self.assertEqual(self.run_legs("dormancy"), 1)
+        # qa/UPSTREAM_PIN names the synced commit: the default upstream follows it.
+        self.pin("upstream-next")
+        self.assertEqual(self.run_legs("greps", "dormancy"), 0)
+
+    def test_an_upstream_main_ref_is_excluded_from_the_commit_scan(self):
+        self.upstream_sync("upstream\n\nCo-" + "authored-by: someone")
+        self.git("update-ref", "refs/remotes/upstream/main", "upstream-next")
+        self.assertEqual(self.run_legs("greps"), 0)
+
+    def test_our_attribution_after_a_pinned_sync_still_fails_greps(self):
+        self.upstream_sync("upstream")
+        self.pin("upstream-next")
+        self.write("crates/zakura-chain/src/new.rs", "pub fn f() {}\n")
+        self.git("add", "-A")
+        self.git("commit", "-q", "-m", "add\n\nCo-" + "authored-by: someone")
+        self.assertEqual(self.run_legs("greps"), 1)
+
+    def test_an_unresolvable_or_malformed_pin_is_an_error(self):
+        self.write("qa/UPSTREAM_PIN", "%s\n" % ("ab" * 20))
+        self.assertEqual(self.run_legs("greps"), 2)
+        self.write("qa/UPSTREAM_PIN", "kogany-legacy\n")
+        self.assertEqual(self.run_legs("greps"), 2)
+
+    def test_an_unclassified_workflow_fails(self):
+        self.write(".github/workflows/new.yml", GOOD_WORKFLOW)
+        self.assertEqual(self.run_legs("workflows"), 1)
+
+    def test_an_off_workflow_lives_in_workflows_off(self):
+        self.write(".github/kogany-workflows.txt", "kept lint.yml reason\noff deploy.yml reason\n")
+        self.write(".github/workflows/deploy.yml", "name: Deploy\non:\n  workflow_dispatch:\n")
+        self.assertEqual(self.run_legs("workflows"), 1)
+        os.makedirs(os.path.join(self.repo, ".github/workflows-off"))
+        os.rename(os.path.join(self.repo, ".github/workflows/deploy.yml"),
+                  os.path.join(self.repo, ".github/workflows-off/deploy.yml"))
+        self.assertEqual(self.run_legs("workflows"), 0)
+
+    def test_a_kept_workflow_in_workflows_off_fails(self):
+        os.makedirs(os.path.join(self.repo, ".github/workflows-off"))
+        os.rename(os.path.join(self.repo, ".github/workflows/lint.yml"),
+                  os.path.join(self.repo, ".github/workflows-off/lint.yml"))
+        self.assertEqual(self.run_legs("workflows"), 1)
+
+    def test_an_off_workflow_is_not_checked_for_triggers(self):
+        self.write(".github/kogany-workflows.txt", "kept lint.yml reason\noff deploy.yml reason\n")
+        self.write(".github/workflows-off/deploy.yml", "name: Deploy\non:\n  delete:\n  push:\n")
+        self.assertEqual(self.run_legs("workflows"), 0)
+
+    def test_a_delete_trigger_fails(self):
+        self.write(".github/workflows/lint.yml", GOOD_WORKFLOW.replace("  workflow_dispatch:", "  delete:\n  workflow_dispatch:"))
+        self.assertEqual(self.run_legs("workflows"), 1)
+
+
+if __name__ == "__main__":
+    unittest.main()

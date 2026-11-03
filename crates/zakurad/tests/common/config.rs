@@ -44,6 +44,18 @@ pub fn default_test_config(net: &Network) -> ZakuradConfig {
         ..zakura_network::Config::default()
     };
 
+    // Ycash: the Mainnet seeder does not resolve, and Zakura's startup waits until at least one
+    // initial peer resolves, so the RPC endpoint never opens on a host with no peer cache (CI).
+    // An IP literal resolves without DNS; nothing listens on port 1, so no peer connects.
+    #[cfg(feature = "ycash")]
+    let network = {
+        let mut network = network;
+        network
+            .initial_mainnet_peers
+            .insert("127.0.0.1:1".to_string());
+        network
+    };
+
     let sync = sync::Config {
         // Avoid downloading unnecessary blocks.
         checkpoint_verify_concurrency_limit: sync::MIN_CHECKPOINT_CONCURRENCY_LIMIT,

@@ -88,8 +88,12 @@ pub(crate) mod non_finalized_state;
 mod pending_utxos;
 mod queued_blocks;
 pub(crate) mod read;
+// kogany (W4-c): the Vault upgrade's set state across finalized and non-finalized states.
 mod traits;
+pub mod vault;
 mod write;
+// kogany (W5-e): the Yellowback (YED) index across finalized and non-finalized states.
+pub mod yed;
 
 #[cfg(any(test, feature = "proptest-impl"))]
 pub mod arbitrary;
@@ -487,14 +491,21 @@ impl StateService {
             false
         };
         let backup_dir_path = config.non_finalized_state_backup_dir(network);
-        let skip_backup_task = config.debug_skip_non_finalized_state_backup_task;
+        // kogany (F-S5-7): on a Ycash network the non-finalized backup is written before each tip
+        // update, never by the 5-second task, so a block the node reported is on disk when it
+        // stops: ycashd writes a block to disk before it connects it (`ycash6` at `65cb4ae0f`,
+        // `src/main.cpp:6436,6535`, `AcceptBlock`'s `WriteBlockToDisk`), and a restarted ycashd
+        // is at its tip.
+        // With the task a node stopped within 5 seconds of its last blocks restarted below them.
+        let skip_backup_task =
+            config.debug_skip_non_finalized_state_backup_task || cfg!(feature = "ycash");
         let (non_finalized_state, non_finalized_state_sender, non_finalized_state_receiver) =
             NonFinalizedState::new(network)
                 .with_backup(
                     backup_dir_path.clone(),
                     &finalized_state.db,
                     is_finalized_tip_past_max_checkpoint,
-                    config.debug_skip_non_finalized_state_backup_task,
+                    skip_backup_task,
                 )
                 .await;
 
@@ -2091,6 +2102,60 @@ impl Service<Request> for StateService {
                 .boxed()
             }
 
+            // kogany (W4-d): the Vault set state after a parent block, once the parent commits, for
+            // the block verifier's script checks (modelled on `AwaitBlockInfo`).
+            Request::AwaitVaultSnapshot { parent_hash } => {
+                let mut block_commit_receiver = self.block_commit_sender.subscribe();
+                let read_service = self.read_service.clone();
+                let limit = self.await_block_info_timeout;
+                let hash = parent_hash;
+
+                async move {
+                    let wait = async {
+                        loop {
+                            // Mark this notice as seen before the read, so a write that lands
+                            // after the read still wakes this request.
+                            block_commit_receiver.borrow_and_update();
+
+                            let response = read_service
+                                .clone()
+                                .oneshot(ReadRequest::VaultSnapshot { parent_hash: hash })
+                                .await?;
+                            let ReadResponse::VaultSnapshot(snapshot) = response else {
+                                unreachable!("wrong response to ReadRequest::VaultSnapshot");
+                            };
+                            if snapshot.is_some() {
+                                return Ok(Response::VaultSnapshot(snapshot));
+                            }
+
+                            // A committed block without a state (finalized below the tip) never
+                            // gets one: answer `None` instead of waiting out the limit.
+                            let response = read_service
+                                .clone()
+                                .oneshot(ReadRequest::BlockInfo(hash.into()))
+                                .await?;
+                            if matches!(response, ReadResponse::BlockInfo(Some(_))) {
+                                return Ok(Response::VaultSnapshot(None));
+                            }
+
+                            if block_commit_receiver.borrow().is_rejected(&hash) {
+                                return Err(AwaitBlockInfoError::Rejected { hash }.into());
+                            }
+
+                            block_commit_receiver
+                                .changed()
+                                .await
+                                .map_err(BoxError::from)?;
+                        }
+                    };
+
+                    tokio::time::timeout(limit, wait)
+                        .await
+                        .map_err(|_elapsed| AwaitBlockInfoError::TimedOut { hash, limit })?
+                }
+                .boxed()
+            }
+
             // Used by sync, inbound, and block verifier to check if a block is already in the state
             // before downloading or validating it.
             Request::KnownBlock(hash) => {
@@ -2200,12 +2265,16 @@ impl Service<Request> for StateService {
             | Request::CheckParentInputs { .. }
             | Request::Block(_)
             | Request::BlockInfo(_)
+            | Request::VaultSnapshot { .. }
+            | Request::BestChainVaultSnapshot
+            | Request::BestChainYedMempoolCheck(_)
             | Request::AnyChainBlock(_)
             | Request::BlockHeader(_)
             | Request::FindBlockHashes { .. }
             | Request::FindBlockHeaders { .. }
             | Request::CheckBestChainTipNullifiersAndAnchors(_)
             | Request::CheckPreparedMinedRelayEligibility(_)
+            | Request::CheckAuthDataCommitment(_)
             | Request::CheckBlockProposalValidity(_) => {
                 // Redirect the request to the concurrent ReadStateService
                 let read_service = self.read_service.clone();
@@ -2948,6 +3017,54 @@ impl Service<ReadRequest> for ReadStateService {
                 ),
             )),
 
+            // kogany (W4-d): the block verifier's script snapshot (fork-aware).
+            ReadRequest::VaultSnapshot { parent_hash } => {
+                Ok(ReadResponse::VaultSnapshot(vault::vault_snapshot_by_hash(
+                    state.latest_non_finalized_state().chain_iter(),
+                    &state.db,
+                    parent_hash,
+                )))
+            }
+
+            // kogany (W4-d): the mempool's script snapshot and the vault read RPCs.
+            ReadRequest::BestChainVaultSnapshot => Ok(ReadResponse::VaultSnapshot(Some(
+                match state.latest_best_chain() {
+                    Some(chain) => vault::chain_tip_vault_snapshot(&chain, &state.db),
+                    None => vault::finalized_vault_snapshot(&state.db),
+                },
+            ))),
+
+            // kogany (W5-f): the yed_* read RPCs' index snapshot.
+            ReadRequest::BestChainYedSnapshot => Ok(ReadResponse::YedSnapshot(Some(
+                yed::tip_yed_snapshot(state.latest_best_chain().as_ref(), &state.db),
+            ))),
+            ReadRequest::YedSnapshot { hash } => {
+                Ok(ReadResponse::YedSnapshot(yed::yed_snapshot_by_hash(
+                    state.latest_non_finalized_state().chain_iter(),
+                    &state.db,
+                    hash,
+                )))
+            }
+
+            // kogany (S5, F-S5-19): getblock of a side-chain, invalidated or rejected block.
+            ReadRequest::OffChainBlock(hash) => Ok(ReadResponse::OffChainBlock(
+                state.latest_non_finalized_state().off_chain_block(&hash),
+            )),
+
+            // kogany (W6-c): the YED module's mempool check at the best chain tip (admission
+            // and the tip re-check's sweep).
+            ReadRequest::BestChainYedMempoolCheck(txs) => {
+                let snapshot = yed::tip_yed_snapshot(state.latest_best_chain().as_ref(), &state.db);
+                let reasons = txs
+                    .iter()
+                    .map(|(tx, expiry_height)| snapshot.mempool_check(tx, *expiry_height))
+                    .collect();
+                Ok(ReadResponse::YedMempoolCheck {
+                    tip: snapshot.tip,
+                    reasons,
+                })
+            }
+
             // Used by the StateService.
             ReadRequest::Depth(hash) => Ok(ReadResponse::Depth(read::depth(
                 state.latest_best_chain(),
@@ -3543,6 +3660,19 @@ impl Service<ReadRequest> for ReadStateService {
                 )?;
 
                 Ok(ReadResponse::PreparedMinedRelayEligibility(eligibility))
+            }
+
+            ReadRequest::CheckAuthDataCommitment(commitment) => {
+                let latest_non_finalized_state = state.latest_non_finalized_state();
+                Ok(ReadResponse::AuthDataCommitment(
+                    check::auth_data_commitment(
+                        &state.network,
+                        &latest_non_finalized_state,
+                        &state.db,
+                        commitment.block,
+                        commitment.auth_data_root,
+                    ),
+                ))
             }
 
             // Used by the get_block and get_block_hash RPCs.

@@ -4,9 +4,12 @@ use std::sync::Arc;
 
 use tower::ServiceExt;
 use zakura_chain::{
-    block::Block, parameters::NetworkUpgrade, serialization::ZcashDeserialize, transparent,
+    block::{Block, Height},
+    parameters::{Network, NetworkUpgrade},
+    serialization::ZcashDeserialize,
+    transparent,
 };
-use zakura_script::CachedFfiTransaction;
+use zakura_script::{CachedFfiTransaction, ScriptContext};
 
 use super::{Request, Verifier};
 
@@ -55,6 +58,7 @@ async fn verifier_returns_error_for_out_of_range_input_index() {
         .oneshot(Request {
             cached_ffi_transaction: cached,
             input_index: out_of_range,
+            context: ScriptContext::new(Network::Mainnet, Height(419_199), None),
         })
         .await;
 

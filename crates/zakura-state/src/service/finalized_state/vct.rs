@@ -624,6 +624,9 @@ pub struct VctWriteData {
 /// against the configured Regtest checkpoint height, so Mainnet always uses the
 /// embedded constant and never reads the env. Other testnets have no frontier.
 pub(super) fn embedded_final_frontiers(network: &Network) -> Option<FinalFrontiers> {
+    if is_ycash_network(network) {
+        return None;
+    }
     match network {
         Network::Mainnet => {
             Some(embedded_mainnet_final_frontiers().unwrap_or_else(|error| panic!("{error}")))
@@ -637,6 +640,18 @@ pub(super) fn embedded_final_frontiers(network: &Network) -> Option<FinalFrontie
         }
         Network::Testnet(_) => None,
     }
+}
+
+/// kogany: whether `network` is a Ycash network (its `Ycash` upgrade has a height, which only a
+/// `ycash` build schedules). Every embedded frontier, grid and subtree artefact is Zcash-mainnet
+/// bytes, so a Ycash network has none: VCT fast sync stays on the legacy per-block path and
+/// historical derivation stays idle (decision K-12; vault and YED state are never imported from
+/// an artefact, M24-13).
+pub(super) fn is_ycash_network(network: &Network) -> bool {
+    // `Ycash` is never scheduled in a Zcash build (`is_kogany_upgrade_scheduled`, kogany plan
+    // §2.3): the inert row would otherwise answer the fallback height on Zcash mainnet and switch
+    // the embedded Zcash artefacts off there.
+    cfg!(feature = "ycash") && NetworkUpgrade::Ycash.activation_height(network).is_some()
 }
 
 /// Returns the verified Sapling, Orchard, and Ironwood leaf counts at `last_checkpoint`, when the
@@ -721,6 +736,8 @@ fn final_frontiers_bytes(height: block::Height, trees: &NoteCommitmentTrees) -> 
 }
 
 #[cfg(test)]
+// kogany: the Zcash-fixture tests are not built with `ycash`.
+#[cfg_attr(feature = "ycash", allow(unused_imports, dead_code))]
 mod tests {
     use std::{io::Write, num::NonZeroU64};
 
@@ -998,6 +1015,9 @@ mod tests {
     }
 
     #[test]
+    // kogany: Zcash Mainnet embedded VCT frontier, grid and subtree artefacts, which a Ycash
+    // network has none of (K-12); not run on Ycash.
+    #[cfg(not(feature = "ycash"))]
     fn embedded_mainnet_final_frontiers_parse() {
         let frontiers = embedded_final_frontiers(&Network::Mainnet)
             .expect("mainnet has embedded final frontiers");

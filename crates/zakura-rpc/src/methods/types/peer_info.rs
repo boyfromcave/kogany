@@ -37,6 +37,13 @@ pub struct PeerInfo {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[getset(get = "pub")]
     pub(crate) pingwait: Option<f64>,
+
+    /// Ycash (S5 parity): ycashd's `banscore` (`nMisbehavior`, `src/rpc/net.cpp`), the address
+    /// book's misbehavior score of the peer.
+    #[cfg(feature = "ycash")]
+    #[serde(default)]
+    #[getset(get_copy = "pub")]
+    pub(crate) banscore: u32,
 }
 
 /// Response type for the `getpeerinfo` RPC method.
@@ -61,6 +68,8 @@ impl PeerInfo {
             startingheight: UNKNOWN_STARTING_HEIGHT,
             pingtime,
             pingwait,
+            #[cfg(feature = "ycash")]
+            banscore: 0,
         }
     }
 }
@@ -75,6 +84,8 @@ impl From<MetaAddr> for PeerInfo {
             startingheight: UNKNOWN_STARTING_HEIGHT,
             pingtime: meta_addr.rtt().map(|d| d.as_secs_f64()),
             pingwait: meta_addr.ping_sent_at().map(|t| t.elapsed().as_secs_f64()),
+            #[cfg(feature = "ycash")]
+            banscore: meta_addr.misbehavior(),
         }
     }
 }
@@ -91,6 +102,8 @@ impl From<ConnectedPeer> for PeerInfo {
             pingwait: peer
                 .ping_sent_at
                 .map(|instant| instant.elapsed().as_secs_f64()),
+            #[cfg(feature = "ycash")]
+            banscore: 0,
         }
     }
 }
@@ -105,6 +118,8 @@ impl Default for PeerInfo {
             startingheight: UNKNOWN_STARTING_HEIGHT,
             pingtime: None,
             pingwait: None,
+            #[cfg(feature = "ycash")]
+            banscore: 0,
         }
     }
 }
@@ -135,5 +150,25 @@ mod tests {
         assert_eq!(peer_info.version, Some(170_160));
         assert!(peer_info.inbound);
         assert_eq!(peer_info.startingheight, 3_500_000);
+    }
+}
+
+/// S5 parity (`assert_banscore_zero`): every Ycash `getpeerinfo` row carries ycashd's `banscore`.
+#[cfg(all(test, feature = "ycash"))]
+mod ycash_tests {
+    use super::*;
+
+    #[test]
+    fn ycash_peer_info_has_a_banscore() {
+        let row = serde_json::to_value(PeerInfo::default()).expect("json");
+        assert_eq!(row["banscore"], 0);
+        let row = PeerInfo {
+            banscore: 7,
+            ..PeerInfo::default()
+        };
+        let json = serde_json::to_value(&row).expect("json");
+        assert_eq!(json["banscore"], 7);
+        let back: PeerInfo = serde_json::from_value(json).expect("parses");
+        assert_eq!(back.banscore(), 7);
     }
 }

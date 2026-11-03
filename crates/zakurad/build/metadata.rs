@@ -67,9 +67,27 @@ fn emit_git_metadata() -> Result<(), String> {
         Err(error) => return Err(format!("invalid SOURCE_DATE_EPOCH: {error}")),
     };
 
+    let dirty = !git(&["status", "--porcelain", "--untracked-files=no"])?.is_empty();
     let mut describe = git(&["describe", "--always", "--tags", "--match", "v*.*.*"])?;
-    if !git(&["status", "--porcelain", "--untracked-files=no"])?.is_empty() {
+    if dirty {
         describe.push_str("-dirty");
+    }
+
+    // kogany: the Ycash build's metadata counts commits since kogany's own baseline tag, never
+    // since an upstream Zakura `v*` tag (`application::kogany_build_metadata`). Optional: a
+    // checkout without the tag falls back to the commit alone.
+    if let Ok(mut kogany_describe) = git(&[
+        "describe",
+        "--tags",
+        "--match",
+        KOGANY_BASELINE_TAG,
+        "--long",
+        "--abbrev=12",
+    ]) {
+        if dirty {
+            kogany_describe.push_str("-dirty");
+        }
+        emit_env("KOGANY_GIT_DESCRIBE", kogany_describe);
     }
 
     emit_env("VERGEN_GIT_BRANCH", branch);
@@ -80,12 +98,25 @@ fn emit_git_metadata() -> Result<(), String> {
     Ok(())
 }
 
+/// kogany's baseline tag: the commit the Ycash work was cut from (plan §4.2). `koganyd`'s build
+/// metadata counts commits since it.
+const KOGANY_BASELINE_TAG: &str = "kogany-ycash-baseline";
+
 fn emit_git_rerun_triggers() -> Result<(), String> {
     let git_dir = PathBuf::from(git(&["rev-parse", "--git-dir"])?);
     emit_rerun_if_exists(&git_dir.join("HEAD"));
 
     if let Ok(reference) = git(&["symbolic-ref", "HEAD"]) {
-        emit_rerun_if_exists(&git_dir.join(reference));
+        emit_rerun_if_exists(&git_dir.join(&reference));
+
+        // kogany: in a linked worktree the branch ref (and `packed-refs`) live in the common
+        // git dir, not in `--git-dir`, so a new commit would not rerun this script and the
+        // version would name the old commit. `--git-path` resolves both layouts.
+        for path in [reference.as_str(), "packed-refs"] {
+            if let Ok(resolved) = git(&["rev-parse", "--git-path", path]) {
+                emit_rerun_if_exists(Path::new(&resolved));
+            }
+        }
     }
 
     Ok(())

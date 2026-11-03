@@ -1,0 +1,14 @@
+# Determinism disciplines of the kogany plan §4.2 rule 6 (lane E §3.1). The deny attributes in src/lib.rs
+# turn these into errors: consensus code never iterates a randomly seeded hash container, never reads a
+# clock or the network, and never computes in floating point.
+disallowed-types = [
+    { path = "std::collections::HashMap", reason = "iteration order is randomly seeded; use BTreeMap" },
+    { path = "std::collections::HashSet", reason = "iteration order is randomly seeded; use BTreeSet" },
+    { path = "std::time::SystemTime", reason = "consensus never reads the clock" },
+    { path = "std::time::Instant", reason = "consensus never reads the clock" },
+    { path = "std::net::TcpStream", reason = "consensus never touches the network" },
+    { path = "std::net::TcpListener", reason = "consensus never touches the network" },
+    { path = "std::net::UdpSocket", reason = "consensus never touches the network" },
+    { path = "f32", reason = "integer arithmetic only (math.h is arith_uint256 and int64)" },
+    { path = "f64", reason = "integer arithmetic only (math.h is arith_uint256 and int64)" },
+]

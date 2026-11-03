@@ -1,3 +1,5 @@
+// kogany: the Zcash-fixture tests are not built with `ycash`, leaving their helpers unused.
+#![cfg_attr(feature = "ycash", allow(unused_imports, dead_code))]
 use super::*;
 
 fn commit_verified_change(
@@ -209,6 +211,9 @@ fn assert_fork_eviction_body_evidence(reconsider: bool) {
 }
 
 #[test]
+// kogany: Zcash Mainnet and Testnet block vectors (NU5 branch IDs, Zcash Heartwood and NU5
+// heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 // DF-01: real headers at every observable activation boundary exercise the
 // shared rules with production network parameters and historical encoding.
 fn production_activation_headers_pass_shared_rules() {
@@ -304,6 +309,9 @@ fn production_activation_headers_pass_shared_rules() {
 }
 
 #[test]
+// kogany: generated Zcash Mainnet headers (Equihash (200, 9)) on the VCT and header-chain paths;
+// not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 // DF-01: one coherent fork graph crosses NU5 through both validation paths;
 // unequal work agrees, while equal work can keep distinct header and mining tips.
 fn generated_nu5_graph_matches_full_state_before_finalization() {
@@ -311,6 +319,9 @@ fn generated_nu5_graph_matches_full_state_before_finalization() {
     fn network(checkpoint_blocks: Option<&[Arc<Block>]>) -> Network {
         let builder = ParametersBuilder::default()
             .with_activation_heights(ConfiguredActivationHeights {
+                ycash: None,
+                vault: None,
+                pq_falcon: None,
                 before_overwinter: Some(1),
                 overwinter: Some(10),
                 sapling: Some(15),

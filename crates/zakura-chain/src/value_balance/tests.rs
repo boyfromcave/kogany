@@ -203,6 +203,9 @@ fn signed_deficit_roundtrips_without_changing_monetary_totals() {
 }
 
 #[test]
+// kogany: Zcash Mainnet/Testnet schedules (halvings, subsidies, activation list, value pools); not
+// run on Ycash, whose schedule tests are parameters/ycash/tests.rs.
+#[cfg(not(feature = "ycash"))]
 fn nsm_seed_matches_measured_public_network_supply() {
     use crate::{block::Height, parameters::Network};
     for (network, height, issued, expected) in [

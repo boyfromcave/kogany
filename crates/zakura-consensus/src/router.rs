@@ -401,6 +401,13 @@ where
             Some(height) if height <= self.max_checkpoint_height => {
                 self.checkpoint.call(block).map_err(Into::into).boxed()
             }
+            // kogany: with a partial Ycash list (W1-Y4), a pre-Canopy block above its last
+            // checkpoint can be neither checkpointed nor semantically verified (K-9): the
+            // checkpoint verifier rejects it as `TooHigh`, rather than the state asserting.
+            #[cfg(feature = "ycash")]
+            Some(height) if height <= self.checkpoint.network().mandatory_checkpoint_height() => {
+                self.checkpoint.call(block).map_err(Into::into).boxed()
+            }
             // This also covers blocks with no height, which the block verifier
             // will reject immediately.
             _ => self.block.call(request).map_err(Into::into).boxed(),
@@ -666,9 +673,26 @@ pub fn init_checkpoint_list(config: Config, network: &Network) -> (Arc<Checkpoin
     let max_checkpoint_height = if config.checkpoint_sync {
         list.max_height()
     } else {
-        list.min_height_in_range(network.mandatory_checkpoint_height()..)
-            .expect("hardcoded checkpoint list extends past canopy activation")
+        let mandatory = list.min_height_in_range(network.mandatory_checkpoint_height()..);
+        // kogany: a `# PARTIAL` Ycash list may stop below the mandatory checkpoint (W1-Y4).
+        #[cfg(feature = "ycash")]
+        let mandatory = mandatory.or_else(|| {
+            network
+                .ycash_checkpoint_list_is_partial()
+                .then(|| list.max_height())
+        });
+        mandatory.expect("hardcoded checkpoint list extends past canopy activation")
     };
+
+    #[cfg(feature = "ycash")]
+    if list.max_height() < network.mandatory_checkpoint_height() {
+        tracing::warn!(
+            max_checkpoint = ?list.max_height(),
+            mandatory_checkpoint = ?network.mandatory_checkpoint_height(),
+            "the Ycash checkpoint list is partial: blocks above its last checkpoint and below \
+             Canopy are rejected until a list reaching Canopy ships"
+        );
+    }
 
     (list, max_checkpoint_height)
 }

@@ -108,6 +108,11 @@ pub(crate) mod hex_data;
 pub(crate) mod trees;
 pub(crate) mod types;
 
+/// Ycash (kogany W7-e): ycashd's reject codes and texts; `zakurad`'s mempool builds
+/// [`ycash_reject::MempoolRejection`] for `sendrawtransaction`.
+#[cfg(feature = "ycash")]
+pub use types::ycash_reject;
+
 use hex_data::HexData;
 use trees::{GetSubtreesByIndexResponse, GetTreestateResponse, SubtreeRpcData};
 use types::get_block_template::prepared_candidates::ResolvePreparedCandidateError;
@@ -244,6 +249,7 @@ pub(crate) const RPC_METHOD_ACCESS: &[(&str, RpcAccess)] = &[
     ("preciousblock", RpcAccess::Admin),
     ("generate", RpcAccess::Test),
     ("addnode", RpcAccess::Test),
+    ("disconnectnode", RpcAccess::Admin),
     ("rpc.discover", RpcAccess::Unauthenticated),
     ("gettxout", RpcAccess::Unauthenticated),
 ];
@@ -278,6 +284,7 @@ pub(super) const PARAM_BLOCK_HASH_DESC: &str = "The hash of the block to return.
 pub(super) const PARAM_ADDRESS_DESC: &str = "The address to return.";
 pub(super) const PARAM_ADDRESS_STRINGS_DESC: &str = "The addresses to return.";
 pub(super) const PARAM_ADDR_DESC: &str = "The address to return.";
+pub(super) const PARAM_NODE_DESC: &str = "The node's address, as `getpeerinfo` reports it.";
 pub(super) const PARAM_HEX_DATA_DESC: &str = "The hex-encoded data to return.";
 pub(super) const PARAM_TXID_DESC: &str = "The transaction ID to return.";
 pub(super) const PARAM_HASH_OR_HEIGHT_DESC: &str = "The block hash or height to return.";
@@ -985,12 +992,33 @@ pub trait RpcServer {
     ///
     /// # Notes
     ///
-    /// Only the "add" command is currently supported.
+    /// The "add" and "onetry" commands are supported. kogany (F-S5-6): "onetry" dials a known
+    /// address now instead of after its reconnection delay, as ycashd's does.
     ///
     /// zcashd reference: [`addnode`](https://zcash.github.io/rpc/addnode.html)
     /// method: post
     /// tags: network
     async fn add_node(&self, addr: PeerSocketAddr, command: AddNodeCommand) -> Result<()>;
+
+    #[method(name = "disconnectnode")]
+    /// Immediately disconnects from the specified node.
+    ///
+    /// # Parameters
+    ///
+    /// - `node`: (string, required) The node's address, as `getpeerinfo` reports it (`ip:port`).
+    ///
+    /// # Notes
+    ///
+    /// kogany (finding F-S5-6): closes every connection to `node`, and keeps its address out of
+    /// the address book, so the node is not redialed, until `addnode` adds it again, as ycashd
+    /// never redials a node it disconnected that `addnode` does not name
+    /// (`ycash6` `src/rpc/net.cpp:224-245`). Answers `-29` ("Node not found in connected nodes")
+    /// when no connection to `node` is open; the address is kept out of the book then too.
+    ///
+    /// zcashd reference: [`disconnectnode`](https://zcash.github.io/rpc/disconnectnode.html)
+    /// method: post
+    /// tags: network
+    async fn disconnect_node(&self, node: String) -> Result<()>;
 
     /// Returns an OpenRPC schema as a description of this service.
     #[method(name = "rpc.discover")]
@@ -1076,6 +1104,10 @@ where
 
     /// Handler for the `getblocktemplate` RPC.
     gbt: GetBlockTemplateHandler<BlockVerifierRouter, SyncStatus>,
+
+    /// Ycash (W8): the node's Yellowback and vault hooks of `getblocktemplate`.
+    #[cfg(feature = "ycash")]
+    ycash_mining: Arc<dyn types::get_block_template::ycash::YcashMining>,
 }
 
 /// How long one mining template may take to pass proposal validation.
@@ -1369,6 +1401,55 @@ where
     BlockVerifierRouter: BlockVerifierService,
     SyncStatus: ChainSyncStatus + Clone + Send + Sync + 'static,
 {
+    /// kogany (S5, F-S5-7): waits, at most ten seconds, until the mempool has caught up with the
+    /// state's best tip: the reset seen, the disconnected blocks' transactions verified back in.
+    /// ycashd's `invalidateblock` / `reconsiderblock` return after `DisconnectTip` has refilled
+    /// the mempool, so a caller reads the mempool of the new tip; kogany's is asynchronous.
+    #[cfg(feature = "ycash")]
+    async fn ycash_wait_mempool_settled(&self) {
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
+        let Ok(zakura_state::ReadResponse::Tip(Some((_, tip)))) = self
+            .read_state
+            .clone()
+            .oneshot(zakura_state::ReadRequest::Tip)
+            .await
+        else {
+            return;
+        };
+        while tokio::time::Instant::now() < deadline {
+            if self.latest_chain_tip.best_tip_hash() == Some(tip)
+                && matches!(
+                    self.mempool
+                        .clone()
+                        .oneshot(mempool::Request::Settled)
+                        .await,
+                    Ok(mempool::Response::Settled(true))
+                )
+            {
+                return;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    }
+
+    /// kogany (S5, F-S5-19): the block `hash` off the best chain (side chain, invalidated or
+    /// rejected) and its height, as ycashd's block index still holds it.
+    #[cfg(feature = "ycash")]
+    async fn ycash_off_chain_block(
+        &self,
+        hash: block::Hash,
+    ) -> Option<(Arc<block::Block>, block::Height)> {
+        match self
+            .read_state
+            .clone()
+            .oneshot(zakura_state::ReadRequest::OffChainBlock(hash))
+            .await
+        {
+            Ok(zakura_state::ReadResponse::OffChainBlock(found)) => found,
+            _ => None,
+        }
+    }
+
     /// Create a new instance of the RPC handler.
     //
     // TODO:
@@ -1427,6 +1508,8 @@ where
             address_book,
             last_warn_error_log_rx,
             gbt,
+            #[cfg(feature = "ycash")]
+            ycash_mining: Arc::new(types::get_block_template::ycash::NotLive),
         };
 
         // run the process queue
@@ -1961,6 +2044,12 @@ where
             // Checking the download queues and BlockVerifierRouter buffer for duplicates
             // might require architectural changes to Zebra, so we should only do it
             // if mining pools really need it.
+            // Ycash (W7-e): ycashd's BIP 22 reason for the first failing rule.
+            #[cfg(feature = "ycash")]
+            Ok(verify_chain_error) => SubmitBlockErrorResponse::Invalid(
+                types::ycash_reject::block_reject(&verify_chain_error),
+            ),
+            #[cfg(not(feature = "ycash"))]
             Ok(_verify_chain_error) => SubmitBlockErrorResponse::Rejected,
 
             // This match arm is currently unreachable, but if future changes add extra error types,
@@ -2021,7 +2110,11 @@ where
             .latest_chain_tip
             .best_tip_height()
             .unwrap_or(Height::MIN);
+        #[cfg(not(feature = "ycash"))]
         let testnet = self.network.is_a_test_network();
+        // Ycash (W1-Y6): `testnet` is false on Regtest, as ycashd reports it.
+        #[cfg(feature = "ycash")]
+        let testnet = types::ycash::is_testnet_field(&self.network);
 
         // This field is behind the `ENABLE_WALLET` feature flag in zcashd:
         // https://github.com/zcash/zcash/blob/v6.1.0/src/rpc/misc.cpp#L113
@@ -2252,7 +2345,12 @@ where
         };
 
         let response = GetBlockchainInfoResponse {
+            #[cfg(not(feature = "ycash"))]
             chain: network.bip70_network_name(),
+            #[cfg(feature = "ycash")]
+            chain: types::ycash::chain_name(network),
+            #[cfg(feature = "ycash")]
+            testnet_profile: types::ycash::testnet_profile(network),
             blocks: tip_height,
             best_block_hash: tip_hash,
             estimated_height,
@@ -2266,6 +2364,14 @@ where
             verification_progress,
             // TODO: store work in the finalized state for each height (#7109)
             chain_work: 0,
+            #[cfg(feature = "ycash")]
+            chain_work_hex: types::ycash::chain_work(
+                self.read_state.clone(),
+                network,
+                tip_height,
+                tip_hash,
+            )
+            .await,
             pruned: is_pruned,
             prune_height,
             size_on_disk,
@@ -2303,6 +2409,8 @@ where
         raw_transaction_hex: String,
         _allow_high_fees: Option<bool>,
     ) -> Result<SendRawTransactionResponse> {
+        #[cfg(feature = "ycash")]
+        let allow_high_fees = _allow_high_fees.unwrap_or(false);
         let mempool = self.mempool.clone();
         let queue_sender = self.queue_sender.clone();
 
@@ -2315,35 +2423,83 @@ where
 
         let transaction_hash = raw_transaction.hash();
 
+        // Ycash (W7-e): ycashd's refusals before AcceptToMemoryPool (expiring soon, absurd fee).
+        #[cfg(feature = "ycash")]
+        types::ycash_reject::send_raw_transaction_prechecks(
+            self.read_state.clone(),
+            &self.network,
+            self.latest_chain_tip.best_tip_height(),
+            &raw_transaction,
+            allow_high_fees,
+        )
+        .await?;
+
         // send transaction to the rpc queue, ignore any error.
         let unmined_transaction = UnminedTx::from(raw_transaction.clone());
         let _ = queue_sender.send(unmined_transaction);
 
         let transaction_parameter = mempool::Gossip::Tx(raw_transaction.into());
-        let request = mempool::Request::Queue(vec![transaction_parameter]);
+        #[cfg(feature = "ycash")]
+        let mut queued_wait = types::ycash_reject::ALREADY_QUEUED_WAIT;
+        // The retry below exists on the Ycash build only; upstream runs this body once.
+        #[cfg_attr(not(feature = "ycash"), allow(clippy::never_loop))]
+        let queue_result = loop {
+            let request = mempool::Request::Queue(vec![transaction_parameter.clone()]);
 
-        let response = call_service(mempool, request).await?;
+            let response = call_service(mempool.clone(), request).await?;
 
-        let mut queue_results = match response {
-            mempool::Response::Queued(results) => results,
-            _ => unreachable!("incorrect response variant from mempool service"),
+            let mut queue_results = match response {
+                mempool::Response::Queued(results) => results,
+                _ => unreachable!("incorrect response variant from mempool service"),
+            };
+
+            assert_eq!(
+                queue_results.len(),
+                1,
+                "mempool service returned more results than expected"
+            );
+
+            let queue_result = queue_results
+                .pop()
+                .expect("there should be exactly one item in Vec")
+                .inspect_err(|err| tracing::debug!("sent transaction to mempool: {:?}", &err));
+            // kogany (S5): a peer's download of the same transaction is in flight; ycashd has no
+            // download queue and verifies the RPC's bytes, so wait for that download's verdict
+            // (then the mempool holds it, or the retry verifies these bytes) instead of
+            // reporting the transaction dropped.
+            #[cfg(feature = "ycash")]
+            if let Err(error) = &queue_result {
+                if types::ycash_reject::is_already_queued(error.as_ref()) && queued_wait > 0 {
+                    queued_wait -= 1;
+                    tokio::time::sleep(types::ycash_reject::ALREADY_QUEUED_POLL).await;
+                    continue;
+                }
+            }
+            break queue_result;
         };
-
-        assert_eq!(
-            queue_results.len(),
-            1,
-            "mempool service returned more results than expected"
-        );
-
-        let queue_result = queue_results
-            .pop()
-            .expect("there should be exactly one item in Vec")
-            .inspect_err(|err| tracing::debug!("sent transaction to mempool: {:?}", &err))
-            .map_misc_error()?
-            .await
-            .map_misc_error()?;
+        // Ycash (W7-e): ycashd's code and text for the rejection, or the txid for a
+        // transaction the mempool already holds.
+        #[cfg(feature = "ycash")]
+        let queue_result = match queue_result {
+            Err(error) => {
+                return match types::ycash_reject::send_raw_transaction_error(error.as_ref()) {
+                    Some(error) => Err(error),
+                    None => Ok(SendRawTransactionResponse(transaction_hash)),
+                }
+            }
+            ok => ok,
+        };
+        let queue_result = queue_result.map_misc_error()?.await.map_misc_error()?;
 
         tracing::debug!("sent transaction to mempool: {:?}", &queue_result);
+
+        #[cfg(feature = "ycash")]
+        if let Err(error) = &queue_result {
+            return match types::ycash_reject::send_raw_transaction_error(error.as_ref()) {
+                Some(error) => Err(error),
+                None => Ok(SendRawTransactionResponse(transaction_hash)),
+            };
+        }
 
         queue_result
             .map(|_| SendRawTransactionResponse(transaction_hash))
@@ -2391,6 +2547,19 @@ where
                     Ok(GetBlockResponse::Raw(block.into()))
                 }
                 zakura_state::ReadResponse::Block(None) => {
+                    #[cfg(feature = "ycash")]
+                    if types::ycash::block_body_pruned(self.read_state.clone(), hash_or_height)
+                        .await
+                    {
+                        return Err(types::ycash::PRUNED_BLOCK).map_error(ErrorCode::InternalError);
+                    }
+                    // kogany (S5, F-S5-19): ycashd serves a block off the best chain too.
+                    #[cfg(feature = "ycash")]
+                    if let Some(hash) = hash_or_height.hash() {
+                        if let Some((block, _height)) = self.ycash_off_chain_block(hash).await {
+                            return Ok(GetBlockResponse::Raw(block.into()));
+                        }
+                    }
                     Err("Block not found").map_error(server::error::LegacyCode::InvalidParameter)
                 }
                 _ => unreachable!("unmatched response to a block request"),
@@ -2420,6 +2589,69 @@ where
                 previous_block_hash,
                 next_block_hash,
             } = *block_header;
+
+            // kogany (S5, F-S5-19): a block off the best chain, from the block itself.
+            #[cfg(feature = "ycash")]
+            if confirmations == -1 {
+                if let Some((block, _)) = self.ycash_off_chain_block(hash).await {
+                    let size = block.zcash_serialize_to_vec().map_misc_error()?.len();
+                    let tx: Vec<GetBlockTransaction> = block
+                        .transactions
+                        .iter()
+                        .map(|t| {
+                            if verbosity == 1 {
+                                GetBlockTransaction::Hash(t.hash())
+                            } else {
+                                GetBlockTransaction::Object(Box::new(
+                                    TransactionObject::from_transaction(
+                                        t.clone(),
+                                        Some(height),
+                                        Some(confirmations),
+                                        &network,
+                                        Some(block.header.time),
+                                        Some(hash),
+                                        Some(false),
+                                        t.hash(),
+                                    ),
+                                ))
+                            }
+                        })
+                        .collect();
+                    return Ok(GetBlockResponse::Object(Box::new(BlockObject {
+                        hash,
+                        confirmations,
+                        height: Some(height),
+                        version: Some(version),
+                        merkle_root: Some(merkle_root),
+                        time: Some(time),
+                        nonce: Some(nonce),
+                        solution: Some(solution),
+                        bits: Some(bits),
+                        difficulty: Some(difficulty),
+                        n_tx: tx.len(),
+                        tx,
+                        trees: GetBlockTrees {
+                            sapling: SaplingTrees {
+                                size: sapling_tree_size,
+                            },
+                            ..Default::default()
+                        },
+                        chain_supply: None,
+                        value_pools: None,
+                        size: Some(size as i64),
+                        block_commitments: Some(block_commitments),
+                        final_sapling_root: Some(final_sapling_root),
+                        final_orchard_root: None,
+                        chain_history_root: Some(types::ycash::chain_history_root(
+                            &network,
+                            height,
+                            block_commitments,
+                        )),
+                        previous_block_hash: Some(previous_block_hash),
+                        next_block_hash: None,
+                    })));
+                }
+            }
 
             // # Concurrency
             //
@@ -2466,6 +2698,16 @@ where
             }
 
             let tx_ids_response = futs.next().await.expect("`futs` should not be empty");
+            // Ycash: a pruned body is ycashd's pruned refusal at every verbosity.
+            #[cfg(feature = "ycash")]
+            if matches!(
+                tx_ids_response,
+                Ok(zakura_state::ReadResponse::TransactionIdsForBlock(None))
+                    | Ok(zakura_state::ReadResponse::BlockAndSize(None))
+            ) && types::ycash::block_body_pruned(self.read_state.clone(), hash_or_height).await
+            {
+                return Err(types::ycash::PRUNED_BLOCK).map_error(ErrorCode::InternalError);
+            }
             let (tx, size): (Vec<_>, Option<usize>) = match tx_ids_response? {
                 zakura_state::ReadResponse::TransactionIdsForBlock(tx_ids) => (
                     tx_ids
@@ -2594,6 +2836,12 @@ where
                 block_commitments: Some(block_commitments),
                 final_sapling_root: Some(final_sapling_root),
                 final_orchard_root,
+                #[cfg(feature = "ycash")]
+                chain_history_root: Some(types::ycash::chain_history_root(
+                    &network,
+                    height,
+                    block_commitments,
+                )),
                 previous_block_hash: Some(previous_block_hash),
                 next_block_hash,
             })))
@@ -2615,16 +2863,32 @@ where
                 // Reference for the legacy error code:
                 // <https://github.com/zcash/zcash/blob/99ad6fdc3a549ab510422820eea5e5ce9f60a5fd/src/rpc/blockchain.cpp#L629>
                 .map_error(server::error::LegacyCode::InvalidParameter)?;
+        let best_chain_header = self
+            .read_state
+            .clone()
+            .oneshot(zakura_state::ReadRequest::BlockHeader(hash_or_height))
+            .await;
+        // kogany (S5, F-S5-19): a block off the best chain (a side chain, an invalidated or a
+        // rejected block) is ycashd's header with `confirmations: -1`.
+        #[cfg(feature = "ycash")]
+        let best_chain_header = match (best_chain_header, hash_or_height.hash()) {
+            (Err(error), Some(hash)) => match self.ycash_off_chain_block(hash).await {
+                Some((block, height)) => Ok(zakura_state::ReadResponse::BlockHeader {
+                    header: block.header.clone(),
+                    hash,
+                    height,
+                    next_block_hash: None,
+                }),
+                None => Err(error),
+            },
+            (response, _) => response,
+        };
         let zakura_state::ReadResponse::BlockHeader {
             header,
             hash,
             height,
             next_block_hash,
-        } = self
-            .read_state
-            .clone()
-            .oneshot(zakura_state::ReadRequest::BlockHeader(hash_or_height))
-            .await
+        } = best_chain_header
             .map_err(|_| "block height not in best chain")
             .map_error(
                 // ## Compatibility with `zcashd`.
@@ -2654,6 +2918,19 @@ where
             .await?
             else {
                 panic!("unexpected response to SaplingTree request")
+            };
+
+            // kogany (S5, F-S5-19): an off-chain block has no tree the best-chain reads find; its
+            // tree fields are the header's (an empty tree's size).
+            #[cfg(feature = "ycash")]
+            let sapling_tree = match sapling_tree {
+                Some(tree) => Some(tree),
+                None if next_block_hash.is_none()
+                    && self.ycash_off_chain_block(hash).await.is_some() =>
+                {
+                    Some(Default::default())
+                }
+                None => None,
             };
 
             // This could be `None` if there's a chain reorg between state queries.
@@ -2689,7 +2966,23 @@ where
                     root.reverse();
                     root
                 } else {
-                    [0; 32]
+                    // kogany (Y8): below Sapling ycashd answers the header's hashFinalSaplingRoot
+                    // field (on Ycash mainnet those blocks carry the empty Sapling root).
+                    #[cfg(feature = "ycash")]
+                    {
+                        match header.commitment(&network, height) {
+                            // ycashd prints the field in display order (byte-reversed).
+                            Ok(Commitment::PreSaplingReserved(mut bytes)) => {
+                                bytes.reverse();
+                                bytes
+                            }
+                            _ => [0; 32],
+                        }
+                    }
+                    #[cfg(not(feature = "ycash"))]
+                    {
+                        [0; 32]
+                    }
                 };
 
             let difficulty = header.difficulty_threshold.relative_to_network(&network);
@@ -2697,7 +2990,20 @@ where
             let block_commitments = match header.commitment(&network, height).expect(
                 "Unexpected failure while parsing the blockcommitments field in get_block_header",
             ) {
-                Commitment::PreSaplingReserved(bytes) => bytes,
+                Commitment::PreSaplingReserved(bytes) => {
+                    // kogany (Y8): ycashd prints hashBlockCommitments in display order; upstream
+                    // Zakura's own output is unchanged in a Zcash build.
+                    #[cfg(feature = "ycash")]
+                    {
+                        let mut bytes = bytes;
+                        bytes.reverse();
+                        bytes
+                    }
+                    #[cfg(not(feature = "ycash"))]
+                    {
+                        bytes
+                    }
+                }
                 Commitment::FinalSaplingRoot(_) => final_sapling_root,
                 Commitment::ChainHistoryActivationReserved => [0; 32],
                 Commitment::ChainHistoryRoot(root) => root.bytes_in_display_order(),
@@ -3093,6 +3399,9 @@ where
         };
         let (sapling_tree, sapling_root) =
             sapling.map_or((None, None), |(tree, root)| (Some(tree), Some(root)));
+        // kogany W9-c: ycashd's `finalState` has no trailing empty parents.
+        #[cfg(feature = "ycash")]
+        let sapling_tree = sapling_tree.map(types::ycash::trim_tree_parents);
 
         let orchard = if network.is_nu_active(consensus::NetworkUpgrade::Nu5, height.into()) {
             match call_service(
@@ -3311,6 +3620,8 @@ where
             );
 
             let entry = Utxo {
+                #[cfg(feature = "ycash")]
+                address_name: None,
                 address,
                 txid,
                 output_index,
@@ -3321,6 +3632,32 @@ where
             response_utxos.push(entry);
 
             last_output_location = output_location;
+        }
+
+        // kogany: ycashd's order (its address-unspent index order, then by height), which
+        // lightwalletd compares byte for byte; Zakura's chain order stays feature-off.
+        #[cfg(feature = "ycash")]
+        {
+            let named: Vec<(Address, &String)> = utxos_request
+                .addresses()
+                .iter()
+                .filter_map(|text| types::ycash::insight_address(text).map(|a| (a, text)))
+                .collect();
+            let request_addresses: Vec<Address> = named.iter().map(|(a, _)| *a).collect();
+            types::ycash::order_address_utxos_as_ycashd(&mut response_utxos, &request_addresses);
+            // ycashd names a post-quantum key with the caller's form (`AddressNames`).
+            for utxo in &mut response_utxos {
+                let name = match utxo.address() {
+                    pq @ Address::PayToPqKeyHash { .. } => named
+                        .iter()
+                        .find(|(a, _)| a == pq)
+                        .map_or_else(|| pq.to_string(), |(_, text)| (*text).clone()),
+                    other => other.to_string(),
+                };
+                if name != utxo.address().to_string() {
+                    utxo.set_address_name(name);
+                }
+            }
         }
 
         if !utxos_request.chain_info {
@@ -3344,6 +3681,10 @@ where
         #[cfg(not(target_os = "windows"))]
         if self.network.is_regtest() {
             match unix::raise_interrupt() {
+                // kogany: ycashd's reply (ycash6 `src/rpc/server.cpp:291`).
+                #[cfg(feature = "ycash")]
+                Ok(_) => Ok("Ycash server stopping".to_string()),
+                #[cfg(not(feature = "ycash"))]
                 Ok(_) => Ok("Zakura server stopping".to_string()),
                 Err(error) => Err(ErrorObject::new(
                     ErrorCode::InternalError,
@@ -3393,15 +3734,25 @@ where
         &self,
         parameters: Option<GetBlockTemplateParameters>,
     ) -> Result<GetBlockTemplateResponse> {
+        #[cfg(not(feature = "ycash"))]
+        use types::get_block_template::zip317::select_mempool_transactions;
         use types::get_block_template::{
             check_parameters, check_synced_to_tip, fetch_chain_info, fetch_mempool_transactions,
-            validate_block_proposal, zip317::select_mempool_transactions,
+            validate_block_proposal,
         };
+
+        // Ycash (W8-b): ycashd refuses every getblocktemplate call while the YED index is
+        // unhealthy, and the miner's Yellowback state decides the coinbase tag.
+        #[cfg(feature = "ycash")]
+        let yellowback = self
+            .ycash_mining
+            .yellowback_miner()
+            .await
+            .map_err(|reason| types::get_block_template::ycash::unhealthy_error(&reason))?;
 
         // Clone Services
         let mempool = self.mempool.clone();
         let mut latest_chain_tip = self.latest_chain_tip.clone();
-        let sync_status = self.gbt.sync_status();
         let read_state = self.read_state.clone();
 
         if let Some(HexData(block_proposal_bytes)) = parameters
@@ -3413,11 +3764,10 @@ where
                 block_proposal_bytes,
                 &self.network,
                 latest_chain_tip,
-                sync_status,
+                self.gbt.prepared_candidates(),
                 parameters
                     .as_ref()
-                    .and_then(|params| params.work_id.as_deref())
-                    .map(|work_id| (self.gbt.prepared_candidates(), work_id)),
+                    .and_then(|params| params.work_id.as_deref()),
             )
             .await;
         }
@@ -3432,6 +3782,10 @@ where
             .gbt
             .miner_params()
             .ok_or_error(0, "miner parameters are required for get_block_template")?;
+        #[cfg(feature = "ycash")]
+        let ycash_miner_params = miner_params.clone().with_yellowback(yellowback);
+        #[cfg(feature = "ycash")]
+        let miner_params = &ycash_miner_params;
 
         // A template can be superseded while it is being built: the tip moves (a new
         // block, or an equal-height reorg), a concurrent caller selects a newer parent,
@@ -3459,7 +3813,7 @@ where
                 //
                 // Optional TODO:
                 // - add `async changed()` method to ChainSyncStatus (like `ChainTip`)
-                check_synced_to_tip(&self.network, latest_chain_tip.clone(), sync_status.clone())?;
+                check_synced_to_tip(&self.network, latest_chain_tip.clone())?;
                 // TODO: return an error if we have no peers, like `zcashd` does,
                 //       and add a developer config that mines regardless of how many peers we have.
                 // https://github.com/zcash/zcash/blob/6fdd9f1b81d3b228326c9826fa10696fc516444b/src/miner.cpp#L865-L880
@@ -3748,6 +4102,29 @@ where
 
             let height = chain_info.tip_height.next().map_misc_error()?;
 
+            // Ycash (W8-a): the vault and YED template filter, asked about every candidate that
+            // fits the block limits; selection is otherwise Zakura's.
+            #[cfg(feature = "ycash")]
+            let template_filter = types::get_block_template::ycash::TemplateFilter::prepare(
+                &self.network,
+                height,
+                chain_info.tip_hash,
+                self.ycash_mining.as_ref(),
+            )
+            .await;
+            #[cfg(feature = "ycash")]
+            let select_mempool_transactions = |net, height, miner_params, nsm, txs, deps| {
+                types::get_block_template::zip317::select_mempool_transactions_filtered(
+                    net,
+                    height,
+                    miner_params,
+                    nsm,
+                    txs,
+                    deps,
+                    Some(template_filter),
+                )
+            };
+
             // Randomly select some mempool transactions.
             let mempool_txs = select_mempool_transactions(
                 &self.network,
@@ -3765,6 +4142,15 @@ where
                 mempool_tx_deps,
             )
             .map_misc_error()?;
+
+            // Ycash: the template's own block check (ycashd `TestNewBlockAtTipValidity`) refuses
+            // a template the filter let an invalid candidate into (`yellowback.test_fault`).
+            #[cfg(feature = "ycash")]
+            if let Some(reject) =
+                types::get_block_template::ycash::take_template_block_check_reject()
+            {
+                return Err(reject).map_misc_error();
+            }
 
             tracing::debug!(
                 selected_mempool_tx_hashes = ?mempool_txs
@@ -3805,23 +4191,30 @@ where
         _parameters: Option<SubmitBlockParameters>,
     ) -> Result<SubmitBlockResponse> {
         let submitted_at = std::time::Instant::now();
-        let block: Block = match block_bytes.zcash_deserialize_into() {
-            Ok(block) => block,
-            Err(error) => {
-                tracing::info!(
-                    ?error,
-                    "submit block failed: block bytes could not be deserialized into a structurally valid block"
-                );
+        let block = match self
+            .gbt
+            .prepared_candidates()
+            .decode_submitted(&block_bytes)
+        {
+            Some(block) => block,
+            None => match block_bytes.zcash_deserialize_into::<Block>() {
+                Ok(block) => Arc::new(block),
+                Err(error) => {
+                    tracing::info!(
+                        ?error,
+                        "submit block failed: block bytes could not be deserialized into a structurally valid block"
+                    );
 
-                return Ok(SubmitBlockErrorResponse::Rejected.into());
-            }
+                    // Ycash (W7-e): ycashd throws -22 "Block decode failed".
+                    #[cfg(feature = "ycash")]
+                    return Err(types::ycash_reject::block_decode_failed());
+                    #[cfg(not(feature = "ycash"))]
+                    return Ok(SubmitBlockErrorResponse::Rejected.into());
+                }
+            },
         };
-        self.run_mined_block_lifecycle(
-            Arc::new(block),
-            submitted_at,
-            MinedBlockSubmission::FullBlock,
-        )
-        .await
+        self.run_mined_block_lifecycle(block, submitted_at, MinedBlockSubmission::FullBlock)
+            .await
     }
 
     async fn submit_solution(
@@ -4010,7 +4403,27 @@ where
     async fn get_peer_info(&self) -> Result<Vec<PeerInfo>> {
         let address_book = self.address_book.clone();
         if let Some(connected_peers) = address_book.connected_peers() {
-            return Ok(connected_peers.into_iter().map(PeerInfo::from).collect());
+            // Ycash (S5 parity): ycashd's `banscore`, the address book's misbehavior score.
+            #[cfg(feature = "ycash")]
+            let scores: std::collections::HashMap<_, _> = address_book
+                .recently_live_peers(chrono::Utc::now())
+                .into_iter()
+                .map(|meta| (meta.addr(), meta.misbehavior()))
+                .collect();
+            return Ok(connected_peers
+                .into_iter()
+                .map(|peer| {
+                    #[cfg(feature = "ycash")]
+                    let score = scores.get(&peer.addr).copied().unwrap_or(0);
+                    #[allow(unused_mut)]
+                    let mut info = PeerInfo::from(peer);
+                    #[cfg(feature = "ycash")]
+                    {
+                        info.banscore = score;
+                    }
+                    info
+                })
+                .collect());
         }
 
         Ok(address_book
@@ -4133,11 +4546,18 @@ where
                     .collect()
             });
 
+        let miner = miner_subsidy(height, &net, subsidy).map_misc_error()?;
+        let founders = founders_reward(&net, height);
+        // Ycash (W1-Y6): `founders` is the founders' or YDF share ycashd's miner pays, and
+        // `miner` the rest, including the optional post-mandate YDF.
+        #[cfg(feature = "ycash")]
+        let (miner, founders) =
+            types::ycash::subsidy_fields(&net, height, subsidy, miner, founders)
+                .map_misc_error()?;
+
         Ok(GetBlockSubsidyResponse {
-            miner: miner_subsidy(height, &net, subsidy)
-                .map_misc_error()?
-                .into(),
-            founders: founders_reward(&net, height).into(),
+            miner: miner.into(),
+            founders: founders.into(),
             funding_streams,
             lockbox_streams,
             funding_streams_total: funding_streams_total?,
@@ -4205,12 +4625,17 @@ where
             .parse()
             .map_error(server::error::LegacyCode::InvalidParameter)?;
 
-        call_service(
+        let result = call_service(
             self.state.clone(),
             zakura_state::Request::InvalidateBlock(block_hash),
         )
         .await
-        .map(|rsp| assert_eq!(rsp, zakura_state::Response::Invalidated(block_hash)))
+        .map(|rsp| assert_eq!(rsp, zakura_state::Response::Invalidated(block_hash)));
+        #[cfg(feature = "ycash")]
+        if result.is_ok() {
+            self.ycash_wait_mempool_settled().await;
+        }
+        result
     }
 
     async fn reconsider_block(&self, block_hash: String) -> Result<Vec<block::Hash>> {
@@ -4218,6 +4643,40 @@ where
             .parse()
             .map_error(server::error::LegacyCode::InvalidParameter)?;
 
+        // Ycash (S5 parity): ycashd's `reconsiderblock` clears the invalidity of a known block
+        // that has none as a no-op (`ReconsiderBlock`, `src/main.cpp`), and refuses only an
+        // unknown hash, `-5 "Block not found"`.
+        #[cfg(feature = "ycash")]
+        {
+            let result = self
+                .state
+                .clone()
+                .oneshot(zakura_state::Request::ReconsiderBlock(block_hash))
+                .await;
+            return match result {
+                Ok(zakura_state::Response::Reconsidered(block_hashes)) => {
+                    self.ycash_wait_mempool_settled().await;
+                    Ok(block_hashes)
+                }
+                Ok(_) => unreachable!("unmatched response to a reconsider block request"),
+                // zakura-state's `ReconsiderError::MissingInvalidatedBlock` (not exported).
+                Err(error) if error.to_string().contains("was not previously invalidated") => {
+                    match call_service(
+                        self.state.clone(),
+                        zakura_state::Request::KnownBlock(block_hash),
+                    )
+                    .await?
+                    {
+                        zakura_state::Response::KnownBlock(Some(_)) => Ok(Vec::new()),
+                        _ => Err("Block not found")
+                            .map_error(server::error::LegacyCode::InvalidAddressOrKey),
+                    }
+                }
+                Err(error) => Err(error.to_string()).map_misc_error(),
+            };
+        }
+
+        #[allow(unreachable_code)]
         call_service(
             self.state.clone(),
             zakura_state::Request::ReconsiderBlock(block_hash),
@@ -4313,6 +4772,19 @@ where
     ) -> Result<()> {
         if self.network.is_regtest() {
             match command {
+                AddNodeCommand::OneTry => {
+                    tracing::info!(?addr, "trying a connection to a peer address now");
+                    if self.address_book.clone().try_peer_now(addr) {
+                        Ok(())
+                    } else {
+                        Err(ErrorObject::new(
+                            ErrorCode::InvalidParams,
+                            format!(
+                                "peer address cannot be used for an outbound connection: {addr}"
+                            ),
+                        ))
+                    }
+                }
                 AddNodeCommand::Add => {
                     tracing::info!(?addr, "adding peer address to the address book");
                     if self.address_book.clone().add_peer(addr) {
@@ -4330,6 +4802,22 @@ where
                 ErrorCode::InvalidParams,
                 "addnode command is only supported on regtest",
             ));
+        }
+    }
+
+    async fn disconnect_node(&self, node: String) -> Result<()> {
+        let not_connected = || {
+            ErrorObject::new(
+                server::error::LegacyCode::ClientNodeNotConnected,
+                "Node not found in connected nodes",
+            )
+        };
+        let addr: PeerSocketAddr = node.parse().map_err(|_| not_connected())?;
+        if self.address_book.clone().disconnect_peer(addr) {
+            tracing::info!(?addr, "disconnected peer by RPC request");
+            Ok(())
+        } else {
+            Err(not_connected())
         }
     }
 
@@ -4365,6 +4853,11 @@ where
                     tx_version,
                     last_seen_hash,
                 })) => {
+                    // Ycash (W7-e): ycashd prunes unspendable outputs from its coins view.
+                    #[cfg(feature = "ycash")]
+                    if types::ycash_script::is_unspendable(&output.lock_script) {
+                        return Ok(GetTxOutResponse(None));
+                    }
                     return Ok(GetTxOutResponse(Some(
                         types::transaction::OutputObject::from_output(
                             &output,
@@ -4374,7 +4867,7 @@ where
                             false,
                             self.network(),
                         ),
-                    )))
+                    )));
                 }
                 mempool::Response::TransparentOutput(Some(CreatedOrSpent::Spent)) => {
                     return Ok(GetTxOutResponse(None))
@@ -4411,6 +4904,11 @@ where
                     // return null if the output is not found
                     None => return Ok(GetTxOutResponse(None)),
                 };
+                // Ycash (W7-e): ycashd prunes unspendable outputs from its coins view.
+                #[cfg(feature = "ycash")]
+                if types::ycash_script::is_unspendable(&output.lock_script) {
+                    return Ok(GetTxOutResponse(None));
+                }
 
                 // Prune state outputs that are spent
                 let is_spent = {
@@ -4738,6 +5236,15 @@ pub struct GetBlockchainInfoResponse {
     #[getset(get = "pub")]
     chain: String,
 
+    /// Ycash (W7-c): the testnet profile, `fast` or `slow`, on the Ycash testnets only.
+    #[cfg(feature = "ycash")]
+    #[serde(
+        default,
+        rename = "testnetprofile",
+        skip_serializing_if = "Option::is_none"
+    )]
+    testnet_profile: Option<String>,
+
     /// The current number of blocks processed in the server, numeric
     #[getset(get_copy = "pub")]
     blocks: Height,
@@ -4757,9 +5264,17 @@ pub struct GetBlockchainInfoResponse {
     verification_progress: f64,
 
     /// The total amount of work in the best chain, hex-encoded.
-    #[serde(rename = "chainwork")]
+    #[cfg_attr(not(feature = "ycash"), serde(rename = "chainwork"))]
+    // Ycash (W7-c): `chainwork` is ycashd's hex string, `chain_work_hex`.
+    #[cfg_attr(feature = "ycash", serde(skip))]
     #[getset(get_copy = "pub")]
     chain_work: u64,
+
+    /// Ycash (W7-c): the total work of the best chain through the tip, as ycashd's 64-digit hex
+    /// string; omitted while kogany is still summing it (`types::ycash::chain_work`).
+    #[cfg(feature = "ycash")]
+    #[serde(default, rename = "chainwork", skip_serializing_if = "Option::is_none")]
+    chain_work_hex: Option<String>,
 
     /// Whether this node's blocks are subject to pruning, that is, whether it
     /// runs in pruned storage mode or has already pruned historical data.
@@ -5010,6 +5525,10 @@ impl Default for GetBlockchainInfoResponse {
             difficulty: 0.0,
             verification_progress: 0.0,
             chain_work: 0,
+            #[cfg(feature = "ycash")]
+            chain_work_hex: None,
+            #[cfg(feature = "ycash")]
+            testnet_profile: None,
             pruned: false,
             prune_height: None,
             size_on_disk: 0,
@@ -5058,6 +5577,10 @@ impl GetBlockchainInfoResponse {
             difficulty,
             verification_progress,
             chain_work,
+            #[cfg(feature = "ycash")]
+            chain_work_hex: None,
+            #[cfg(feature = "ycash")]
+            testnet_profile: None,
             pruned,
             prune_height,
             size_on_disk,
@@ -5122,6 +5645,11 @@ pub trait ValidateAddresses {
             .addresses()
             .iter()
             .map(|address| {
+                // Ycash (S5 parity): a YED form (yb…/yt…/yr…) names its transparent key too.
+                #[cfg(feature = "ycash")]
+                if let Some(address) = types::ycash::insight_address(address) {
+                    return Ok(address);
+                }
                 address
                     .parse()
                     .map_error(server::error::LegacyCode::InvalidAddressOrKey)
@@ -5382,6 +5910,8 @@ impl Default for GetBlockResponse {
             block_commitments: None,
             final_sapling_root: None,
             final_orchard_root: None,
+            #[cfg(feature = "ycash")]
+            chain_history_root: None,
             nonce: None,
             bits: None,
             difficulty: None,
@@ -5454,6 +5984,18 @@ pub struct BlockObject {
 
     // `chainhistoryroot` would be here. Undocumented. TODO: decide if we want to support it
     //
+    /// Ycash (S5 parity): ycashd's `chainhistoryroot` (`types::ycash::chain_history_root`).
+    #[cfg(feature = "ycash")]
+    #[serde(
+        with = "opthex",
+        rename = "chainhistoryroot",
+        skip_serializing_if = "Option::is_none",
+        default
+    )]
+    #[getset(get_copy = "pub")]
+    #[new(default)]
+    chain_history_root: Option<[u8; 32]>,
+
     /// The number of transactions in this block.
     #[serde(rename = "nTx")]
     #[getset(get_copy = "pub")]
@@ -5770,10 +6312,19 @@ pub struct GetAddressUtxosResponseObject {
 #[derive(
     Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize, Getters, CopyGetters, new,
 )]
+#[cfg_attr(feature = "ycash", serde(into = "UtxoJson"))]
 pub struct Utxo {
     /// The transparent address, base58check encoded
     #[getset(get = "pub")]
     address: transparent::Address,
+
+    /// Ycash (S5 parity): the address as ycashd answers it, the form the caller named for a
+    /// post-quantum key (`AddressNames`: `rq…` or its `yr…` YED form); `None` is the canonical
+    /// form.
+    #[cfg(feature = "ycash")]
+    #[serde(skip)]
+    #[new(default)]
+    address_name: Option<String>,
 
     /// The output txid, in big-endian order, hex-encoded
     #[serde(with = "hex")]
@@ -5801,9 +6352,51 @@ pub struct Utxo {
     height: Height,
 }
 
+/// A [`Utxo`] as a Ycash build writes it (S5 parity): `address` is the caller's name of a
+/// post-quantum key, else the canonical address; the fields in zcashd's order.
+#[cfg(feature = "ycash")]
+#[derive(serde::Serialize)]
+struct UtxoJson {
+    address: String,
+    #[serde(with = "hex")]
+    txid: transaction::Hash,
+    #[serde(rename = "outputIndex")]
+    output_index: OutputIndex,
+    #[serde(with = "hex")]
+    script: transparent::Script,
+    satoshis: u64,
+    height: Height,
+}
+
+#[cfg(feature = "ycash")]
+impl From<Utxo> for UtxoJson {
+    fn from(utxo: Utxo) -> Self {
+        Self {
+            address: utxo
+                .address_name
+                .unwrap_or_else(|| utxo.address.to_string()),
+            txid: utxo.txid,
+            output_index: utxo.output_index,
+            script: utxo.script,
+            satoshis: utxo.satoshis,
+            height: utxo.height,
+        }
+    }
+}
+
+#[cfg(feature = "ycash")]
+impl Utxo {
+    /// Names the address as the caller did (a post-quantum key) or canonically.
+    pub(crate) fn set_address_name(&mut self, name: String) {
+        self.address_name = Some(name);
+    }
+}
+
 impl Default for Utxo {
     fn default() -> Self {
         Self {
+            #[cfg(feature = "ycash")]
+            address_name: None,
             address: transparent::Address::from_pub_key_hash(
                 zakura_chain::parameters::NetworkKind::default(),
                 [0u8; 20],
@@ -6225,7 +6818,11 @@ where
 
     // Get expanded difficulties (256 bits), these are the inverse of the work
     let pow_limit: U256 = network.target_difficulty_limit().into();
-    let Some(difficulty) = chain_info.expected_difficulty.to_expanded() else {
+    let expected_difficulty = chain_info.expected_difficulty;
+    // Ycash (W1-Y6): ycashd's regtest never adjusts the difficulty.
+    #[cfg(feature = "ycash")]
+    let expected_difficulty = types::ycash::expected_difficulty(&network, expected_difficulty);
+    let Some(difficulty) = expected_difficulty.to_expanded() else {
         return Ok(0.0);
     };
 
@@ -6248,6 +6845,11 @@ pub enum AddNodeCommand {
     /// Add a node to the address book.
     #[serde(rename = "add")]
     Add,
+
+    /// kogany (F-S5-6): try a connection to a node now, as ycashd's `onetry` does: a known
+    /// address is attempted without waiting out its reconnection delay.
+    #[serde(rename = "onetry")]
+    OneTry,
 }
 
 /// Response to a `gettxout` RPC request.

@@ -1,4 +1,6 @@
 //! Randomised property tests for Proof of Work.
+// kogany: the Zcash-fixture tests are not built with `ycash`, leaving their helpers unused.
+#![cfg_attr(feature = "ycash", allow(unused_imports, dead_code))]
 
 use std::{env, sync::Arc};
 
@@ -64,6 +66,9 @@ prop_compose! {
 }
 
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, Equihash (200, 9), Zcash
+// Mainnet heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn equihash_prop_test_solution() -> eyre::Result<()> {
     let _init_guard = zakura_test::init();
 
@@ -77,7 +82,7 @@ fn equihash_prop_test_solution() -> eyre::Result<()> {
         assert_ne!(fake_header.solution, real_header.solution);
         fake_header
             .solution
-            .check(&fake_header, &Network::Mainnet)
+            .check(&fake_header, &Network::Mainnet, crate::block::Height(1))
             .expect_err("block header should not validate with the null solution");
     }
 
@@ -87,7 +92,7 @@ fn equihash_prop_test_solution() -> eyre::Result<()> {
     proptest!(Config::with_cases(equihash_proptest_cases()),
         |(fake_header in randomized_headers)| {
         fake_header.solution
-            .check(&fake_header, &Network::Mainnet)
+            .check(&fake_header, &Network::Mainnet, crate::block::Height(1))
             .expect_err("block header should not validate on randomized solution");
     });
 
@@ -110,6 +115,9 @@ prop_compose! {
 }
 
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, Equihash (200, 9), Zcash
+// Mainnet heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn equihash_prop_test_nonce() -> eyre::Result<()> {
     let _init_guard = zakura_test::init();
 
@@ -121,7 +129,7 @@ fn equihash_prop_test_nonce() -> eyre::Result<()> {
         assert_ne!(fake_header.nonce, real_header.nonce);
         fake_header
             .solution
-            .check(&fake_header, &Network::Mainnet)
+            .check(&fake_header, &Network::Mainnet, crate::block::Height(1))
             .expect_err("block header should not validate with a changed nonce");
     }
 
@@ -129,7 +137,7 @@ fn equihash_prop_test_nonce() -> eyre::Result<()> {
     proptest!(Config::with_cases(equihash_proptest_cases()),
         |(fake_header in randomized_headers)| {
         fake_header.solution
-            .check(&fake_header, &Network::Mainnet)
+            .check(&fake_header, &Network::Mainnet, crate::block::Height(1))
             .expect_err("block header should not validate on randomized nonce");
     });
 
@@ -154,6 +162,9 @@ prop_compose! {
 }
 
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, Equihash (200, 9), Zcash
+// Mainnet heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn equihash_prop_test_input() -> eyre::Result<()> {
     let _init_guard = zakura_test::init();
 
@@ -165,7 +176,7 @@ fn equihash_prop_test_input() -> eyre::Result<()> {
         assert_ne!(fake_header, *real_header);
         fake_header
             .solution
-            .check(&fake_header, &Network::Mainnet)
+            .check(&fake_header, &Network::Mainnet, crate::block::Height(1))
             .expect_err("equihash solution should not validate with changed input");
     }
 
@@ -173,7 +184,7 @@ fn equihash_prop_test_input() -> eyre::Result<()> {
     proptest!(Config::with_cases(equihash_proptest_cases()),
         |(fake_header in randomized_headers)| {
         fake_header.solution
-            .check(&fake_header, &Network::Mainnet)
+            .check(&fake_header, &Network::Mainnet, crate::block::Height(1))
             .expect_err("equihash solution should not validate on randomized input");
     });
 

@@ -36,11 +36,35 @@ pub struct ValidateAddressResponse {
     #[getset(get = "pub")]
     pub(crate) address: Option<String>,
 
+    /// Ycash (W1-Y6): the hex `scriptPubKey` of a valid address, as ycashd sends it
+    /// (`ycash6 src/rpc/misc.cpp`, `validateaddress`); yolo builds its payout output from it.
+    #[cfg(feature = "ycash")]
+    #[serde(
+        rename = "scriptPubKey",
+        skip_serializing_if = "Option::is_none",
+        default
+    )]
+    #[new(default)]
+    pub(crate) script_pub_key: Option<String>,
+
     /// If the key is a script.
     #[serde(rename = "isscript")]
     #[serde(skip_serializing_if = "Option::is_none")]
     #[getset(get_copy = "pub")]
     pub(crate) is_script: Option<bool>,
+
+    /// Ycash (W7-c): the scheme of a post-quantum address (`sq…`/`tq…`/`rq…`), 1 =
+    /// SLH-DSA-SHA2-128s, 2 = FN-DSA-512 (`ycash6 src/rpc/misc.cpp`, `DescribeAddressVisitor`).
+    #[cfg(feature = "ycash")]
+    #[serde(rename = "pqscheme", skip_serializing_if = "Option::is_none", default)]
+    #[new(default)]
+    pub(crate) pq_scheme: Option<u8>,
+
+    /// Ycash (W7-c): the key hash of a post-quantum address, as pushed in its TX_PQPKH script.
+    #[cfg(feature = "ycash")]
+    #[serde(rename = "pqkeyhash", skip_serializing_if = "Option::is_none", default)]
+    #[new(default)]
+    pub(crate) pq_key_hash: Option<String>,
 }
 
 impl ValidateAddressResponse {
@@ -57,6 +81,19 @@ pub fn validate_address(
     raw_address: String,
 ) -> RpcResult<ValidateAddressResponse> {
     let Ok(address) = raw_address.parse::<zcash_address::ZcashAddress>() else {
+        // Ycash (W7-c): a plain-YEC post-quantum address, which ycashd decodes after the
+        // transparent forms.
+        #[cfg(feature = "ycash")]
+        if let Some(pq) = super::ycash::decode_pq_address(&network, &raw_address) {
+            return Ok(ValidateAddressResponse {
+                is_valid: true,
+                address: Some(pq.address),
+                script_pub_key: Some(pq.script_pub_key),
+                is_script: Some(false),
+                pq_scheme: Some(pq.scheme),
+                pq_key_hash: Some(pq.key_hash),
+            });
+        }
         return Ok(ValidateAddressResponse::invalid());
     };
 
@@ -88,7 +125,18 @@ pub fn validate_address(
 
     Ok(validate_address::ValidateAddressResponse {
         address: Some(raw_address),
+        #[cfg(feature = "ycash")]
+        script_pub_key: match &address {
+            primitives::Address::Transparent(taddr) => {
+                Some(hex::encode(taddr.script().as_raw_bytes()))
+            }
+            _ => None,
+        },
         is_valid: true,
         is_script: Some(address.is_script_hash()),
+        #[cfg(feature = "ycash")]
+        pq_scheme: None,
+        #[cfg(feature = "ycash")]
+        pq_key_hash: None,
     })
 }

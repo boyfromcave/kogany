@@ -211,7 +211,7 @@ else
 fi
 if [[ ! -x "${ZAKURAD_BIN}" ]]; then
   log "building host zakurad (debug) — no in-container build"
-  ( cd "${REPO_DIR}" && CXXFLAGS="-include cstdint" cargo build -p zakura --bin zakurad )
+  ( cd "${REPO_DIR}" && CXXFLAGS="-include cstdint" cargo build -p kogany --bin zakurad )
 fi
 [[ -x "${ZAKURAD_BIN}" ]] || fail "zakurad binary not found at ${ZAKURAD_BIN}"
 docker run --rm \

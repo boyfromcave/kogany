@@ -101,7 +101,8 @@
 //! ```sh
 //! export TMPDIR=/path/to/disk/directory
 //! ```
-
+// kogany: the Zcash-fixture tests are not built with `ycash`, leaving their helpers unused.
+#![cfg_attr(feature = "ycash", allow(unused_imports, dead_code))]
 #![allow(clippy::unwrap_in_result)]
 
 mod common;
@@ -120,8 +121,10 @@ use std::{net::SocketAddr, path::Path};
 use eyre::{eyre, WrapErr};
 use futures::{stream::FuturesUnordered, StreamExt};
 use semver::Version;
+// kogany: the node's binary and package names (`koganyd`/`kogany` in a `ycash` build).
 use serde_json::Value;
 use tower::ServiceExt;
+use zakurad::application::{NODE_NAME, PACKAGE_NAME};
 
 use zakura_chain::{
     amount::Amount,
@@ -201,7 +204,7 @@ fn generate_no_args() -> Result<()> {
     let output = output.assert_success()?;
 
     // First line
-    output.stdout_line_contains("# Default configuration for zakurad")?;
+    output.stdout_line_contains(&format!("# Default configuration for {NODE_NAME}"))?;
 
     Ok(())
 }
@@ -339,7 +342,7 @@ fn start_no_args() -> Result<()> {
         .spawn_child(args!["-v", "start"])?
         .with_timeout(EXTENDED_LAUNCH_DELAY);
 
-    child.expect_stdout_line_matches("Starting zakurad")?;
+    child.expect_stdout_line_matches(format!("Starting {NODE_NAME}"))?;
     child.expect_stdout_line_matches("starting legacy chain check")?;
     child.expect_stdout_line_matches("no legacy chain found")?;
     child.kill(false)?;
@@ -363,7 +366,7 @@ fn start_args() -> Result<()> {
     let mut child = testdir
         .spawn_child(args!["start"])?
         .with_timeout(EXTENDED_LAUNCH_DELAY);
-    child.expect_stdout_line_matches("Starting zakurad")?;
+    child.expect_stdout_line_matches(format!("Starting {NODE_NAME}"))?;
     child.kill(false)?;
     let output = child.wait_with_output()?;
 
@@ -680,7 +683,7 @@ fn version_args() -> Result<()> {
 /// cache conflicts.
 #[test]
 fn config_tests() -> Result<()> {
-    valid_generated_config("start", "Starting zakurad")?;
+    valid_generated_config("start", &format!("Starting {NODE_NAME}"))?;
 
     // Check what happens when Zakura parses an invalid config
     invalid_generated_config()?;
@@ -720,7 +723,7 @@ fn app_no_args() -> Result<()> {
     let output = child.wait_with_output()?;
     let output = output.assert_failure()?;
 
-    output.stdout_line_contains("Starting zakurad")?;
+    output.stdout_line_contains(&format!("Starting {NODE_NAME}"))?;
 
     // Make sure the command passed the legacy chain check
     output.stdout_line_contains("starting legacy chain check")?;
@@ -1505,7 +1508,7 @@ async fn metrics_endpoint() -> Result<()> {
     let output = output.assert_failure()?;
 
     output.any_output_line_contains(
-        "# TYPE zakura_build_info counter",
+        &format!("# TYPE {PACKAGE_NAME}_build_info counter"),
         &body,
         "metrics exporter response",
         "the metrics response header",
@@ -1525,6 +1528,9 @@ async fn metrics_endpoint() -> Result<()> {
 /// The multi-threaded node also checks zcashd-compatible content types, avoiding
 /// a third node startup for those requests.
 #[tokio::test]
+// kogany: starts on Ycash Mainnet, whose only DNS seed, seed.ycash.xyz, does not resolve (SERVFAIL,
+// 2026-11-02), so network setup never finishes; not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn rpc_endpoints() -> Result<()> {
     let _init_guard = zakura_test::init();
     if zakura_test::net::zebra_skip_network_tests() {
@@ -1953,6 +1959,9 @@ where
 }
 
 #[test]
+// kogany: starts on Ycash Mainnet, whose only DNS seed, seed.ycash.xyz, does not resolve (SERVFAIL,
+// 2026-11-02), so network setup never finishes; not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 #[cfg(not(target_os = "windows"))]
 fn delete_old_databases() -> Result<()> {
     use std::fs::{canonicalize, create_dir};
@@ -2053,6 +2062,9 @@ async fn rpc_submit_block() -> Result<()> {
 
 /// Check that the end of support code is called at least once.
 #[test]
+// kogany: starts on Ycash Mainnet, whose only DNS seed, seed.ycash.xyz, does not resolve (SERVFAIL,
+// 2026-11-02), so network setup never finishes; not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn end_of_support_is_checked_at_start() -> Result<()> {
     let _init_guard = zakura_test::init();
     let testdir = testdir()?.with_config(&mut default_test_config(&Mainnet))?;
@@ -2060,7 +2072,7 @@ fn end_of_support_is_checked_at_start() -> Result<()> {
         .spawn_child(args!["start"])?
         .with_timeout(EXTENDED_LAUNCH_DELAY);
 
-    child.expect_stdout_line_matches("Starting zakurad")?;
+    child.expect_stdout_line_matches(format!("Starting {NODE_NAME}"))?;
     child.expect_stdout_line_matches("Starting end of support task")?;
     child.kill(false)?;
 
@@ -2413,6 +2425,9 @@ async fn validate_regtest_genesis_block() {
 
 /// Test that Version messages are sent with the external address when configured to do so.
 #[test]
+// kogany: starts on Ycash Mainnet, whose only DNS seed, seed.ycash.xyz, does not resolve (SERVFAIL,
+// 2026-11-02), so network setup never finishes; not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn external_address() -> Result<()> {
     let _init_guard = zakura_test::init();
     let testdir = testdir()?.with_config(&mut external_address_test_config(&Mainnet)?)?;
@@ -2420,7 +2435,7 @@ fn external_address() -> Result<()> {
         .spawn_child(args!["start"])?
         .with_timeout(EXTENDED_LAUNCH_DELAY);
 
-    child.expect_stdout_line_matches("Starting zakurad")?;
+    child.expect_stdout_line_matches(format!("Starting {NODE_NAME}"))?;
     // Wait for an actual outbound handshake to use the configured address.
     child.expect_stdout_line_matches("using external address for Version messages")?;
 
@@ -2540,10 +2555,21 @@ async fn rejected_block_does_not_reject_same_hash_block_children() -> Result<()>
         .json_result_from_call("submitblock", format!(r#"["{poisoned_block_data}"]"#))
         .await
         .map_err(|err| eyre!(err))?;
+    #[cfg(not(feature = "ycash"))]
     assert_eq!(
         poisoned_response,
         SubmitBlockResponse::ErrorResponse(SubmitBlockErrorResponse::Rejected),
         "the poisoned block body must be rejected"
+    );
+    // kogany: a Ycash coinbase is V4, so the poisoned scriptSig changes the txid and the
+    // commitments; the rejection carries ycashd's reason (`Invalid`, W7-e).
+    #[cfg(feature = "ycash")]
+    assert!(
+        matches!(
+            poisoned_response,
+            SubmitBlockResponse::ErrorResponse(SubmitBlockErrorResponse::Invalid(_))
+        ),
+        "the poisoned block body must be rejected: {poisoned_response:?}"
     );
 
     let valid_block_data = hex::encode(valid_block.zcash_serialize_to_vec()?);
@@ -2812,6 +2838,8 @@ async fn startup_upgrades_previous_database_and_records_finalized_height() -> Re
 }
 
 #[tokio::test]
+// kogany: Zcash funding streams (Zcash t3 addresses); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn regtest_coinbase() -> Result<()> {
     common::coinbase::regtest_coinbase().await
 }
@@ -3095,8 +3123,10 @@ async fn trusted_chain_sync_handles_forks_correctly() -> Result<()> {
 /// Test successful block template submission as a block proposal or submission on a custom Testnet.
 ///
 /// This test can be run locally with:
-/// `cargo test --package zakura --test acceptance -- nu6_funding_streams_and_coinbase_balance --exact --show-output`
+/// `cargo test --package kogany --test acceptance -- nu6_funding_streams_and_coinbase_balance --exact --show-output`
 #[tokio::test(flavor = "multi_thread")]
+// kogany: Zcash funding streams (Zcash t3 addresses); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn nu6_funding_streams_and_coinbase_balance() -> Result<()> {
     use zakura_chain::{
         chain_sync_status::MockSyncStatus,
@@ -3709,7 +3739,16 @@ async fn precious_block_prefers_equal_work_siblings() -> Result<()> {
         .await
         .map_err(|err| eyre!(err))?;
     let first = proposal_block_from_template(&template, BlockTemplateTimeSource::MinTime, &net)?;
-    let second = proposal_block_from_template(&template, BlockTemplateTimeSource::MaxTime, &net)?;
+    // kogany: a Ycash template carries no `maxtime` (ycashd sends none, so it reads back as
+    // `DateTime32::MAX`); one minute past `mintime` is a valid, distinct header time there.
+    let second_time = if cfg!(feature = "ycash") {
+        BlockTemplateTimeSource::Raw(zakura_chain::serialization::DateTime32::from(
+            template.min_time().timestamp() + 60,
+        ))
+    } else {
+        BlockTemplateTimeSource::MaxTime
+    };
+    let second = proposal_block_from_template(&template, second_time, &net)?;
     assert_ne!(first.hash(), second.hash());
     // Submit the lower hash first so receipt order deliberately opposes hash order.
     let (first, second) = if first.hash().0 < second.hash().0 {

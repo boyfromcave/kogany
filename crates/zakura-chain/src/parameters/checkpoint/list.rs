@@ -16,6 +16,8 @@ use crate::{block, parameters::Network, BoxError};
 
 #[cfg(test)]
 mod tests;
+#[cfg(all(test, feature = "ycash"))]
+mod ycash_tests;
 
 /// The hard-coded checkpoints for mainnet, generated using the
 /// `zakura-checkpoints` tool.
@@ -29,7 +31,16 @@ mod tests;
 /// ```
 ///
 /// See the checkpoints [./README.md] for more details.
+#[cfg(not(feature = "ycash"))]
 const MAINNET_CHECKPOINTS: &str = include_str!("main-checkpoints.txt");
+
+/// kogany: in a `ycash` build, [`Network::Mainnet`] is Ycash mainnet, whose list is generated from
+/// a ycash6 node by `qa/kogany_checkpoints.py mainnet` (W1-Y4; K-9; M24-14): Zakura's selection
+/// rule, every hash ycashd pins, and never a Vault-epoch block. Its `#` header says how far it
+/// reaches; a `PARTIAL` list may stop below the mandatory checkpoint
+/// ([`Network::ycash_checkpoint_list_is_partial`]).
+#[cfg(feature = "ycash")]
+const MAINNET_CHECKPOINTS: &str = include_str!("ycash-main-checkpoints.txt");
 
 /// The hard-coded checkpoints for testnet, generated using the
 /// `zakura-checkpoints` tool.
@@ -39,25 +50,47 @@ const MAINNET_CHECKPOINTS: &str = include_str!("main-checkpoints.txt");
 ///
 /// See [`MAINNET_CHECKPOINTS`] for detailed `zakura-checkpoints` usage
 /// information.
+#[cfg(not(feature = "ycash"))]
 pub(crate) const TESTNET_CHECKPOINTS: &str = include_str!("test-checkpoints.txt");
+
+/// kogany: the re-forked Ycash testnet's list, shared by the `fast` and `slow` profiles:
+/// Zcash testnet's history through 510,247 and ycashd's pin there (`qa/kogany_checkpoints.py
+/// testnet`; `ycash6 src/chainparams.cpp:571-583`). Never a Vault-epoch block (M24-14).
+#[cfg(feature = "ycash")]
+pub(crate) const TESTNET_CHECKPOINTS: &str = include_str!("ycash-test-checkpoints.txt");
+
+/// kogany: the Ycash list files open with `#` comment lines (generator, provenance, and a
+/// `# PARTIAL` line while the list stops short of the mandatory checkpoint). They are stripped
+/// here, in a `ycash` build only; [`CheckpointList`]'s parser itself is unchanged.
+#[cfg(feature = "ycash")]
+fn ycash_list_lines(list: &str) -> String {
+    list.lines()
+        .filter(|line| !line.starts_with('#'))
+        .map(|line| format!("{line}\n"))
+        .collect()
+}
 
 /// Parsed mainnet checkpoint list, cached to avoid re-parsing on every use.
 static MAINNET_CHECKPOINT_LIST: LazyLock<Arc<CheckpointList>> = LazyLock::new(|| {
     Arc::new(
-        MAINNET_CHECKPOINTS
-            .parse()
-            .expect("hard-coded mainnet checkpoint list parses"),
+        hard_coded_list(MAINNET_CHECKPOINTS).expect("hard-coded mainnet checkpoint list parses"),
     )
 });
 
 /// Parsed testnet checkpoint list, cached to avoid re-parsing on every use.
 pub(crate) static TESTNET_CHECKPOINT_LIST: LazyLock<Arc<CheckpointList>> = LazyLock::new(|| {
     Arc::new(
-        TESTNET_CHECKPOINTS
-            .parse()
-            .expect("hard-coded testnet checkpoint list parses"),
+        hard_coded_list(TESTNET_CHECKPOINTS).expect("hard-coded testnet checkpoint list parses"),
     )
 });
+
+/// Parses a hard-coded list file: as is in a Zcash build, without its `#` lines in a `ycash` one.
+fn hard_coded_list(list: &str) -> Result<CheckpointList, BoxError> {
+    #[cfg(feature = "ycash")]
+    return ycash_list_lines(list).parse();
+    #[cfg(not(feature = "ycash"))]
+    list.parse()
+}
 
 impl Network {
     /// Returns the hash for the genesis block in `network`.
@@ -71,6 +104,26 @@ impl Network {
             Network::Testnet(params) => params.genesis_hash(),
         }
     }
+    /// kogany: whether this network's hard-coded Ycash list is marked `# PARTIAL`: generated
+    /// before its source node synced, or (testnet) before the re-forked chain's blocks exist.
+    /// Such a list may stop below [`Network::mandatory_checkpoint_height`]; the block verifier
+    /// then rejects every block between the list's last checkpoint and that height rather than
+    /// verifying it semantically (zakura-consensus `router.rs`), so a sync stops safely at the
+    /// list's end. Regtest and configured lists are never partial.
+    #[cfg(feature = "ycash")]
+    pub fn ycash_checkpoint_list_is_partial(&self) -> bool {
+        let is_partial = |list: &str| list.lines().any(|line| line.starts_with("# PARTIAL"));
+        match self {
+            Network::Mainnet => is_partial(MAINNET_CHECKPOINTS),
+            // Only the hard-coded testnet list can be partial. (Not `is_regtest()`: this runs
+            // while the default Regtest parameters are being built, and that check reads them.)
+            Network::Testnet(params) => {
+                *params.checkpoints() == **TESTNET_CHECKPOINT_LIST
+                    && is_partial(TESTNET_CHECKPOINTS)
+            }
+        }
+    }
+
     /// Returns the hard-coded checkpoint list for `network`.
     pub fn checkpoint_list(&self) -> Arc<CheckpointList> {
         match self {

@@ -2,7 +2,8 @@ name: Lint
 
 on:
   pull_request:
-    branches: [main, "feat/**", "split/**", "adam/**", "release/**"]
+    # kogany (2026-11-01): only PRs into kogany's branches (K-15, .github/README-kogany.md "Triggers").
+    branches: [upgrade/vault, "vaults/**", "kc/**"]
     paths:
       - "**/*.rs"
       - "**/Cargo.toml"
@@ -29,7 +30,8 @@ on:
       - ".github/release-review/**"
 
   push:
-    branches: [main, "feat/**", "release/**"]
+    # kogany (2026-11-01): only pushes to kogany's branches (K-15).
+    branches: [upgrade/vault, "vaults/**"]
     paths:
       - "**/*.rs"
       - "**/Cargo.toml"
@@ -58,12 +60,15 @@ on:
   # Run the full lint suite when a PR is queued so the merge queue validates the
   # merged result against the latest `main`. `merge_group` ignores path filters,
   # so this runs unconditionally on every queued entry.
-  merge_group:
+  # kogany (2026-11-01): no merge queue on kogany, and nothing runs outside its branches
+  # (.github/README-kogany.md "Triggers").
+  # merge_group:
 
   # Nightly run for the expensive, non-gating unused-deps lint that is
   # gated off the PR/merge path below.
-  schedule:
-    - cron: "0 8 * * *"
+  # kogany (2026-11-01): no nightly run (K-15); unused-deps runs on workflow_dispatch only.
+  # schedule:
+  #   - cron: "0 8 * * *"
 
   workflow_dispatch:
 
@@ -134,7 +139,7 @@ jobs:
       - name: Check default x86 assembly features
         if: ${{ !cancelled() }}
         run: |
-          cargo tree --locked --package zakura --target x86_64-unknown-linux-gnu \
+          cargo tree --locked --package kogany --target x86_64-unknown-linux-gnu \
             -e features -i zakura-pasta-curves > "$RUNNER_TEMP/pasta-default-features"
           grep -F 'zakura-pasta-curves feature "x86_64-asm"' "$RUNNER_TEMP/pasta-default-features"
           if grep -F 'zakura-pasta-curves feature "portable"' "$RUNNER_TEMP/pasta-default-features"; then
@@ -206,6 +211,14 @@ jobs:
         # .github/workflows/scripts/*.sh included: those run on provisioned
         # droplets, where a shell bug costs a full provisioning cycle to find.
         run: shellcheck .github/actions/setup-zakura-build/*.sh scripts/*.sh scripts/lib/*.sh .github/workflows/scripts/*.sh deploy/release-state/deploy-archive-pair.sh scripts/tests/test_resolve_zcashd_compat_manifest.sh
+      # kogany (2026-11-01): the off workflows live in .github/workflows-off/ (K-15,
+      # .github/README-kogany.md); upstream's tests below read some of them from
+      # .github/workflows/ (ci-alerts, the deploy and PR-node workflows). Copy them back into
+      # this job's checkout only, so the tests run unchanged. Nothing is committed and no
+      # workflow can start from a runner's working tree.
+      - name: Off workflows in place for upstream's tests (kogany)
+        if: ${{ !cancelled() }}
+        run: cp .github/workflows-off/*.yml .github/workflows/
       - name: Ubuntu package retry tests
         if: ${{ !cancelled() }}
         run: bash .github/actions/setup-zakura-build/test-install-ubuntu-packages.sh
@@ -291,7 +304,7 @@ jobs:
 
       - name: Ensure no arbitrary or proptest dependency on default build
         if: ${{ !cancelled() }}
-        run: cargo +stable tree --package zakura -e=features,no-dev | grep -Eq "arbitrary|proptest" && exit 1 || exit 0
+        run: cargo +stable tree --package kogany -e=features,no-dev | grep -Eq "arbitrary|proptest" && exit 1 || exit 0
 
   header-conformance:
     name: header conformance
@@ -383,7 +396,7 @@ jobs:
         if: ${{ !cancelled() }}
         run: |
           denied='^(zakura-iroh|zakura-iroh-base|zakura-iroh-dns|zakura-iroh-relay|netwatch|netdev|netlink-.*|n0-.*|hickory-.*|papaya|seize|iroh-metrics|tokio-websockets|noq.*|quinn|quinn-udp|ed25519-dalek|nix|memoffset) '
-          hits=$(cargo tree --locked -p zakura -e normal --prefix none | grep -E "$denied" | sort -u || true)
+          hits=$(cargo tree --locked -p kogany -e normal --prefix none | grep -E "$denied" | sort -u || true)
           if [ -n "$hits" ]; then
             echo "zakurad's dependency graph contains packages that docs/specs/zakura-quic.md DEP-1 forbids:"
             echo "$hits"
@@ -396,7 +409,7 @@ jobs:
         if: ${{ !cancelled() }}
         run: |
           denied='^(zakura-scheduler|zakura-sim|zakura-storage|corosensei) '
-          hits=$(cargo tree --locked -p zakura -e normal,build --target all --prefix none | grep -E "$denied" | sort -u || true)
+          hits=$(cargo tree --locked -p kogany -e normal,build --target all --prefix none | grep -E "$denied" | sort -u || true)
           if [ -n "$hits" ]; then
             echo "zakurad's dependency graph contains test-only simulator packages:"
             echo "$hits"

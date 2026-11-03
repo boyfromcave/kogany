@@ -73,9 +73,20 @@ fn gossiped_change(
 /// even when peer priority separates those addresses in `by_addr`.
 #[test]
 fn misbehavior_ban_removes_all_addresses_for_ip() {
-    let banned_addr: crate::PeerSocketAddr = "127.0.0.1:8233".parse().unwrap();
-    let other_port_same_ip: crate::PeerSocketAddr = "127.0.0.1:8234".parse().unwrap();
-    let unrelated_addr: crate::PeerSocketAddr = "127.0.0.2:8233".parse().unwrap();
+    // kogany: the network's default port (Ycash refuses Zcash's 8233 as a peer port); with
+    // `ycash` routable hosts, since the book drops gossiped loopback addresses (F-S5-6).
+    let (host, other_host) = if cfg!(feature = "ycash") {
+        ("1.0.0.1", "1.0.0.2")
+    } else {
+        ("127.0.0.1", "127.0.0.2")
+    };
+    let banned_addr: crate::PeerSocketAddr = format!("{host}:{}", Mainnet.default_port())
+        .parse()
+        .unwrap();
+    let other_port_same_ip: crate::PeerSocketAddr = format!("{host}:8234").parse().unwrap();
+    let unrelated_addr: crate::PeerSocketAddr = format!("{other_host}:{}", Mainnet.default_port())
+        .parse()
+        .unwrap();
 
     let mut address_book =
         AddressBook::new("0.0.0.0:0".parse().unwrap(), &Mainnet, 2, Span::current());
@@ -342,4 +353,31 @@ fn disconnected_inbound_endpoint_is_not_dialed_or_cached() {
         );
         assert_eq!(cached, !is_inbound, "inbound {is_inbound}: cacheable");
     }
+}
+
+/// Ycash (S5): a local peer that reaches the ban threshold is not banned (ycashd's
+/// `src/main.cpp:9508`): its IP stays dialable and its score stays in the book.
+#[cfg(feature = "ycash")]
+#[test]
+fn misbehaving_local_peer_is_not_banned() {
+    let local_addr: crate::PeerSocketAddr = format!("127.0.0.1:{}", Mainnet.default_port())
+        .parse()
+        .unwrap();
+    let mut address_book =
+        AddressBook::new("0.0.0.0:0".parse().unwrap(), &Mainnet, 2, Span::current());
+    address_book.update(MetaAddr::new_reconnect(local_addr));
+    address_book.update(MetaAddr::new_responded(local_addr, None));
+    address_book.update(MetaAddr::new_misbehavior(
+        local_addr,
+        crate::constants::MAX_PEER_MISBEHAVIOR_SCORE,
+    ));
+
+    assert!(!address_book.bans().contains(local_addr.ip()));
+    assert_eq!(
+        address_book.get(local_addr).map(|peer| peer.misbehavior()),
+        Some(crate::constants::MAX_PEER_MISBEHAVIOR_SCORE)
+    );
+    assert!(crate::ycash::is_local("0.1.2.3".parse().unwrap()));
+    assert!(crate::ycash::is_local("::1".parse().unwrap()));
+    assert!(!crate::ycash::is_local("1.0.0.1".parse().unwrap()));
 }

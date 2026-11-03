@@ -16,7 +16,10 @@ use tracing_subscriber::{
 };
 use zakura_chain::parameters::Network;
 
-use crate::{application::build_version, components::tracing::Config};
+use crate::{
+    application::{build_version, NODE_NAME},
+    components::tracing::Config,
+};
 
 use super::non_blocking::{non_blocking, WorkerGuard};
 
@@ -84,7 +87,9 @@ impl Tracing {
             // If it's a terminal and color escaping is enabled: clear screen and
             // print Zakura logo (here `use_color` is being interpreted as
             // "use escape codes")
-            if use_color_stderr {
+            //
+            // kogany: the Ycash build prints no Zakura logo.
+            if use_color_stderr && !cfg!(feature = "ycash") {
                 // Clear screen
                 eprint!("\x1B[2J");
                 eprintln!(
@@ -95,8 +100,9 @@ impl Tracing {
             }
 
             eprintln!(
-                "Thank you for running a {} zakurad {} node!",
+                "Thank you for running a {} {} {} node!",
                 network.lowercase_name(),
+                NODE_NAME,
                 build_version()
             );
             eprintln!(

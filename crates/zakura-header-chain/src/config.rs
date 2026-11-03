@@ -661,6 +661,8 @@ mod tests {
     }
 
     #[test]
+    // kogany: Zcash's production policies; the Ycash pins are the `ycash` variant below.
+    #[cfg(not(feature = "ycash"))]
     fn network_policy_digest_production_vectors_are_stable() {
         assert_eq!(
             NetworkPolicyDigest::for_network(&Network::Mainnet).bytes(),
@@ -674,6 +676,26 @@ mod tests {
             [
                 169, 181, 233, 214, 155, 219, 207, 22, 234, 219, 209, 9, 175, 28, 7, 157, 185, 240,
                 147, 249, 200, 127, 6, 12, 151, 154, 107, 182, 241, 84, 100, 214,
+            ],
+        );
+    }
+
+    /// kogany: the Ycash Mainnet and default (re-forked) Testnet policies, pinned the same way.
+    #[test]
+    #[cfg(feature = "ycash")]
+    fn network_policy_digest_production_vectors_are_stable() {
+        assert_eq!(
+            NetworkPolicyDigest::for_network(&Network::Mainnet).bytes(),
+            [
+                121, 154, 246, 77, 95, 38, 43, 13, 35, 52, 120, 30, 166, 45, 204, 188, 144, 84,
+                147, 187, 239, 40, 107, 87, 15, 208, 227, 204, 255, 233, 133, 228,
+            ],
+        );
+        assert_eq!(
+            NetworkPolicyDigest::for_network(&Network::new_default_testnet()).bytes(),
+            [
+                20, 8, 150, 43, 92, 160, 48, 119, 252, 208, 222, 124, 151, 188, 5, 131, 23, 87, 81,
+                1, 203, 210, 171, 130, 139, 82, 148, 220, 145, 133, 160, 145,
             ],
         );
     }

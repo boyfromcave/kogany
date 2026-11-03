@@ -20,7 +20,7 @@ use futures::{
     Stream,
 };
 use tokio::sync::oneshot::{self, error::TryRecvError};
-use tower::{buffer::Buffer, timeout::Timeout, Service, ServiceExt};
+use tower::{buffer::Buffer, timeout::Timeout, util::BoxCloneSyncService, Service, ServiceExt};
 
 use zakura_network::{self as zn, PeerSocketAddr};
 use zakura_state::{self as zs};
@@ -100,8 +100,7 @@ pub(crate) const ZCASHD_COMPAT_PRUNED_BLOCK_ERROR: &str =
      requiring this block cannot continue syncing. Restore zcashd from a newer snapshot, or use \
      archive storage on Zakura side https://zakura.com/snapshots/ .";
 
-type BlockDownloadPeerSet =
-    Buffer<zn::Request, futures::future::BoxFuture<'static, Result<zn::Response, zn::BoxError>>>;
+type BlockDownloadPeerSet = BoxCloneSyncService<zn::Request, zn::Response, zn::BoxError>;
 type State =
     Buffer<zs::Request, futures::future::BoxFuture<'static, Result<zs::Response, zs::BoxError>>>;
 type Mempool = Buffer<
@@ -124,7 +123,7 @@ type GossipedBlockDownloads =
 /// errors are [`RouterError`]s, not [`VerifyBlockError`]s. Both concrete types are checked here,
 /// because tests and other verifier configurations can produce a bare [`VerifyBlockError`].
 fn block_misbehavior(
-    err: BoxError,
+    err: &BoxError,
     advertiser_addr: Option<PeerSocketAddr>,
 ) -> Option<(PeerSocketAddr, u32)> {
     let advertiser_addr = advertiser_addr?;
@@ -281,6 +280,10 @@ pub struct InboundSetupData {
 
     /// A channel to send misbehavior reports to the [`AddressBook`].
     pub misbehavior_sender: tokio::sync::mpsc::Sender<(PeerSocketAddr, u32)>,
+
+    /// kogany (S5-K12): woken when a gossiped block cannot connect, so the syncer runs at once.
+    #[cfg(feature = "ycash")]
+    pub gossip_gap: Option<std::sync::Arc<tokio::sync::Notify>>,
 }
 
 /// Tracks the internal state of the [`Inbound`] service during setup.
@@ -474,11 +477,13 @@ impl Service<zn::Request> for Inbound {
                         latest_chain_tip,
                         network,
                         misbehavior_sender,
+                        #[cfg(feature = "ycash")]
+                        gossip_gap,
                     } = setup_data;
 
                     let cached_peer_addr_response = CachedPeerAddrResponse::new(address_book);
 
-                    let block_downloads = Box::pin(BlockDownloads::new(
+                    let block_downloads = BlockDownloads::new(
                         full_verify_concurrency_limit,
                         self.expose_peer_addresses,
                         Timeout::new(block_download_peer_set, BLOCK_DOWNLOAD_TIMEOUT),
@@ -486,7 +491,14 @@ impl Service<zn::Request> for Inbound {
                         state.clone(),
                         latest_chain_tip,
                         network,
-                    ));
+                    );
+                    // Ycash (S5): the download tasks score a failed block's advertiser at once.
+                    #[cfg(feature = "ycash")]
+                    let block_downloads =
+                        block_downloads.with_misbehavior_sender(misbehavior_sender.clone());
+                    #[cfg(feature = "ycash")]
+                    let block_downloads = block_downloads.with_gossip_gap_notify(gossip_gap);
+                    let block_downloads = Box::pin(block_downloads);
 
                     result = Ok(());
                     Setup::Initialized {
@@ -562,15 +574,23 @@ impl Service<zn::Request> for Inbound {
                             ));
                         }
 
-                        // The outcome, including a replacement refused by the queue bounds, is
-                        // logged by `retry_poisoned` itself.
-                        let _ = block_downloads.retry_poisoned(mismatch.hash);
+                        // A failed parent recovery is left to the syncer. A re-request would
+                        // leave the recovery bounds, because it is an ordinary download.
+                        if !mismatch.parent_recovery {
+                            // The outcome, including a replacement refused by the queue bounds,
+                            // is logged by `retry_poisoned` itself.
+                            let _ = block_downloads.retry_poisoned(mismatch.hash);
+                        }
                         continue;
                     }
 
-                    if let Some(update) = block_misbehavior(err, advertiser_addr) {
+                    // Ycash (S5): the download task scored it already.
+                    #[cfg(not(feature = "ycash"))]
+                    if let Some(update) = block_misbehavior(&err, advertiser_addr) {
                         let _ = misbehavior_sender.try_send(update);
                     }
+                    #[cfg(feature = "ycash")]
+                    let _ = (err, advertiser_addr);
                 }
 
                 result = Ok(());

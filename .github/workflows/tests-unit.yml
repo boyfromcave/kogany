@@ -6,11 +6,13 @@ on:
   # that touch no test-relevant files. This keeps the `test success` required
   # check reporting on every PR instead of sitting in "Expected" forever.
   pull_request:
-    branches: [main, "feat/**", "split/**", "adam/**", "release/**"]
+    # kogany (2026-11-01): only PRs into kogany's branches (K-15, .github/README-kogany.md "Triggers").
+    branches: [upgrade/vault, "vaults/**", "kc/**"]
     types: [opened, synchronize, reopened, labeled, unlabeled]
 
   push:
-    branches: [main]
+    # kogany (2026-11-01): only pushes to kogany's branches (K-15).
+    branches: [upgrade/vault, "vaults/**"]
     paths:
       - "**/*.rs"
       - "**/Cargo.toml"
@@ -35,11 +37,15 @@ on:
   # Run the full unit-test suite when a PR is queued so the merge queue validates
   # the merged result against the latest `main`. `merge_group` ignores path
   # filters, so this runs unconditionally on every queued entry.
-  merge_group:
+  # kogany (2026-11-01): no merge queue on kogany, and nothing runs outside its branches
+  # (.github/README-kogany.md "Triggers").
+  # merge_group:
 
-  schedule:
-    # Verify the exact production release profile, including ThinLTO, nightly.
-    - cron: "0 8 * * *"
+  # kogany (2026-11-01): no nightly release-profile run and so no nightly-failure issue (K-15);
+  # the release profile and the simulator jobs run on workflow_dispatch.
+  # schedule:
+  #   # Verify the exact production release profile, including ThinLTO, nightly.
+  #   - cron: "0 8 * * *"
 
   workflow_dispatch:
 
@@ -641,11 +647,14 @@ jobs:
     needs: changes
     # Path-gated on PRs and pushes. Always runs in the merge queue and
     # nightly so a docs-only merge cannot land on top of a broken graph.
+    # kogany (2026-11-01): upstream's repository only (K-15): kogany publishes no crate, so the
+    # crates.io index pins this job checks are upstream's, not kogany's.
     if: >
+      github.repository == 'zakura-core/zakura' && (
       needs.changes.outputs.publish_graph == 'true'
       || github.event_name == 'merge_group'
       || github.event_name == 'schedule'
-      || github.event_name == 'workflow_dispatch'
+      || github.event_name == 'workflow_dispatch')
     permissions:
       contents: read
     runs-on: ubuntu-latest

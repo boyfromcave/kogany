@@ -1,0 +1,121 @@
+# Copyright (c) 2026 The Ycash developers
+# Distributed under the MIT software license, see the accompanying
+# file COPYING or https://www.opensource.org/licenses/mit-license.php .
+#
+name: kogany-build
+
+# kogany's build legs (plan §5 "build matrix"; .github/README-kogany.md). One job per check, no
+# `needs:` between them, so a failed check is re-run alone. The feature-off clippy and the
+# workspace-wide nightly rustfmt stay upstream's (lint.yml); these are kogany's additions.
+#
+#   check (matrix)   `cargo check -p kogany`, ycash feature off and on
+#   clippy (matrix)  `-D warnings` with the ycash feature, one crate group per job; the pure
+#                    kogany crates carry their own clippy.toml (plan §4.2 rule 6)
+#   fmt              stable rustfmt over the kogany-* crates
+on:
+  push:
+    branches: [upgrade/vault, "vaults/**"]
+  pull_request:
+    branches: [upgrade/vault, "vaults/**", "kc/**"]
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  CARGO_INCREMENTAL: '0'
+  CARGO_TERM_COLOR: always
+
+jobs:
+  check:
+    name: check (ycash feature ${{ matrix.ycash && 'on' || 'off' }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        ycash: [false, true]
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f #v2.0.0 # zizmor: ignore[cache-poisoning] -- check-only build, nothing published or released
+        with:
+          toolchain: stable
+          cache-key: kogany-build-check-${{ matrix.ycash && 'ycash' || 'default' }}
+          cache-on-failure: true
+          cache-save-if: ${{ github.ref == 'refs/heads/upgrade/vault' || startsWith(github.ref, 'refs/heads/vaults/') }}
+      - uses: ./.github/actions/setup-zakura-build
+      - name: cargo check -p kogany (ycash feature ${{ matrix.ycash && 'on' || 'off' }})
+        env:
+          YCASH: ${{ matrix.ycash }}
+        run: |
+          features=()
+          if [ "$YCASH" = true ]; then features=(--features ycash); fi
+          cargo check --locked -p kogany --all-targets "${features[@]}"
+
+  clippy:
+    name: clippy ${{ matrix.group }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - group: kogany-pure
+            args: -p kogany-pq -p kogany-vault -p kogany-yellowback
+          - group: kogany-rpc
+            args: -p kogany-rpc --features kogany-rpc/ycash
+          - group: zakura-chain
+            args: -p zakura-chain --features zakura-chain/ycash
+          - group: zakura-consensus
+            args: -p zakura-consensus -p zakura-header-chain --features zakura-consensus/ycash,zakura-header-chain/ycash
+          - group: zakura-state
+            args: -p zakura-state --features zakura-state/ycash
+          - group: zakura-rpc-network
+            args: -p zakura-rpc -p zakura-network --features zakura-rpc/ycash,zakura-network/ycash
+          - group: zakurad
+            args: -p kogany --features kogany/ycash
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f #v2.0.0 # zizmor: ignore[cache-poisoning] -- lint-only build, nothing published or released
+        with:
+          toolchain: stable
+          components: clippy
+          cache-key: kogany-build-clippy-${{ matrix.group }}
+          cache-on-failure: true
+          cache-save-if: ${{ github.ref == 'refs/heads/upgrade/vault' || startsWith(github.ref, 'refs/heads/vaults/') }}
+      - uses: ./.github/actions/setup-zakura-build
+      - name: cargo clippy ${{ matrix.group }}
+        env:
+          ARGS: ${{ matrix.args }}
+        run: |
+          read -ra args <<< "$ARGS"
+          cargo clippy --locked --all-targets "${args[@]}" -- -D warnings
+
+  fmt:
+    name: rustfmt (kogany crates)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f #v2.0.0
+        with:
+          toolchain: stable
+          components: rustfmt
+          cache: false
+      - name: cargo fmt --check (kogany-*)
+        run: cargo fmt --check -p kogany-pq -p kogany-vault -p kogany-yellowback -p kogany-rpc

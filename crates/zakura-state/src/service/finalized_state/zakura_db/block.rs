@@ -1407,6 +1407,14 @@ impl DiskWriteBatch {
             );
         }
 
+        // kogany (W4-c): the block's vault transition, computed here so checkpoint and finalized
+        // commits share it (M24-13); total, never an error.
+        self.prepare_vault_batch(zakura_db, network, finalized, &spent_utxos_by_outpoint);
+
+        // kogany (W5-e): the block's YED evaluation, in the same batch (M24-13, U-21); stops the
+        // node when the index cannot evaluate it.
+        self.prepare_yed_batch(zakura_db, network, finalized);
+
         // Commit UTXOs and value pools
         self.prepare_chain_value_pools_batch(
             zakura_db,

@@ -1,4 +1,6 @@
 //! Fixed test vectors for transactions.
+// kogany: the Zcash-fixture tests are not built with `ycash`, leaving their helpers unused.
+#![cfg_attr(feature = "ycash", allow(unused_imports, dead_code))]
 
 use arbitrary::v5_transactions;
 use chrono::DateTime;
@@ -36,6 +38,9 @@ pub static EMPTY_V5_TX: LazyLock<Transaction> = LazyLock::new(|| Transaction::V5
 });
 
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, Equihash (200, 9), Zcash
+// Mainnet heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn attributed_memory_size_counts_orchard_proof_capacity() {
     let template = Network::iter()
         .flat_map(|network| v5_transactions(network.block_iter()))
@@ -88,6 +93,9 @@ fn transaction_inline_size_excludes_sprout_sapling_and_orchard_bundles() {
 }
 
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, Equihash (200, 9), Zcash
+// Mainnet heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn attributed_memory_size_counts_boxed_sprout_sapling_and_orchard_bundles() {
     fn bundle_bytes<T: AttributedMemorySize>(bundle: &T) -> u64 {
         u64::try_from(std::mem::size_of::<T>()).unwrap() + bundle.attributed_memory_size_bytes()
@@ -178,6 +186,9 @@ fn deserialize_canonical_zip244_test_vector(
 }
 
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, Equihash (200, 9), Zcash
+// Mainnet heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn zip244_noncanonical_orchard_proof_sizes_are_rejected() -> Result<()> {
     let _init_guard = zakura_test::init();
     let mut canonical_count = 0;
@@ -287,6 +298,9 @@ fn librustzcash_tx_hash() {
 }
 
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, Equihash (200, 9), Zcash
+// Mainnet heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn v5_orchard_cross_address_flag_fails_serialization() {
     let _init_guard = zakura_test::init();
 
@@ -315,6 +329,9 @@ fn v5_orchard_cross_address_flag_fails_serialization() {
 }
 
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, Equihash (200, 9), Zcash
+// Mainnet heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn v5_orchard_cross_address_flag_fails_deserialization() {
     let _init_guard = zakura_test::init();
 
@@ -367,6 +384,9 @@ fn v5_orchard_cross_address_flag_fails_deserialization() {
 /// V6 Orchard keeps the cross-address bit reserved on the wire, even though
 /// V6 Ironwood uses the same internal `Flags` type and permits that bit.
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, Equihash (200, 9), Zcash
+// Mainnet heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn v6_orchard_cross_address_flag_fails_serialization_and_deserialization() {
     let _init_guard = zakura_test::init();
 
@@ -426,6 +446,9 @@ fn v6_orchard_cross_address_flag_fails_serialization_and_deserialization() {
 /// V6 Ironwood must round-trip `ENABLE_CROSS_ADDRESS`, while still rejecting
 /// undefined flag bits 3..7.
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, Equihash (200, 9), Zcash
+// Mainnet heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn v6_ironwood_cross_address_flag_round_trips_and_rejects_reserved_bits() {
     let _init_guard = zakura_test::init();
 
@@ -717,6 +740,9 @@ fn invalid_orchard_nullifier() {
 /// in the block test vectors.
 /// Makes sure that zebra-serialized transactions can be deserialized by librustzcash.
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, Equihash (200, 9), Zcash
+// Mainnet heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn fake_v5_librustzcash_round_trip() {
     let _init_guard = zakura_test::init();
     for network in Network::iter() {
@@ -788,6 +814,9 @@ fn fake_v5_librustzcash_round_trip_for_network(network: Network) {
 }
 
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, Equihash (200, 9), Zcash
+// Mainnet heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn zip244_round_trip() -> Result<()> {
     let _init_guard = zakura_test::init();
 
@@ -809,6 +838,9 @@ fn zip244_round_trip() -> Result<()> {
 }
 
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, Equihash (200, 9), Zcash
+// Mainnet heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn zip244_txid() -> Result<()> {
     let _init_guard = zakura_test::init();
 
@@ -825,6 +857,9 @@ fn zip244_txid() -> Result<()> {
 }
 
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, Equihash (200, 9), Zcash
+// Mainnet heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn zip244_auth_digest() -> Result<()> {
     let _init_guard = zakura_test::init();
 
@@ -854,6 +889,9 @@ fn zip244_auth_digest() -> Result<()> {
 /// both implementations to the independently-published expected outputs, so a
 /// shared bug in the two V5 computations could not pass silently.
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, Equihash (200, 9), Zcash
+// Mainnet heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn native_zip244_matches_test_vectors() -> Result<()> {
     let _init_guard = zakura_test::init();
 
@@ -893,6 +931,9 @@ fn native_zip244_matches_test_vectors() -> Result<()> {
 /// introduces V6 and changes Orchard bundle semantics. Keep the native
 /// ZIP-244 path pinned to the librustzcash oracle at that mixed boundary.
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, Equihash (200, 9), Zcash
+// Mainnet heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn native_zip244_matches_librustzcash_for_v5_nu6_3_orchard() {
     let _init_guard = zakura_test::init();
 
@@ -1368,6 +1409,9 @@ fn zip243_sighash() -> Result<()> {
 }
 
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, Equihash (200, 9), Zcash
+// Mainnet heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn zip244_sighash() -> Result<()> {
     let _init_guard = zakura_test::init();
 
@@ -1523,6 +1567,9 @@ fn v6_zip244_sighash_matches_librustzcash() -> Result<()> {
 }
 
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, Equihash (200, 9), Zcash
+// Mainnet heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn script_code_commitment_is_version_specific() -> Result<()> {
     let _init_guard = zakura_test::init();
 
@@ -1629,6 +1676,9 @@ fn script_code_commitment_is_version_specific() -> Result<()> {
 /// a proof with trailing bytes must make it non-canonical (GHSA-jfw5-j458-pfv6). This
 /// also cross-checks `expected_proof_size` against real proofs produced by the chain.
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, Equihash (200, 9), Zcash
+// Mainnet heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn orchard_proof_size_is_canonical() {
     let mut checked = 0;
 
@@ -1663,6 +1713,9 @@ fn orchard_proof_size_is_canonical() {
 }
 
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, Equihash (200, 9), Zcash
+// Mainnet heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn consensus_branch_id() {
     for net in Network::iter() {
         for tx in v5_transactions(net.block_iter()).filter(|tx| {
@@ -1717,6 +1770,9 @@ fn consensus_branch_id() {
 }
 
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, Equihash (200, 9), Zcash
+// Mainnet heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn binding_signatures() {
     let _init_guard = zakura_test::init();
 
@@ -1974,6 +2030,9 @@ fn v6_transactions_accept_nu6_3_and_later_branch_ids() {
 /// same authorization mapper, so a swapped getter or accidental alias would
 /// otherwise send one pool's proof to the other pool's verifier.
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, Equihash (200, 9), Zcash
+// Mainnet heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn v6_sighasher_preserves_distinct_orchard_and_ironwood_bundle_slots() {
     use crate::{ironwood, orchard};
 
@@ -2182,6 +2241,9 @@ fn v6_ironwood_anchor_changes_auth_digest_not_txid() {
 }
 
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, Equihash (200, 9), Zcash
+// Mainnet heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn standalone_orchard_proof_size_is_enforced_during_deserialization() {
     let _init_guard = zakura_test::init();
 
@@ -2216,6 +2278,9 @@ fn standalone_orchard_proof_size_is_enforced_during_deserialization() {
 }
 
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, Equihash (200, 9), Zcash
+// Mainnet heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn v5_orchard_proof_size_is_always_enforced_during_deserialization() {
     let _init_guard = zakura_test::init();
 
@@ -2280,6 +2345,9 @@ fn v5_orchard_proof_size_is_always_enforced_during_deserialization() {
 }
 
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, Equihash (200, 9), Zcash
+// Mainnet heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn v6_noncanonical_orchard_proof_is_rejected_during_deserialization() {
     let _init_guard = zakura_test::init();
 
@@ -2329,6 +2397,9 @@ fn v6_noncanonical_orchard_proof_is_rejected_during_deserialization() {
 }
 
 #[test]
+// kogany: Zcash block and transaction vectors (NU5-and-later branch IDs, Equihash (200, 9), Zcash
+// Mainnet heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn v6_noncanonical_ironwood_proof_is_rejected_during_deserialization() {
     let _init_guard = zakura_test::init();
 
@@ -2504,21 +2575,22 @@ fn orchard_rk_identity_point_rejected_during_deserialization() {
 }
 
 /// Lazy Sapling `cv` / `ephemeral_key` deserialization stays consensus-safe:
-/// deferring the not-small-order check is caught later by librustzcash.
+/// the not-small-order check is deferred to semantic verification, and neither
+/// Zakura's parser nor librustzcash's rejects a small-order point at read.
 ///
-/// Every untrusted transaction is converted via `to_librustzcash` before it is
-/// accepted, and librustzcash enforces the same rules the deferred check would:
+/// - Zakura's semantic verifier and mempool reject both in
+///   `Transaction::sapling_point_encodings_are_valid`, before any proof work.
+/// - librustzcash keeps `cv` as bytes when it parses, so `to_librustzcash`
+///   accepts a small-order `cv`. Its Sapling verifier rejects it when it
+///   recovers the point with `ValueCommitment::try_point`.
+/// - librustzcash rejects a small-order `epk` at verify: `check_output` checks
+///   `epk.is_small_order()`.
 ///
-/// - `cv` is rejected at *read* — `read_value_commitment` uses
-///   `ValueCommitment::from_bytes_not_small_order`, so a small-order `cv` fails
-///   the conversion.
-/// - `epk` is rejected at *verify* — `check_output` checks `epk.is_small_order()`.
-///
-/// So this test asserts both the deferral (deserialization now accepts a
-/// small-order `cv`/`epk`) and the safety net (`to_librustzcash` rejects the
-/// small-order `cv`; the small-order `epk` is flagged by the verifier's check).
+/// The library verifier's rejection of a converted bundle with an invalid `cv`
+/// is pinned end to end by zakura-consensus's
+/// `library_verifier_rejects_invalid_value_commitments_that_now_convert`.
 #[test]
-fn sapling_small_order_cv_epk_deferred_but_caught_by_librustzcash() {
+fn sapling_small_order_cv_epk_deferred_to_semantic_checks() {
     use group::Group;
 
     use crate::{
@@ -2546,14 +2618,14 @@ fn sapling_small_order_cv_epk_deferred_but_caught_by_librustzcash() {
     // not-small-order check must reject it.
     let small_order_bytes = jubjub::AffinePoint::from(jubjub::ExtendedPoint::identity()).to_bytes();
 
-    // The exact library functions the semantic/mempool path uses must detect it.
+    // The exact library functions the verifiers use must detect it.
     assert!(
         bool::from(
-            sapling_crypto::value::ValueCommitment::from_bytes_not_small_order(&small_order_bytes)
+            sapling_crypto::value::ValueCommitment::from_bytes_unvalidated(small_order_bytes)
+                .try_point()
                 .is_none()
         ),
-        "from_bytes_not_small_order (used by librustzcash read_value_commitment) must reject \
-         the small-order cv",
+        "try_point (used by the librustzcash Sapling verifier) must reject the small-order cv",
     );
     assert!(
         bool::from(
@@ -2577,8 +2649,8 @@ fn sapling_small_order_cv_epk_deferred_but_caught_by_librustzcash() {
 
     // Build a minimal V5 transaction with one Sapling output using the given cv
     // and ephemeral_key bytes, round-trip it through the lazy deserializer, and
-    // return whether `to_librustzcash` accepts it.
-    let build_and_convert = |cv_bytes: [u8; 32], epk_bytes: [u8; 32]| -> bool {
+    // return it with the result of `to_librustzcash`.
+    let build_and_convert = |cv_bytes: [u8; 32], epk_bytes: [u8; 32]| {
         let output = Output {
             cv: ValueCommitment(cv_bytes),
             cm_u: sapling_crypto::note::ExtractedNoteCommitment::from_bytes(&[0u8; 32]).unwrap(),
@@ -2615,14 +2687,28 @@ fn sapling_small_order_cv_epk_deferred_but_caught_by_librustzcash() {
             .zcash_deserialize_into()
             .expect("lazy deserialization accepts a small-order cv/epk; validation is deferred");
 
-        tx.to_librustzcash(NetworkUpgrade::Nu5).is_ok()
+        let converted = tx.to_librustzcash(NetworkUpgrade::Nu5);
+        (tx, converted)
     };
 
-    // cv is enforced at *read*: `read_value_commitment` uses
-    // `from_bytes_not_small_order`, so `to_librustzcash` rejects a small-order cv.
+    // cv is enforced at *verify*, not read: Zakura's semantic check rejects it,
+    // `to_librustzcash` keeps the bytes, and the library verifier's `try_point`
+    // rejects the converted commitment.
+    let (tx, converted) = build_and_convert(small_order_bytes, valid_cv_bytes);
     assert!(
-        !build_and_convert(small_order_bytes, valid_cv_bytes),
-        "to_librustzcash must reject a small-order Sapling cv at read",
+        !tx.sapling_point_encodings_are_valid(),
+        "the semantic point check must reject a small-order Sapling cv",
+    );
+    let converted = converted
+        .expect("to_librustzcash keeps a small-order cv as bytes; it is checked at verify");
+    let output = &converted
+        .sapling_bundle()
+        .expect("the converted transaction keeps its Sapling bundle")
+        .shielded_outputs()[0];
+    assert_eq!(output.cv().to_bytes(), small_order_bytes);
+    assert!(
+        bool::from(output.cv().try_point().is_none()),
+        "the library verifier must reject the converted small-order cv",
     );
 
     // epk is enforced at *verify*, not read: a small-order epk (with a valid cv)
@@ -2633,16 +2719,22 @@ fn sapling_small_order_cv_epk_deferred_but_caught_by_librustzcash() {
     // the SigHash and binding signature, and the output proof can't be forged, so
     // the rejection would be confounded. The `is_small_order` assertion above
     // covers the exact librustzcash code path that rejects it.
+    let (tx, converted) = build_and_convert(valid_cv_bytes, small_order_bytes);
     assert!(
-        build_and_convert(valid_cv_bytes, small_order_bytes),
+        !tx.sapling_point_encodings_are_valid(),
+        "the semantic point check must reject a small-order epk",
+    );
+    assert!(
+        converted.is_ok(),
         "to_librustzcash must accept a small-order epk (it is enforced at verify, not read)",
     );
 }
 
 /// Edge cases for lazy Sapling `cv` / `ephemeral_key` deserialization. Beyond the
 /// small-order case, this checks that:
-/// - an off-curve `cv` is also rejected by `to_librustzcash`, so the safety net
-///   covers every invalid encoding, not just small-order points;
+/// - an off-curve `cv` also fails the semantic point check and, after
+///   `to_librustzcash` keeps its bytes, the library verifier's `try_point`, so
+///   both layers cover every invalid encoding, not just small-order points;
 /// - the lazy types round-trip byte-for-byte through serialize/deserialize — the
 ///   txid and merkle root hash these bytes, so any change would break consensus;
 /// - `cv.commitment()` decompresses a valid encoding back to the same point;
@@ -2708,18 +2800,32 @@ fn sapling_lazy_cv_epk_edge_cases() {
         }
     };
 
-    // An off-curve cv is rejected by to_librustzcash, covering invalid encodings
-    // beyond small-order points.
+    // An off-curve cv fails the semantic point check, and the library verifier
+    // rejects it after conversion, covering invalid encodings beyond small-order
+    // points.
     let tx_off_curve_cv: Transaction = make_v5(off_curve, valid_cv)
         .zcash_serialize_to_vec()
         .expect("serializes")
         .zcash_deserialize_into()
         .expect("lazy deserialization accepts an off-curve cv");
     assert!(
-        tx_off_curve_cv
-            .to_librustzcash(NetworkUpgrade::Nu5)
-            .is_err(),
-        "to_librustzcash must reject an off-curve cv",
+        !tx_off_curve_cv.sapling_point_encodings_are_valid(),
+        "the semantic point check must reject an off-curve cv",
+    );
+    let converted = tx_off_curve_cv
+        .to_librustzcash(NetworkUpgrade::Nu5)
+        .expect("to_librustzcash keeps an off-curve cv as bytes; it is checked at verify");
+    assert!(
+        bool::from(
+            converted
+                .sapling_bundle()
+                .expect("the converted transaction keeps its Sapling bundle")
+                .shielded_outputs()[0]
+                .cv()
+                .try_point()
+                .is_none()
+        ),
+        "the library verifier must reject the converted off-curve cv",
     );
 
     // Byte-identity: even non-canonical cv/epk bytes survive a
@@ -2774,8 +2880,9 @@ fn sapling_lazy_cv_epk_edge_cases() {
 ///
 /// Checkpoint hashing and pre-verification mempool IDs are computed before
 /// semantic point validation. An off-curve Sapling commitment must therefore
-/// still produce a deterministic V5/V6 `UnminedTx` ID, while the later
-/// librustzcash conversion remains fail-closed.
+/// still produce a deterministic V5/V6 `UnminedTx` ID, while the semantic point
+/// check remains fail-closed. librustzcash keeps the bytes too, so its
+/// conversion succeeds and its txid matches the native one.
 #[test]
 fn native_zip244_hashes_invalid_lazy_sapling_points_before_semantic_rejection() {
     use group::Group;
@@ -2875,15 +2982,19 @@ fn native_zip244_hashes_invalid_lazy_sapling_points_before_semantic_rejection() 
             !parsed.sapling_point_encodings_are_valid(),
             "off-curve Sapling cv must fail deferred semantic validation",
         );
-        assert!(
-            parsed.to_librustzcash(network_upgrade).is_err(),
-            "off-curve Sapling cv must fail librustzcash conversion",
-        );
+        let converted = parsed
+            .to_librustzcash(network_upgrade)
+            .expect("librustzcash keeps an off-curve Sapling cv as bytes; it is checked at verify");
 
         let unmined = UnminedTx::from(parsed.clone());
         let (txid, auth_digest) = parsed.txid_and_auth_digest();
         assert_eq!(unmined.id().mined_id(), txid);
         assert_eq!(unmined.id().auth_digest(), auth_digest);
+        assert_eq!(
+            txid,
+            crate::transaction::Hash(*converted.txid().as_ref()),
+            "librustzcash must hash the same raw Sapling cv bytes as the native txid",
+        );
         assert_ne!(
             txid,
             changed_parsed.hash(),
@@ -3170,8 +3281,9 @@ fn sapling_point_encodings_check_rejects_bad_v4_spend_cv() {
 /// chain split. This pins each Zebra predicate against the library predicate over
 /// a corpus covering both verdicts:
 ///
-/// - `cv`: `read_value_commitment` accepts a `cv` iff `from_bytes_not_small_order`
-///   returns a point.
+/// - `cv`: the Sapling verifier accepts a `cv` iff `ValueCommitment::try_point`
+///   returns a point. (librustzcash's parser keeps `cv` as bytes, so this is
+///   now enforced at verify rather than at read.)
 /// - `epk`: sapling-crypto decodes `epk` as an `ExtendedPoint` and `check_output`
 ///   rejects it when `epk.is_small_order()`. Zebra decodes as an `AffinePoint`, so
 ///   this also guards that the two decoders agree.
@@ -3183,10 +3295,12 @@ fn sapling_point_checks_match_librustzcash_predicates() {
 
     let _init_guard = zakura_test::init();
 
-    // The exact predicate librustzcash applies to a `cv` at read.
+    // The exact predicate the librustzcash Sapling verifier applies to a `cv`.
     let librustzcash_cv_valid = |bytes: [u8; 32]| -> bool {
         bool::from(
-            sapling_crypto::value::ValueCommitment::from_bytes_not_small_order(&bytes).is_some(),
+            sapling_crypto::value::ValueCommitment::from_bytes_unvalidated(bytes)
+                .try_point()
+                .is_some(),
         )
     };
 
@@ -3237,8 +3351,8 @@ fn sapling_point_checks_match_librustzcash_predicates() {
         assert_eq!(
             ValueCommitment(bytes).is_valid_not_small_order(),
             librustzcash_cv_valid(bytes),
-            "ValueCommitment::is_valid_not_small_order must match librustzcash \
-             read_value_commitment for {bytes:02x?}",
+            "ValueCommitment::is_valid_not_small_order must match the librustzcash \
+             Sapling verifier's try_point for {bytes:02x?}",
         );
         assert_eq!(
             EphemeralPublicKey(bytes).is_valid_not_small_order(),

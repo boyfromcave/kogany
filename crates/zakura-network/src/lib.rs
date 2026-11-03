@@ -169,12 +169,19 @@ mod peer_set;
 mod protocol;
 pub mod zakura;
 
+#[cfg(feature = "ycash")]
+pub mod ycash;
+
 #[cfg(any(test, feature = "proptest-impl"))]
 pub use crate::{
     isolated::connect_isolated_with_inbound,
     peer_set::{init, init_with_zakura_header_sync},
     protocol::external::canonical_peer_addr,
 };
+
+/// kogany (S5-K11): the syncer wakes on a newly responded peer.
+#[cfg(feature = "ycash")]
+pub use crate::address_book::AddressMetrics;
 
 pub use crate::{
     address_book::{AddressBook, BannedIps},

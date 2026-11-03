@@ -806,7 +806,7 @@
     {
       "name": "addnode",
       "summary": "Add or remove a node from the address book.",
-      "description": "Add or remove a node from the address book.\n\n# Parameters\n\n- `addr`: (string, required) The address of the node to add or remove.\n- `command`: (string, required) The command to execute, either \"add\", \"onetry\", or \"remove\".\n\n# Notes\n\nOnly the \"add\" command is currently supported.\n\nzcashd reference: [`addnode`](https://zcash.github.io/rpc/addnode.html)\nmethod: post\ntags: network",
+      "description": "Add or remove a node from the address book.\n\n# Parameters\n\n- `addr`: (string, required) The address of the node to add or remove.\n- `command`: (string, required) The command to execute, either \"add\", \"onetry\", or \"remove\".\n\n# Notes\n\nThe \"add\" and \"onetry\" commands are supported. kogany (F-S5-6): \"onetry\" dials a known\naddress now instead of after its reconnection delay, as ycashd's does.\n\nzcashd reference: [`addnode`](https://zcash.github.io/rpc/addnode.html)\nmethod: post\ntags: network",
       "params": [
         {
           "name": "addr",
@@ -829,6 +829,30 @@
       ],
       "result": {
         "name": "addnode_result",
+        "summary": "An OpenRPC document.",
+        "description": "An OpenRPC document.",
+        "schema": {
+          "$ref": "#/components/schemas/OpenRPC%20Schema"
+        }
+      }
+    },
+    {
+      "name": "disconnectnode",
+      "summary": "Immediately disconnects from the specified node.",
+      "description": "Immediately disconnects from the specified node.\n\n# Parameters\n\n- `node`: (string, required) The node's address, as `getpeerinfo` reports it (`ip:port`).\n\n# Notes\n\nkogany (finding F-S5-6): closes every connection to `node`, and keeps its address out of\nthe address book, so the node is not redialed, until `addnode` adds it again, as ycashd\nnever redials a node it disconnected that `addnode` does not name\n(`ycash6` `src/rpc/net.cpp:224-245`). Answers `-29` (\"Node not found in connected nodes\")\nwhen no connection to `node` is open; the address is kept out of the book then too.\n\nzcashd reference: [`disconnectnode`](https://zcash.github.io/rpc/disconnectnode.html)\nmethod: post\ntags: network",
+      "params": [
+        {
+          "name": "node",
+          "summary": "The node's address, as `getpeerinfo` reports it.",
+          "description": "The node's address, as `getpeerinfo` reports it.",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "result": {
+        "name": "disconnectnode_result",
         "summary": "An OpenRPC document.",
         "description": "An OpenRPC document.",
         "schema": {
@@ -980,9 +1004,14 @@
         "description": "Commands for the `addnode` RPC method.",
         "oneOf": [
           {
+            "type": "string",
             "const": "add",
-            "description": "Add a node to the address book.",
-            "type": "string"
+            "description": "Add a node to the address book."
+          },
+          {
+            "type": "string",
+            "const": "onetry",
+            "description": "Try a connection to a node now, without waiting out its reconnection delay."
           }
         ]
       },

@@ -1,4 +1,6 @@
 //! Fixed test vectors for state contextual validation checks.
+// kogany: the Zcash-fixture tests are not built with `ycash`, leaving their helpers unused.
+#![cfg_attr(feature = "ycash", allow(unused_imports, dead_code))]
 
 use chrono::{DateTime, Duration};
 
@@ -66,6 +68,9 @@ fn test_sequential_height_check() {
 /// header fail the ZIP-244 commitment check, proving the supplied value is the one
 /// bound into the check.
 #[test]
+// kogany: Zcash Mainnet and Testnet block vectors (NU5 branch IDs, Zcash Heartwood and NU5
+// heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn block_commitment_uses_the_precomputed_auth_data_root() {
     let _init_guard = zakura_test::init();
 

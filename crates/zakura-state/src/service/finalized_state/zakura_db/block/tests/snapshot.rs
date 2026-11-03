@@ -29,6 +29,8 @@
 //! cargo insta test --review --release -p zakura-state --lib
 //! ```
 //! to update the test snapshots, then commit the `test_*.snap` files using git.
+// kogany: the Zcash-fixture tests are not built with `ycash`, leaving their helpers unused.
+#![cfg_attr(feature = "ycash", allow(unused_imports, dead_code))]
 
 use std::sync::Arc;
 
@@ -153,6 +155,9 @@ impl TransactionData {
 
 /// Snapshot test for finalized block and transaction data.
 #[test]
+// kogany: Zcash Mainnet and Testnet block vectors (NU5 branch IDs, Zcash Heartwood and NU5
+// heights); not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 fn test_block_and_transaction_data() {
     let _init_guard = zakura_test::init();
     for network in Network::iter() {

@@ -100,7 +100,6 @@ use std::{
     marker::PhantomData,
     net::IpAddr,
     pin::Pin,
-    sync::Arc,
     task::{Context, Poll},
     time::Instant,
 };
@@ -129,7 +128,7 @@ use crate::{
     address_book::AddressMetrics,
     constants::MIN_PEER_SET_LOG_INTERVAL,
     peer::{
-        block_gossip::{BlockGossipPeer, BLOCK_GOSSIP_CONCURRENCY},
+        block_gossip::{BlockGossipPeer, BlockUploadSlots, BLOCK_UPLOAD_CONCURRENCY},
         LoadTrackedClient, MinimumPeerVersion,
     },
     peer_set::{
@@ -142,7 +141,7 @@ use crate::{
         external::{canonical_ip, InventoryHash},
         internal::{Request, Response},
     },
-    BannedIps, BoxError, Config, PeerError, PeerSocketAddr, SharedPeerError,
+    BannedIps, BoxError, Config, PeerError, PeerSocketAddr, PeerSource, SharedPeerError,
 };
 
 #[cfg(test)]
@@ -243,8 +242,8 @@ where
     block_gossip_peers_tx: watch::Sender<Vec<BlockGossipPeer>>,
     /// Whether `block_gossip_peers` changed since it was last published.
     block_gossip_peers_changed: bool,
-    /// Share the cap across early, committed, and concurrent block broadcasts.
-    block_gossip_slots: Arc<tokio::sync::Semaphore>,
+    /// Share the upload slots across early, committed, and concurrent block broadcasts.
+    block_gossip_slots: BlockUploadSlots,
 
     /// Inbound peer IPs that must always receive block inventory broadcasts.
     block_gossip_peer_ips: HashSet<IpAddr>,
@@ -260,6 +259,25 @@ where
 
     /// Channels used to cancel the request that an unready service is doing.
     cancel_handles: HashMap<D::Key, oneshot::Sender<CancelClientWork>>,
+
+    /// kogany (S5, F-S5-16): transaction ids a broadcast found this busy peer unable to take,
+    /// advertised once it is ready again (ycashd relays every accepted transaction to every
+    /// peer). At most [`MAX_PENDING_TX_ADVERTS_PER_PEER`] per peer; dropped with the peer.
+    #[cfg(feature = "ycash")]
+    pending_tx_adverts: HashMap<D::Key, HashSet<zakura_chain::transaction::UnminedTxId>>,
+
+    /// kogany (S5-K11): peers inserted since their first `FindBlocks`/`FindHeaders`. The next
+    /// find request goes to one of them once it is ready, so a reconnected peer's heavier
+    /// branch is found in one sync round, as ycashd syncs headers from a peer on connect.
+    #[cfg(feature = "ycash")]
+    fresh_find_peers: HashSet<D::Key>,
+
+    /// kogany (S5-K11): the hashes each `FindBlocks` response carried, registered as that
+    /// peer's inventory so the block downloads are routed to it.
+    #[cfg(feature = "ycash")]
+    find_inv_tx: tokio_mpsc::UnboundedSender<(PeerSocketAddr, Vec<block::Hash>)>,
+    #[cfg(feature = "ycash")]
+    find_inv_rx: tokio_mpsc::UnboundedReceiver<(PeerSocketAddr, Vec<block::Hash>)>,
 
     // Peer Validation
     //
@@ -324,6 +342,10 @@ where
     }
 }
 
+/// kogany (S5, F-S5-16): the most transaction ids queued for one busy peer.
+#[cfg(feature = "ycash")]
+pub(crate) const MAX_PENDING_TX_ADVERTS_PER_PEER: usize = 1_000;
+
 impl<D, C> PeerSet<D, C>
 where
     D: Discover<Key = PeerSocketAddr, Service = LoadTrackedClient> + Unpin,
@@ -362,6 +384,8 @@ where
         max_conns_per_ip: Option<usize>,
     ) -> Self {
         let (stall_event_tx, stall_event_rx) = tokio_mpsc::unbounded_channel();
+        #[cfg(feature = "ycash")]
+        let (find_inv_tx, find_inv_rx) = tokio_mpsc::unbounded_channel();
         Self {
             // New peers
             discover,
@@ -381,13 +405,21 @@ where
             block_gossip_peers: HashMap::new(),
             block_gossip_peers_tx: watch::channel(Vec::new()).0,
             block_gossip_peers_changed: false,
-            block_gossip_slots: Arc::new(tokio::sync::Semaphore::new(BLOCK_GOSSIP_CONCURRENCY)),
+            block_gossip_slots: BlockUploadSlots::new(BLOCK_UPLOAD_CONCURRENCY),
             block_gossip_peer_ips: block_gossip_peer_ips.into_iter().collect(),
             legacy_peer_trace: LegacyPeerTrace::new(config.zakura.trace_dir.clone()),
 
             // Busy peers
             unready_services: FuturesUnordered::new(),
             cancel_handles: HashMap::new(),
+            #[cfg(feature = "ycash")]
+            pending_tx_adverts: HashMap::new(),
+            #[cfg(feature = "ycash")]
+            fresh_find_peers: HashSet::new(),
+            #[cfg(feature = "ycash")]
+            find_inv_tx,
+            #[cfg(feature = "ycash")]
+            find_inv_rx,
 
             // Peer validation
             minimum_peer_version,
@@ -719,6 +751,38 @@ where
         self.ready_services.contains_key(&addr) || self.cancel_handles.contains_key(&addr)
     }
 
+    /// Drops the ready service for `key` if its connection has already failed, and returns
+    /// whether it did. A busy service for `key` is left alone.
+    ///
+    /// The dropped connection's stall count is cleared, so a reconnecting peer starts fresh, as it
+    /// does after a disconnect.
+    ///
+    /// A ready service is never pending: it only becomes unready when the peer set sends it a
+    /// request, and unready services are tracked separately.
+    fn drop_ready_service_if_failed(&mut self, key: &D::Key, cx: &mut Context<'_>) -> bool {
+        let Some(svc) = self.ready_services.get_mut(key) else {
+            return false;
+        };
+
+        match svc.poll_ready(cx) {
+            Poll::Ready(Err(error)) => {
+                debug!(
+                    %error,
+                    peer = %key.addr_label(self.expose_peer_addresses),
+                    "ready service failed before the peer reconnected, dropping service"
+                );
+                self.ready_services.remove(key);
+                self.find_response_stalls.clear(*key);
+                true
+            }
+            Poll::Ready(Ok(())) => false,
+            Poll::Pending => unreachable!(
+                "unexpected unready peer: peers must be put into the unready_peers list \
+                 after sending them a request"
+            ),
+        }
+    }
+
     /// Processes the entire list of newly inserted or removed services.
     ///
     /// Puts inserted services in the unready list.
@@ -768,7 +832,12 @@ where
                     //
                     // Drop the new peer if we are already connected to it.
                     // Preferring old connections avoids connection thrashing.
-                    if self.has_peer_with_addr(key) {
+                    //
+                    // A ready connection that has already closed is not a live duplicate: drop it
+                    // instead, so a peer that reconnects before the next health sweep keeps its
+                    // place in the set.
+                    if self.has_peer_with_addr(key) && !self.drop_ready_service_if_failed(&key, cx)
+                    {
                         std::mem::drop(svc);
                         continue;
                     }
@@ -782,6 +851,8 @@ where
                         continue;
                     }
 
+                    #[cfg(feature = "ycash")]
+                    self.fresh_find_peers.insert(key);
                     self.push_unready(key, svc);
                 }
             }
@@ -845,6 +916,10 @@ where
     /// If the peer does not exist, does nothing.
     fn remove(&mut self, key: &D::Key) {
         self.find_response_stalls.clear(*key);
+        #[cfg(feature = "ycash")]
+        self.pending_tx_adverts.remove(key);
+        #[cfg(feature = "ycash")]
+        self.fresh_find_peers.remove(key);
 
         if let Some(ready_service) = self.take_ready_service(key) {
             // A ready service has no work to cancel, so just drop it.
@@ -931,6 +1006,26 @@ where
                 .map(|(key, _)| *key)
                 .collect(),
         )
+    }
+
+    /// kogany (S5-K11): a ready peer that has not had a find request since it connected, under
+    /// the same filter as [`Self::select_ready_p2c_peer`] for find requests.
+    #[cfg(feature = "ycash")]
+    fn select_fresh_find_peer(&self) -> Option<D::Key> {
+        let tip_height = self
+            .minimum_peer_version
+            .chain_tip()
+            .best_tip_height()
+            .unwrap_or(block::Height(0));
+        self.fresh_find_peers
+            .iter()
+            .find(|key| {
+                self.ready_services.get(key).is_some_and(|service| {
+                    !(self.is_zcashd_compat_peer(service)
+                        && service.remote_start_height() <= tip_height)
+                })
+            })
+            .copied()
     }
 
     /// Performs P2C on `ready_service_list` to randomly select a less-loaded ready service.
@@ -1045,7 +1140,18 @@ where
             Request::FindBlocks { .. } | Request::FindHeaders { .. }
         );
 
-        if let Some(p2c_key) = self.select_ready_p2c_peer(is_find_request) {
+        #[cfg(feature = "ycash")]
+        let fresh_key = is_find_request
+            .then(|| self.select_fresh_find_peer())
+            .flatten();
+        #[cfg(not(feature = "ycash"))]
+        let fresh_key = None;
+
+        if let Some(p2c_key) = fresh_key.or_else(|| self.select_ready_p2c_peer(is_find_request)) {
+            #[cfg(feature = "ycash")]
+            if is_find_request {
+                self.fresh_find_peers.remove(&p2c_key);
+            }
             tracing::trace!(
                 peer = %p2c_key.addr_label(self.expose_peer_addresses),
                 "routing based on p2c"
@@ -1079,8 +1185,16 @@ where
             if track_stalls || find_blocks_trace.is_some() {
                 let stall_tx = self.stall_event_tx.clone();
                 let trace = self.legacy_peer_trace.clone();
+                #[cfg(feature = "ycash")]
+                let find_inv_tx = self.find_inv_tx.clone();
                 return async move {
                     let result = fut.await;
+                    #[cfg(feature = "ycash")]
+                    if let Ok(Response::BlockHashes(hashes)) = &result {
+                        if !hashes.is_empty() {
+                            let _ = find_inv_tx.send((p2c_key, hashes.clone()));
+                        }
+                    }
                     if track_stalls {
                         if let Some(outcome) = classify_find_response(&result) {
                             let _ = stall_tx.send((p2c_key, outcome));
@@ -1192,12 +1306,28 @@ where
             .missing_peers(hash)
             .copied()
             .collect();
-        let maybe_peer_list = self
-            .ready_services
-            .keys()
-            .filter(|addr| !missing_peer_list.contains(addr))
-            .copied()
-            .collect();
+
+        // No ready peer advertised this block, so its known source is the most likely to have it:
+        // a child's advertiser has validated the child's parent. Advertisers go first, so this
+        // can't take a request away from a peer that said it has the block.
+        let block_source = match &req {
+            Request::BlocksByHashFrom {
+                source: PeerSource::LegacySocket(addr),
+                ..
+            } if self.ready_services.contains_key(addr) && !missing_peer_list.contains(addr) => {
+                Some(*addr)
+            }
+            _ => None,
+        };
+        let maybe_peer_list = match block_source {
+            Some(addr) => HashSet::from([addr]),
+            None => self
+                .ready_services
+                .keys()
+                .filter(|addr| !missing_peer_list.contains(addr))
+                .copied()
+                .collect(),
+        };
 
         // Security: choose a random, less-loaded peer that might have the inventory.
         let peer = self.select_p2c_peer_from_list(&maybe_peer_list);
@@ -1339,8 +1469,56 @@ where
 
     /// Broadcasts the same request to lots of ready peers, ignoring return values.
     fn route_broadcast(&mut self, req: Request) -> <Self as tower::Service<Request>>::Future {
+        // kogany (S5, F-S5-16): every ready peer gets the inv now, every busy one once it is
+        // ready (`flush_pending_tx_adverts`), as ycashd's `RelayTransaction` reaches every peer.
+        #[cfg(feature = "ycash")]
+        if let Request::AdvertiseTransactionIds(ids, _) = &req {
+            let busy: Vec<D::Key> = self.cancel_handles.keys().copied().collect();
+            for key in busy {
+                let pending = self.pending_tx_adverts.entry(key).or_default();
+                for id in ids {
+                    if pending.len() >= MAX_PENDING_TX_ADVERTS_PER_PEER {
+                        break;
+                    }
+                    pending.insert(*id);
+                }
+            }
+            let all = self.ready_services.len();
+            return self.route_multiple(req, all);
+        }
         // Broadcasts ignore the response
         self.route_multiple(req, self.number_of_peers_to_broadcast())
+    }
+
+    /// kogany (S5, F-S5-16): advertises the queued transaction ids to each peer that is ready
+    /// again; drops the queues of peers that left.
+    #[cfg(feature = "ycash")]
+    fn flush_pending_tx_adverts(&mut self) {
+        if self.pending_tx_adverts.is_empty() {
+            return;
+        }
+        let (ready, busy) = (&self.ready_services, &self.cancel_handles);
+        self.pending_tx_adverts
+            .retain(|key, _| ready.contains_key(key) || busy.contains_key(key));
+        let ready_keys: Vec<D::Key> = self
+            .pending_tx_adverts
+            .keys()
+            .filter(|key| self.ready_services.contains_key(*key))
+            .copied()
+            .collect();
+        for key in ready_keys {
+            let Some(ids) = self.pending_tx_adverts.remove(&key) else {
+                continue;
+            };
+            let Some(mut svc) = self.take_ready_service(&key) else {
+                continue;
+            };
+            let fut = svc.call(Request::AdvertiseTransactionIds(ids, None));
+            self.push_unready(key, svc);
+            tokio::spawn(async move {
+                let _ = fut.await;
+            });
+        }
     }
 
     /// Pace legacy inventory through the corresponding uploads, including busy sidecars.
@@ -1367,12 +1545,125 @@ where
         )
     }
 
+    /// Processes connection events even when no ordinary request is waiting.
+    /// Registers wakeups but does not demand an idle peer.
+    pub(super) fn maintain(&mut self, cx: &mut Context<'_>) -> Result<(), BoxError> {
+        // Update service and peer statuses.
+        //
+        // # Correctness
+        //
+        // All of the futures that receive a context from this method can wake the peer set owner
+        // task. If there are no ready peers, and no new peers, network requests will pause until:
+        // - an unready peer becomes ready, or
+        // - a new peer arrives.
+
+        // Drain stall events first, so disconnects free up slots that
+        // `poll_discover` can fill in the same poll cycle.
+        self.drain_stall_events(cx);
+        #[cfg(feature = "ycash")]
+        while let Poll::Ready(Some((peer, hashes))) = self.find_inv_rx.poll_recv(cx) {
+            self.inventory_registry
+                .register_find_response(peer, &hashes);
+        }
+
+        // Check for new peers, and register a task wakeup when the next new peers arrive. New peers
+        // can be infrequent if our connection slots are full, or we're connected to all
+        // available/useful peers.
+        let _poll_pending_or_ready: Poll<()> = self.poll_discover(cx)?;
+
+        // This task doesn't provide new peers or newly ready peers.
+        let _poll_pending: Poll<()> = self.poll_background_errors(cx)?;
+
+        let _ = self.poll_peers(cx)?;
+        #[cfg(feature = "ycash")]
+        self.flush_pending_tx_adverts();
+        self.prune_block_gossip_peers();
+        self.publish_block_gossip_peers();
+
+        // Peers leave the set through many paths. Pruning here, instead of at each
+        // path, keeps stall counts bounded by the live peers.
+        if !self.find_response_stalls.is_empty() {
+            let (ready_services, cancel_handles) = (&self.ready_services, &self.cancel_handles);
+            self.find_response_stalls.retain(|addr| {
+                ready_services.contains_key(addr) || cancel_handles.contains_key(addr)
+            });
+        }
+
+        // These metrics should run last, to report the most up-to-date information.
+        self.log_peer_set_size();
+        self.update_metrics();
+
+        Ok(())
+    }
+
+    /// Checks whether a request can be routed now. [`Self::maintain`] must have run in the same
+    /// poll, so its wakeups are registered when this returns `Poll::Pending`.
+    ///
+    /// Refreshes the inventory registry here rather than in maintenance, because only request
+    /// routing reads it, and asks the crawler for more peers when none is ready.
+    pub(super) fn poll_routing_readiness(
+        &mut self,
+        cx: &mut Context<'_>,
+    ) -> Poll<Result<(), BoxError>> {
+        let _poll_pending_or_ready: Poll<()> = self.inventory_registry.poll_inventory(cx)?;
+
+        if self.ready_services.is_empty() {
+            // # Correctness
+            //
+            // If the channel is full, drop the demand signal rather than waiting. If we waited
+            // here, the crawler could deadlock sending a request to fetch more peers, because it
+            // also empties the channel.
+            trace!("no ready services, sending demand signal");
+            let _ = self.demand_signal.try_send(MorePeers);
+
+            // # Correctness
+            //
+            // The current task must be scheduled for wakeup every time we return `Poll::Pending`.
+            //
+            // As long as there are unready or new peers, this task will run, because:
+            // - `poll_discover` schedules this task for wakeup when new peers arrive.
+            // - if there are unready peers, `poll_unready` or `poll_ready_peers` schedule this
+            //   task for wakeup when peer services become ready.
+            //
+            // To avoid peers blocking on a full peer status/error channel:
+            // - `poll_background_errors` schedules this task for wakeup when the peer status
+            //   update task exits.
+            return Poll::Pending;
+        }
+
+        Poll::Ready(Ok(()))
+    }
+
+    /// Asks the crawler for more peers when no connection can carry a block advert.
+    ///
+    /// Block advertisers wait for membership changes instead of request readiness, so this is
+    /// their only demand signal.
+    pub(super) fn demand_peers_if_none_advertisable(&mut self) {
+        if self.block_gossip_peers.is_empty() {
+            trace!("no advertisable peers, sending demand signal");
+            let _ = self.demand_signal.try_send(MorePeers);
+        }
+    }
+
+    /// Authorization sources watched by the owning driver: the ban list, and a minimum peer
+    /// version tracker that reports version changes rather than every chain tip change.
+    pub(super) fn authorization(&self) -> (BannedIps, MinimumPeerVersion<C>)
+    where
+        C: Clone,
+    {
+        (self.bans.clone(), self.minimum_peer_version.clone())
+    }
+
     /// Drops the block gossip peers of connections that left the peer set, and marks the
     /// published peer list stale if any were dropped.
     fn prune_block_gossip_peers(&mut self) {
         let before = self.block_gossip_peers.len();
-        self.block_gossip_peers.retain(|key, _| {
-            self.ready_services.contains_key(key) || self.cancel_handles.contains_key(key)
+        let minimum = self.minimum_peer_version.current();
+        self.block_gossip_peers.retain(|key, peer| {
+            (self.ready_services.contains_key(key) || self.cancel_handles.contains_key(key))
+                && !peer.sender.is_closed()
+                && !self.bans.contains(key.ip())
+                && peer.version >= minimum
         });
         self.block_gossip_peers_changed |= self.block_gossip_peers.len() != before;
     }
@@ -1395,6 +1686,8 @@ where
             peers: self.block_gossip_peers_tx.subscribe(),
             slots: self.block_gossip_slots.clone(),
             minimum_peer_version: self.minimum_peer_version.clone(),
+            bans: self.bans.clone(),
+            refresh: None,
         }
     }
 
@@ -1544,74 +1837,8 @@ where
         Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send + 'static>>;
 
     fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        // Update service and peer statuses.
-        //
-        // # Correctness
-        //
-        // All of the futures that receive a context from this method can wake the peer set buffer
-        // task. If there are no ready peers, and no new peers, network requests will pause until:
-        // - an unready peer becomes ready, or
-        // - a new peer arrives.
-
-        // Drain stall events first, so disconnects free up slots that
-        // `poll_discover` can fill in the same poll cycle.
-        self.drain_stall_events(cx);
-
-        // Check for new peers, and register a task wakeup when the next new peers arrive. New peers
-        // can be infrequent if our connection slots are full, or we're connected to all
-        // available/useful peers.
-        let _poll_pending_or_ready: Poll<()> = self.poll_discover(cx)?;
-
-        // These tasks don't provide new peers or newly ready peers.
-        let _poll_pending: Poll<()> = self.poll_background_errors(cx)?;
-        let _poll_pending_or_ready: Poll<()> = self.inventory_registry.poll_inventory(cx)?;
-
-        let ready_peers = self.poll_peers(cx)?;
-        self.prune_block_gossip_peers();
-        self.publish_block_gossip_peers();
-
-        // Peers leave the set through many paths. Pruning here, instead of at each
-        // path, keeps stall counts bounded by the live peers.
-        if !self.find_response_stalls.is_empty() {
-            let (ready_services, cancel_handles) = (&self.ready_services, &self.cancel_handles);
-            self.find_response_stalls.retain(|addr| {
-                ready_services.contains_key(addr) || cancel_handles.contains_key(addr)
-            });
-        }
-
-        // These metrics should run last, to report the most up-to-date information.
-        self.log_peer_set_size();
-        self.update_metrics();
-
-        if ready_peers.is_pending() {
-            // # Correctness
-            //
-            // If the channel is full, drop the demand signal rather than waiting. If we waited
-            // here, the crawler could deadlock sending a request to fetch more peers, because it
-            // also empties the channel.
-            trace!("no ready services, sending demand signal");
-            let _ = self.demand_signal.try_send(MorePeers);
-
-            // # Correctness
-            //
-            // The current task must be scheduled for wakeup every time we return `Poll::Pending`.
-            //
-            // As long as there are unready or new peers, this task will run, because:
-            // - `poll_discover` schedules this task for wakeup when new peers arrive.
-            // - if there are unready peers, `poll_unready` or `poll_ready_peers` schedule this
-            //   task for wakeup when peer services become ready.
-            //
-            // To avoid peers blocking on a full peer status/error channel:
-            // - `poll_background_errors` schedules this task for wakeup when the peer status
-            //   update task exits.
-            return Poll::Pending;
-        }
-
-        if self.ready_services.is_empty() {
-            self.poll_peers(cx)
-        } else {
-            Poll::Ready(Ok(()))
-        }
+        self.maintain(cx)?;
+        self.poll_routing_readiness(cx)
     }
 
     fn call(&mut self, req: Request) -> Self::Future {

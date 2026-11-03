@@ -27,9 +27,19 @@ use crate::{
 mod tests;
 
 /// Read-only access to currently banned peer IP addresses.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 pub struct BannedIps {
     inner: Arc<RwLock<BanList>>,
+    changes: tokio::sync::watch::Sender<()>,
+}
+
+impl Default for BannedIps {
+    fn default() -> Self {
+        Self {
+            inner: Default::default(),
+            changes: tokio::sync::watch::channel(()).0,
+        }
+    }
 }
 
 /// A bounded FIFO list of banned peer IP addresses.
@@ -65,6 +75,27 @@ impl BanList {
 }
 
 impl BannedIps {
+    /// Watches authorization changes without polling the ban list.
+    pub(crate) fn subscribe(&self) -> tokio::sync::watch::Receiver<()> {
+        self.changes.subscribe()
+    }
+
+    /// Applies a ban and notifies readers after releasing the list lock.
+    fn insert(&self, ip: IpAddr) {
+        let changed = {
+            let mut list = self
+                .inner
+                .write()
+                .expect("ban list lock should not be poisoned");
+            let changed = !list.ips.contains(&canonical_ip(ip));
+            list.insert(ip);
+            changed
+        };
+        if changed {
+            self.changes.send_replace(());
+        }
+    }
+
     /// Returns whether `ip` is currently banned.
     pub fn contains(&self, ip: IpAddr) -> bool {
         let ip = canonical_ip(ip);
@@ -79,10 +110,7 @@ impl BannedIps {
     #[cfg(test)]
     pub(crate) fn with_banned_ip(ip: IpAddr) -> Self {
         let bans = Self::default();
-        bans.inner
-            .write()
-            .expect("ban list lock should not be poisoned")
-            .insert(ip);
+        bans.insert(ip);
         bans
     }
 }
@@ -304,6 +332,12 @@ pub struct AddressBook {
 
     /// The last time we logged a message about the address metrics.
     last_address_log: Option<Instant>,
+
+    /// Listener addresses an operator disconnected (`disconnectnode`, kogany F-S5-6): left out of
+    /// the book, and every change for them ignored, so the crawler never redials them and a
+    /// gossiped copy never brings them back, until `addnode` adds them again. ycashd never
+    /// redials a node it disconnected unless `addnode` names it.
+    disconnected_by_operator: HashSet<PeerSocketAddr>,
 }
 
 /// Metrics about the states of the addresses in an [`AddressBook`].
@@ -375,6 +409,7 @@ impl AddressBook {
             last_address_log: None,
             most_recent_by_ip: should_limit_outbound_conns_per_ip.then(HashMap::new),
             bans_by_ip: Default::default(),
+            disconnected_by_operator: HashSet::new(),
         };
 
         new_book.update_metrics(instant_now, chrono_now);
@@ -399,6 +434,12 @@ impl AddressBook {
 
     /// Attach the active peer registry used by local RPC diagnostics.
     #[must_use]
+    /// The handle that sends ycashd's transaction `reject` to a legacy peer (kogany S5).
+    #[cfg(feature = "ycash")]
+    pub fn legacy_reject_sender(&self) -> crate::ycash::LegacyRejectSender {
+        crate::ycash::LegacyRejectSender::new(self.peer_registry.clone())
+    }
+
     pub(crate) fn with_peer_registry(mut self, peer_registry: PeerRegistry) -> Self {
         self.peer_registry = Some(peer_registry);
         self
@@ -657,6 +698,23 @@ impl AddressBook {
             return None;
         }
 
+        // kogany (F-S5-6): a gossiped address ycashd's address manager would refuse (loopback,
+        // private) is not kept, so it is never dialled (`crate::ycash::is_routable`).
+        #[cfg(feature = "ycash")]
+        if matches!(change, MetaAddrChange::NewGossiped { .. })
+            && !crate::ycash::is_routable(change.addr().ip())
+        {
+            return None;
+        }
+
+        // kogany (F-S5-6): an address an operator disconnected stays out of the book.
+        if self
+            .disconnected_by_operator
+            .contains(&canonical_peer_addr(*change.addr()))
+        {
+            return None;
+        }
+
         let previous = self.get(change.addr());
 
         let _guard = self.span.enter();
@@ -677,18 +735,34 @@ impl AddressBook {
         );
 
         if let Some(updated) = updated {
-            if updated.misbehavior() >= constants::MAX_PEER_MISBEHAVIOR_SCORE {
+            // Ycash (S5): ycashd's line for the same event (`src/main.cpp:2720`
+            // `Misbehaving`), which the shared regtest scripts read from the log; and its
+            // refusal to ban a local peer (`src/main.cpp:9508`, `CNetAddr::IsLocal`), whose
+            // score stays in the book.
+            #[cfg(feature = "ycash")]
+            let spare_local = updated.misbehavior() >= constants::MAX_PEER_MISBEHAVIOR_SCORE && {
+                tracing::info!(
+                    "Misbehaving: {} ({} -> {}) BAN THRESHOLD EXCEEDED",
+                    updated.addr,
+                    previous.as_ref().map_or(0, |p| p.misbehavior()),
+                    updated.misbehavior(),
+                );
+                let local = crate::ycash::is_local(updated.addr.ip());
+                if local {
+                    tracing::info!("Warning: not banning local peer {}!", updated.addr);
+                    // ycashd still sets `fDisconnect` for a local peer (`main.cpp:9507`).
+                    if let Some(registry) = self.peer_registry.as_ref() {
+                        registry.disconnect(updated.addr);
+                    }
+                }
+                local
+            };
+            #[cfg(not(feature = "ycash"))]
+            let spare_local = false;
+            if updated.misbehavior() >= constants::MAX_PEER_MISBEHAVIOR_SCORE && !spare_local {
                 // Ban and skip outbound connections with excessively misbehaving peers.
                 let banned_ip = updated.addr.ip();
-                {
-                    let mut bans_by_ip = self
-                        .bans_by_ip
-                        .inner
-                        .write()
-                        .expect("ban list lock should not be poisoned");
-
-                    bans_by_ip.insert(banned_ip);
-                }
+                self.bans_by_ip.insert(banned_ip);
 
                 // `most_recent_by_ip` is only populated when
                 // `max_connections_per_ip == 1`. The ban path runs for any
@@ -1074,7 +1148,40 @@ impl AddressBookPeers for AddressBook {
             .map(PeerRegistry::connected_peers)
     }
 
+    fn try_peer_now(&mut self, peer: PeerSocketAddr) -> bool {
+        let peer = canonical_peer_addr(*peer);
+        self.disconnected_by_operator.remove(&peer);
+        if self
+            .peer_registry
+            .as_ref()
+            .is_some_and(|registry| registry.has_outbound(peer))
+        {
+            // ycashd's `OpenNetworkConnection` skips a node it is already connected to.
+            return true;
+        }
+        // A known address waits out its reconnection delay (two minutes after a disconnect);
+        // `onetry` is an operator's request to dial it now, as ycashd's is.
+        self.take(peer);
+        self.update(MetaAddr::new_initial_peer(peer)).is_some()
+    }
+
+    fn disconnect_peer(&mut self, peer: PeerSocketAddr) -> bool {
+        let closed = self
+            .peer_registry
+            .as_ref()
+            .map_or(0, |registry| registry.disconnect(peer));
+        // Kept out even when no connection was open: an address `addnode` added stays in the
+        // book and would be redialled, where ycashd's `onetry` node never is.
+        let peer = canonical_peer_addr(*peer);
+        self.disconnected_by_operator.insert(peer);
+        self.take(peer);
+        closed > 0
+    }
+
     fn add_peer(&mut self, peer: PeerSocketAddr) -> bool {
+        // kogany (F-S5-6): `addnode` undoes a `disconnectnode`.
+        self.disconnected_by_operator
+            .remove(&canonical_peer_addr(*peer));
         if self.get(peer).is_some() {
             // Peer already exists in the address book, so we don't need to add it again.
             return false;
@@ -1100,6 +1207,18 @@ impl AddressBookPeers for Arc<Mutex<AddressBook>> {
         self.lock()
             .expect("panic in a previous thread that was holding the mutex")
             .add_peer(peer)
+    }
+
+    fn disconnect_peer(&mut self, peer: PeerSocketAddr) -> bool {
+        self.lock()
+            .expect("panic in a previous thread that was holding the mutex")
+            .disconnect_peer(peer)
+    }
+
+    fn try_peer_now(&mut self, peer: PeerSocketAddr) -> bool {
+        self.lock()
+            .expect("panic in a previous thread that was holding the mutex")
+            .try_peer_now(peer)
     }
 }
 
@@ -1146,6 +1265,7 @@ impl Clone for AddressBook {
             last_address_log: None,
             most_recent_by_ip: self.most_recent_by_ip.clone(),
             bans_by_ip: self.bans_by_ip.clone(),
+            disconnected_by_operator: self.disconnected_by_operator.clone(),
         }
     }
 }

@@ -56,6 +56,18 @@ pub enum ParametersBuilderError {
     #[non_exhaustive]
     OutOfOrderUpgrades,
 
+    #[error("the Ycash network upgrade can only be scheduled in a `ycash` build")]
+    #[non_exhaustive]
+    YcashUpgradeNeedsYcashBuild,
+
+    #[error("The Vault upgrade requires Sapling active at or below its height (quantum spec R-A3: the vault opcodes are defined for v4 transactions only)")]
+    #[non_exhaustive]
+    VaultWithoutSapling,
+
+    #[error("NU5..NU6.2 cannot be scheduled together with the Vault upgrade (quantum spec R-A3; this node builds V1 history-tree leaves in the Vault epoch)")]
+    #[non_exhaustive]
+    VaultWithNu5OrLater,
+
     #[error("difficulty limits are valid expanded values")]
     #[non_exhaustive]
     InvaildDifficultyLimits,

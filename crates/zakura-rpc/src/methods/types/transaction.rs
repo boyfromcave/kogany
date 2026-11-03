@@ -98,6 +98,17 @@ where
     #[getset(get_copy = "pub")]
     pub(crate) sigops: u32,
 
+    /// Ycash (W1-Y6): the founders' reward or mandatory YDF payment in zatoshis that the coinbase
+    /// must carry, sent on the coinbase only (`ycash6 src/rpc/mining.cpp:773-783`).
+    #[cfg(feature = "ycash")]
+    #[serde(
+        rename = "foundersreward",
+        skip_serializing_if = "Option::is_none",
+        default
+    )]
+    #[new(default)]
+    pub(crate) founders_reward: Option<Amount<NonNegative>>,
+
     /// Is this transaction required in the block?
     ///
     /// Coinbase transactions are required, all other transactions are not.
@@ -129,7 +140,16 @@ impl From<&VerifiedUnminedTx> for TransactionTemplate<NonNegative> {
 
             // Report the full block-level sigop count (legacy + P2SH) so the template `sigops`
             // field matches what the block verifier charges against `MAX_BLOCK_SIGOPS`.
+            #[cfg(not(feature = "ycash"))]
             sigops: tx.block_sigop_count(),
+            // Ycash (W8-b): plus 20 per OP_CHECKPQSIG, as ycashd's mempool entry counts them.
+            #[cfg(feature = "ycash")]
+            sigops: tx
+                .block_sigop_count()
+                .saturating_add(super::get_block_template::ycash::pq_sigops(tx)),
+
+            #[cfg(feature = "ycash")]
+            founders_reward: None,
 
             // Zebra does not require any transactions except the coinbase transaction.
             required: false,
@@ -219,6 +239,15 @@ impl CoinbasePlan {
                 Some((Zatoshis::try_from(amount).ok()?, addr.try_into().ok()?))
             })
             .collect::<Vec<_>>();
+
+        // Ycash (W1-Y6): the YDF output ycashd's miner adds; Ycash has no funding streams or
+        // lockbox, so it is the only one.
+        #[cfg(feature = "ycash")]
+        funding_stream_outputs.extend(
+            super::ycash::ydf_output(net, height, block_subsidy).and_then(|(amount, addr)| {
+                Some((Zatoshis::try_from(amount).ok()?, addr.try_into().ok()?))
+            }),
+        );
 
         funding_stream_outputs.sort_unstable();
 
@@ -369,6 +398,10 @@ impl TransactionTemplate<NegativeOrZero> {
         let plan = CoinbasePlan::new(net, height, miner_params, block_subsidy)?;
         let miner_fees = miner_fee_share(height, net, txs_fee);
         let miner_reward = miner_subsidy(height, net, block_subsidy)? + miner_fees;
+        // Ycash (W1-Y6): the optional post-mandate YDF output also comes out of the miner's share.
+        #[cfg(feature = "ycash")]
+        let miner_reward =
+            miner_reward? - super::ycash::optional_ydf_share(net, height, block_subsidy);
         let miner_reward = Zatoshis::try_from(miner_reward?)?;
 
         let mut builder = Builder::new(
@@ -445,15 +478,37 @@ impl TransactionTemplate<NegativeOrZero> {
         let mut data = vec![];
         tx.write(&mut data)?;
 
-        Ok(Self {
+        let auth_digest = tx.auth_commitment().as_ref().try_into()?;
+        // Ycash (W1-Y6): a v4 coinbase has no authorizing data digest; report the placeholder,
+        // as the mempool templates above and ycashd do.
+        #[cfg(feature = "ycash")]
+        let auth_digest = if matches!(tx.version(), TxVersion::V4) {
+            AUTH_DIGEST_PLACEHOLDER
+        } else {
+            auth_digest
+        };
+
+        let coinbase = Self {
             data: data.into(),
             hash: tx.txid().as_ref().into(),
-            auth_digest: tx.auth_commitment().as_ref().try_into()?,
+            auth_digest,
             depends: Vec::new(),
             fee: (-miner_fees).constrain()?,
             sigops: tx.sigops(),
+            #[cfg(feature = "ycash")]
+            founders_reward: super::ycash::template_founders_reward(net, height, block_subsidy),
             required: true,
-        })
+        };
+        // Ycash (W8-b): the Yellowback tag after the coinbase data (ycashd's COINBASE_FLAGS).
+        #[cfg(feature = "ycash")]
+        let coinbase = super::get_block_template::ycash::append_coinbase_flags(
+            coinbase,
+            &miner_params
+                .yellowback()
+                .map(super::get_block_template::ycash::YellowbackMiner::flags)
+                .unwrap_or_default(),
+        )?;
+        Ok(coinbase)
     }
 }
 
@@ -748,7 +803,8 @@ impl OutputObject {
                 .unwrap_or("nonstandard")
                 .to_string(),
             addresses,
-        );
+        )
+        .with_network_fields(network);
 
         Self {
             best_block,
@@ -787,6 +843,33 @@ pub struct ScriptPubKey {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[getset(get = "pub")]
     addresses: Option<Vec<String>>,
+}
+
+impl ScriptPubKey {
+    /// The fields the node's network describes differently: under `ycash` (kogany W7-e),
+    /// ycashd's `type`, `reqSigs` and `addresses` (`super::ycash_script`); otherwise unchanged.
+    fn with_network_fields(self, _network: &Network) -> Self {
+        #[cfg(feature = "ycash")]
+        {
+            let (req_sigs, r#type, addresses) =
+                super::ycash_script::script_pub_key_fields(&self.hex, self.r#type, _network);
+            // Zakura's disassembler stops at the Ycash opcodes (`[error]`).
+            let asm = if self.asm.contains("[error]") {
+                super::ycash_script::script_to_asm(self.hex.as_raw_bytes())
+            } else {
+                self.asm
+            };
+            Self {
+                asm,
+                req_sigs,
+                r#type,
+                addresses,
+                ..self
+            }
+        }
+        #[cfg(not(feature = "ycash"))]
+        self
+    }
 }
 
 /// The scriptSig of a transaction input.
@@ -1272,7 +1355,8 @@ impl TransactionObject {
                             .unwrap_or("nonstandard")
                             .to_string(),
                             addresses,
-                        },
+                        }
+                        .with_network_fields(network),
                     }
                 })
                 .collect(),

@@ -6,6 +6,8 @@ use std::{
     sync::{Arc, OnceLock},
 };
 
+// kogany: the `ycash` profile reads neither the Zcash mainnet funding streams nor its founders.
+#[cfg_attr(feature = "ycash", allow(unused_imports))]
 use crate::{
     amount::{Amount, NonNegative, MAX_MONEY},
     block::{self, Height, HeightDiff},
@@ -186,9 +188,11 @@ impl From<&BTreeMap<Height, NetworkUpgrade>> for ConfiguredActivationHeights {
                 }
                 NetworkUpgrade::Overwinter => &mut configured_activation_heights.overwinter,
                 NetworkUpgrade::Sapling => &mut configured_activation_heights.sapling,
+                NetworkUpgrade::Ycash => &mut configured_activation_heights.ycash,
                 NetworkUpgrade::Blossom => &mut configured_activation_heights.blossom,
                 NetworkUpgrade::Heartwood => &mut configured_activation_heights.heartwood,
                 NetworkUpgrade::Canopy => &mut configured_activation_heights.canopy,
+                NetworkUpgrade::Vault => &mut configured_activation_heights.vault,
                 NetworkUpgrade::Nu5 => &mut configured_activation_heights.nu5,
                 NetworkUpgrade::Nu6 => &mut configured_activation_heights.nu6,
                 NetworkUpgrade::Nu6_1 => &mut configured_activation_heights.nu6_1,
@@ -543,6 +547,35 @@ fn check_founders_reward_is_exact(network: &Network) -> Result<(), ParametersBui
     Ok(())
 }
 
+/// kogany: the Vault upgrade's schedule refusals, ycashd's start-up check
+/// (`ycash6 src/init.cpp:1541-1565`, upgrade plan U-26 / quantum spec R-A3).
+///
+/// With Vault scheduled, Sapling must be active at or below it (the vault opcodes are defined
+/// over the ZIP-243 sighash of v4 transactions), and no upgrade from NU5 on may be scheduled at
+/// all (v5 is invalid under Vault, and Vault's history-tree leaves are V1). The second rule also
+/// means Vault can never be collapsed into a later upgrade at the same height (kogany plan §2.2).
+///
+/// Sapling's height is its own, else the first of the upgrades from Sapling to Canopy that is
+/// scheduled: Zakura's implicit activation, and ycashd's `-nuparams` back-fill, which fills
+/// Sapling from any higher upgrade except Vault (`ycash6 src/init.cpp:1529-1537`).
+fn check_vault_schedule(
+    vault: Option<u32>,
+    sapling_to_canopy: &[Option<u32>],
+    nu5_and_later: &[Option<u32>],
+) -> Result<(), ParametersBuilderError> {
+    let Some(vault) = vault else {
+        return Ok(());
+    };
+    let sapling = sapling_to_canopy.iter().find_map(|&height| height);
+    if !sapling.is_some_and(|sapling| sapling <= vault) {
+        return Err(ParametersBuilderError::VaultWithoutSapling);
+    }
+    if nu5_and_later.iter().any(Option::is_some) {
+        return Err(ParametersBuilderError::VaultWithNu5OrLater);
+    }
+    Ok(())
+}
+
 /// Configurable activation heights for Regtest and configured Testnets.
 #[derive(Serialize, Deserialize, Default, Clone, Copy, Debug, PartialEq)]
 #[serde(rename_all = "PascalCase", deny_unknown_fields)]
@@ -553,12 +586,31 @@ pub struct ConfiguredActivationHeights {
     pub overwinter: Option<u32>,
     /// Activation height for `Sapling` network upgrade.
     pub sapling: Option<u32>,
+    /// Activation height for the `Ycash` network upgrade. Only a `ycash` build accepts one.
+    #[serde(rename = "Ycash", default, skip_serializing_if = "Option::is_none")]
+    pub ycash: Option<u32>,
     /// Activation height for `Blossom` network upgrade.
     pub blossom: Option<u32>,
     /// Activation height for `Heartwood` network upgrade.
     pub heartwood: Option<u32>,
     /// Activation height for `Canopy` network upgrade.
     pub canopy: Option<u32>,
+    /// Activation height for the Ycash `Vault` network upgrade (branch ID `0x6d5b7a31`, ycashd's
+    /// `-nuparams=6d5b7a31:<h>`). Default `None`: Regtest never back-fills it.
+    #[serde(rename = "Vault", default, skip_serializing_if = "Option::is_none")]
+    pub vault: Option<u32>,
+    /// kogany: the post-quantum Falcon height (ycashd `-pqfalconheight=<h>`, `-pqfalcon=1` = 0;
+    /// ycash6 `Consensus::Params::pqFalconHeight`), from which `OP_CHECKPQSIG` admits scheme 0x02
+    /// (FN-DSA-512) where Vault is active. Not a network upgrade: no branch ID, no place in the
+    /// upgrade order, and 0 is a valid value. The toml key is the harness's
+    /// (`activation_heights.pq_falcon_height`). `None` keeps the network's default: 0 on a
+    /// configured Testnet (a `ycash` build), never on Regtest. Only a `ycash` build accepts one.
+    #[serde(
+        rename = "pq_falcon_height",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub pq_falcon: Option<u32>,
     /// Activation height for `NU5` network upgrade.
     #[serde(rename = "NU5")]
     pub nu5: Option<u32>,
@@ -591,9 +643,12 @@ impl ConfiguredActivationHeights {
             before_overwinter,
             overwinter,
             sapling,
+            ycash,
             blossom,
             heartwood,
             canopy,
+            vault,
+            pq_falcon,
             nu5,
             nu6,
             nu6_1,
@@ -614,9 +669,12 @@ impl ConfiguredActivationHeights {
             before_overwinter,
             overwinter,
             sapling,
+            ycash,
             blossom,
             heartwood,
             canopy,
+            vault,
+            pq_falcon,
             nu5,
             nu6,
             nu6_1,
@@ -634,9 +692,11 @@ impl ConfiguredActivationHeights {
             self.before_overwinter,
             self.overwinter,
             self.sapling,
+            self.ycash,
             self.blossom,
             self.heartwood,
             self.canopy,
+            self.vault,
             self.nu5,
             self.nu6,
             self.nu6_1,
@@ -657,9 +717,12 @@ impl ConfiguredActivationHeights {
             before_overwinter: self.before_overwinter.or(base.before_overwinter),
             overwinter: self.overwinter.or(base.overwinter),
             sapling: self.sapling.or(base.sapling),
+            ycash: self.ycash.or(base.ycash),
             blossom: self.blossom.or(base.blossom),
             heartwood: self.heartwood.or(base.heartwood),
             canopy: self.canopy.or(base.canopy),
+            vault: self.vault.or(base.vault),
+            pq_falcon: self.pq_falcon.or(base.pq_falcon),
             nu5: self.nu5.or(base.nu5),
             nu6: self.nu6.or(base.nu6),
             nu6_1: self.nu6_1.or(base.nu6_1),
@@ -783,6 +846,8 @@ pub struct ParametersBuilder {
     /// The NSM value balance immediately before NU7, see
     /// [`Parameters::initial_nsm_value_balance`].
     initial_nsm_value_balance: Option<Amount<NonNegative>>,
+    /// kogany: the Falcon height, see [`Parameters::pq_falcon_height`].
+    pq_falcon_height: Option<Height>,
 }
 
 impl Default for ParametersBuilder {
@@ -790,7 +855,11 @@ impl Default for ParametersBuilder {
     fn default() -> Self {
         Self {
             network_name: "UnknownTestnet".to_string(),
+            #[cfg(not(feature = "ycash"))]
             network_magic: magics::TESTNET,
+            // The `ycash` profile's default testnet is the re-forked testnet's `fast` profile.
+            #[cfg(feature = "ycash")]
+            network_magic: crate::parameters::ycash::magics::TESTNET_FAST,
             // # Correctness
             //
             // `Genesis` network upgrade activation height must always be 0
@@ -810,24 +879,44 @@ impl Default for ParametersBuilder {
                 .expect("difficulty limits are valid expanded values"),
             disable_pow: false,
             max_block_time_start_height: None,
+            // Ycash has no ZIP 207/214 funding streams (lane B §1 row 6).
+            #[cfg(not(feature = "ycash"))]
             funding_streams: testnet::FUNDING_STREAMS.clone(),
+            #[cfg(not(feature = "ycash"))]
             inherited_funding_stream_ranges: vec![true; testnet::FUNDING_STREAMS.len()],
+            #[cfg(feature = "ycash")]
+            funding_streams: Vec::new(),
+            #[cfg(feature = "ycash")]
+            inherited_funding_stream_ranges: Vec::new(),
             should_lock_funding_stream_address_period: false,
             pre_blossom_halving_interval: PRE_BLOSSOM_HALVING_INTERVAL,
             post_blossom_halving_interval: POST_BLOSSOM_HALVING_INTERVAL,
             should_allow_unshielded_coinbase_spends: false,
+            #[cfg(not(feature = "ycash"))]
             lockbox_disbursements: testnet::NU6_1_LOCKBOX_DISBURSEMENTS
                 .iter()
                 .map(|(addr, amount)| (addr.to_string(), *amount))
                 .collect(),
+            // Ycash has no NU6.1 lockbox.
+            #[cfg(feature = "ycash")]
+            lockbox_disbursements: Vec::new(),
             checkpoints: TESTNET_CHECKPOINT_LIST.clone(),
+            #[cfg(not(feature = "ycash"))]
             temporary_orchard_disabling_soft_fork_height: Some(
                 super::TESTNET_TEMPORARY_ORCHARD_DISABLING_SOFT_FORK_HEIGHT,
             ),
+            // The Ycash testnet never had this Zcash soft fork.
+            #[cfg(feature = "ycash")]
+            temporary_orchard_disabling_soft_fork_height: None,
             #[cfg(any(test, feature = "proptest-impl"))]
             test_nsm_reissuance_height: None,
             // Configured networks derive their seed unless an override is supplied.
             initial_nsm_value_balance: None,
+            // ycash6 testnet `pqFalconHeight = 0` (quantum plan D-Q-2); a Zcash build has none.
+            #[cfg(feature = "ycash")]
+            pq_falcon_height: Some(Height(0)),
+            #[cfg(not(feature = "ycash"))]
+            pq_falcon_height: None,
         }
     }
 }
@@ -902,9 +991,12 @@ impl ParametersBuilder {
             before_overwinter,
             overwinter,
             sapling,
+            ycash,
             blossom,
             heartwood,
             canopy,
+            vault,
+            pq_falcon,
             nu5,
             nu6,
             nu6_1,
@@ -921,6 +1013,34 @@ impl ParametersBuilder {
             return Err(ParametersBuilderError::LockFundingStreams);
         }
 
+        // A Zcash build never schedules the Ycash upgrade (kogany plan §2.3).
+        #[cfg(not(feature = "ycash"))]
+        if ycash.is_some() {
+            return Err(ParametersBuilderError::YcashUpgradeNeedsYcashBuild);
+        }
+
+        // kogany: the Falcon height is a Ycash parameter (W3-c finding F-1).
+        #[cfg(not(feature = "ycash"))]
+        if pq_falcon.is_some() {
+            return Err(ParametersBuilderError::YcashUpgradeNeedsYcashBuild);
+        }
+
+        // kogany: Vault's start-up refusals (U-26), before any upgrade can be collapsed away.
+        check_vault_schedule(
+            vault,
+            &[sapling, ycash, blossom, heartwood, canopy],
+            &[
+                nu5,
+                nu6,
+                nu6_1,
+                nu6_2,
+                nu6_3,
+                nu7,
+                #[cfg(zcash_unstable = "zfuture")]
+                zfuture,
+            ],
+        )?;
+
         // # Correctness
         //
         // These must be in order so that later network upgrades overwrite prior ones
@@ -931,9 +1051,11 @@ impl ParametersBuilder {
                 .map(|h| (h, BeforeOverwinter))
                 .chain(overwinter.into_iter().map(|h| (h, Overwinter)))
                 .chain(sapling.into_iter().map(|h| (h, Sapling)))
+                .chain(ycash.into_iter().map(|h| (h, Ycash)))
                 .chain(blossom.into_iter().map(|h| (h, Blossom)))
                 .chain(heartwood.into_iter().map(|h| (h, Heartwood)))
                 .chain(canopy.into_iter().map(|h| (h, Canopy)))
+                .chain(vault.into_iter().map(|h| (h, Vault)))
                 .chain(nu5.into_iter().map(|h| (h, Nu5)))
                 .chain(nu6.into_iter().map(|h| (h, Nu6)))
                 .chain(nu6_1.into_iter().map(|h| (h, Nu6_1)))
@@ -978,6 +1100,9 @@ impl ParametersBuilder {
         // Height(0) must be reserved for the `NetworkUpgrade::Genesis`.
         self.activation_heights.split_off(&Height(1));
         self.activation_heights.extend(activation_heights);
+        if let Some(pq_falcon) = pq_falcon {
+            self.pq_falcon_height = Some(Height(pq_falcon));
+        }
 
         Ok(self)
     }
@@ -1184,6 +1309,13 @@ impl ParametersBuilder {
         self
     }
 
+    /// kogany: sets the Falcon height (`None`: Falcon never activates), see
+    /// [`Parameters::pq_falcon_height`].
+    pub fn with_pq_falcon_height(mut self, height: Option<Height>) -> Self {
+        self.pq_falcon_height = height;
+        self
+    }
+
     /// Disables the soft fork that would temporarily disable Orchard transactions.
     pub fn disable_temporary_orchard_disabling_soft_fork(mut self) -> Self {
         self.temporary_orchard_disabling_soft_fork_height = None;
@@ -1238,6 +1370,7 @@ impl ParametersBuilder {
             #[cfg(any(test, feature = "proptest-impl"))]
             test_nsm_reissuance_height,
             initial_nsm_value_balance,
+            pq_falcon_height,
         } = self;
         let mut parameters = Parameters {
             network_name,
@@ -1260,6 +1393,7 @@ impl ParametersBuilder {
             test_nsm_reissuance_height,
             nsm_reissuance_crossing_height: DerivedHeight::default(),
             initial_nsm_value_balance,
+            pq_falcon_height,
         };
 
         // ZIP 218 moves the third halving, and ZIP 214 Revision 3 moves the end of the
@@ -1343,6 +1477,7 @@ impl ParametersBuilder {
             #[cfg(any(test, feature = "proptest-impl"))]
                 test_nsm_reissuance_height: _,
             initial_nsm_value_balance: _,
+            pq_falcon_height,
         } = Self::default();
 
         // Compare the height ranges after NU7 moves the inherited ones, so an explicit copy
@@ -1361,6 +1496,7 @@ impl ParametersBuilder {
             && self.post_blossom_halving_interval == post_blossom_halving_interval
             && self.lockbox_disbursements == lockbox_disbursements
             && self.initial_nsm_value_balance == Some(testnet::INITIAL_NSM_VALUE_BALANCE)
+            && self.pq_falcon_height == pq_falcon_height
     }
 }
 
@@ -1371,7 +1507,13 @@ fn check_checkpoint_coverage(network: &Network) -> Result<(), ParametersBuilderE
     if checkpoints.hash(Height(0)) != Some(network.genesis_hash()) {
         return Err(ParametersBuilderError::CheckpointGenesisMismatch);
     }
-    if checkpoints.max_height() < network.mandatory_checkpoint_height() {
+    // kogany: a `# PARTIAL` hard-coded Ycash list may stop short; the verifier rejects the
+    // uncovered pre-Canopy blocks instead (W1-Y4, `checkpoint/list.rs`).
+    #[cfg(feature = "ycash")]
+    let partial = network.ycash_checkpoint_list_is_partial();
+    #[cfg(not(feature = "ycash"))]
+    let partial = false;
+    if checkpoints.max_height() < network.mandatory_checkpoint_height() && !partial {
         return Err(ParametersBuilderError::InsufficientCheckpointCoverage);
     }
     Ok(())
@@ -1454,6 +1596,9 @@ pub struct Parameters {
     nsm_reissuance_crossing_height: DerivedHeight,
     /// The NSM value balance immediately before NU7 activates.
     initial_nsm_value_balance: Option<Amount<NonNegative>>,
+    /// kogany: the Falcon height (ycash6 `Consensus::Params::pqFalconHeight`), `None` when
+    /// Falcon never activates.
+    pq_falcon_height: Option<Height>,
 }
 
 /// A height derived from the other [`Parameters`] fields and computed on first use.
@@ -1536,6 +1681,9 @@ impl Parameters {
             // Like the default Testnet activation heights stripped below, the default Testnet's
             // temporary Orchard-disabling soft fork does not apply to Regtest.
             .disable_temporary_orchard_disabling_soft_fork()
+            // kogany: ycash6 regtest has no Falcon height unless `-pqfalcon`/`-pqfalconheight`
+            // (`activation_heights.pq_falcon_height`) sets one (W3-c finding F-1).
+            .with_pq_falcon_height(None)
             // Removes default Testnet activation heights if not configured,
             // most network upgrades are disabled by default for Regtest in zcashd
             .with_activation_heights(activation_heights.for_regtest())?
@@ -1619,6 +1767,8 @@ impl Parameters {
             // identity check for the same reason the halving interval stays in: it is
             // derived from the defaults above, not chosen.
             initial_nsm_value_balance: _,
+            // kogany: the Falcon height is configurable on Regtest, as ycashd's -pqfalconheight.
+            pq_falcon_height: _,
         } = default_regtest();
 
         self.network_name == *network_name
@@ -1726,6 +1876,12 @@ impl Parameters {
         self.checkpoints.clone()
     }
 
+    /// kogany: the height from which `OP_CHECKPQSIG` admits scheme 0x02 (FN-DSA-512) where
+    /// Vault is active (ycash6 `Consensus::Params::pqFalconHeight`), `None` when it never does.
+    pub fn pq_falcon_height(&self) -> Option<Height> {
+        self.pq_falcon_height
+    }
+
     /// Returns the height at which the soft-fork to temporarily disable Orchard in
     /// transactions activates.
     pub fn temporary_orchard_disabling_soft_fork_height(&self) -> Option<Height> {
@@ -1806,6 +1962,13 @@ impl Network {
         if let Self::Testnet(params) = self {
             params.funding_streams()
         } else {
+            // Ycash mainnet has no ZIP 207/214 funding streams (lane B §1 row 6).
+            #[cfg(feature = "ycash")]
+            {
+                static YCASH_MAINNET_FUNDING_STREAMS: Vec<FundingStreams> = Vec::new();
+                &YCASH_MAINNET_FUNDING_STREAMS
+            }
+            #[cfg(not(feature = "ycash"))]
             &mainnet::FUNDING_STREAMS
         }
     }
@@ -1823,7 +1986,15 @@ impl Network {
     /// Returns the list of founders' reward addresses for this network.
     pub fn founder_address_list(&self) -> &[&str] {
         match self {
+            // The same founders' scripts, encoded under the Ycash prefixes the `ycash` profile
+            // parses (`KeyIO::ZecToYec`, `ycash6 src/chainparams.cpp:1009-1024`).
+            #[cfg(feature = "ycash")]
+            Network::Mainnet => &crate::parameters::ycash::ydf::MAINNET_FOUNDER_ADDRESSES,
+            #[cfg(feature = "ycash")]
+            Network::Testnet(_) => &crate::parameters::ycash::ydf::TESTNET_FOUNDER_ADDRESSES,
+            #[cfg(not(feature = "ycash"))]
             Network::Mainnet => &mainnet::FOUNDER_ADDRESS_LIST,
+            #[cfg(not(feature = "ycash"))]
             Network::Testnet(_) => &testnet::FOUNDER_ADDRESS_LIST,
         }
     }

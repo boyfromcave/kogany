@@ -65,7 +65,7 @@ git -C /root/zakura checkout --detach "${BAKE_SHA}"
 # Warm the shared target dir that deploy.py's per-run worktree builds reuse.
 cd /root/zakura
 export CARGO_TARGET_DIR=/root/cargo-target
-cargo build --release --locked -p zakura
+cargo build --release --locked -p kogany
 /root/cargo-target/release/zakurad --version
 
 # --------------------------------------------------------------------------- #

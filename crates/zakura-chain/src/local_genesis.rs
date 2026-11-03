@@ -418,9 +418,17 @@ fn configured_activation_heights(
         before_overwinter: Some(1),
         overwinter: (latest_network_upgrade >= Overwinter).then_some(activation_height),
         sapling: (latest_network_upgrade >= Sapling).then_some(activation_height),
+        // The Ycash rules gate on `current >= Ycash` in a `ycash` build, so a later upgrade at
+        // the same height already applies them; a Zcash build never schedules Ycash.
+        ycash: None,
         blossom: (latest_network_upgrade >= Blossom).then_some(activation_height),
         heartwood: (latest_network_upgrade >= Heartwood).then_some(activation_height),
         canopy: (latest_network_upgrade >= Canopy).then_some(activation_height),
+        // Vault is scheduled only explicitly (kogany plan §2.2), never as a later upgrade's
+        // implicit predecessor.
+        vault: (latest_network_upgrade == Vault).then_some(activation_height),
+        // kogany: no Falcon height (a local genesis is a Zcash-style chain).
+        pq_falcon: None,
         nu5: (latest_network_upgrade >= Nu5).then_some(activation_height),
         nu6: (latest_network_upgrade >= Nu6).then_some(activation_height),
         nu6_1: (latest_network_upgrade >= Nu6_1).then_some(activation_height),

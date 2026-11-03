@@ -17,19 +17,25 @@ on:
   # - block-sync fuzz must run after every merge to `main`, even when
   #   the merged PR did not touch an obviously Zakura-specific path.
   pull_request:
-    branches: [main, "feat/**", "split/**", "adam/**", "release/**"]
+    # kogany (2026-11-01): only PRs into kogany's branches, for the pr-gate (K-15,
+    # .github/README-kogany.md "Triggers").
+    branches: [upgrade/vault, "vaults/**", "kc/**"]
     types: [opened, synchronize, reopened, labeled, unlabeled]
 
-  push:
-    branches: [main, "feat/**", "release/**"]
+  # kogany (2026-11-01): pushes run nothing here (K-15).
+  # push:
+  #   branches: [main, "feat/**", "release/**"]
 
   # Always run in the merge queue, so a change that breaks Zakura sync
   # indirectly is still caught at landing.
-  merge_group:
+  # kogany (2026-11-01): no merge queue on kogany, and nothing runs outside its branches
+  # (.github/README-kogany.md "Triggers").
+  # merge_group:
 
   # Long four-node modes run nightly and on demand.
+  # kogany (2026-11-01): weekly, Sunday, instead of nightly (K-15).
   schedule:
-    - cron: "0 8 * * *"
+    - cron: "0 8 * * 0"
 
   workflow_dispatch:
 
@@ -159,13 +165,13 @@ jobs:
       - name: Build Zakura e2e (debug)
         run: |
           unset ROCKSDB_LIB_DIR
-          cargo test -p zakura --test zakura_regtest_e2e --no-run
+          cargo test -p kogany --test zakura_regtest_e2e --no-run
         env:
           CXXFLAGS: "-include cstdint -mpclmul"
       - name: Run Zakura regtest PR gate
         run: |
           unset ROCKSDB_LIB_DIR
-          cargo test -p zakura --test zakura_regtest_e2e -- --ignored --nocapture
+          cargo test -p kogany --test zakura_regtest_e2e -- --ignored --nocapture
         env:
           CXXFLAGS: "-include cstdint -mpclmul"
           ZAKURA_REGTEST_E2E: "1"
@@ -270,13 +276,13 @@ jobs:
       - name: Build Zakura e2e (debug)
         run: |
           unset ROCKSDB_LIB_DIR
-          cargo test -p zakura --test zakura_regtest_e2e --no-run
+          cargo test -p kogany --test zakura_regtest_e2e --no-run
         env:
           CXXFLAGS: "-include cstdint -mpclmul"
       - name: Run Zakura regtest dual-stack e2e
         run: |
           unset ROCKSDB_LIB_DIR
-          cargo test -p zakura --test zakura_regtest_e2e -- --ignored --nocapture
+          cargo test -p kogany --test zakura_regtest_e2e -- --ignored --nocapture
         env:
           CXXFLAGS: "-include cstdint -mpclmul"
           ZAKURA_REGTEST_E2E: "1"

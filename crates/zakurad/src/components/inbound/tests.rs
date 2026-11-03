@@ -163,16 +163,22 @@ async fn zcashd_compat_block_requests_skip_the_byte_limit() -> Result<(), crate:
             DEFAULT_MAX_CONNS_PER_IP,
             Span::none(),
         ))),
-        block_download_peer_set: Buffer::new(
-            BoxService::new(MockService::build().for_unit_tests()),
+        block_download_peer_set: tower::util::BoxCloneSyncService::new(Buffer::new(
+            BoxService::new(MockService::build().for_unit_tests::<
+                zakura_network::Request,
+                zakura_network::Response,
+                crate::BoxError,
+            >()),
             1,
-        ),
+        )),
         block_verifier: Buffer::new(BoxService::new(MockService::build().for_unit_tests()), 1),
         mempool: Buffer::new(BoxService::new(MockService::build().for_unit_tests()), 1),
         state: Buffer::new(BoxService::new(state), 1),
         latest_chain_tip,
         network,
         misbehavior_sender,
+        #[cfg(feature = "ycash")]
+        gossip_gap: None,
     };
     assert!(
         setup_tx.send(setup).is_ok(),
@@ -231,7 +237,10 @@ fn router_consensus_invalid_gossip_keeps_advertiser_score() {
     };
 
     assert_eq!(
-        block_misbehavior(Box::new(router_error), Some(advertiser)),
+        block_misbehavior(
+            &(Box::new(router_error) as crate::BoxError),
+            Some(advertiser)
+        ),
         Some((
             advertiser,
             zakura_network::constants::MAX_PEER_MISBEHAVIOR_SCORE,
@@ -247,7 +256,7 @@ fn direct_consensus_invalid_gossip_keeps_advertiser_score() {
     };
 
     assert_eq!(
-        block_misbehavior(Box::new(error), Some(advertiser)),
+        block_misbehavior(&(Box::new(error) as crate::BoxError), Some(advertiser)),
         Some((
             advertiser,
             zakura_network::constants::MAX_PEER_MISBEHAVIOR_SCORE,

@@ -92,6 +92,8 @@ proptest! {
     ///
     /// Mempool service errors should become server errors.
     #[test]
+    // kogany W7-e: under `ycash` the rejections carry ycashd's codes and texts (ycash_reject).
+    #[cfg_attr(feature = "ycash", ignore)]
     fn mempool_errors_are_forwarded(transaction in any::<Transaction>(), network in any::<Network>()) {
         prop_assume!(!(transaction.is_coinbase() && transaction.sapling_spends_per_anchor().count() > 0));
 
@@ -148,6 +150,8 @@ proptest! {
 
     /// Test that when the mempool rejects a transaction the caller receives an error.
     #[test]
+    // kogany W7-e: under `ycash` the rejections carry ycashd's codes and texts (ycash_reject).
+    #[cfg_attr(feature = "ycash", ignore)]
     fn rejected_txs_are_reported(transaction in any::<Transaction>(), network in any::<Network>()) {
         prop_assume!(!(transaction.is_coinbase() && transaction.sapling_spends_per_anchor().count() > 0));
 
@@ -427,6 +431,13 @@ proptest! {
                             min_time: DateTime32::now(),
                             max_time: DateTime32::now()
                         }));
+
+                    // Ycash (W7-c): `chainwork` sums the headers (`types::ycash::chain_work`);
+                    // this mock has none, so the field is omitted.
+                    #[cfg(feature = "ycash")]
+                    while let Some(request) = state.try_next_request().await {
+                        request.respond(Err(BoxError::from("no headers in this mock state")));
+                    }
                 }
             };
 
@@ -548,6 +559,13 @@ proptest! {
                             min_time: DateTime32::now(),
                             max_time: DateTime32::now()
                         }));
+
+                    // Ycash (W7-c): `chainwork` sums the headers (`types::ycash::chain_work`);
+                    // this mock has none, so the field is omitted.
+                    #[cfg(feature = "ycash")]
+                    while let Some(request) = state.try_next_request().await {
+                        request.respond(Err(BoxError::from("no headers in this mock state")));
+                    }
                 }
             };
 
@@ -674,6 +692,13 @@ proptest! {
                     .expect("getblockchaininfo should call mock state service with correct request")
                     .respond(Err(BoxError::from("chain info not available")));
 
+
+                    // Ycash (W7-c): `chainwork` sums the headers (`types::ycash::chain_work`);
+                    // this mock has none, so the field is omitted.
+                    #[cfg(feature = "ycash")]
+                    while let Some(request) = state.try_next_request().await {
+                        request.respond(Err(BoxError::from("no headers in this mock state")));
+                    }
                 }
             };
 

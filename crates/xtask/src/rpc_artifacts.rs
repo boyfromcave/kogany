@@ -2,6 +2,7 @@ use std::{fs, path::Path};
 
 use crate::BoxError;
 
+mod kogany;
 mod openrpc;
 
 const INDEXER_PROTO: &str = "crates/zakura-rpc/proto/indexer.proto";
@@ -32,7 +33,12 @@ fn compare_generated_artifacts(repo_root: &Path, update: bool) -> Result<(), Box
     generate(repo_root, first_dir.path())?;
     generate(repo_root, second_dir.path())?;
 
-    for (file_name, checked_in_path) in GENERATED_FILES {
+    // kogany (plan W7-d): its extension methods' document, when the tree carries kogany-rpc.
+    let kogany = kogany::present(repo_root).then_some((kogany::FILE_NAME, kogany::ARTIFACT));
+    if kogany.is_some() {
+        kogany::check_contracts(repo_root, first_dir.path())?;
+    }
+    for (file_name, checked_in_path) in GENERATED_FILES.into_iter().chain(kogany) {
         let first = fs::read(first_dir.path().join(file_name))?;
         let second = fs::read(second_dir.path().join(file_name))?;
 
@@ -71,6 +77,9 @@ fn generate(repo_root: &Path, output_dir: &Path) -> Result<(), BoxError> {
         .compile_protos(&[proto_file], &[rpc_crate])?;
 
     openrpc::generate(&repo_root.join(METHODS_SOURCE), output_dir)?;
+    if kogany::present(repo_root) {
+        kogany::generate(repo_root, output_dir)?;
+    }
 
     verify_generated_files(output_dir)
 }

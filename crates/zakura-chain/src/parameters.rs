@@ -18,6 +18,8 @@ mod genesis;
 mod network;
 mod network_upgrade;
 mod transaction;
+#[cfg(feature = "ycash")]
+pub mod ycash;
 
 #[cfg(any(test, feature = "proptest-impl"))]
 pub mod arbitrary;
@@ -31,3 +33,7 @@ pub use constants::MAX_NON_FINALIZED_CHAIN_FORKS;
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod vault_tests;
+#[cfg(all(test, not(feature = "ycash")))]
+mod ycash_dormancy_tests;

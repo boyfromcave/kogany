@@ -21,9 +21,7 @@ use zakura_chain::{
         SAPLING_BLOCK_IO_LIMIT, SPROUT_BLOCK_JOINSPLIT_LIMIT,
     },
     serialization::{CompactSizeMessage, TrustedPreallocate, ZcashSerialize},
-    transaction::{
-        self, zip317::BLOCK_UNPAID_ACTION_LIMIT, ShieldedActionCounts, VerifiedUnminedTx,
-    },
+    transaction::{self, ShieldedActionCounts, VerifiedUnminedTx},
     work::equihash::Solution,
 };
 use zakura_consensus::{error::TransactionError, MAX_BLOCK_SIGOPS};
@@ -80,6 +78,8 @@ fn block_template_overhead_bytes(net: &Network) -> usize {
 ///
 /// [ZIP-317]: https://zips.z.cash/zip-0317#block-production
 #[allow(clippy::too_many_arguments, clippy::unwrap_in_result)]
+// Ycash (W8-a): the node selects with `select_mempool_transactions_filtered`; tests call this.
+#[cfg_attr(feature = "ycash", allow(dead_code))]
 pub fn select_mempool_transactions(
     net: &Network,
     height: Height,
@@ -87,6 +87,62 @@ pub fn select_mempool_transactions(
     nsm_value_balance: Option<Amount<amount::NonNegative>>,
     mempool_txs: Vec<VerifiedUnminedTx>,
     mempool_tx_deps: TransactionDependencies,
+) -> Result<Vec<SelectedMempoolTx>, TransactionError> {
+    #[cfg(feature = "ycash")]
+    return select_mempool_transactions_filtered(
+        net,
+        height,
+        miner_params,
+        nsm_value_balance,
+        mempool_txs,
+        mempool_tx_deps,
+        None,
+    );
+
+    #[cfg(not(feature = "ycash"))]
+    select_mempool_transactions_inner(
+        net,
+        height,
+        miner_params,
+        nsm_value_balance,
+        mempool_txs,
+        mempool_tx_deps,
+    )
+}
+
+/// Ycash (W8-a): [`select_mempool_transactions`] with the template filter `filter` (the vault
+/// and YED checks of ycashd's `TestForBlock`) asked about each candidate that fits the limits.
+#[cfg(feature = "ycash")]
+#[allow(clippy::too_many_arguments)]
+pub fn select_mempool_transactions_filtered(
+    net: &Network,
+    height: Height,
+    miner_params: &MinerParams,
+    nsm_value_balance: Option<Amount<amount::NonNegative>>,
+    mempool_txs: Vec<VerifiedUnminedTx>,
+    mempool_tx_deps: TransactionDependencies,
+    filter: Option<super::ycash::TemplateFilter>,
+) -> Result<Vec<SelectedMempoolTx>, TransactionError> {
+    select_mempool_transactions_inner(
+        net,
+        height,
+        miner_params,
+        nsm_value_balance,
+        mempool_txs,
+        mempool_tx_deps,
+        filter,
+    )
+}
+
+#[allow(clippy::too_many_arguments, clippy::unwrap_in_result)]
+fn select_mempool_transactions_inner(
+    net: &Network,
+    height: Height,
+    miner_params: &MinerParams,
+    nsm_value_balance: Option<Amount<amount::NonNegative>>,
+    mempool_txs: Vec<VerifiedUnminedTx>,
+    mempool_tx_deps: TransactionDependencies,
+    #[cfg(feature = "ycash")] filter: Option<super::ycash::TemplateFilter>,
 ) -> Result<Vec<SelectedMempoolTx>, TransactionError> {
     let coinbase_resources =
         TransactionTemplate::coinbase_resource_usage(net, height, miner_params, nsm_value_balance)?;
@@ -107,6 +163,16 @@ pub fn select_mempool_transactions(
 
     // Set up limit tracking.
     let mut limits = BlockTemplateLimits::initial(net, height, coinbase_resources);
+    #[cfg(feature = "ycash")]
+    {
+        limits.filter = filter;
+        // Ycash: ycashd's `-blockunpaidactionlimit`, no limit by default (`SIZE_MAX`,
+        // `ycash6` at `65cb4ae0f`, `src/zip317.h:42`, `src/miner.cpp:304,685-702`), where
+        // Zakura's limit is 0: a transaction that pays the size-based Ycash relay fee but less
+        // than the conventional fee, as a post-quantum owner spend whose large scriptSig counts
+        // as many logical actions, is mined.
+        limits.remaining_unpaid_actions = miner_params.block_unpaid_action_limit();
+    }
     // > Repeat while there is any candidate transaction
     // > that pays at least the conventional fee:
     let mut conventional_fee_tx_weights = setup_fee_weighted_index(&conventional_fee_txs);
@@ -268,6 +334,11 @@ fn checked_add_transaction_weighted_random(
 
                 // Transactions that don't pay the conventional fee should not have
                 // the same probability of being included as their dependencies.
+                // Ycash (S5 parity, template policy): ycashd's own fee rules replace ZIP-317's
+                // (W1-Y9) and its `CreateNewBlock` takes a dependent after its parents whatever
+                // its fee (ycash6 `src/miner.cpp`), so a child paying the Ycash floor (a YED
+                // mint off an equivocation proof's change) is not dropped here.
+                #[cfg(not(feature = "ycash"))]
                 if !candidate_tx.pays_conventional_fee() {
                     continue;
                 }
@@ -311,6 +382,9 @@ struct BlockTemplateLimits {
     remaining_sapling_ios: u32,
     remaining_sprout_joinsplits: u32,
     remaining_shielded_cost: u32,
+    /// Ycash (W8-a): the template filter, asked last.
+    #[cfg(feature = "ycash")]
+    filter: Option<super::ycash::TemplateFilter>,
 }
 
 impl BlockTemplateLimits {
@@ -333,12 +407,14 @@ impl BlockTemplateLimits {
             remaining_sigops: MAX_BLOCK_SIGOPS
                 .checked_sub(coinbase.sigops)
                 .expect("coinbase sigops fit within the block limit"),
-            remaining_unpaid_actions: BLOCK_UNPAID_ACTION_LIMIT,
+            remaining_unpaid_actions: BLOCK_UNPAID_ACTION_LIMIT_FOR_TEMPLATES,
             remaining_orchard_actions: shielded_limits.orchard_actions,
             remaining_ironwood_actions: shielded_limits.ironwood_actions,
             remaining_sapling_ios: shielded_limits.sapling_ios,
             remaining_sprout_joinsplits: shielded_limits.sprout_joinsplits,
             remaining_shielded_cost: shielded_limits.cost,
+            #[cfg(feature = "ycash")]
+            filter: None,
         }
     }
 
@@ -398,6 +474,9 @@ impl BlockTemplateLimits {
         let counts = tx.transaction.transaction().shielded_action_counts();
         let cost = counts.cost();
         let tx_block_sigops = tx.block_sigop_count();
+        // Ycash (W8-b): ycashd charges 20 per OP_CHECKPQSIG against the block's sigop limit.
+        #[cfg(feature = "ycash")]
+        let tx_block_sigops = tx_block_sigops.saturating_add(super::ycash::pq_sigops(tx));
 
         if tx.transaction.size() > self.remaining_bytes
             || tx_block_sigops > self.remaining_sigops
@@ -408,6 +487,19 @@ impl BlockTemplateLimits {
             || counts.sprout_joinsplits > self.remaining_sprout_joinsplits
             || cost > self.remaining_shielded_cost
         {
+            tracing::debug!(
+                txid = ?tx.transaction.id().mined_id(),
+                size = tx.transaction.size(),
+                tx_block_sigops,
+                unpaid_actions = tx.unpaid_actions,
+                "template: skipping a candidate over the block limits"
+            );
+            return false;
+        }
+
+        // Ycash (W8-a): the vault and YED checks, after the limits, as ycashd's `TestForBlock`.
+        #[cfg(feature = "ycash")]
+        if self.filter.as_mut().is_some_and(|filter| !filter.keep(tx)) {
             return false;
         }
 
@@ -423,6 +515,16 @@ impl BlockTemplateLimits {
         true
     }
 }
+
+/// The template's unpaid-action budget. Ycash (S5 parity): ycashd's
+/// `DEFAULT_BLOCK_UNPAID_ACTION_LIMIT` is `SIZE_MAX` (ycash6 `src/zip317.h`, `-blockunpaidactionlimit`):
+/// its own fee rules replace ZIP-317's (W1-Y9), so a mempool transaction is never left out of a
+/// template for its unpaid actions (a raw MINT paying the Ycash floor has 15).
+#[cfg(feature = "ycash")]
+const BLOCK_UNPAID_ACTION_LIMIT_FOR_TEMPLATES: u32 = u32::MAX;
+/// The template's unpaid-action budget (ZIP-317's `block_unpaid_action_limit`).
+#[cfg(not(feature = "ycash"))]
+const BLOCK_UNPAID_ACTION_LIMIT_FOR_TEMPLATES: u32 = transaction::zip317::BLOCK_UNPAID_ACTION_LIMIT;
 
 /// ZIP 218 capacity remaining after the generated coinbase transaction.
 struct RemainingShieldedLimits {

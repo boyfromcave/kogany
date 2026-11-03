@@ -372,6 +372,20 @@ impl InventoryRegistry {
     /// Record the given inventory `change` for the peer `addr`.
     ///
     /// `Missing` markers are not updated until the registry rotates, for security reasons.
+    /// kogany (S5-K11): records that `peer` returned `hashes` in a `FindBlocks` response, so
+    /// the block downloads go to it first (ycashd asks the peer whose headers it took).
+    #[cfg(feature = "ycash")]
+    pub(crate) fn register_find_response(
+        &mut self,
+        peer: PeerSocketAddr,
+        hashes: &[zakura_chain::block::Hash],
+    ) {
+        let hashes: Vec<InventoryHash> = hashes.iter().copied().map(InventoryHash::Block).collect();
+        if let Some(change) = InventoryChange::new_available_multi(&hashes, peer) {
+            self.register(change);
+        }
+    }
+
     fn register(&mut self, change: InventoryChange) {
         let new_status = change.marker();
         let (invs, addr) = change.to_inner();
@@ -391,7 +405,17 @@ impl InventoryRegistry {
             // Prefer `missing` over `advertised`, so malicious peers can't reset their own entries,
             // and funnel multiple failing requests to themselves.
             if let Some(old_status) = hash_peers.get(&addr) {
-                if old_status.is_missing() && new_status.is_available() {
+                // kogany (W9-a/F-6): a peer that answered `notfound` for a transaction and then
+                // announces it again holds it now (ycashd announces a transaction it accepted
+                // again, and asks a peer again after its `notfound`). Its new advertisement
+                // replaces the marker, so the transaction can be downloaded; a peer that keeps
+                // re-announcing pays one `inv` per request. Blocks keep upstream's rule.
+                #[cfg(feature = "ycash")]
+                let readvertised_tx = matches!(inv, Tx(_) | Wtx(_));
+                #[cfg(not(feature = "ycash"))]
+                let readvertised_tx = false;
+
+                if old_status.is_missing() && new_status.is_available() && !readvertised_tx {
                     debug!(
                         ?new_status,
                         ?old_status,

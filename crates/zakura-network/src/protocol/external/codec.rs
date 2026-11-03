@@ -336,8 +336,16 @@ impl Codec {
                     .zcash_serialize(writer)?;
             }
             Message::Headers(headers) => headers.zcash_serialize(writer)?,
+            // kogany: Ycash peers cannot parse MSG_WTX (`crate::ycash::outbound_inventory`).
+            #[cfg(feature = "ycash")]
+            Message::Inv(hashes) | Message::GetData(hashes) | Message::NotFound(hashes) => {
+                crate::ycash::outbound_inventory(hashes).zcash_serialize(writer)?
+            }
+            #[cfg(not(feature = "ycash"))]
             Message::Inv(hashes) => hashes.zcash_serialize(writer)?,
+            #[cfg(not(feature = "ycash"))]
             Message::GetData(hashes) => hashes.zcash_serialize(writer)?,
+            #[cfg(not(feature = "ycash"))]
             Message::NotFound(hashes) => hashes.zcash_serialize(writer)?,
             Message::Tx(transaction) => transaction.transaction().zcash_serialize(writer)?,
             Message::Mempool => { /* Empty payload -- no-op */ }

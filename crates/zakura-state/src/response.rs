@@ -46,8 +46,26 @@ pub enum PreparedMinedRelayEligibility {
     Unavailable,
 }
 
+/// Whether a block's header commits to the authorizing data in its body.
+///
+/// From NU5, the block hash commits to authorizing data only through `hashBlockCommitments`
+/// (ZIP 244), so a body can match its header's transaction IDs and still carry different
+/// signatures, proofs, or scripts.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum AuthDataCommitment {
+    /// The header commits to the body's authorizing data. Before NU5, transaction IDs do.
+    Bound,
+    /// The body's authorizing data does not match the header's commitment.
+    Mismatch(block::CommitmentError),
+    /// The parent's history tree is not available, so the binding is unknown.
+    Unavailable,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 /// A response to a [`StateService`](crate::service::StateService) [`Request`].
+// kogany: `VaultSnapshot` is the largest variant; boxing it would change the response type the
+// RPC and node crates match on, so the size is accepted (CI clippy runs with `-D warnings`).
+#[allow(clippy::large_enum_variant)]
 pub enum Response {
     /// Response to [`Request::ApplyHeaderChainInsert`].
     HeaderChainInsertApplied(zakura_header_chain::ApplyResult),
@@ -107,6 +125,20 @@ pub enum Response {
     /// specified block's chain value pools.
     BlockInfo(Option<BlockInfo>),
 
+    /// kogany (W4-d): response to [`Request::VaultSnapshot`], [`Request::AwaitVaultSnapshot`] and
+    /// [`Request::BestChainVaultSnapshot`] with the Vault set state after the block.
+    VaultSnapshot(Option<crate::service::vault::VaultSnapshot>),
+
+    /// kogany (W6-c): response to [`Request::BestChainYedMempoolCheck`]: the tip the YED state
+    /// was read at (`None` before the state has a block) and, per transaction in request order,
+    /// `None` (admitted) or the module's reason.
+    YedMempoolCheck {
+        /// The best chain tip the check read.
+        tip: Option<(block::Height, block::Hash)>,
+        /// The reasons, in request order.
+        reasons: Vec<Option<String>>,
+    },
+
     /// The response to a `BlockHeader` request.
     BlockHeader {
         /// The header of the requested block
@@ -136,6 +168,9 @@ pub enum Response {
 
     /// Response to [`Request::CheckPreparedMinedRelayEligibility`].
     PreparedMinedRelayEligibility(PreparedMinedRelayEligibility),
+
+    /// Response to [`Request::CheckAuthDataCommitment`].
+    AuthDataCommitment(AuthDataCommitment),
 
     /// Response to [`Request::BestChainNextMedianTimePast`].
     /// Contains the median-time-past for the *next* block on the best chain.
@@ -483,6 +518,27 @@ pub enum ReadResponse {
     /// the block info after the specified block.
     BlockInfo(Option<BlockInfo>),
 
+    /// kogany (W4-d): response to [`ReadRequest::VaultSnapshot`] and
+    /// [`ReadRequest::BestChainVaultSnapshot`].
+    VaultSnapshot(Option<crate::service::vault::VaultSnapshot>),
+
+    /// kogany (W5-f): response to [`ReadRequest::BestChainYedSnapshot`] and
+    /// [`ReadRequest::YedSnapshot`].
+    YedSnapshot(Option<crate::service::yed::YedSnapshot>),
+
+    /// kogany (S5, F-S5-19): response to [`ReadRequest::OffChainBlock`]: the block and its
+    /// height.
+    OffChainBlock(Option<(Arc<Block>, block::Height)>),
+
+    /// kogany (W6-c): response to [`ReadRequest::BestChainYedMempoolCheck`]; see
+    /// [`Response::YedMempoolCheck`].
+    YedMempoolCheck {
+        /// The best chain tip the check read.
+        tip: Option<(block::Height, block::Hash)>,
+        /// The reasons, in request order.
+        reasons: Vec<Option<String>>,
+    },
+
     /// Response to [`ReadRequest::Depth`] with the depth of the specified block.
     Depth(Option<u32>),
 
@@ -641,6 +697,9 @@ pub enum ReadResponse {
     /// Response to [`ReadRequest::CheckPreparedMinedRelayEligibility`].
     PreparedMinedRelayEligibility(PreparedMinedRelayEligibility),
 
+    /// Response to [`ReadRequest::CheckAuthDataCommitment`].
+    AuthDataCommitment(AuthDataCommitment),
+
     /// Response to [`ReadRequest::BestChainNextMedianTimePast`].
     /// Contains the median-time-past for the *next* block on the best chain.
     BestChainNextMedianTimePast(DateTime32),
@@ -763,8 +822,18 @@ impl TryFrom<ReadResponse> for Response {
             ReadResponse::PreparedMinedRelayEligibility(eligibility) => {
                 Ok(Response::PreparedMinedRelayEligibility(eligibility))
             }
+            ReadResponse::AuthDataCommitment(commitment) => {
+                Ok(Response::AuthDataCommitment(commitment))
+            }
 
             ReadResponse::BlockInfo(block_info) => Ok(Response::BlockInfo(block_info)),
+            ReadResponse::VaultSnapshot(snapshot) => Ok(Response::VaultSnapshot(snapshot)),
+            ReadResponse::YedSnapshot(_) | ReadResponse::OffChainBlock(_) => {
+                Err("there is no corresponding Response for this ReadResponse")
+            }
+            ReadResponse::YedMempoolCheck { tip, reasons } => {
+                Ok(Response::YedMempoolCheck { tip, reasons })
+            }
 
             ReadResponse::Depth(_)
             | ReadResponse::Transaction(_)

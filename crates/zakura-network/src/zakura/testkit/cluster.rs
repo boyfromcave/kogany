@@ -162,7 +162,6 @@ mod tests {
         sync::{mpsc, Mutex},
         task::JoinHandle,
     };
-    use zakura_rt::sync::CancellationToken;
     use zakura_chain::{
         block,
         parameters::{
@@ -175,6 +174,7 @@ mod tests {
         work::difficulty::U256,
     };
     use zakura_quic::QuicConfig;
+    use zakura_rt::sync::CancellationToken;
 
     /// Over real QUIC, a peer's Status leads to an Open, and a page that
     /// reaches the target prepares it once and closes the subscription.
@@ -1141,6 +1141,9 @@ mod tests {
             .with_genesis_hash(mainnet_genesis_hash())
             .expect("mainnet genesis vector hash parses")
             .with_activation_heights(ConfiguredActivationHeights {
+                ycash: None,
+                vault: None,
+                pq_falcon: None,
                 before_overwinter: None,
                 overwinter: Some(1),
                 sapling: Some(1),

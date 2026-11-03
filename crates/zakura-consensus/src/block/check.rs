@@ -154,10 +154,11 @@ pub fn difficulty_is_valid(
     Ok(())
 }
 
-/// Returns `Ok(())` if the `EquihashSolution` is valid for `header` on `network`
+/// Returns `Ok(())` if the `EquihashSolution` is valid for `header` on `network` at `height`
 pub fn equihash_solution_is_valid(
     header: &Header,
     network: &Network,
+    height: &Height,
 ) -> Result<(), equihash::Error> {
     // # Consensus
     //
@@ -168,7 +169,28 @@ pub fn equihash_solution_is_valid(
     // The Equihash `(n, k)` parameters are bound to `network`, so a peer cannot
     // downgrade the proof of work to the trivial Regtest `(48, 5)` parameters
     // by sending a short 36-byte solution on Mainnet or Testnet.
-    PowPolicy::validating(network).validate_solution(header)
+    PowPolicy::validating(network).validate_solution(header, *height)
+}
+
+/// Returns `true` if `header` passes the context-free proof of work checks of the block verifier
+/// on `network`, or if `network` waives them.
+///
+/// This lets callers reject blocks that cost nothing to make before spending anything on them.
+/// It does not check the block's difficulty against the chain.
+pub fn proof_of_work_is_valid(
+    header: &Header,
+    network: &Network,
+    height: &Height,
+    hash: &Hash,
+) -> bool {
+    match PowPolicy::for_network(network) {
+        Ok(policy) if policy.is_authenticated_custom_waiver() => true,
+        Ok(_) => {
+            difficulty_is_valid(header, network, height, hash).is_ok()
+                && equihash_solution_is_valid(header, network, height).is_ok()
+        }
+        Err(_) => false,
+    }
 }
 
 /// Returns `Ok()` with the deferred pool balance change of the coinbase transaction if the block
@@ -194,6 +216,20 @@ pub fn subsidy_is_valid(
             .outputs(),
     );
 
+    // # Consensus (Ycash)
+    //
+    // From the Ycash upgrade until the mandate ends, the coinbase must pay exactly
+    // `subsidy / 20` to the YDF address for the height; the inherited founders' reward no
+    // longer applies (`ycash6 src/main.cpp:6248-6286`).
+    #[cfg(feature = "ycash")]
+    let ycash_active = {
+        use zakura_chain::parameters::ycash::ydf;
+        ydf_reward_is_valid(net, height, &mut coinbase_outputs)?;
+        ydf::is_ycash_active(net, height)
+    };
+    #[cfg(not(feature = "ycash"))]
+    let ycash_active = false;
+
     // # Note
     //
     // Canopy activation is at the first halving on Mainnet, but not on Testnet. [ZIP-1014] only
@@ -216,7 +252,7 @@ pub fn subsidy_is_valid(
         //
         // <https://zips.z.cash/protocol/protocol.pdf#foundersreward>
 
-        if Height::MIN < height && height < net.height_for_first_halving() {
+        if Height::MIN < height && height < net.height_for_first_halving() && !ycash_active {
             let addr = founders_reward_address(net, height).ok_or(BlockError::Other(format!(
                 "founders reward address must be defined for height: {height:?}"
             )))?;
@@ -315,6 +351,34 @@ pub fn subsidy_is_valid(
 
         Ok(DeferredPoolBalanceChange::new(deferred_pool_balance_change))
     }
+}
+
+/// Returns `Ok(())` if the coinbase pays the mandatory YDF output at `height`, removing it from
+/// `coinbase_outputs`: `subsidy / 20` to [`ydf_address`] from the Ycash upgrade until the mandate
+/// ends, nothing otherwise (`ycash6 src/main.cpp:6267-6286`).
+///
+/// [`ydf_address`]: zakura_chain::parameters::ycash::ydf::ydf_address
+#[cfg(feature = "ycash")]
+fn ydf_reward_is_valid(
+    net: &Network,
+    height: Height,
+    coinbase_outputs: &mut UnmatchedCoinbaseOutputs,
+) -> Result<(), BlockError> {
+    use zakura_chain::parameters::ycash::ydf;
+
+    let expected = ydf::ydf_reward(net, height);
+    if expected.is_zero() {
+        return Ok(());
+    }
+
+    let address = ydf::ydf_address(net, height).ok_or(BlockError::Other(format!(
+        "YDF address must be defined for height: {height:?}"
+    )))?;
+    if !coinbase_outputs.remove_payment(&address, expected) {
+        Err(SubsidyError::FoundersRewardNotFound)?;
+    }
+
+    Ok(())
 }
 
 /// Returns `Ok(())` if the miner fees consensus rule is valid.
@@ -567,6 +631,8 @@ pub fn merkle_root_validity(
 }
 
 #[cfg(test)]
+// kogany: the Zcash-fixture tests are not built with `ycash`.
+#[cfg_attr(feature = "ycash", allow(unused_imports, dead_code))]
 mod tests {
     use zakura_chain::{
         amount::{Amount, NonNegative},
@@ -598,6 +664,9 @@ mod tests {
     }
 
     #[test]
+    // kogany: Zcash coinbases and subsidies on Zcash schedules (no Ycash YDF output, funding
+    // streams, ZIP 234); not run on Ycash.
+    #[cfg(not(feature = "ycash"))]
     fn coinbase_payment_matches_configured_address_and_amount() {
         let nu7_fpf_address: Address = "t1MkHnkxVjNpNbCrSs3AJ8J7ZSp6NTYiUcG"
             .parse()

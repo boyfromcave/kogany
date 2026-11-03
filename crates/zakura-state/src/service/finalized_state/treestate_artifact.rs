@@ -1061,6 +1061,10 @@ impl SubtreeArtifact {
 pub(crate) fn embedded_historical_frontier_artifact(
     network: &Network,
 ) -> Option<Arc<FrontierArtifact>> {
+    // kogany: no Zcash-mainnet artefact on a Ycash network (K-12).
+    if super::vct::is_ycash_network(network) {
+        return None;
+    }
     match network {
         Network::Mainnet => {
             static MAINNET_ARTIFACT: OnceLock<Arc<FrontierArtifact>> = OnceLock::new();
@@ -1090,6 +1094,10 @@ pub(crate) fn embedded_historical_frontier_artifact(
 /// Mainnet verifies its embedded artifact once per process before any read service can use it.
 /// Other networks do not use the Mainnet artifact.
 pub(crate) fn embedded_historical_subtrees(network: &Network) -> Option<SubtreeArtifact> {
+    // kogany: no Zcash-mainnet artefact on a Ycash network (K-12).
+    if super::vct::is_ycash_network(network) {
+        return None;
+    }
     match network {
         Network::Mainnet => {
             static VERIFIED_MAINNET_SUBTREES: OnceLock<SubtreeArtifact> = OnceLock::new();
@@ -1491,6 +1499,9 @@ mod tests {
     }
 
     #[test]
+    // kogany: Zcash Mainnet embedded VCT frontier, grid and subtree artefacts, which a Ycash
+    // network has none of (K-12); not run on Ycash.
+    #[cfg(not(feature = "ycash"))]
     fn embedded_mainnet_frontier_grid_respects_replay_limit() {
         let artifact = embedded_historical_frontier_artifact(&Network::Mainnet)
             .expect("Mainnet has an embedded historical frontier artifact");
@@ -1555,6 +1566,9 @@ mod tests {
     }
 
     #[test]
+    // kogany: Zcash Mainnet embedded VCT frontier, grid and subtree artefacts, which a Ycash
+    // network has none of (K-12); not run on Ycash.
+    #[cfg(not(feature = "ycash"))]
     fn embedded_subtrees_match_mainnet_last_checkpoint() {
         let artifact = embedded_historical_subtrees(&Network::Mainnet)
             .expect("Mainnet ships an embedded subtree-root artifact");
@@ -1579,6 +1593,9 @@ mod tests {
     /// imported release-state bundle with `cargo test -p zakura-state --lib -- frontier
     /// sprout_change`, so the name is what makes this run against every future artifact.
     #[test]
+    // kogany: Zcash Mainnet embedded VCT frontier, grid and subtree artefacts, which a Ycash
+    // network has none of (K-12); not run on Ycash.
+    #[cfg(not(feature = "ycash"))]
     fn embedded_subtree_roots_match_embedded_frontier() {
         let counts = verify_subtree_artifact(&Network::Mainnet, MAINNET_SUBTREES, None)
             .expect("embedded Mainnet subtree roots must match the embedded Mainnet frontier");
@@ -1602,6 +1619,9 @@ mod tests {
     /// A supplied frontier is paired with the artifact by its own height, so a bundle can be
     /// checked by a binary whose last checkpoint is still the older one.
     #[test]
+    // kogany: Zcash Mainnet embedded VCT frontier, grid and subtree artefacts, which a Ycash
+    // network has none of (K-12); not run on Ycash.
+    #[cfg(not(feature = "ycash"))]
     fn a_supplied_frontier_pairs_with_the_artifact_by_its_own_height() {
         const MAINNET_FRONTIER: &[u8] = include_bytes!("vct/mainnet-frontier.bin");
 
@@ -1626,6 +1646,9 @@ mod tests {
 
     /// The regression this check exists for: an empty artifact, correctly framed.
     #[test]
+    // kogany: Zcash Mainnet embedded VCT frontier, grid and subtree artefacts, which a Ycash
+    // network has none of (K-12); not run on Ycash.
+    #[cfg(not(feature = "ycash"))]
     fn an_empty_artifact_is_rejected_against_the_embedded_frontier() {
         let empty = SubtreeArtifact {
             last_checkpoint: Network::Mainnet.checkpoint_list().max_height(),

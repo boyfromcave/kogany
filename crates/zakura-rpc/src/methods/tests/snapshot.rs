@@ -4,6 +4,8 @@
 //! ```sh
 //! cargo insta test --review --release -p zakura-rpc --lib -- test_rpc_response_data
 //! ```
+// kogany: the Zcash-fixture tests are not built with `ycash`, leaving their helpers unused.
+#![cfg_attr(feature = "ycash", allow(unused_imports, dead_code))]
 
 use crate::tests::test_rpc::TestRpcImpl;
 use std::{
@@ -68,6 +70,8 @@ pub const EXCESSIVE_BLOCK_HEIGHT: u32 = MAX_ON_DISK_HEIGHT.0 + 1;
 
 /// Snapshot test for RPC methods responses.
 #[tokio::test(flavor = "multi_thread")]
+// kogany: Zcash Mainnet and Testnet block vectors and their snapshots; not run on Ycash.
+#[cfg(not(feature = "ycash"))]
 async fn test_rpc_response_data() {
     let _init_guard = zakura_test::init();
     let default_testnet = Network::new_default_testnet();
@@ -1054,6 +1058,12 @@ pub async fn test_mining_rpcs<State, ReadState>(
         // TODO: Use default field values when optional features are enabled in tests #8183
         internal_miner: true,
         optimistic_block_inventory: true,
+        #[cfg(feature = "ycash")]
+        yellowback_payout_default: true,
+        #[cfg(feature = "ycash")]
+        yellowback_payout_address: None,
+        #[cfg(feature = "ycash")]
+        block_unpaid_action_limit: None,
     };
 
     // nu5 block height
@@ -1078,6 +1088,7 @@ pub async fn test_mining_rpcs<State, ReadState>(
     mock_tip_sender.send_best_tip_height(fake_tip_height);
     mock_tip_sender.send_best_tip_hash(fake_tip_hash);
     mock_tip_sender.send_estimated_distance_to_network_chain_tip(Some(0));
+    mock_tip_sender.send_best_tip_block_time(chrono::Utc::now());
 
     let mock_address_book = MockAddressBookPeers::new(vec![MetaAddr::new_connected(
         SocketAddr::new(

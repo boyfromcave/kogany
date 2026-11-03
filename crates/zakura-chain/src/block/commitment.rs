@@ -115,7 +115,7 @@ impl Commitment {
 
         match NetworkUpgrade::current_with_activation_height(network, height) {
             (Genesis | BeforeOverwinter | Overwinter, _) => Ok(PreSaplingReserved(bytes)),
-            (Sapling | Blossom, _) => match sapling::tree::Root::try_from(bytes) {
+            (Sapling | Ycash | Blossom, _) => match sapling::tree::Root::try_from(bytes) {
                 Ok(root) => Ok(FinalSaplingRoot(root)),
                 _ => Err(InvalidSapingRootBytes),
             },
@@ -131,14 +131,14 @@ impl Commitment {
             // activation bytes should still be used pre-NU5.
             //
             // See <https://zips.z.cash/zip-0221> and the [protocol specification §7.6](https://zips.z.cash/protocol/protocol.pdf).
-            (Canopy, _) if Some(height) == Heartwood.activation_height(network) => {
+            (Canopy | Vault, _) if Some(height) == Heartwood.activation_height(network) => {
                 if bytes == CHAIN_HISTORY_ACTIVATION_RESERVED {
                     Ok(ChainHistoryActivationReserved)
                 } else {
                     Err(InvalidChainHistoryActivationReserved { actual: bytes })
                 }
             }
-            (Heartwood | Canopy, _) => Ok(ChainHistoryRoot(ChainHistoryMmrRootHash(bytes))),
+            (Heartwood | Canopy | Vault, _) => Ok(ChainHistoryRoot(ChainHistoryMmrRootHash(bytes))),
             (Nu5 | Nu6 | Nu6_1 | Nu6_2 | Nu6_3 | Nu7, _) => Ok(ChainHistoryBlockTxAuthCommitment(
                 ChainHistoryBlockTxAuthCommitmentHash(bytes),
             )),
