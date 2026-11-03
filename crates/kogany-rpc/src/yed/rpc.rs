@@ -1067,7 +1067,10 @@ impl YedRpc for YedRpcImpl {
         };
         let price = price_arg(price_micro_usd.as_ref())?;
         healthy(&s)?;
-        let e = s.index.estimate_collateral(cents, lock_blocks, price)?;
+        let pending = self.state.pending_mint_cents().await;
+        let e = s
+            .index
+            .estimate_collateral(cents, lock_blocks, price, pending)?;
         Ok(CollateralJson {
             required_zat: e.required_zat,
             required_zat_floored: e.required_zat_floored,
@@ -1090,7 +1093,7 @@ impl YedRpc for YedRpcImpl {
             attest_fee_zat: e.attest_fee_zat,
             divergence_bps: e.divergence_bps,
             mint_blocked: e.mint_blocked.is_some(),
-            mint_blocked_reason: e.mint_blocked.unwrap_or(""),
+            mint_blocked_reason: e.mint_blocked.clone().unwrap_or_default(),
         })
     }
 

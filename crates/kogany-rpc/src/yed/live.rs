@@ -577,6 +577,27 @@ where
         Ok(row)
     }
 
+    /// `MempoolMintCents()`: the cents of every MINT payload in the node's mempool (read-only).
+    async fn pending_mint_cents(&self) -> i64 {
+        crate::mempool::transactions()
+            .await
+            .iter()
+            .filter_map(|tx| {
+                let t = tx.transaction.transaction();
+                let vt = zakura_state::vault::vault_tx(t, &t.hash());
+                let scripts: Vec<&[u8]> = vt
+                    .outputs
+                    .iter()
+                    .map(|o| o.script_pubkey.as_slice())
+                    .collect();
+                match find_payload(&scripts).map(|f| f.payload) {
+                    Some(Payload::Mint(m)) => Some(i64::from(m.cents)),
+                    _ => None,
+                }
+            })
+            .sum()
+    }
+
     /// The node's mempool (`crate::mempool`): its spender of `outpoint` (F-S5-5).
     async fn mempool_spender(&self, outpoint: &OutPoint) -> Option<Hash32> {
         let outpoint = zakura_chain::transparent::OutPoint {

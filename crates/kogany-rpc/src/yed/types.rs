@@ -762,7 +762,7 @@ pub struct CollateralJson {
     /// MINTPOL-1 would refuse.
     pub mint_blocked: bool,
     /// Its identifier, `""`.
-    pub mint_blocked_reason: &'static str,
+    pub mint_blocked_reason: String,
 }
 
 /// `yed_estimatefee`'s result.

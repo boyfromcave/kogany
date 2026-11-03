@@ -32,7 +32,7 @@ use kogany_yellowback::{
         protocol_fee_cents, protocol_fee_zat, required_collateral_rounded, residual_min_zat,
         residual_zat, seat_weight, supply_cap_cents, BPS, DEFAULT_COLLATERAL_GRANULARITY, U256,
     },
-    params::{MicroUsd, Params, COIN, LOCKTIME_THRESHOLD, MAX_MONEY},
+    params::{MicroUsd, Params, COIN, LOCKTIME_THRESHOLD, MAX_MONEY, NUM_CLASSES},
     state::{
         armed_at, block_hash_at, cancels_required, default_payee, eligible_payees,
         lookups::selection_basis,
@@ -476,47 +476,116 @@ impl LiveIndex {
         }
     }
 
-    /// `MintPolicyRefusal` (MINTPOL-1, ycash6 `src/yellowback/policy.cpp`): the identifier
-    /// `yed_mint` would refuse with at `R`. kogany has no wallet and the RPC no mempool access,
-    /// so the pending mints of `MempoolMintCents` count zero here.
+    /// `MintPolicyRefusal` (MINTPOL-1, ycash6 `src/yellowback/policy.cpp`): the refusal
+    /// `yed_mint` would answer at `R`, ycashd's text exactly; the `mintpol-*` identifier before
+    /// the colon is the machine-readable part. `pending_mint_cents` is `MempoolMintCents()`.
     fn mint_policy_refusal(
         &self,
         ref_height: i64,
         term_class: usize,
         cents: i64,
-    ) -> Option<&'static str> {
+        pending_mint_cents: i64,
+    ) -> Option<String> {
         let p = &self.params;
         let r = self.read();
+        let not_active = || {
+            Some("mintpol-not-active: Yellowback is not active at the reference height".to_string())
+        };
         let Some(s) = kogany_yellowback::state::snapshot_at(r, p, ref_height) else {
-            return Some("mintpol-not-active");
+            return not_active();
         };
         if s.halt_mask & HALT_NOT_ACTIVE != 0 {
-            return Some("mintpol-not-active");
+            return not_active();
         }
         if s.halt_mask & HALT_NO_PRICE != 0 {
-            return Some("mintpol-no-price");
+            return Some(
+                "mintpol-no-price: no defined price at the reference height (PRICE-1 fill)".into(),
+            );
         }
         let base = p.base_ratio_bps.get(term_class).copied().unwrap_or(0);
+        let open = open_classes(p);
+        let open_suffix = if open.is_empty() {
+            String::new()
+        } else {
+            format!(" (class {open})")
+        };
         if s.halt_mask & HALT_GLOBAL_RATIO != 0 && base < p.recap_ratio_bps {
-            return Some("mintpol-global-ratio");
+            return Some(format!(
+                "mintpol-global-ratio: the global collateral ratio is below {} % (HALT-2); only a term class whose base ratio is at least {} % can mint until it recovers{open_suffix}",
+                p.global_ratio_halt_bps / 100,
+                p.recap_ratio_bps / 100
+            ));
         }
         if s.halt_mask & HALT_DIVERGENCE != 0 {
-            return Some("mintpol-divergence");
+            return Some(
+                "mintpol-divergence: minting is halted while the price windows diverge (HALT-3)"
+                    .into(),
+            );
         }
         if s.halt_mask & !HALT_GLOBAL_RATIO != 0 {
-            return Some("mintpol-not-active");
+            return Some(
+                "mintpol-not-active: an unknown halt bit is set at the reference height".into(),
+            );
         }
         if p.mint_requires_armed && !armed_at(r, p, ref_height) {
-            return Some("mintpol-unarmed");
+            return Some("mintpol-unarmed: minting needs an ARMED attestation layer at the reference height (MINT_REQUIRES_ARMED)".into());
         }
-        let x_mint = s.pmint()?;
+        let Some(x_mint) = s.pmint() else {
+            return Some("mintpol-no-price: pMint is undefined at the reference height".into());
+        };
         let supply = r.totals().supply_cents;
-        let cap = supply_cap_cents(s.issued_zat, Some(x_mint), p.supply_cap_bps);
-        if cap.is_some_and(|cap| supply.saturating_add(cents) > cap) && base < p.recap_ratio_bps {
-            return Some("mintpol-cap");
-        }
-        None
+        let cap = supply_cap_cents(s.issued_zat, Some(x_mint), p.supply_cap_bps)?;
+        mint_cap_refusal(
+            cap,
+            supply,
+            cents,
+            pending_mint_cents,
+            base < p.recap_ratio_bps,
+            p.recap_ratio_bps,
+            &open_suffix,
+        )
     }
+}
+
+/// The enabled term classes whose base ratio reaches `RECAP_RATIO_BPS`, as `A, B, C`.
+fn open_classes(p: &Params) -> String {
+    (0..NUM_CLASSES)
+        .filter(|&c| p.is_class_enabled(c as i64) && p.base_ratio_bps[c] >= p.recap_ratio_bps)
+        .map(|c| char::from(b'A' + c as u8).to_string())
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+/// MINT-6's cap gate in `MintPolicyRefusal` (W20, IT-5; audit C-3), ycashd's two texts.
+fn mint_cap_refusal(
+    cap: i64,
+    supply: i64,
+    cents: i64,
+    pending: i64,
+    below_floor: bool,
+    recap_ratio_bps: i32,
+    open_suffix: &str,
+) -> Option<String> {
+    if !below_floor {
+        return None;
+    }
+    let above = format!(
+        "; above the cap only a term class with a base ratio of at least {} % can mint (W20, IT-5){open_suffix}",
+        recap_ratio_bps / 100
+    );
+    if supply.saturating_add(cents) > cap {
+        return Some(format!(
+            "mintpol-cap: supply cap headroom is {} cents{above}",
+            (cap - supply).max(0)
+        ));
+    }
+    if pending > 0 && supply.saturating_add(pending).saturating_add(cents) > cap {
+        return Some(format!(
+            "mintpol-cap: supply cap headroom is {} cents after {pending} cents of mints in the mempool{above}",
+            (cap - supply - pending).max(0)
+        ));
+    }
+    None
 }
 
 /// What `BuildBundleInfoLocked` reports.
@@ -1195,6 +1264,7 @@ impl YedIndexView for LiveIndex {
         cents: i64,
         lock_blocks: i64,
         price_override: Option<i64>,
+        pending_mint_cents: i64,
     ) -> Result<CollateralEstimate, YedError> {
         let p = &self.params;
         let r = self.read();
@@ -1311,7 +1381,7 @@ impl YedIndexView for LiveIndex {
             bundle_seqs,
             attest_fee_zat: attest_fee,
             divergence_bps,
-            mint_blocked: self.mint_policy_refusal(ref_h, term_class, cents),
+            mint_blocked: self.mint_policy_refusal(ref_h, term_class, cents, pending_mint_cents),
         })
     }
 
@@ -1479,4 +1549,39 @@ impl YedIndexView for LiveIndex {
 /// A txid in display (reversed) hex.
 fn display_hex(h: &Hash32) -> String {
     kogany_yellowback::state::display_hex(h)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::mint_cap_refusal;
+
+    const ABOVE: &str = "; above the cap only a term class with a base ratio of at least 500 % can mint (W20, IT-5) (class C)";
+
+    #[test]
+    fn mint_cap_refusal_matches_ycashd() {
+        assert_eq!(
+            mint_cap_refusal(10_000, 9_000, 2_000, 0, true, 50_000, " (class C)"),
+            Some(format!(
+                "mintpol-cap: supply cap headroom is 1000 cents{ABOVE}"
+            ))
+        );
+        assert_eq!(
+            mint_cap_refusal(10_000, 9_000, 500, 700, true, 50_000, " (class C)"),
+            Some(format!(
+                "mintpol-cap: supply cap headroom is 300 cents after 700 cents of mints in the mempool{ABOVE}"
+            ))
+        );
+        assert_eq!(
+            mint_cap_refusal(10_000, 9_000, 500, 0, true, 50_000, ""),
+            None
+        );
+        assert_eq!(
+            mint_cap_refusal(10_000, 9_000, 2_000, 0, false, 50_000, ""),
+            None
+        );
+        assert_eq!(
+            mint_cap_refusal(10_000, 11_000, 1, 0, true, 50_000, ""),
+            Some("mintpol-cap: supply cap headroom is 0 cents; above the cap only a term class with a base ratio of at least 500 % can mint (W20, IT-5)".into())
+        );
+    }
 }
