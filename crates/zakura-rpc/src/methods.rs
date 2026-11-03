@@ -2441,6 +2441,8 @@ where
         let transaction_parameter = mempool::Gossip::Tx(raw_transaction.into());
         #[cfg(feature = "ycash")]
         let mut queued_wait = types::ycash_reject::ALREADY_QUEUED_WAIT;
+        // The retry below exists on the Ycash build only; upstream runs this body once.
+        #[cfg_attr(not(feature = "ycash"), allow(clippy::never_loop))]
         let queue_result = loop {
             let request = mempool::Request::Queue(vec![transaction_parameter.clone()]);
 
