@@ -89,9 +89,7 @@ fn lock_time_and_maturity_failures_start_no_cooldown() {
 
     assert_eq!(
         transaction_cooldown_peer(
-            &invalid(TransactionError::Script(
-                zakura_script::Error::ScriptInvalid
-            )),
+            &invalid(TransactionError::SaplingVerificationFailed),
             tip_height,
             NetworkUpgrade::Nu6_3,
             None
@@ -172,9 +170,7 @@ fn lock_time_and_maturity_failures_start_no_cooldown() {
     };
     assert_eq!(
         transaction_cooldown_peer(
-            &unattributed(TransactionError::Script(
-                zakura_script::Error::ScriptInvalid
-            )),
+            &unattributed(TransactionError::SaplingVerificationFailed),
             tip_height,
             NetworkUpgrade::Nu6_3,
             None

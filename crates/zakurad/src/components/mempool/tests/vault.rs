@@ -50,7 +50,7 @@ fn the_vault_grace_period_names_canopy_as_ycashd_s_previous_epoch() {
     // period the relaying peer starts no cooldown; after it, it does.
     let peer = zakura_network::PeerSocketAddr::from(([203, 0, 113, 7], 8833));
     let failure = TransactionDownloadVerifyError::Invalid {
-        error: TransactionError::Script(zakura_script::Error::ScriptInvalid),
+        error: TransactionError::SaplingVerificationFailed,
         advertiser_addr: Some(peer),
         tip_height: Some(block::Height(VAULT)),
         transaction_version: 4,
