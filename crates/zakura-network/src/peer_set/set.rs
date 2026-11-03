@@ -266,6 +266,19 @@ where
     #[cfg(feature = "ycash")]
     pending_tx_adverts: HashMap<D::Key, HashSet<zakura_chain::transaction::UnminedTxId>>,
 
+    /// kogany (S5-K11): peers inserted since their first `FindBlocks`/`FindHeaders`. The next
+    /// find request goes to one of them once it is ready, so a reconnected peer's heavier
+    /// branch is found in one sync round, as ycashd syncs headers from a peer on connect.
+    #[cfg(feature = "ycash")]
+    fresh_find_peers: HashSet<D::Key>,
+
+    /// kogany (S5-K11): the hashes each `FindBlocks` response carried, registered as that
+    /// peer's inventory so the block downloads are routed to it.
+    #[cfg(feature = "ycash")]
+    find_inv_tx: tokio_mpsc::UnboundedSender<(PeerSocketAddr, Vec<block::Hash>)>,
+    #[cfg(feature = "ycash")]
+    find_inv_rx: tokio_mpsc::UnboundedReceiver<(PeerSocketAddr, Vec<block::Hash>)>,
+
     // Peer Validation
     //
     /// An endpoint to see the minimum peer protocol version in real time.
@@ -371,6 +384,8 @@ where
         max_conns_per_ip: Option<usize>,
     ) -> Self {
         let (stall_event_tx, stall_event_rx) = tokio_mpsc::unbounded_channel();
+        #[cfg(feature = "ycash")]
+        let (find_inv_tx, find_inv_rx) = tokio_mpsc::unbounded_channel();
         Self {
             // New peers
             discover,
@@ -399,6 +414,12 @@ where
             cancel_handles: HashMap::new(),
             #[cfg(feature = "ycash")]
             pending_tx_adverts: HashMap::new(),
+            #[cfg(feature = "ycash")]
+            fresh_find_peers: HashSet::new(),
+            #[cfg(feature = "ycash")]
+            find_inv_tx,
+            #[cfg(feature = "ycash")]
+            find_inv_rx,
 
             // Peer validation
             minimum_peer_version,
@@ -830,6 +851,8 @@ where
                         continue;
                     }
 
+                    #[cfg(feature = "ycash")]
+                    self.fresh_find_peers.insert(key);
                     self.push_unready(key, svc);
                 }
             }
@@ -895,6 +918,8 @@ where
         self.find_response_stalls.clear(*key);
         #[cfg(feature = "ycash")]
         self.pending_tx_adverts.remove(key);
+        #[cfg(feature = "ycash")]
+        self.fresh_find_peers.remove(key);
 
         if let Some(ready_service) = self.take_ready_service(key) {
             // A ready service has no work to cancel, so just drop it.
@@ -981,6 +1006,26 @@ where
                 .map(|(key, _)| *key)
                 .collect(),
         )
+    }
+
+    /// kogany (S5-K11): a ready peer that has not had a find request since it connected, under
+    /// the same filter as [`Self::select_ready_p2c_peer`] for find requests.
+    #[cfg(feature = "ycash")]
+    fn select_fresh_find_peer(&self) -> Option<D::Key> {
+        let tip_height = self
+            .minimum_peer_version
+            .chain_tip()
+            .best_tip_height()
+            .unwrap_or(block::Height(0));
+        self.fresh_find_peers
+            .iter()
+            .find(|key| {
+                self.ready_services.get(key).is_some_and(|service| {
+                    !(self.is_zcashd_compat_peer(service)
+                        && service.remote_start_height() <= tip_height)
+                })
+            })
+            .copied()
     }
 
     /// Performs P2C on `ready_service_list` to randomly select a less-loaded ready service.
@@ -1095,7 +1140,18 @@ where
             Request::FindBlocks { .. } | Request::FindHeaders { .. }
         );
 
-        if let Some(p2c_key) = self.select_ready_p2c_peer(is_find_request) {
+        #[cfg(feature = "ycash")]
+        let fresh_key = is_find_request
+            .then(|| self.select_fresh_find_peer())
+            .flatten();
+        #[cfg(not(feature = "ycash"))]
+        let fresh_key = None;
+
+        if let Some(p2c_key) = fresh_key.or_else(|| self.select_ready_p2c_peer(is_find_request)) {
+            #[cfg(feature = "ycash")]
+            if is_find_request {
+                self.fresh_find_peers.remove(&p2c_key);
+            }
             tracing::trace!(
                 peer = %p2c_key.addr_label(self.expose_peer_addresses),
                 "routing based on p2c"
@@ -1129,8 +1185,16 @@ where
             if track_stalls || find_blocks_trace.is_some() {
                 let stall_tx = self.stall_event_tx.clone();
                 let trace = self.legacy_peer_trace.clone();
+                #[cfg(feature = "ycash")]
+                let find_inv_tx = self.find_inv_tx.clone();
                 return async move {
                     let result = fut.await;
+                    #[cfg(feature = "ycash")]
+                    if let Ok(Response::BlockHashes(hashes)) = &result {
+                        if !hashes.is_empty() {
+                            let _ = find_inv_tx.send((p2c_key, hashes.clone()));
+                        }
+                    }
                     if track_stalls {
                         if let Some(outcome) = classify_find_response(&result) {
                             let _ = stall_tx.send((p2c_key, outcome));
@@ -1496,6 +1560,11 @@ where
         // Drain stall events first, so disconnects free up slots that
         // `poll_discover` can fill in the same poll cycle.
         self.drain_stall_events(cx);
+        #[cfg(feature = "ycash")]
+        while let Poll::Ready(Some((peer, hashes))) = self.find_inv_rx.poll_recv(cx) {
+            self.inventory_registry
+                .register_find_response(peer, &hashes);
+        }
 
         // Check for new peers, and register a task wakeup when the next new peers arrive. New peers
         // can be infrequent if our connection slots are full, or we're connected to all

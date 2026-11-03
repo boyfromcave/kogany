@@ -179,6 +179,10 @@ pub use crate::{
     protocol::external::canonical_peer_addr,
 };
 
+/// kogany (S5-K11): the syncer wakes on a newly responded peer.
+#[cfg(feature = "ycash")]
+pub use crate::address_book::AddressMetrics;
+
 pub use crate::{
     address_book::{AddressBook, BannedIps},
     address_book_peers::AddressBookPeers,
