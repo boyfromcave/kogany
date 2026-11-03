@@ -145,7 +145,10 @@ async fn not_live_is_method_not_found_for_every_yed_method() {
     let s = service(Arc::new(UnavailableYedState));
     assert_eq!(call(&s, "getinfo", json!([])).await["result"], "primary");
     // ycashd's verifychain has nothing YED to re-check when Yellowback is not live.
-    assert_eq!(call(&s, "verifychain", json!([4, 20])).await["result"], true);
+    assert_eq!(
+        call(&s, "verifychain", json!([4, 20])).await["result"],
+        true
+    );
     for (method, params) in reads() {
         let r = call(&s, method, params).await;
         assert_eq!(r["error"]["code"], -32601, "{method}: {r}");
