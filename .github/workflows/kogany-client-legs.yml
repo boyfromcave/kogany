@@ -138,8 +138,8 @@ jobs:
   yolo:
     # yolo serves kogany's templates (its tests/regtest.rs kogany mode, YOLO_REGTEST_KOGANY) with
     # two ycash6 nodes holding the wallet and checking every block (plan W8-c). ycashd is ycash6's
-    # node-bin (the cross-line contract, README-kogany.md): the newest push, schedule or dispatch run
-    # of its yellowback-tests.yml on YCASH6_BRANCH.
+    # node-bin (the cross-line contract, README-kogany.md), fetched by
+    # scripts/fetch-ycash6-node-bin.sh from a trusted run at the pinned YCASH6_REV only.
     name: yolo (report-only)
     needs: koganyd
     runs-on: ubuntu-24.04
@@ -151,7 +151,7 @@ jobs:
       YOLO_REPO: boyfromcave/yolo
       YOLO_REV: 576754ded6cf3cdf092874224c9d67cdc7059112      # yolo vaults/kogany-compat (W8-c)
       YCASH6_REPO: boyfromcave/ycash6
-      YCASH6_BRANCH: vaults/kogany-compat
+      YCASH6_REV: cba4024ea907970b27c4d2c0de5726c87dc0a899    # ycash6 vaults/kogany-compat, as kogany-mixed.yml
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -161,12 +161,17 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           repository: ${{ env.YCASH6_REPO }}
-          ref: ${{ env.YCASH6_BRANCH }}
+          ref: ${{ env.YCASH6_REV }}
           path: node
           persist-credentials: false
           sparse-checkout: |
             contrib/yellowback/devnet
             zcutil
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          path: kogany
+          persist-credentials: false
+          sparse-checkout: .github/workflows/scripts
       - name: koganyd (this run's koganyd-bin) and librocksdb
         run: sudo apt-get update -q && sudo apt-get install -y -q librocksdb-dev
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
@@ -180,16 +185,8 @@ jobs:
           GH_TOKEN: ${{ secrets.YCASH6_ARTIFACT_TOKEN || github.token }}
         run: |
           set -euo pipefail
+          "$GITHUB_WORKSPACE/kogany/.github/workflows/scripts/fetch-ycash6-node-bin.sh" "$RUNNER_TEMP/dl"
           dst="$RUNNER_TEMP/node"; mkdir -p "$dst"
-          trusted='select(.event == "push" or .event == "schedule" or .event == "workflow_dispatch")'
-          runs=$(gh run list -R "$YCASH6_REPO" -w yellowback-tests.yml -b "$YCASH6_BRANCH" -L 20 --json databaseId,event -q ".[] | $trusted | .databaseId")
-          for r in $runs; do
-            for name in ycash6-node-bin node-bin; do
-              if gh run download "$r" -R "$YCASH6_REPO" -n "$name" -D "$RUNNER_TEMP/dl" 2>/dev/null; then
-                echo "ycashd: $YCASH6_REPO run $r, artifact $name" | tee -a "$GITHUB_STEP_SUMMARY"; break 2
-              fi
-            done
-          done
           tar -xzf "$RUNNER_TEMP/dl/node-bin.tgz" -C "$dst" src/ycashd src/ycash-cli
           test -x "$dst/src/ycashd"
       - name: fetch zcash params
