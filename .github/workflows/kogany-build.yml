@@ -78,7 +78,7 @@ jobs:
           - group: zakura-consensus
             args: -p zakura-consensus -p zakura-header-chain --features zakura-consensus/ycash,zakura-header-chain/ycash
           - group: zakura-state
-            args: -p zakura-state --features zakura-chain/ycash
+            args: -p zakura-state --features zakura-state/ycash
           - group: zakura-rpc-network
             args: -p zakura-rpc -p zakura-network --features zakura-rpc/ycash,zakura-network/ycash
           - group: zakurad

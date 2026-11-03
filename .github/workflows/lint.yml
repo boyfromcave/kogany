@@ -217,6 +217,7 @@ jobs:
       # this job's checkout only, so the tests run unchanged. Nothing is committed and no
       # workflow can start from a runner's working tree.
       - name: Off workflows in place for upstream's tests (kogany)
+        if: ${{ !cancelled() }}
         run: cp .github/workflows-off/*.yml .github/workflows/
       - name: Ubuntu package retry tests
         if: ${{ !cancelled() }}
