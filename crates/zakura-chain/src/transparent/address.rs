@@ -524,6 +524,26 @@ mod tests {
         }
     }
 
+    /// Ycash: a transparent address as YEW encodes it (`yew/core/src/params.rs`, the ycash6
+    /// `chainparams.cpp` `PUBKEY_ADDRESS` / `SCRIPT_ADDRESS` rows) parses on every network.
+    #[cfg(feature = "ycash")]
+    #[test]
+    fn ycash_transparent_prefixes_parse() {
+        for (prefix, p2sh) in [
+            ([0x1C, 0x28], false),
+            ([0x1C, 0x2C], true),
+            ([0x1C, 0x95], false),
+            ([0x1C, 0x2A], true),
+        ] {
+            let mut data = prefix.to_vec();
+            data.extend_from_slice(&[0x11u8; 20]);
+            let text = bs58::encode(data).with_check().into_string();
+            let address: Address = text.parse().unwrap_or_else(|e| panic!("{text}: {e}"));
+            assert_eq!(address.to_string(), text);
+            assert_eq!(matches!(address, Address::PayToScriptHash { .. }), p2sh);
+        }
+    }
+
     /// Ycash (kogany W9-c finding 3): the plain post-quantum address round-trips, and its
     /// index hash is ycash6's `CScript::AddressHash` (Hash160(scheme || keyHash)).
     #[cfg(feature = "ycash")]
