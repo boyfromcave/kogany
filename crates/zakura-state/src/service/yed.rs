@@ -300,6 +300,11 @@ impl YedTestFault {
     }
 }
 
+/// The reason an injected storage fault gives: ycashd's `AbortNode` text for a failed index
+/// commit (`ycash6 src/main.cpp:4435`), which the regtest scripts look for in the node's log.
+pub const YED_TEST_FAULT_REASON: &str =
+    "Failed to write to the Yellowback index (injected storage fault, yellowback.test_fault)";
+
 /// The armed fault: the spec it came from and the fault, `None` once it fired.
 static YED_TEST_FAULT: std::sync::Mutex<Option<(String, Option<YedTestFault>)>> =
     std::sync::Mutex::new(None);
@@ -345,7 +350,7 @@ pub fn maybe_inject_yed_test_fault(
             *fault = None;
             tracing::error!(?height, "yellowback.test_fault: injecting a storage fault");
             Err(YedEvaluationFailed::Unhealthy(
-                "injected storage fault (yellowback.test_fault)".to_owned(),
+                YED_TEST_FAULT_REASON.to_owned(),
             ))
         }
         Some(YedTestFault::Crash(at)) if at == height => {
@@ -766,7 +771,11 @@ mod ycash_test_fault_tests {
         // the startup backup replay never fires it, even past its height
         assert!(without_yed_test_fault(|| maybe_inject_yed_test_fault(&config, Height(6))).is_ok());
         // the first commit at or after the height does, once
-        assert!(maybe_inject_yed_test_fault(&config, Height(6)).is_err());
+        let fired = maybe_inject_yed_test_fault(&config, Height(6)).expect_err("fires at 6");
+        // the stop's log line carries ycashd's AbortNode text (yellowback_mining.py:368)
+        assert!(fired
+            .to_string()
+            .contains("Failed to write to the Yellowback index"));
         assert!(maybe_inject_yed_test_fault(&config, Height(7)).is_ok());
     }
 }

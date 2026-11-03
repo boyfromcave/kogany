@@ -60,6 +60,10 @@ use crate::{
     BannedIps, BoxError, Config, PeerSocketAddr, VersionMessage,
 };
 
+/// The bound on a connection's queue of messages sent outside a request (kogany S5): a
+/// `reject` that does not fit is dropped, as the peer learns nothing it needs from it.
+const SIDE_MESSAGE_QUEUE: usize = 16;
+
 #[cfg(test)]
 mod tests;
 
@@ -1737,6 +1741,8 @@ where
             // Bound pending adverts; slow peers can catch up through later tip gossip.
             let (block_advert_tx, block_advert_rx) =
                 tokio::sync::mpsc::channel(super::block_gossip::BLOCK_ADVERT_QUEUE);
+            // kogany (S5): messages sent outside a request (ycashd's `reject`).
+            let (side_message_tx, side_message_rx) = tokio::sync::mpsc::channel(SIDE_MESSAGE_QUEUE);
             let (shutdown_tx, shutdown_rx) = oneshot::channel();
             let error_slot = ErrorSlot::default();
 
@@ -1862,6 +1868,7 @@ where
                 ConnectionRequests {
                     client_rx: server_rx,
                     block_advert_rx,
+                    side_message_rx,
                     minimum_peer_version,
                     bans,
                 },
@@ -1888,6 +1895,7 @@ where
             // kogany (F-S5-6): `disconnectnode` closes the connection through its task.
             if let Some(updater) = &client_peer_registry_updater {
                 updater.attach_connection_task(connection_task.abort_handle());
+                updater.attach_message_sender(side_message_tx);
             }
 
             let heartbeat_task = tokio::spawn(

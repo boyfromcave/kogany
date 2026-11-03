@@ -434,6 +434,12 @@ impl AddressBook {
 
     /// Attach the active peer registry used by local RPC diagnostics.
     #[must_use]
+    /// The handle that sends ycashd's transaction `reject` to a legacy peer (kogany S5).
+    #[cfg(feature = "ycash")]
+    pub fn legacy_reject_sender(&self) -> crate::ycash::LegacyRejectSender {
+        crate::ycash::LegacyRejectSender::new(self.peer_registry.clone())
+    }
+
     pub(crate) fn with_peer_registry(mut self, peer_registry: PeerRegistry) -> Self {
         self.peer_registry = Some(peer_registry);
         self

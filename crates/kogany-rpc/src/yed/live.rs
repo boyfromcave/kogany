@@ -793,6 +793,8 @@ where
         let mut spent = Vec::new();
         let mut unconfirmed = Vec::new();
         let mut first_unknown = None;
+        // Each input's coin height for the BIP68 check: a mempool parent confirms at `next`.
+        let mut coin_heights = std::collections::HashMap::new();
         let mut mempool: Option<Vec<zakura_chain::transaction::VerifiedUnminedTx>> = None;
         for (i, input) in tx.inputs().iter().enumerate() {
             let Some(outpoint) = input.outpoint() else {
@@ -813,8 +815,12 @@ where
             // ycashd's `FetchInputs` reads through `CCoinsViewMemPool`: a mempool parent's
             // output is a known input (`src/yellowback/policy.cpp:95`), only not confirmed.
             let output = match utxo {
-                Some(u) => Some(u.output),
+                Some(u) => {
+                    coin_heights.insert(outpoint, Some(u.height));
+                    Some(u.output)
+                }
                 None => {
+                    coin_heights.insert(outpoint, None);
                     if mempool.is_none() {
                         mempool = Some(crate::mempool::transactions().await);
                     }
@@ -856,20 +862,21 @@ where
             _ => None,
         };
         let nu = NetworkUpgrade::current(network, height);
-        let cached =
-            match zakura_script::CachedFfiTransaction::new(Arc::new(tx), Arc::new(spent), nu) {
-                Ok(c) => c,
-                Err(e) => {
-                    return (
-                        false,
-                        Some(format!(
-                            "input 0 fails script verification: {}",
-                            script_error_text(&e)
-                        )),
-                        unconfirmed,
-                    )
-                }
-            };
+        let tx = Arc::new(tx);
+        let cached = match zakura_script::CachedFfiTransaction::new(tx.clone(), Arc::new(spent), nu)
+        {
+            Ok(c) => c,
+            Err(e) => {
+                return (
+                    false,
+                    Some(format!(
+                        "input 0 fails script verification: {}",
+                        script_error_text(&e)
+                    )),
+                    unconfirmed,
+                )
+            }
+        };
         let context = zakura_script::ScriptContext::new(network.clone(), height, vault_state)
             .with_standard_policy();
         for i in 0..cached.inputs().len() {
@@ -884,7 +891,28 @@ where
                 );
             }
         }
+        // ycash6 `policy.cpp:152-160`: BIP68 relative lock-times as AcceptToMemoryPool applies
+        // them (`ContextualCheckSequenceLocks(.., fMempool = true)`).
+        if let Err(e) = zakura_state::check::transparent_sequence_locks(network, &tx, height, |o| {
+            coin_heights
+                .get(o)
+                .map(|h: &Option<Height>| h.unwrap_or(height))
+        }) {
+            return (
+                false,
+                Some(sequence_lock_reason(&e).to_owned()),
+                unconfirmed,
+            );
+        }
         (true, None, unconfirmed)
+    }
+}
+
+/// ycash6 `ContextualCheckSequenceLocks`'s mempool reject reasons (`main.cpp:904-909`).
+fn sequence_lock_reason(e: &zakura_state::ValidateContextError) -> &'static str {
+    match e {
+        zakura_state::ValidateContextError::VaultTimeLock { .. } => "bad-txns-vault-timelock",
+        _ => "non-BIP68-final",
     }
 }
 

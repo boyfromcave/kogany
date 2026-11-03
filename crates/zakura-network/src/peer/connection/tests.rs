@@ -190,9 +190,11 @@ fn test_connection_channels(
 ) -> super::ConnectionRequests<zakura_chain::chain_tip::NoChainTip> {
     let (_block_advert_tx, block_advert_rx) =
         tokio::sync::mpsc::channel(crate::peer::block_gossip::BLOCK_ADVERT_QUEUE);
+    let (_side_message_tx, side_message_rx) = tokio::sync::mpsc::channel(1);
     super::ConnectionRequests {
         client_rx,
         block_advert_rx,
+        side_message_rx,
         minimum_peer_version: crate::peer::MinimumPeerVersion::new(
             zakura_chain::chain_tip::NoChainTip,
             &zakura_chain::parameters::Network::Mainnet,
