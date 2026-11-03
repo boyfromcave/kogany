@@ -21,7 +21,10 @@ pub use addr::{canonical_peer_addr, canonical_socket_addr, AddrInVersion};
 pub use codec::Codec;
 pub(crate) use inv::MIN_INV_HASH_SIZE;
 pub use inv::{InventoryHash, MAX_TX_INV_IN_SENT_MESSAGE};
-pub use message::{Message, RejectReason, VersionMessage};
+pub use message::{Message, VersionMessage};
+// kogany: the reject message is sent on the Ycash build only.
+#[cfg(feature = "ycash")]
+pub use message::RejectReason;
 pub use types::{Nonce, Version};
 
 pub use zakura_chain::serialization::MAX_PROTOCOL_MESSAGE_LEN;

@@ -232,6 +232,7 @@ impl PeerRegistry {
 
     /// Queues `message` on every legacy connection to `addr` (dropped when its queue is full).
     /// Returns the number of connections it was queued on.
+    #[cfg(feature = "ycash")]
     pub(crate) fn send_legacy(
         &self,
         addr: PeerSocketAddr,
