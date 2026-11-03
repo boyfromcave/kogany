@@ -750,6 +750,10 @@ impl AddressBook {
                 let local = crate::ycash::is_local(updated.addr.ip());
                 if local {
                     tracing::info!("Warning: not banning local peer {}!", updated.addr);
+                    // ycashd still sets `fDisconnect` for a local peer (`main.cpp:9507`).
+                    if let Some(registry) = self.peer_registry.as_ref() {
+                        registry.disconnect(updated.addr);
+                    }
                 }
                 local
             };
