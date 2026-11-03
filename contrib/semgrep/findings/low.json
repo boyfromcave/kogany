@@ -1,0 +1,2382 @@
+{
+ "bucket": "low",
+ "sla_days": 180,
+ "findings": [
+  {
+   "fingerprint": "315a0107fbed3e29",
+   "rule": "python.lang.security.audit.dangerous-subprocess-use-audit",
+   "path": ".github/scripts/release_review/github.py",
+   "line": 33,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "fd6c810dbbbeb728",
+   "rule": "python.lang.security.audit.dangerous-subprocess-use-audit",
+   "path": ".github/scripts/test_release_state_orchestration.py",
+   "line": 69,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "936dc8ac25c52f49",
+   "rule": "python.lang.security.audit.dangerous-subprocess-use-audit",
+   "path": ".github/scripts/test_release_state_registry.py",
+   "line": 221,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "1d159294b7bbebb4",
+   "rule": "python.lang.security.audit.dangerous-subprocess-use-audit",
+   "path": ".github/workflows/scripts/affected_semver_packages.py",
+   "line": 149,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "c5211f4161d131c9",
+   "rule": "python.lang.security.audit.dynamic-urllib-use-detected",
+   "path": ".github/workflows/scripts/ci_alert.py",
+   "line": 117,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "4605f86afbb34d52",
+   "rule": "trailofbits.generic.ssh-disable-host-key-checking",
+   "path": ".github/workflows/scripts/do_seed_approach.py",
+   "line": 18,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "10b2531bd899be10",
+   "rule": "python.lang.security.audit.dangerous-subprocess-use-audit",
+   "path": ".github/workflows/scripts/do_seed_approach.py",
+   "line": 39,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "f2e45516bad7fe59",
+   "rule": "python.lang.security.audit.dangerous-subprocess-use-audit",
+   "path": ".github/workflows/scripts/do_seed_approach.py",
+   "line": 137,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "6223cdbf3f0bca12",
+   "rule": "python.lang.security.audit.dangerous-subprocess-use-audit",
+   "path": ".github/workflows/scripts/do_seed_approach.py",
+   "line": 143,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "6c5871c97191cb67",
+   "rule": "python.lang.security.audit.dangerous-subprocess-use-audit",
+   "path": ".github/workflows/scripts/mempool-load-lab.py",
+   "line": 128,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "e92fea420f90ca80",
+   "rule": "python.lang.security.audit.dynamic-urllib-use-detected",
+   "path": ".github/workflows/scripts/mempool-load-lab.py",
+   "line": 143,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "eff26a84f8a831a3",
+   "rule": "python.lang.security.audit.dangerous-subprocess-use-audit",
+   "path": ".github/workflows/scripts/mempool-load-lab.py",
+   "line": 302,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "768a73cfc003624a",
+   "rule": "python.lang.security.audit.dangerous-subprocess-use-audit",
+   "path": ".github/workflows/scripts/mempool-load-lab.py",
+   "line": 662,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "5450a1941d5c09b8",
+   "rule": "python.lang.security.audit.dynamic-urllib-use-detected",
+   "path": ".github/workflows/scripts/mempool-load-monitor.py",
+   "line": 62,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "4aae6174ba462d8d",
+   "rule": "python.lang.security.audit.dynamic-urllib-use-detected",
+   "path": ".github/workflows/scripts/mempool-load-monitor.py",
+   "line": 71,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "4714f80e2e11f9a5",
+   "rule": "python.lang.security.audit.dynamic-urllib-use-detected",
+   "path": ".github/workflows/scripts/pr-node-monitor.py",
+   "line": 39,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "bd128488e635494f",
+   "rule": "python.lang.security.audit.dynamic-urllib-use-detected",
+   "path": ".github/workflows/scripts/pr-node-monitor.py",
+   "line": 95,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "92064f429cf99d5b",
+   "rule": "python.lang.security.audit.dangerous-subprocess-use-audit",
+   "path": ".github/workflows/scripts/test_pr_node_bake.py",
+   "line": 72,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "c6c04ebe482e7cba",
+   "rule": "python.lang.security.audit.dangerous-subprocess-use-audit",
+   "path": ".github/workflows/scripts/test_pr_node_bake.py",
+   "line": 352,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "d43311eeb43b2a58",
+   "rule": "python.lang.security.audit.dangerous-subprocess-use-audit",
+   "path": ".github/workflows/scripts/test_pr_node_bake.py",
+   "line": 424,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "acf561ff33253656",
+   "rule": "rust.lang.security.args",
+   "path": "crates/xtask/src/main.rs",
+   "line": 38,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "c0d54937f515e5f4",
+   "rule": "rust.lang.security.unsafe-usage",
+   "path": "crates/xtask/src/sim_minimize.rs",
+   "line": 1636,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "8070f27e9861be93",
+   "rule": "rust.lang.security.unsafe-usage",
+   "path": "crates/xtask/src/sim_minimize.rs",
+   "line": 1674,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "7e1634cf03e81c0e",
+   "rule": "rust.lang.security.unsafe-usage",
+   "path": "crates/xtask/src/sim_minimize/tests.rs",
+   "line": 1049,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "0efcb78e8ed04629",
+   "rule": "rust.lang.security.unsafe-usage",
+   "path": "crates/zakura-chain/src/common/directories.rs",
+   "line": 102,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "ecf6683a5bdec595",
+   "rule": "rust.lang.security.unsafe-usage",
+   "path": "crates/zakura-chain/src/common/directories.rs",
+   "line": 109,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "a573a76402c64404",
+   "rule": "rust.lang.security.unsafe-usage",
+   "path": "crates/zakura-chain/src/common/directories.rs",
+   "line": 115,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "2944e606f5eb2b5b",
+   "rule": "rust.lang.security.unsafe-usage",
+   "path": "crates/zakura-chain/src/common/directories.rs",
+   "line": 118,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "47d83e4b704479e5",
+   "rule": "rust.lang.security.current-exe",
+   "path": "crates/zakura-chain/src/common/directories/tests.rs",
+   "line": 48,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "8aae9f8fa915e3b2",
+   "rule": "rust.lang.security.current-exe",
+   "path": "crates/zakura-chain/src/common/directories/tests.rs",
+   "line": 84,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "c229ad0f2605cf03",
+   "rule": "rust.lang.security.temp-dir",
+   "path": "crates/zakura-chain/src/common/temp.rs",
+   "line": 175,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "4b172630c453d63b",
+   "rule": "generic.secrets.gitleaks.generic-api-key",
+   "path": "crates/zakura-chain/src/transaction/tests/vectors.rs",
+   "line": 239,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "1f8675b5de51d294",
+   "rule": "rust.lang.security.unsafe-usage",
+   "path": "crates/zakura-header-chain/benches/retention.rs",
+   "line": 23,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "4cea189e8fc3df4f",
+   "rule": "rust.lang.security.unsafe-usage",
+   "path": "crates/zakura-header-chain/benches/retention.rs",
+   "line": 28,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "aa54c39eee1a572f",
+   "rule": "rust.lang.security.unsafe-usage",
+   "path": "crates/zakura-header-chain/benches/retention.rs",
+   "line": 34,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "8042ebd521249292",
+   "rule": "rust.lang.security.unsafe-usage",
+   "path": "crates/zakura-quic/src/socket.rs",
+   "line": 546,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "8c0804361e6f3077",
+   "rule": "rust.lang.security.unsafe-usage",
+   "path": "crates/zakura-quic/src/socket.rs",
+   "line": 559,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "86bb97f985c16a1f",
+   "rule": "rust.lang.security.unsafe-usage",
+   "path": "crates/zakura-quic/src/socket.rs",
+   "line": 584,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "c42ce10a4ac08fea",
+   "rule": "rust.lang.security.unsafe-usage",
+   "path": "crates/zakura-quic/src/socket.rs",
+   "line": 671,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "fb8aae9dbe663447",
+   "rule": "rust.lang.security.unsafe-usage",
+   "path": "crates/zakura-quic/src/socket.rs",
+   "line": 684,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "26de1281b8eaf406",
+   "rule": "rust.lang.security.unsafe-usage",
+   "path": "crates/zakura-quic/src/socket.rs",
+   "line": 823,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "4ec8e20ad5e2525f",
+   "rule": "rust.lang.security.unsafe-usage",
+   "path": "crates/zakura-quic/src/sys.rs",
+   "line": 59,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "80ddcfd7fa042e27",
+   "rule": "rust.lang.security.unsafe-usage",
+   "path": "crates/zakura-quic/src/sys.rs",
+   "line": 69,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "a4ef28e5bfb0670d",
+   "rule": "rust.lang.security.unsafe-usage",
+   "path": "crates/zakura-quic/src/sys.rs",
+   "line": 94,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "a3be1ae4bef4dd34",
+   "rule": "rust.lang.security.current-exe",
+   "path": "crates/zakura-quic/tests/sim_replay.rs",
+   "line": 508,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "a0497c3cdfa48872",
+   "rule": "generic.secrets.gitleaks.private-key",
+   "path": "crates/zakura-rpc/src/indexer/tests/certs.rs",
+   "line": 28,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "25c6d9bf3545b7e0",
+   "rule": "generic.secrets.security.detected-private-key",
+   "path": "crates/zakura-rpc/src/indexer/tests/certs.rs",
+   "line": 28,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "4e50820bc31b1c4b",
+   "rule": "generic.secrets.security.detected-private-key",
+   "path": "crates/zakura-rpc/src/indexer/tests/certs.rs",
+   "line": 47,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "63295d6e42731792",
+   "rule": "generic.secrets.security.detected-private-key",
+   "path": "crates/zakura-rpc/src/indexer/tests/certs.rs",
+   "line": 69,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "19b3321cf03b9642",
+   "rule": "rust.lang.security.unsafe-usage",
+   "path": "crates/zakura-rpc/src/methods/unix.rs",
+   "line": 10,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "fc01035595e06d7a",
+   "rule": "generic.secrets.gitleaks.private-key",
+   "path": "crates/zakura-rpc/src/server/tests/handshake-key.pem",
+   "line": 1,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "456188f7b8466b86",
+   "rule": "generic.secrets.security.detected-private-key",
+   "path": "crates/zakura-rpc/src/server/tests/handshake-key.pem",
+   "line": 1,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "b3fd2a945cddf08c",
+   "rule": "generic.secrets.gitleaks.private-key",
+   "path": "crates/zakura-rpc/src/server/tests/tls.rs",
+   "line": 412,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "5ede7125d5f3c843",
+   "rule": "generic.secrets.gitleaks.generic-api-key",
+   "path": "crates/zakura-rpc/tests/vectors/getblock_response_2.json",
+   "line": 9,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "bf141b803cede1d1",
+   "rule": "generic.secrets.gitleaks.generic-api-key",
+   "path": "crates/zakura-rpc/tests/vectors/getblock_response_2.json",
+   "line": 101,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "a804a9f78ab1b786",
+   "rule": "generic.secrets.gitleaks.generic-api-key",
+   "path": "crates/zakura-rpc/tests/vectors/getblock_response_2.json",
+   "line": 842,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "71886533e1bae9d8",
+   "rule": "generic.secrets.gitleaks.generic-api-key",
+   "path": "crates/zakura-rpc/tests/vectors/getblock_response_2.json",
+   "line": 849,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "f5dced4c1ab3b065",
+   "rule": "generic.secrets.gitleaks.generic-api-key",
+   "path": "crates/zakura-rpc/tests/vectors/getblock_response_2.json",
+   "line": 857,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "9a95af0bd1c6d50b",
+   "rule": "generic.secrets.gitleaks.generic-api-key",
+   "path": "crates/zakura-rpc/tests/vectors/getblocktemplate_response_template.json",
+   "line": 8,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "40d580711bd7ce22",
+   "rule": "generic.secrets.gitleaks.generic-api-key",
+   "path": "crates/zakura-rpc/tests/vectors/getrawtransaction_response_true.json",
+   "line": 4,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "7d901c077793756b",
+   "rule": "generic.secrets.gitleaks.generic-api-key",
+   "path": "crates/zakura-rpc/tests/vectors/getrawtransaction_response_true.json",
+   "line": 744,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "11c6185bb0a80ee3",
+   "rule": "generic.secrets.gitleaks.generic-api-key",
+   "path": "crates/zakura-rpc/tests/vectors/getrawtransaction_response_true.json",
+   "line": 751,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "50839e03ea8f5d17",
+   "rule": "generic.secrets.gitleaks.generic-api-key",
+   "path": "crates/zakura-rpc/tests/vectors/getrawtransaction_response_true.json",
+   "line": 759,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "7c56dc8e8f53da64",
+   "rule": "rust.lang.security.unsafe-usage",
+   "path": "crates/zakura-scheduler/src/hooks.rs",
+   "line": 262,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "d23d75afd0adb9bf",
+   "rule": "rust.lang.security.current-exe",
+   "path": "crates/zakura-scheduler/tests/fixtures.rs",
+   "line": 2084,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "d23d75afd0adb9bf-1",
+   "rule": "rust.lang.security.current-exe",
+   "path": "crates/zakura-scheduler/tests/fixtures.rs",
+   "line": 2115,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "3887a809cb2e9ded",
+   "rule": "rust.lang.security.unsafe-usage",
+   "path": "crates/zakura-scheduler/tests/repeated_runs.rs",
+   "line": 46,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "edca213229e00ac8",
+   "rule": "rust.lang.security.unsafe-usage",
+   "path": "crates/zakura-scheduler/tests/repeated_runs.rs",
+   "line": 55,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "ffa7e8cf4f618723",
+   "rule": "rust.lang.security.unsafe-usage",
+   "path": "crates/zakura-scheduler/tests/repeated_runs.rs",
+   "line": 64,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "aa2a99a4ff836d90",
+   "rule": "rust.lang.security.unsafe-usage",
+   "path": "crates/zakura-scheduler/tests/repeated_runs.rs",
+   "line": 70,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "1b329012128b09a2",
+   "rule": "rust.lang.security.args",
+   "path": "crates/zakura-sim/src/bin/zakura-sim.rs",
+   "line": 40,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "c72f66e6d1d83d32",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-sim/src/campaign/run.rs",
+   "line": 334,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "be5a2e16d8898798",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-sim/src/campaign/store.rs",
+   "line": 349,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "be5a2e16d8898798-1",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-sim/src/campaign/store.rs",
+   "line": 371,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "bf318dc05278ffaa",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-sim/src/explore/save.rs",
+   "line": 68,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "e47f6c8aabb61470",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-sim/src/explore/save.rs",
+   "line": 133,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "430e87bbae330eff",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-sim/src/explore/save.rs",
+   "line": 137,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "7f43e506a516db04",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-sim/src/explore/save.rs",
+   "line": 171,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "6721c048dd8034bf",
+   "rule": "rust.lang.security.current-exe",
+   "path": "crates/zakura-sim/src/explore/triage.rs",
+   "line": 250,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "0a9b21903ad5851d",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-sim/src/explore/triage.rs",
+   "line": 777,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "aac58235db9ea27d",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-sim/src/explore/triage.rs",
+   "line": 781,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "abaee886b122b85c",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-sim/src/harness/header_sync/grammar.rs",
+   "line": 307,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "1203a8144af970fe",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-sim/src/harness/header_sync/grammar.rs",
+   "line": 420,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "c5e0cfe03e4a0789",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-sim/src/net.rs",
+   "line": 210,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "35703153ec061cbc",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-sim/src/trace/confirm.rs",
+   "line": 397,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "6434aa0e543ac86b",
+   "rule": "rust.lang.security.temp-dir",
+   "path": "crates/zakura-sim/src/trace/failure.rs",
+   "line": 81,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "9e53ee561ff51883",
+   "rule": "rust.lang.security.current-exe",
+   "path": "crates/zakura-sim/src/trace/meta.rs",
+   "line": 153,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "8dd374b227326e0d",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-sim/src/trace/replay.rs",
+   "line": 340,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "07cb2956d0a70d64",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-sim/src/trace/shrink.rs",
+   "line": 289,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "1294ab1c31b1bedf",
+   "rule": "rust.lang.security.current-exe",
+   "path": "crates/zakura-sim/tests/determinism.rs",
+   "line": 132,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "9997382379030ae6",
+   "rule": "rust.lang.security.current-exe",
+   "path": "crates/zakura-sim/tests/explore_results.rs",
+   "line": 295,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "d0d36233e6e9f997",
+   "rule": "rust.lang.security.current-exe",
+   "path": "crates/zakura-sim/tests/header_controlled.rs",
+   "line": 565,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "ffeb61ec77e8354d",
+   "rule": "rust.lang.security.current-exe",
+   "path": "crates/zakura-sim/tests/replay_exact.rs",
+   "line": 1003,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "fc0f6803a1c9b28e",
+   "rule": "rust.lang.security.current-exe",
+   "path": "crates/zakura-sim/tests/shrink.rs",
+   "line": 783,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "2106c06210aa4071",
+   "rule": "rust.lang.security.current-exe",
+   "path": "crates/zakura-sim/tests/triage.rs",
+   "line": 285,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "56b1a3ae33676d8d",
+   "rule": "rust.lang.security.current-exe",
+   "path": "crates/zakura-sim/tests/triage_minimize.rs",
+   "line": 451,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "b3d1a48111472de0",
+   "rule": "rust.lang.security.unsafe-usage",
+   "path": "crates/zakura-state/benches/chain_clone_worst_case.rs",
+   "line": 42,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "eef380d2864468b1",
+   "rule": "rust.lang.security.unsafe-usage",
+   "path": "crates/zakura-state/benches/chain_clone_worst_case.rs",
+   "line": 47,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "cbe7a91ca2865dd7",
+   "rule": "rust.lang.security.unsafe-usage",
+   "path": "crates/zakura-state/benches/chain_clone_worst_case.rs",
+   "line": 54,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "9cfc3326583e61b5",
+   "rule": "rust.lang.security.temp-dir",
+   "path": "crates/zakura-state/src/config.rs",
+   "line": 223,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "ebba95b0cc0ddcc2",
+   "rule": "rust.lang.security.temp-dir",
+   "path": "crates/zakura-state/src/service/finalized_state/disk_db.rs",
+   "line": 1189,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "487e421071426007",
+   "rule": "rust.lang.security.unsafe-usage",
+   "path": "crates/zakura-state/src/service/finalized_state/disk_db/rlimit.rs",
+   "line": 94,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "3381082c77449c70",
+   "rule": "rust.lang.security.unsafe-usage",
+   "path": "crates/zakura-state/src/service/finalized_state/disk_db/rlimit.rs",
+   "line": 105,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "38e63a0d812ca6a3",
+   "rule": "rust.lang.security.unsafe-usage",
+   "path": "crates/zakura-state/src/service/finalized_state/disk_db/rlimit.rs",
+   "line": 126,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "66c844c9d80d0c75",
+   "rule": "rust.lang.security.current-exe",
+   "path": "crates/zakura-state/src/service/finalized_state/disk_db/rlimit/tests.rs",
+   "line": 10,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "6fc938d0bd40b295",
+   "rule": "rust.lang.security.temp-dir",
+   "path": "crates/zakura-state/src/service/finalized_state/vct.rs",
+   "line": 1305,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "1ee52af07f2b824a",
+   "rule": "rust.lang.security.temp-dir",
+   "path": "crates/zakura-state/src/service/finalized_state/vct.rs",
+   "line": 1332,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "0b69443873c3367c",
+   "rule": "rust.lang.security.temp-dir",
+   "path": "crates/zakura-state/src/service/finalized_state/vct_fast_sync_fixture.rs",
+   "line": 403,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "571251c84e60ddb1",
+   "rule": "rust.lang.security.unsafe-usage",
+   "path": "crates/zakura-state/src/service/yed.rs",
+   "line": 398,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "57bf5d9ec6d2652a",
+   "rule": "rust.lang.security.current-exe",
+   "path": "crates/zakura-storage/tests/header_adapter.rs",
+   "line": 322,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "9bb906ccadb00e4f",
+   "rule": "rust.lang.security.unsafe-usage",
+   "path": "crates/zakura-test/src/allocations.rs",
+   "line": 119,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "78383ea92a2d6e05",
+   "rule": "rust.lang.security.unsafe-usage",
+   "path": "crates/zakura-test/src/allocations.rs",
+   "line": 126,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "6fc4dc7352f2af36",
+   "rule": "rust.lang.security.unsafe-usage",
+   "path": "crates/zakura-test/src/allocations.rs",
+   "line": 134,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "e085994c5b8350ff",
+   "rule": "rust.lang.security.unsafe-usage",
+   "path": "crates/zakura-test/src/allocations.rs",
+   "line": 139,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "c68619049daaed6a",
+   "rule": "rust.lang.security.unsafe-usage",
+   "path": "crates/zakura-test/src/allocations.rs",
+   "line": 143,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "45c85d9154b54333",
+   "rule": "rust.lang.security.unsafe-usage",
+   "path": "crates/zakura-test/src/allocations/process.rs",
+   "line": 61,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "8b40866fa90d4589",
+   "rule": "rust.lang.security.current-exe",
+   "path": "crates/zakura-test/src/allocations/process.rs",
+   "line": 79,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "7d7204b17acb28a5",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-test/src/command.rs",
+   "line": 144,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "03ad0b7a0eb1ead2",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-test/src/command.rs",
+   "line": 846,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "56819f7ee1230085",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-test/src/command.rs",
+   "line": 878,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "03ad0b7a0eb1ead2-1",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-test/src/command.rs",
+   "line": 955,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "8363ddee25476c5d",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-test/src/command.rs",
+   "line": 990,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "e517b183f420fd00",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-test/src/command.rs",
+   "line": 1284,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "95b5f40f3324f089",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-test/src/transcript.rs",
+   "line": 58,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "0b2e7cb3a1221240",
+   "rule": "rust.lang.security.args-os",
+   "path": "crates/zakurad/src/application.rs",
+   "line": 288,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "0216c7a8978a80bf",
+   "rule": "rust.lang.security.current-exe",
+   "path": "crates/zakurad/src/commands/start.rs",
+   "line": 2249,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "652811ce767b434b",
+   "rule": "rust.lang.security.unsafe-usage",
+   "path": "crates/zakurad/src/components/miner/priority.rs",
+   "line": 15,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "19d9c109ff609437",
+   "rule": "rust.lang.security.unsafe-usage",
+   "path": "crates/zakurad/src/components/miner/priority.rs",
+   "line": 19,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "6f4894f0303501d8",
+   "rule": "rust.lang.security.unsafe-usage",
+   "path": "crates/zakurad/src/components/miner/priority.rs",
+   "line": 22,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "6ffb03b6f279da5c",
+   "rule": "rust.lang.security.unsafe-usage",
+   "path": "crates/zakurad/src/components/miner/priority.rs",
+   "line": 29,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "df884f6a8bfde26c",
+   "rule": "rust.lang.security.unsafe-usage",
+   "path": "crates/zakurad/src/components/miner/priority.rs",
+   "line": 36,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "96f94e4aa1fe0ac7",
+   "rule": "rust.lang.security.unsafe-usage",
+   "path": "crates/zakurad/src/components/miner/priority.rs",
+   "line": 52,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "9d8d77c1565e8120",
+   "rule": "rust.lang.security.unsafe-usage",
+   "path": "crates/zakurad/src/components/miner/priority.rs",
+   "line": 70,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "2ca2d470b1901168",
+   "rule": "rust.lang.security.unsafe-usage",
+   "path": "crates/zakurad/src/components/zcashd_compat/unix.rs",
+   "line": 18,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "f352014502b21eae",
+   "rule": "rust.lang.security.unsafe-usage",
+   "path": "crates/zakurad/src/components/zcashd_compat/unix.rs",
+   "line": 31,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "95e4d110c4aab680",
+   "rule": "rust.lang.security.unsafe-usage",
+   "path": "crates/zakurad/src/components/zcashd_compat/unix.rs",
+   "line": 45,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "84af67edae0c87ae",
+   "rule": "rust.lang.security.unsafe-usage",
+   "path": "crates/zakurad/src/components/zcashd_compat/unix.rs",
+   "line": 49,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "588dc3b67f1c8640",
+   "rule": "rust.lang.security.current-exe",
+   "path": "crates/zakurad/tests/config.rs",
+   "line": 837,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "585b23be6924e0bf",
+   "rule": "python.lang.security.audit.dangerous-subprocess-use-audit",
+   "path": "deploy/continuous-sync/alert-monitor.py",
+   "line": 86,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "0237259bb0fc47f0",
+   "rule": "python.lang.security.audit.dynamic-urllib-use-detected",
+   "path": "deploy/continuous-sync/alert-monitor.py",
+   "line": 246,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "d1c62f177a2349a7",
+   "rule": "python.lang.security.audit.dynamic-urllib-use-detected",
+   "path": "deploy/continuous-sync/alert-status.py",
+   "line": 137,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "4fe4690b861c43d3",
+   "rule": "python.lang.security.audit.dangerous-subprocess-use-audit",
+   "path": "deploy/continuous-sync/continuous-sync.py",
+   "line": 295,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "84c2b4cf475b2052",
+   "rule": "python.lang.security.audit.dynamic-urllib-use-detected",
+   "path": "deploy/continuous-sync/continuous-sync.py",
+   "line": 363,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "c7c032a483b51c82",
+   "rule": "python.lang.security.audit.dangerous-subprocess-use-audit",
+   "path": "deploy/continuous-sync/continuous-sync.py",
+   "line": 400,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "f5a72ea56ee1f47d",
+   "rule": "python.lang.security.audit.insecure-file-permissions",
+   "path": "deploy/continuous-sync/continuous-sync.py",
+   "line": 440,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "f5a72ea56ee1f47d-1",
+   "rule": "python.lang.security.audit.insecure-file-permissions",
+   "path": "deploy/continuous-sync/continuous-sync.py",
+   "line": 476,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "f714f8734fe0b5ae",
+   "rule": "python.lang.security.audit.dynamic-urllib-use-detected",
+   "path": "deploy/continuous-sync/continuous-sync.py",
+   "line": 599,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "685736fa683b0bdb",
+   "rule": "python.lang.security.audit.dangerous-subprocess-use-audit",
+   "path": "deploy/continuous-sync/continuous-sync.py",
+   "line": 850,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "562067e46a13a501",
+   "rule": "python.lang.security.audit.dangerous-subprocess-use-audit",
+   "path": "deploy/continuous-sync/deploy.py",
+   "line": 70,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "ef5c140ac433c6f9",
+   "rule": "python.lang.security.audit.dangerous-subprocess-use-audit",
+   "path": "deploy/continuous-sync/deploy.py",
+   "line": 317,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "ed8372f025b46e79",
+   "rule": "python.lang.security.audit.dangerous-subprocess-use-audit",
+   "path": "deploy/continuous-sync/deploy.py",
+   "line": 389,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "e90c5e7313274a2b",
+   "rule": "python.lang.security.audit.dangerous-subprocess-use-audit",
+   "path": "deploy/continuous-sync/deploy.py",
+   "line": 440,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "4a0a955df3e5c2b0",
+   "rule": "python.lang.security.audit.dangerous-subprocess-use-audit",
+   "path": "deploy/continuous-sync/deploy.py",
+   "line": 464,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "9a1cbc7021111a78",
+   "rule": "python.lang.security.audit.dynamic-urllib-use-detected",
+   "path": "deploy/continuous-sync/deploy.py",
+   "line": 597,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "9e65436acc1d7e08",
+   "rule": "python.lang.security.audit.dangerous-subprocess-use-audit",
+   "path": "deploy/continuous-sync/tests/test_continuous_sync.py",
+   "line": 48,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "fa3bb3cecbf697b6",
+   "rule": "python.lang.security.audit.dangerous-subprocess-use-audit",
+   "path": "deploy/continuous-sync/tests/test_continuous_sync.py",
+   "line": 73,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "4c2d6aa7eb1e2a9d",
+   "rule": "python.lang.security.audit.dangerous-subprocess-use-audit",
+   "path": "deploy/continuous-sync/tests/test_continuous_sync.py",
+   "line": 123,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "4c2d6aa7eb1e2a9d-1",
+   "rule": "python.lang.security.audit.dangerous-subprocess-use-audit",
+   "path": "deploy/continuous-sync/tests/test_continuous_sync.py",
+   "line": 146,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "440e15afe9e8ec04",
+   "rule": "python.lang.security.audit.dangerous-subprocess-use-audit",
+   "path": "deploy/continuous-sync/tests/test_continuous_sync.py",
+   "line": 152,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "3622893a7074cde2",
+   "rule": "python.lang.security.audit.dangerous-subprocess-use-audit",
+   "path": "deploy/continuous-sync/tests/test_continuous_sync.py",
+   "line": 156,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "be1d11c3784940e4",
+   "rule": "python.lang.security.audit.dangerous-subprocess-use-audit",
+   "path": "deploy/continuous-sync/tests/test_continuous_sync.py",
+   "line": 171,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "86ff956cb6de8b2c",
+   "rule": "python.lang.security.audit.dangerous-subprocess-use-audit",
+   "path": "deploy/continuous-sync/tests/test_continuous_sync.py",
+   "line": 186,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "1c5c003194db8c98",
+   "rule": "python.lang.security.audit.dangerous-subprocess-use-audit",
+   "path": "deploy/continuous-sync/tests/test_continuous_sync.py",
+   "line": 191,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "7063e21d177b87ed",
+   "rule": "python.lang.security.audit.dangerous-subprocess-use-audit",
+   "path": "deploy/continuous-sync/tests/test_continuous_sync.py",
+   "line": 192,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "4975dcea9526135e",
+   "rule": "python.lang.security.audit.dangerous-subprocess-use-audit",
+   "path": "deploy/continuous-sync/tests/test_continuous_sync.py",
+   "line": 214,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "78537fb94b0db4f5",
+   "rule": "python.lang.security.audit.dangerous-subprocess-use-audit",
+   "path": "deploy/continuous-sync/tests/test_continuous_sync.py",
+   "line": 221,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "581e63ca7a7571fe",
+   "rule": "python.lang.security.audit.dangerous-subprocess-use-audit",
+   "path": "deploy/continuous-sync/tests/test_continuous_sync.py",
+   "line": 222,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "c1c758110a99369f",
+   "rule": "python.lang.security.audit.dangerous-subprocess-use-audit",
+   "path": "deploy/continuous-sync/tests/test_continuous_sync.py",
+   "line": 645,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "96c302fafbe93d23",
+   "rule": "python.lang.security.audit.dangerous-subprocess-use-audit",
+   "path": "deploy/continuous-sync/tests/test_continuous_sync.py",
+   "line": 658,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "1046ff098266e5d6",
+   "rule": "python.lang.security.audit.dangerous-subprocess-use-audit",
+   "path": "deploy/deployer/deploy.py",
+   "line": 337,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "a4f64856e0143377",
+   "rule": "python.lang.security.audit.insecure-file-permissions",
+   "path": "deploy/deployer/deploy.py",
+   "line": 475,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "d768fe5d8063e733",
+   "rule": "trailofbits.generic.container-user-root",
+   "path": "deploy/deployer/deploy.py",
+   "line": 912,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "d9b8e82b9d520ffb",
+   "rule": "python.lang.security.audit.dangerous-subprocess-use-audit",
+   "path": "deploy/deployer/deploy.py",
+   "line": 986,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "57e00dd8716e7c02",
+   "rule": "python.lang.security.audit.dangerous-subprocess-use-audit",
+   "path": "deploy/deployer/deploy.py",
+   "line": 995,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "645b4c6155e4a370",
+   "rule": "python.lang.security.audit.dangerous-subprocess-use-audit",
+   "path": "deploy/deployer/deploy.py",
+   "line": 1033,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "686d27cd9915aac7",
+   "rule": "python.lang.security.audit.subprocess-list-passed-as-string",
+   "path": "deploy/deployer/deploy.py",
+   "line": 1033,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "06d8e6b28d7ffaf9",
+   "rule": "python.lang.security.audit.dangerous-subprocess-use-audit",
+   "path": "deploy/deployer/deploy.py",
+   "line": 1198,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "1b72a704337f6dfb",
+   "rule": "python.lang.security.audit.dangerous-subprocess-use-audit",
+   "path": "deploy/deployer/deploy.py",
+   "line": 1232,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "196dbb2b6a678e15",
+   "rule": "trailofbits.generic.container-user-root",
+   "path": "deploy/deployer/test_deploy.py",
+   "line": 737,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "1a154a36c2026fbe",
+   "rule": "python.lang.security.audit.dangerous-subprocess-use-audit",
+   "path": "deploy/deployer/test_release_state_deploy.py",
+   "line": 256,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "491a9bb429995677",
+   "rule": "python.lang.security.audit.dangerous-subprocess-use-audit",
+   "path": "deploy/deployer/test_zakura_mac_cranelift_manager.py",
+   "line": 370,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "5d047fadff01ac29",
+   "rule": "python.lang.security.audit.dangerous-subprocess-use-audit",
+   "path": "deploy/deployer/test_zakura_mac_cranelift_manager.py",
+   "line": 378,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "b388d988206332c3",
+   "rule": "python.lang.security.audit.dangerous-subprocess-use-audit",
+   "path": "deploy/deployer/zakura-mac-cranelift-manager.py",
+   "line": 51,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "78c5a5b3744558c4",
+   "rule": "python.lang.security.audit.dangerous-subprocess-use-audit",
+   "path": "deploy/deployer/zakura-mac-cranelift-manager.py",
+   "line": 64,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "6e2abda86acf99c7",
+   "rule": "python.lang.security.audit.dynamic-urllib-use-detected",
+   "path": "deploy/deployer/zakura-mac-cranelift-manager.py",
+   "line": 187,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "a717b464e4ad48d3",
+   "rule": "python.lang.security.audit.dynamic-urllib-use-detected",
+   "path": "deploy/gateway/broadcast.py",
+   "line": 286,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "9d8ac7c2ddf4550d",
+   "rule": "python.lang.security.audit.dynamic-urllib-use-detected",
+   "path": "deploy/gateway/test_broadcast.py",
+   "line": 211,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "7a01808033af2341",
+   "rule": "python.lang.security.audit.dynamic-urllib-use-detected",
+   "path": "deploy/gateway/test_broadcast.py",
+   "line": 241,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "6ddbd0716019ec20",
+   "rule": "python.lang.security.audit.dynamic-urllib-use-detected",
+   "path": "deploy/mempool-spam/scripts/matrix_poller.py",
+   "line": 33,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "0589d79d40d73298",
+   "rule": "python.lang.security.audit.dynamic-urllib-use-detected",
+   "path": "deploy/mempool-spam/scripts/round_robin_selfsend.py",
+   "line": 78,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "63808d458b690903",
+   "rule": "python.lang.security.audit.dangerous-subprocess-use-audit",
+   "path": "deploy/mempool-spam/scripts/round_robin_selfsend.py",
+   "line": 333,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "26ea621be5a7b909",
+   "rule": "generic.secrets.gitleaks.generic-api-key",
+   "path": "deploy/nu7-fork/faucet.py",
+   "line": 38,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "be7f081c5bdfb517",
+   "rule": "python.lang.security.audit.dynamic-urllib-use-detected",
+   "path": "deploy/nu7-fork/faucet.py",
+   "line": 50,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "a639100d5b835a97",
+   "rule": "python.lang.security.audit.dangerous-subprocess-use-audit",
+   "path": "deploy/nu7-fork/faucet.py",
+   "line": 230,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "f77047a914c50d69",
+   "rule": "python.lang.security.audit.dangerous-subprocess-use-audit",
+   "path": "deploy/nu7-fork/fork.py",
+   "line": 90,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "173361e824a4718a",
+   "rule": "trailofbits.generic.curl-unencrypted-url",
+   "path": "deploy/nu7-fork/fork.py",
+   "line": 146,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "f9b35d888f6b3d38",
+   "rule": "python.lang.security.audit.dynamic-urllib-use-detected",
+   "path": "deploy/nu7-fork/miner/remote-status.py",
+   "line": 53,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "d8de675d0d6acc4f",
+   "rule": "python.lang.security.audit.dynamic-urllib-use-detected",
+   "path": "deploy/nu7-fork/publish_network.py",
+   "line": 49,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "721fe74fcf5f8da7",
+   "rule": "python.lang.security.audit.dangerous-subprocess-use-audit",
+   "path": "deploy/nu7-fork/test_fork.py",
+   "line": 193,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "721fe74fcf5f8da7-1",
+   "rule": "python.lang.security.audit.dangerous-subprocess-use-audit",
+   "path": "deploy/nu7-fork/test_fork.py",
+   "line": 220,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "4df87be12c97190f",
+   "rule": "python.lang.security.audit.dangerous-subprocess-use-audit",
+   "path": "deploy/nu7-fork/test_fork.py",
+   "line": 326,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "bb26f04b70a163fb",
+   "rule": "python.lang.security.audit.dynamic-urllib-use-detected",
+   "path": "deploy/runner/nu7_activation.py",
+   "line": 37,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "15132a8babbe45b7",
+   "rule": "python.lang.security.audit.dangerous-subprocess-use-audit",
+   "path": "deploy/runner/nu7_activation.py",
+   "line": 350,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "bb26f04b70a163fb-1",
+   "rule": "python.lang.security.audit.dynamic-urllib-use-detected",
+   "path": "deploy/runner/nu7_activation.py",
+   "line": 611,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "d848581c9ada5ac9",
+   "rule": "bash.lang.security.ifs-tampering",
+   "path": "deploy/runner/perf.sh",
+   "line": 79,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "a3b7bcc4ba1a04e1",
+   "rule": "python.lang.security.audit.dangerous-subprocess-use-audit",
+   "path": "deploy/runner/test_monitoring_deploy_tool.py",
+   "line": 66,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "90f0bb904debbb44",
+   "rule": "python.lang.security.audit.dangerous-subprocess-use-audit",
+   "path": "deploy/runner/test_monitoring_deploy_tool.py",
+   "line": 122,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "64c62a88bd08b3b1",
+   "rule": "python.lang.security.audit.dangerous-subprocess-use-audit",
+   "path": "deploy/runner/test_monitoring_deploy_tool.py",
+   "line": 130,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "851ca5dd38a6455a",
+   "rule": "generic.secrets.gitleaks.generic-api-key",
+   "path": "deploy/runner/test_monitoring_deploy_tool.py",
+   "line": 141,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "1ee0d02afe87d938",
+   "rule": "generic.secrets.gitleaks.generic-api-key",
+   "path": "deploy/runner/test_monitoring_deploy_tool.py",
+   "line": 159,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "7d00e8cf620c46ac",
+   "rule": "python.lang.security.audit.dangerous-subprocess-use-audit",
+   "path": "deploy/runner/test_monitoring_deploy_tool.py",
+   "line": 259,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "00c3833f0bde505a",
+   "rule": "python.lang.security.audit.dangerous-subprocess-use-audit",
+   "path": "deploy/runner/test_monitoring_deploy_tool.py",
+   "line": 353,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "5456fdedae13a69c",
+   "rule": "python.lang.security.audit.dangerous-subprocess-use-audit",
+   "path": "deploy/runner/test_monitoring_deploy_tool.py",
+   "line": 425,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "ecd1f3b68c153ea1",
+   "rule": "python.lang.security.audit.dangerous-subprocess-use-audit",
+   "path": "deploy/runner/test_monitoring_deploy_tool.py",
+   "line": 451,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "15cf346cb5387c55",
+   "rule": "python.lang.security.audit.dangerous-subprocess-use-audit",
+   "path": "deploy/runner/test_monitoring_deploy_tool.py",
+   "line": 462,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "632c05005df03273",
+   "rule": "python.lang.security.audit.dangerous-subprocess-use-audit",
+   "path": "deploy/runner/test_monitoring_deploy_tool.py",
+   "line": 471,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "cd0ecc782ea0476b",
+   "rule": "python.lang.security.audit.eval-detected",
+   "path": "deploy/runner/test_monitoring_deploy_tool.py",
+   "line": 501,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "c709b44db993330e",
+   "rule": "python.lang.security.audit.exec-detected",
+   "path": "deploy/runner/test_nu7_qualify.py",
+   "line": 43,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "dc10cf41c8486871",
+   "rule": "python.lang.security.audit.dangerous-subprocess-use-audit",
+   "path": "deploy/runner/test_zakura_cluster_status.py",
+   "line": 352,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "170539aa189525f5",
+   "rule": "python.lang.security.audit.dynamic-urllib-use-detected",
+   "path": "deploy/runner/test_zakura_cluster_status.py",
+   "line": 1358,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "a018db21b1fb1643",
+   "rule": "python.lang.security.audit.dynamic-urllib-use-detected",
+   "path": "deploy/runner/test_zakura_cluster_status.py",
+   "line": 1360,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "85644a7eb3824c56",
+   "rule": "python.lang.security.audit.dynamic-urllib-use-detected",
+   "path": "deploy/runner/test_zakura_cluster_status.py",
+   "line": 1366,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "fc2d090945c36431",
+   "rule": "python.lang.security.audit.dynamic-urllib-use-detected",
+   "path": "deploy/runner/test_zakura_cluster_status.py",
+   "line": 1375,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "b5833c5f794e17fb",
+   "rule": "python.lang.security.audit.dynamic-urllib-use-detected",
+   "path": "deploy/runner/test_zakura_cluster_status.py",
+   "line": 1396,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "71d04c32162a6e27",
+   "rule": "python.lang.security.audit.dynamic-urllib-use-detected",
+   "path": "deploy/runner/test_zakura_cluster_status.py",
+   "line": 1409,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "b5833c5f794e17fb-1",
+   "rule": "python.lang.security.audit.dynamic-urllib-use-detected",
+   "path": "deploy/runner/test_zakura_cluster_status.py",
+   "line": 1418,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "8ae0bc69b1179303",
+   "rule": "python.lang.security.audit.dynamic-urllib-use-detected",
+   "path": "deploy/runner/test_zakura_cluster_status.py",
+   "line": 1422,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "fc2d090945c36431-1",
+   "rule": "python.lang.security.audit.dynamic-urllib-use-detected",
+   "path": "deploy/runner/test_zakura_cluster_status.py",
+   "line": 1481,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "fc2d090945c36431-2",
+   "rule": "python.lang.security.audit.dynamic-urllib-use-detected",
+   "path": "deploy/runner/test_zakura_cluster_status.py",
+   "line": 1509,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "c795028ccf6d83ac",
+   "rule": "python.lang.security.audit.dynamic-urllib-use-detected",
+   "path": "deploy/runner/test_zakura_cluster_status.py",
+   "line": 1516,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "08a9bcac1a91c207",
+   "rule": "python.lang.security.audit.dynamic-urllib-use-detected",
+   "path": "deploy/runner/test_zakura_cluster_status.py",
+   "line": 1524,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "05629b9c77baa70c",
+   "rule": "python.lang.security.audit.dynamic-urllib-use-detected",
+   "path": "deploy/runner/test_zakura_cluster_status.py",
+   "line": 1530,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "185c47e5128f93ee",
+   "rule": "python.lang.security.audit.dynamic-urllib-use-detected",
+   "path": "deploy/runner/test_zakura_cluster_status.py",
+   "line": 1532,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "b66b1cab87ac84bf",
+   "rule": "python.lang.security.audit.dynamic-urllib-use-detected",
+   "path": "deploy/runner/test_zakura_cluster_status.py",
+   "line": 1548,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "d2a1d6a49c44055b",
+   "rule": "python.lang.security.audit.dynamic-urllib-use-detected",
+   "path": "deploy/runner/test_zakura_cluster_status.py",
+   "line": 1558,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "71d04c32162a6e27-1",
+   "rule": "python.lang.security.audit.dynamic-urllib-use-detected",
+   "path": "deploy/runner/test_zakura_cluster_status.py",
+   "line": 1564,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "b673966ee2050497",
+   "rule": "python.lang.security.audit.dynamic-urllib-use-detected",
+   "path": "deploy/runner/test_zakura_cluster_status.py",
+   "line": 1575,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "fc2d090945c36431-3",
+   "rule": "python.lang.security.audit.dynamic-urllib-use-detected",
+   "path": "deploy/runner/test_zakura_cluster_status.py",
+   "line": 1950,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "d1477d3e91c37ecf",
+   "rule": "python.lang.security.audit.dynamic-urllib-use-detected",
+   "path": "deploy/runner/test_zakura_cluster_status.py",
+   "line": 2041,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "66a2ae098265485a",
+   "rule": "python.lang.security.audit.dangerous-subprocess-use-audit",
+   "path": "deploy/runner/test_zakura_monitoring_compat.py",
+   "line": 468,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "278893e52c9de2e6",
+   "rule": "python.lang.security.audit.dangerous-subprocess-use-audit",
+   "path": "deploy/runner/test_zakura_monitoring_compat.py",
+   "line": 553,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "c9c450c3c28c44cf",
+   "rule": "python.lang.security.audit.dangerous-subprocess-use-audit",
+   "path": "deploy/runner/test_zakura_monitoring_compat.py",
+   "line": 555,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "1e126e6d41b486ab",
+   "rule": "python.lang.security.audit.dangerous-subprocess-use-audit",
+   "path": "deploy/runner/test_zakura_monitoring_compat.py",
+   "line": 557,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "9930f97e679ee45d",
+   "rule": "python.lang.security.audit.dangerous-subprocess-use-audit",
+   "path": "deploy/runner/test_zakura_monitoring_install.py",
+   "line": 103,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "f6d6a167a38f703a",
+   "rule": "python.lang.security.audit.dangerous-subprocess-use-audit",
+   "path": "deploy/runner/test_zakura_monitoring_install.py",
+   "line": 138,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "069b27eb91e329c9",
+   "rule": "python.lang.security.audit.dangerous-subprocess-use-audit",
+   "path": "deploy/runner/test_zakura_monitoring_install.py",
+   "line": 144,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "f2b9eba004a4d477",
+   "rule": "python.lang.security.audit.dangerous-subprocess-use-audit",
+   "path": "deploy/runner/test_zakura_monitoring_install.py",
+   "line": 152,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "d42c5f93b8c5a42c",
+   "rule": "generic.secrets.gitleaks.generic-api-key",
+   "path": "deploy/runner/test_zakura_monitoring_install.py",
+   "line": 283,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "49ce1c9081cadd86",
+   "rule": "generic.secrets.gitleaks.generic-api-key",
+   "path": "deploy/runner/test_zakura_monitoring_install.py",
+   "line": 287,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "9185ff6f78acf51a",
+   "rule": "python.lang.security.audit.dangerous-subprocess-use-audit",
+   "path": "deploy/runner/test_zakura_monitoring_install.py",
+   "line": 346,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "2dcad57d3b4b77e7",
+   "rule": "python.lang.security.audit.dangerous-subprocess-use-audit",
+   "path": "deploy/runner/test_zakura_monitoring_install.py",
+   "line": 371,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "040a5b5306b73fbe",
+   "rule": "python.lang.security.audit.dangerous-subprocess-use-audit",
+   "path": "deploy/runner/test_zakura_monitoring_install.py",
+   "line": 384,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "49485822b95cf9ae",
+   "rule": "python.lang.security.audit.dangerous-subprocess-use-audit",
+   "path": "deploy/runner/test_zakura_monitoring_install.py",
+   "line": 396,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "49485822b95cf9ae-1",
+   "rule": "python.lang.security.audit.dangerous-subprocess-use-audit",
+   "path": "deploy/runner/test_zakura_monitoring_install.py",
+   "line": 405,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "280bf09d643ce9aa",
+   "rule": "python.lang.security.audit.dangerous-subprocess-use-audit",
+   "path": "deploy/runner/test_zakura_monitoring_install.py",
+   "line": 429,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "49485822b95cf9ae-2",
+   "rule": "python.lang.security.audit.dangerous-subprocess-use-audit",
+   "path": "deploy/runner/test_zakura_monitoring_install.py",
+   "line": 451,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "4f1a17acb06d1781",
+   "rule": "python.lang.security.audit.dangerous-subprocess-use-audit",
+   "path": "deploy/runner/test_zakura_monitoring_install.py",
+   "line": 487,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "1a67bf966f311d2d",
+   "rule": "python.lang.security.audit.dangerous-subprocess-use-audit",
+   "path": "deploy/runner/test_zakura_monitoring_install.py",
+   "line": 535,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "49485822b95cf9ae-3",
+   "rule": "python.lang.security.audit.dangerous-subprocess-use-audit",
+   "path": "deploy/runner/test_zakura_monitoring_install.py",
+   "line": 629,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "23827d8903540993",
+   "rule": "python.lang.security.audit.dangerous-subprocess-use-audit",
+   "path": "deploy/runner/zakura-cluster-status.py",
+   "line": 1033,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "2742b1c81b265bda",
+   "rule": "python.lang.security.audit.dynamic-urllib-use-detected",
+   "path": "deploy/runner/zakura-cluster-status.py",
+   "line": 1089,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "6441f07487899487",
+   "rule": "python.lang.security.audit.dynamic-urllib-use-detected",
+   "path": "deploy/runner/zakura-cluster-status.py",
+   "line": 2326,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "d81138a21b0a1baf",
+   "rule": "python.lang.security.audit.dynamic-urllib-use-detected",
+   "path": "deploy/runner/zakura-cluster-watchdog.py",
+   "line": 281,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "b31f2826149fc1ae",
+   "rule": "python.lang.security.audit.dynamic-urllib-use-detected",
+   "path": "deploy/runner/zakura-cluster-watchdog.py",
+   "line": 452,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "64ddf7e84e74afe8",
+   "rule": "python.lang.security.audit.dangerous-subprocess-use-audit",
+   "path": "deploy/runner/zakura-cluster-watchdog.py",
+   "line": 1093,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "8a0b5cb26fc0a230",
+   "rule": "python.lang.security.audit.dynamic-urllib-use-detected",
+   "path": "deploy/runner/zakura-metrics-dashboard.py",
+   "line": 304,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "aa21b4eb57a82ee7",
+   "rule": "python.lang.security.audit.dynamic-urllib-use-detected",
+   "path": "deploy/runner/zakura-metrics-dashboard.py",
+   "line": 350,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "6516273db6be0728",
+   "rule": "python.lang.security.audit.dangerous-subprocess-use-audit",
+   "path": "deploy/runner/zakura-monitoring-acceptance.py",
+   "line": 141,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "277aefeff4746c12",
+   "rule": "python.lang.security.audit.dangerous-subprocess-use-audit",
+   "path": "deploy/runner/zakura-monitoring-deploy.py",
+   "line": 94,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "4e0ee2e807ec3490",
+   "rule": "python.lang.security.audit.dangerous-subprocess-use-audit",
+   "path": "deploy/runner/zakura-monitoring-deploy.py",
+   "line": 102,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "610f06b74c4fa6f9",
+   "rule": "python.lang.security.audit.dangerous-subprocess-use-audit",
+   "path": "deploy/runner/zakura-monitoring-deploy.py",
+   "line": 116,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "2b7147757cdece06",
+   "rule": "python.lang.security.audit.insecure-file-permissions",
+   "path": "deploy/runner/zakura-monitoring-deploy.py",
+   "line": 220,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "2f98ed4915749718",
+   "rule": "python.lang.security.audit.dangerous-subprocess-use-audit",
+   "path": "deploy/runner/zakura-monitoring-deploy.py",
+   "line": 245,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "65f2ce0d43d29c44",
+   "rule": "python.lang.security.audit.dangerous-subprocess-use-audit",
+   "path": "deploy/runner/zakura-monitoring-deploy.py",
+   "line": 300,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "dc5b3c1cac79b4da",
+   "rule": "python.lang.security.audit.dangerous-subprocess-use-audit",
+   "path": "deploy/runner/zakura-monitoring-deploy.py",
+   "line": 314,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "eb26541f88fe0724",
+   "rule": "python.lang.security.audit.dangerous-subprocess-use-audit",
+   "path": "deploy/runner/zakura-monitoring-deploy.py",
+   "line": 373,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "428af0b1ae51b8c9",
+   "rule": "python.lang.security.audit.dangerous-subprocess-use-audit",
+   "path": "deploy/runner/zakura-monitoring-deploy.py",
+   "line": 389,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "27f1d3fdc5037e95",
+   "rule": "python.lang.security.audit.insecure-file-permissions",
+   "path": "deploy/runner/zakura_monitoring/install.py",
+   "line": 253,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "e970b833f5880d3c",
+   "rule": "python.lang.security.audit.insecure-file-permissions",
+   "path": "deploy/runner/zakura_monitoring/install.py",
+   "line": 254,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "b62e81e0922d0086",
+   "rule": "python.lang.security.audit.insecure-file-permissions",
+   "path": "deploy/runner/zakura_monitoring/install.py",
+   "line": 262,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "f43f2fcd1901a012",
+   "rule": "python.lang.security.audit.dangerous-subprocess-use-audit",
+   "path": "deploy/runner/zakura_monitoring/install.py",
+   "line": 263,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "6eed65fd466171c7",
+   "rule": "python.lang.security.audit.insecure-file-permissions",
+   "path": "deploy/runner/zakura_monitoring/install.py",
+   "line": 302,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "2c63ab31c51c5edb",
+   "rule": "python.lang.security.audit.dangerous-subprocess-use-audit",
+   "path": "deploy/runner/zakura_monitoring/remote.py",
+   "line": 57,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "6258493ccbc43105",
+   "rule": "python.lang.security.audit.dangerous-subprocess-use-audit",
+   "path": "deploy/runner/zakura_monitoring/remote.py",
+   "line": 81,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "b8b8bc91ead2b4dc",
+   "rule": "python.lang.security.audit.dynamic-urllib-use-detected",
+   "path": "deploy/runner/zakura_monitoring/slack.py",
+   "line": 133,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "a1f05856d0eab477",
+   "rule": "rust.lang.security.args",
+   "path": "deploy/zakura-mac-cranelift/cranelift/probes/src/main.rs",
+   "line": 35,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "2b8866b4e4681fb1",
+   "rule": "python.lang.security.audit.dangerous-subprocess-use-audit",
+   "path": "deploy/zakura-mac-cranelift/cranelift/qualify.py",
+   "line": 44,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "42c3d53d0e6f043e",
+   "rule": "python.lang.security.audit.dangerous-subprocess-use-audit",
+   "path": "deploy/zakura-mac-cranelift/cranelift/qualify.py",
+   "line": 45,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "1b44952253e1633d",
+   "rule": "python.lang.security.audit.dangerous-subprocess-use-audit",
+   "path": "deploy/zakura-mac-cranelift/cranelift/qualify.py",
+   "line": 47,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "9ee0e179f6f642a1",
+   "rule": "python.lang.security.audit.dangerous-subprocess-use-audit",
+   "path": "deploy/zakura-mac-cranelift/cranelift/qualify.py",
+   "line": 49,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "96b1d41b465d35ce",
+   "rule": "python.lang.security.audit.dangerous-subprocess-use-audit",
+   "path": "deploy/zakura-mac-cranelift/cranelift/qualify.py",
+   "line": 113,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "544aedff4fdbc91c",
+   "rule": "python.lang.security.audit.dangerous-subprocess-use-audit",
+   "path": "deploy/zakura-mac-cranelift/tests/test_build_inputs.py",
+   "line": 66,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "5c22c40a1c28da36",
+   "rule": "rust.lang.security.unsafe-usage",
+   "path": "qa/fuzz/sim/src/stats.rs",
+   "line": 121,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "3f0c28bc11765a3c",
+   "rule": "python.lang.security.audit.dangerous-subprocess-use-audit",
+   "path": "scripts/differential-treestate-check.py",
+   "line": 48,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "7def2e594bd112e2",
+   "rule": "python.lang.security.audit.dynamic-urllib-use-detected",
+   "path": "scripts/differential-treestate-check.py",
+   "line": 72,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "d743226d90a3d076",
+   "rule": "python.lang.security.audit.dynamic-urllib-use-detected",
+   "path": "scripts/zakura-metrics-dashboard.py",
+   "line": 291,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  },
+  {
+   "fingerprint": "9842762d7176643a",
+   "rule": "python.lang.security.audit.dynamic-urllib-use-detected",
+   "path": "scripts/zakura-metrics-dashboard.py",
+   "line": 344,
+   "first_seen": "2026-11-03",
+   "due": "2027-05-02"
+  }
+ ]
+}
