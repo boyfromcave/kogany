@@ -171,6 +171,12 @@ crate::kogany_rpc_trait! {
         #[method(name = "yed_getselection", access = Unauthenticated)]
         async fn yed_getselection(&self, ref_height: Value, selector_hex: Value) -> RpcResult<SelectionJson>;
 
+        /// ycashd's `verifychain ( checklevel numblocks )`: the YED index's last `numblocks`
+        /// snapshots (default 288, 0 = all) re-checked against the best chain's hashes, and at
+        /// `checklevel >= 1` (default 3) its stored totals against the records they summarise.
+        #[method(name = "verifychain", access = Unauthenticated)]
+        async fn verifychain(&self, checklevel: Option<Value>, numblocks: Option<Value>) -> RpcResult<bool>;
+
         /// The `Notices` record of the vault `vaultTxid:0`.
         #[method(name = "yed_getnotice", access = Unauthenticated)]
         async fn yed_getnotice(&self, vault_txid: String) -> RpcResult<NoticeJson>;
@@ -506,6 +512,46 @@ impl YedRpc for YedRpcImpl {
             blockhash: tip.map(|t| display_hex(&t.hash)).unwrap_or_default(),
             statehash: display_hex(&s.index.state_hash()),
         })
+    }
+
+    async fn verifychain(
+        &self,
+        checklevel: Option<Value>,
+        numblocks: Option<Value>,
+    ) -> RpcResult<bool> {
+        let level = number_or(checklevel.as_ref(), 3, "checklevel")?.clamp(0, 4);
+        let depth = number_or(numblocks.as_ref(), 288, "numblocks")?;
+        // ycashd's VerifyDB re-reads blocks; a node where YED is not live has no index to check.
+        let Ok(s) = self.live().await else {
+            return Ok(true);
+        };
+        let Some(tip) = s.index.tip() else {
+            return Ok(true);
+        };
+        let start = i64::from(s.params.start_height);
+        let from = if depth <= 0 {
+            start
+        } else {
+            start.max(tip.height.saturating_sub(depth).saturating_add(1))
+        };
+        if self.state.best_chain_hash(tip.height).await != Some(tip.hash) {
+            return Ok(false);
+        }
+        for h in from..=tip.height {
+            let Some(snap) = s.index.snapshot_at(h) else {
+                return Ok(false);
+            };
+            if self.state.best_chain_hash(h).await != Some(snap.block_hash) {
+                return Ok(false);
+            }
+        }
+        if level >= 1 {
+            let a = s.index.verify();
+            if !(a.ok && a.mismatches.is_empty()) {
+                return Ok(false);
+            }
+        }
+        Ok(true)
     }
 
     async fn yed_verifyindex(&self) -> RpcResult<VerifyIndexJson> {

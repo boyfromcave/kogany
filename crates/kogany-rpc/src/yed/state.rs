@@ -114,6 +114,13 @@ pub trait YedReadState: Send + Sync + 'static {
     async fn set_audit(&self) -> (Vec<String>, Vec<SetAudit>) {
         (Vec::new(), Vec::new())
     }
+
+    /// The best chain's block hash at `height` (internal order), for `verifychain`'s re-check
+    /// of the YED index against the chain. The default has no chain.
+    async fn best_chain_hash(&self, height: i64) -> Option<Hash32> {
+        let _ = height;
+        None
+    }
 }
 
 #[async_trait]
@@ -162,6 +169,9 @@ impl<S: YedReadState + ?Sized> YedReadState for Arc<S> {
     }
     async fn set_audit(&self) -> (Vec<String>, Vec<SetAudit>) {
         (**self).set_audit().await
+    }
+    async fn best_chain_hash(&self, height: i64) -> Option<Hash32> {
+        (**self).best_chain_hash(height).await
     }
 }
 

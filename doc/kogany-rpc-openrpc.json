@@ -769,6 +769,32 @@
       "x-kogany-trait": "YedRpc"
     },
     {
+      "description": "ycashd's `verifychain ( checklevel numblocks )`: the YED index's last `numblocks`\nsnapshots (default 288, 0 = all) re-checked against the best chain's hashes, and at\n`checklevel >= 1` (default 3) its stored totals against the records they summarise.",
+      "name": "verifychain",
+      "params": [
+        {
+          "name": "checklevel",
+          "required": false,
+          "schema": {}
+        },
+        {
+          "name": "numblocks",
+          "required": false,
+          "schema": {}
+        }
+      ],
+      "result": {
+        "name": "verifychain_result",
+        "schema": {
+          "type": "boolean"
+        }
+      },
+      "summary": "ycashd's `verifychain ( checklevel numblocks )`: the YED index's last `numblocks`",
+      "x-kogany-access": "Unauthenticated",
+      "x-kogany-served-by": "kogany",
+      "x-kogany-trait": "YedRpc"
+    },
+    {
       "description": "The `Notices` record of the vault `vaultTxid:0`.",
       "name": "yed_getnotice",
       "params": [

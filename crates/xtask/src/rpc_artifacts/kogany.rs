@@ -177,6 +177,10 @@ pub(super) fn generate(repo_root: &Path, output_dir: &Path) -> Result<(), BoxErr
     Ok(())
 }
 
+/// ycashd stock methods (in neither contract) kogany serves through its extension because they
+/// read the YED index: `verifychain` re-checks the index against the best chain.
+const STOCK_METHODS: &[&str] = &["verifychain"];
+
 /// Checks the document in `output_dir` against both contracts and `YED_RPC_VERSION`; prints a
 /// one-line summary.
 pub(super) fn check_contracts(repo_root: &Path, output_dir: &Path) -> Result<(), BoxError> {
@@ -243,6 +247,9 @@ pub(super) fn check_contracts(repo_root: &Path, output_dir: &Path) -> Result<(),
         }
     }
     for name in served.keys() {
+        if STOCK_METHODS.contains(&name.as_str()) {
+            continue;
+        }
         if !expected.contains_key(name) && !problems.iter().any(|p| p.starts_with(name.as_str())) {
             problems.push(format!("{name} is served but is in neither contract"));
         }
