@@ -22,10 +22,11 @@ const VAULT_BRANCH_ID: u32 = 0x6d5b_7a31;
 
 /// `ParametersBuilderError::VaultWithoutSapling` (the error type is private to the crate's
 /// `network` module, so the tests compare its message).
-const WITHOUT_SAPLING: &str = "the Vault upgrade requires Sapling active at or below its height";
+/// ycashd's `InitError` text (`ycash6 src/init.cpp:1559`), byte for byte.
+const WITHOUT_SAPLING: &str = "The Vault upgrade requires Sapling active at or below its height (quantum spec R-A3: the vault opcodes are defined for v4 transactions only)";
 /// `ParametersBuilderError::VaultWithNu5OrLater`.
-const WITH_NU5_OR_LATER: &str =
-    "NU5 and later upgrades cannot be scheduled together with the Vault upgrade";
+/// ycashd's `InitError` text (`ycash6 src/init.cpp:1563`), byte for byte.
+const WITH_NU5_OR_LATER: &str = "NU5..NU6.2 cannot be scheduled together with the Vault upgrade (quantum spec R-A3; this node builds V1 history-tree leaves in the Vault epoch)";
 /// `ParametersBuilderError::OutOfOrderUpgrades`.
 const OUT_OF_ORDER: &str = "network upgrades must be activated in order specified by the protocol";
 

@@ -129,6 +129,11 @@ impl ReorgResurrect {
         }));
     }
 
+    /// Whether no reset task is running or waiting to be collected.
+    pub(super) fn is_idle(&self) -> bool {
+        self.pending.is_none()
+    }
+
     /// The disconnected transactions of a finished reset task, to queue for verification; `None`
     /// while it runs or when none runs. Forgets the disconnected blocks and keeps the filled ones.
     pub(super) fn poll_disconnected(
@@ -260,7 +265,12 @@ mod tests {
             }
         });
         let finished = Arc::new(Notify::new());
+        assert!(resurrect.is_idle(), "no reset task before a reset");
         resurrect.reset((Height(10), hash(10)), read_state, finished.clone());
+        assert!(
+            !resurrect.is_idle(),
+            "the mempool is not settled while a reset task runs"
+        );
         finished.notified().await;
 
         let returned =
@@ -286,6 +296,10 @@ mod tests {
         };
         let returned: Vec<_> = returned.iter().map(|tx| tx.hash()).collect();
         assert_eq!(returned, vec![spends[1].hash(), spends[2].hash()]);
+        assert!(
+            resurrect.is_idle(),
+            "a collected reset task leaves the resurrection idle"
+        );
         let kept: Vec<_> = resurrect.kept.iter().map(|block| block.hash).collect();
         assert_eq!(
             kept,
