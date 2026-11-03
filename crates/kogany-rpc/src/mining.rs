@@ -253,11 +253,26 @@ impl YedTemplateFilter for YedTemplateRun {
             }
         };
         if effect.outcome.invalid {
+            let txid = tx.transaction.id().mined_id();
+            // `yellowback.test_fault = "template"` (regtest): keep this one invalid candidate,
+            // so the template's own block check refuses the template (ycash6 FilterTemplate's
+            // `ConsumeTemplateFault`). Its effect is not applied.
+            if zakura_state::yed::consume_yed_template_fault() {
+                tracing::info!(
+                    %txid,
+                    verdict = %effect.outcome.log.verdict,
+                    "FilterTemplate: -yellowbacktestfault=template keeps {txid}"
+                );
+                zakura_rpc::ycash_mining::refuse_template_block_check(format!(
+                    "bad-yellowback-{}",
+                    effect.outcome.log.verdict
+                ));
+                return true;
+            }
             tracing::debug!(
-                txid = ?tx.transaction.id().mined_id(),
                 height = self.height,
                 verdict = %effect.outcome.log.verdict,
-                "FilterTemplate: skipping a candidate the YED module refuses"
+                "FilterTemplate: skipping {txid}"
             );
             return false;
         }

@@ -197,6 +197,7 @@ pub fn yed_network_params(
         }
     };
     config.validate()?;
+    crate::service::yed::arm_yed_template_fault(config);
     let Some(start) = start else {
         return Ok(None);
     };

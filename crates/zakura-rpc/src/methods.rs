@@ -4143,6 +4143,15 @@ where
             )
             .map_misc_error()?;
 
+            // Ycash: the template's own block check (ycashd `TestNewBlockAtTipValidity`) refuses
+            // a template the filter let an invalid candidate into (`yellowback.test_fault`).
+            #[cfg(feature = "ycash")]
+            if let Some(reject) =
+                types::get_block_template::ycash::take_template_block_check_reject()
+            {
+                return Err(reject).map_misc_error();
+            }
+
             tracing::debug!(
                 selected_mempool_tx_hashes = ?mempool_txs
                     .iter()

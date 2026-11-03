@@ -157,6 +157,30 @@ impl YcashMining for NotLive {
     }
 }
 
+/// The reject the template's own block check gives (ycashd `CreateNewBlock`'s
+/// `TestNewBlockAtTipValidity`), set by a filter that kept a candidate the module refuses: only
+/// `yellowback.test_fault = "template"` (regtest) does that. `getblocktemplate` takes it after
+/// selection and refuses the template with it.
+static TEMPLATE_BLOCK_CHECK_REJECT: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
+
+/// Records the reject the template's block check gives (see [`TEMPLATE_BLOCK_CHECK_REJECT`]).
+pub fn refuse_template_block_check(reject: String) {
+    *TEMPLATE_BLOCK_CHECK_REJECT
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(reject);
+}
+
+/// Takes the reject [`refuse_template_block_check`] recorded, as ycashd's error text.
+pub fn take_template_block_check_reject() -> Option<String> {
+    TEMPLATE_BLOCK_CHECK_REJECT
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .take()
+        .map(|reject| {
+            format!("CreateNewBlock: TestNewBlockAtTipValidity failed: {reject} (code 16)")
+        })
+}
+
 /// The YED half of the template filter (ycash6 `yellowback::policy::FilterTemplate`,
 /// `src/yellowback/policy.cpp:49-94`), one per template.
 ///
@@ -825,5 +849,27 @@ fn vault_tx(tx: &Transaction, txid: &transaction::Hash) -> VaultTx {
         coinbase: tx.is_coinbase(),
         inputs,
         outputs,
+    }
+}
+
+/// The `depends` field of each template transaction, as ycashd computes it
+/// (`src/rpc/mining.cpp:743-766`): for every transparent input whose previous output is created
+/// by a transaction earlier in the block, that transaction's index in the block, where the
+/// coinbase is index 0, so the first `transactions` entry is 1. One entry per such input, in
+/// input order. Template policy only.
+pub fn fill_depends(
+    templates: &mut [super::TransactionTemplate<zakura_chain::amount::NonNegative>],
+    txs: &[&zakura_chain::transaction::Transaction],
+) {
+    let mut index: std::collections::HashMap<zakura_chain::transaction::Hash, u16> =
+        std::collections::HashMap::new();
+    for (i, (template, tx)) in templates.iter_mut().zip(txs).enumerate() {
+        template.depends = tx
+            .inputs()
+            .iter()
+            .filter_map(|input| input.outpoint())
+            .filter_map(|outpoint| index.get(&outpoint.hash).copied())
+            .collect();
+        index.insert(template.hash, u16::try_from(i + 1).unwrap_or(u16::MAX));
     }
 }
