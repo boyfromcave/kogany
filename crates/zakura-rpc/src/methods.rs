@@ -2436,6 +2436,11 @@ where
 
         // send transaction to the rpc queue, ignore any error.
         let unmined_transaction = UnminedTx::from(raw_transaction.clone());
+        // kogany (S5, F-S5-K16): the queue retries its transactions on each new tip for five
+        // blocks, so a refused transaction (say, a vault spend one block early) could enter the
+        // mempool later on its own; ycashd forgets a refused transaction. On Ycash it is queued
+        // only once the mempool has accepted it (below).
+        #[cfg(not(feature = "ycash"))]
         let _ = queue_sender.send(unmined_transaction);
 
         let transaction_parameter = mempool::Gossip::Tx(raw_transaction.into());
@@ -2500,6 +2505,8 @@ where
                 None => Ok(SendRawTransactionResponse(transaction_hash)),
             };
         }
+        #[cfg(feature = "ycash")]
+        let _ = queue_sender.send(unmined_transaction);
 
         queue_result
             .map(|_| SendRawTransactionResponse(transaction_hash))
