@@ -280,6 +280,10 @@ pub struct InboundSetupData {
 
     /// A channel to send misbehavior reports to the [`AddressBook`].
     pub misbehavior_sender: tokio::sync::mpsc::Sender<(PeerSocketAddr, u32)>,
+
+    /// kogany (S5-K12): woken when a gossiped block cannot connect, so the syncer runs at once.
+    #[cfg(feature = "ycash")]
+    pub gossip_gap: Option<std::sync::Arc<tokio::sync::Notify>>,
 }
 
 /// Tracks the internal state of the [`Inbound`] service during setup.
@@ -473,6 +477,8 @@ impl Service<zn::Request> for Inbound {
                         latest_chain_tip,
                         network,
                         misbehavior_sender,
+                        #[cfg(feature = "ycash")]
+                        gossip_gap,
                     } = setup_data;
 
                     let cached_peer_addr_response = CachedPeerAddrResponse::new(address_book);
@@ -490,6 +496,8 @@ impl Service<zn::Request> for Inbound {
                     #[cfg(feature = "ycash")]
                     let block_downloads =
                         block_downloads.with_misbehavior_sender(misbehavior_sender.clone());
+                    #[cfg(feature = "ycash")]
+                    let block_downloads = block_downloads.with_gossip_gap_notify(gossip_gap);
                     let block_downloads = Box::pin(block_downloads);
 
                     result = Ok(());

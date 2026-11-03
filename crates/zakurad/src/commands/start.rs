@@ -698,6 +698,11 @@ impl StartCmd {
                 .expect("address book lock is not poisoned")
                 .address_metrics_watcher(),
         );
+        // Ycash (kogany S5-K12): a gossiped block that cannot connect starts a sync round at once.
+        #[cfg(feature = "ycash")]
+        let gossip_gap = std::sync::Arc::new(tokio::sync::Notify::new());
+        #[cfg(feature = "ycash")]
+        syncer.set_gossip_gap_notify(gossip_gap.clone());
 
         info!("initializing mempool");
         #[allow(unused_mut)]
@@ -743,6 +748,8 @@ impl StartCmd {
             latest_chain_tip: latest_chain_tip.clone(),
             network: config.network.network.clone(),
             misbehavior_sender,
+            #[cfg(feature = "ycash")]
+            gossip_gap: Some(gossip_gap),
         };
         setup_tx
             .send(setup_data)
