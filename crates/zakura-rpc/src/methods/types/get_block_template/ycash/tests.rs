@@ -785,3 +785,46 @@ fn ycash_template_has_no_maxtime_or_workid() {
     };
     assert_eq!(t.max_time(), zakura_chain::serialization::DateTime32::MAX);
 }
+
+/// F-S5-19: a chained spend's `depends` is the 1-based block index of its parent, one entry per
+/// input that spends an earlier template transaction (`ycash6 src/rpc/mining.cpp:743-766`).
+#[test]
+fn depends_are_one_based_block_indexes() {
+    let a = payment(1);
+    let b = payment(2);
+    let a_id = a.transaction.id().mined_id();
+    let b_id = b.transaction.id().mined_id();
+    let child = verified(
+        vec![
+            input(0, 0, vec![]),
+            transparent::Input::PrevOut {
+                outpoint: transparent::OutPoint {
+                    hash: b_id,
+                    index: 0,
+                },
+                unlock_script: Script::new(&[]),
+                sequence: u32::MAX,
+            },
+            transparent::Input::PrevOut {
+                outpoint: transparent::OutPoint {
+                    hash: a_id,
+                    index: 0,
+                },
+                unlock_script: Script::new(&[]),
+                sequence: u32::MAX,
+            },
+        ],
+        vec![Output::new(amount(1000), Script::new(&[0x51]))],
+        vec![Output::new(amount(1_000_000), Script::new(&[0x51])); 3],
+    );
+    let txs = [a, b, child];
+    let mut templates: Vec<TransactionTemplate<NonNegative>> = txs.iter().map(Into::into).collect();
+    let refs: Vec<&Transaction> = txs
+        .iter()
+        .map(|tx| tx.transaction.transaction().as_ref())
+        .collect();
+    fill_depends(&mut templates, &refs);
+    assert!(templates[0].depends.is_empty());
+    assert!(templates[1].depends.is_empty());
+    assert_eq!(templates[2].depends, vec![2, 1]);
+}

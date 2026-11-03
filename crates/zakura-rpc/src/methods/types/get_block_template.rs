@@ -594,6 +594,18 @@ impl BlockTemplateResponse {
                 .unzip()
         };
 
+        // Ycash: `depends` as ycashd reports it (template policy).
+        #[cfg(feature = "ycash")]
+        let mempool_tx_templates = {
+            let mut templates = mempool_tx_templates;
+            let txs: Vec<_> = mempool_txs
+                .iter()
+                .map(|tx| tx.transaction.transaction().as_ref())
+                .collect();
+            ycash::fill_depends(&mut templates, &txs);
+            templates
+        };
+
         let txs_fee = mempool_txs
             .iter()
             .map(|tx| tx.miner_fee)

@@ -827,3 +827,25 @@ fn vault_tx(tx: &Transaction, txid: &transaction::Hash) -> VaultTx {
         outputs,
     }
 }
+
+/// The `depends` field of each template transaction, as ycashd computes it
+/// (`src/rpc/mining.cpp:743-766`): for every transparent input whose previous output is created
+/// by a transaction earlier in the block, that transaction's index in the block, where the
+/// coinbase is index 0, so the first `transactions` entry is 1. One entry per such input, in
+/// input order. Template policy only.
+pub fn fill_depends(
+    templates: &mut [super::TransactionTemplate<zakura_chain::amount::NonNegative>],
+    txs: &[&zakura_chain::transaction::Transaction],
+) {
+    let mut index: std::collections::HashMap<zakura_chain::transaction::Hash, u16> =
+        std::collections::HashMap::new();
+    for (i, (template, tx)) in templates.iter_mut().zip(txs).enumerate() {
+        template.depends = tx
+            .inputs()
+            .iter()
+            .filter_map(|input| input.outpoint())
+            .filter_map(|outpoint| index.get(&outpoint.hash).copied())
+            .collect();
+        index.insert(template.hash, u16::try_from(i + 1).unwrap_or(u16::MAX));
+    }
+}
