@@ -1049,7 +1049,19 @@ where
     /// and left may be gone).
     #[cfg(feature = "ycash")]
     gossip_gap: Option<Arc<tokio::sync::Notify>>,
+
+    /// kogany (S5-K17): hashes this syncer verified as consensus-invalid (newest last, bounded
+    /// by [`MAX_REJECTED_SYNC_HASHES`]). A peer that mined such a block keeps returning it in
+    /// `FindBlocks`; ycashd never re-requests a block it marked invalid (`mapBlockIndex`
+    /// `BLOCK_FAILED_VALID`), so the syncer neither queues nor requeues these hashes, and a
+    /// round is not held open retrying a block no honest peer serves.
+    #[cfg(feature = "ycash")]
+    rejected_hashes: IndexSet<block::Hash>,
 }
+
+/// kogany (S5-K17): the bound on [`ChainSync::rejected_hashes`].
+#[cfg(feature = "ycash")]
+const MAX_REJECTED_SYNC_HASHES: usize = 32;
 
 /// Polls the network to determine whether further blocks are available and
 /// downloads them.
@@ -1201,6 +1213,8 @@ where
             peer_connected: None,
             #[cfg(feature = "ycash")]
             gossip_gap: None,
+            #[cfg(feature = "ycash")]
+            rejected_hashes: IndexSet::new(),
         };
 
         (new_syncer, sync_status)
@@ -2528,6 +2542,16 @@ where
     /// Queue download and verify tasks for each block that isn't currently known to our node.
     ///
     /// TODO: turn obtain and extend tips into a separate task, which sends hashes via a channel?
+    /// kogany (S5-K17): records a consensus-invalid hash in [`Self::rejected_hashes`].
+    #[cfg(feature = "ycash")]
+    fn record_rejected(&mut self, hash: block::Hash) {
+        self.rejected_hashes.shift_remove(&hash);
+        self.rejected_hashes.insert(hash);
+        while self.rejected_hashes.len() > MAX_REJECTED_SYNC_HASHES {
+            self.rejected_hashes.shift_remove_index(0);
+        }
+    }
+
     async fn request_blocks(
         &mut self,
         mut hashes: IndexSet<block::Hash>,
@@ -2551,6 +2575,11 @@ where
         // propagating — this prevents dropping unprocessed hashes from the
         // batch, which would create frontier gaps and stalls (#5709).
         for hash in hashes.into_iter() {
+            #[cfg(feature = "ycash")]
+            if self.rejected_hashes.contains(&hash) {
+                debug!(?hash, "block was verified invalid, not requesting it again");
+                continue;
+            }
             match self.downloads.download_and_verify(hash).await {
                 Ok(()) => {}
                 Err(BlockDownloadVerifyError::DuplicateBlockQueuedForDownload { .. }) => {
@@ -2600,6 +2629,12 @@ where
         &mut self,
         response: Result<(Height, block::Hash), BlockDownloadVerifyError>,
     ) -> Result<(), BlockDownloadVerifyError> {
+        #[cfg(feature = "ycash")]
+        if let Err(BlockDownloadVerifyError::Invalid { error, hash, .. }) = &response {
+            if error.misbehavior_score() != 0 {
+                self.record_rejected(*hash);
+            }
+        }
         match response {
             Ok((height, hash)) => {
                 trace!(?height, ?hash, "verified and committed block to state");
@@ -2878,6 +2913,15 @@ where
                 // different peer) and keep the rest of the pipeline running. Only an exhausted
                 // budget restarts the round.
                 NotFoundKind::Response => {
+                    #[cfg(feature = "ycash")]
+                    if self.rejected_hashes.contains(&hash) {
+                        debug!(
+                            ?hash,
+                            "missing sync block was verified invalid, dropping it"
+                        );
+                        self.missing_block_retry_counts.remove(&hash);
+                        return Ok(());
+                    }
                     let retry_count = self.missing_block_retry_counts.entry(hash).or_default();
 
                     if *retry_count < MISSING_BLOCK_DOWNLOAD_RETRY_LIMIT {
