@@ -115,9 +115,10 @@ fn reads() -> Vec<(&'static str, Value)> {
 }
 
 #[test]
-fn twenty_seven_node_methods_and_twenty_five_wallet_refusals() {
+fn twenty_seven_node_methods_verifychain_and_twenty_five_wallet_refusals() {
     let names = <YedRpcDispatch<yed::YedRpcImpl> as RpcMethods>::METHOD_NAMES;
-    assert_eq!(names.len(), 27);
+    assert_eq!(names.len(), 28);
+    assert!(names.contains(&"verifychain"));
     assert_eq!(reads().len(), 27);
     for (name, _) in reads() {
         assert!(names.contains(&name), "{name}");
@@ -143,6 +144,8 @@ fn twenty_seven_node_methods_and_twenty_five_wallet_refusals() {
 async fn not_live_is_method_not_found_for_every_yed_method() {
     let s = service(Arc::new(UnavailableYedState));
     assert_eq!(call(&s, "getinfo", json!([])).await["result"], "primary");
+    // ycashd's verifychain has nothing YED to re-check when Yellowback is not live.
+    assert_eq!(call(&s, "verifychain", json!([4, 20])).await["result"], true);
     for (method, params) in reads() {
         let r = call(&s, method, params).await;
         assert_eq!(r["error"]["code"], -32601, "{method}: {r}");

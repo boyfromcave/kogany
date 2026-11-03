@@ -609,6 +609,19 @@ where
             .map(|hash| Hash32(hash.0))
     }
 
+    async fn best_chain_hash(&self, height: i64) -> Option<Hash32> {
+        let h = block::Height(u32::try_from(height).ok()?);
+        match self
+            .read_state
+            .clone()
+            .oneshot(ReadRequest::BestChainBlockHash(h))
+            .await
+        {
+            Ok(ReadResponse::BlockHash(Some(hash))) => Some(Hash32(hash.0)),
+            _ => None,
+        }
+    }
+
     /// `AuditLockedValue` over the best chain's set state.
     async fn set_audit(&self) -> (Vec<String>, Vec<SetAudit>) {
         match self
