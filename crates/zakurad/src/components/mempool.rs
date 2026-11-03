@@ -955,6 +955,14 @@ impl Service<Request> for Mempool {
                 "resetting mempool: switched best chain, skipped blocks, or activated network upgrade"
             );
 
+            // Ycash: the tip the mempool last saw, the start of a kept-nothing walk back (F-S5-7).
+            #[cfg(feature = "ycash")]
+            let previous_tip_hash = match &self.active_state {
+                ActiveState::Enabled {
+                    last_seen_tip_hash, ..
+                } => Some(*last_seen_tip_hash),
+                ActiveState::Disabled => None,
+            };
             let previous_state = self.active_state.take();
             let tx_retries = previous_state.transaction_retry_requests();
             // Ycash: the retries below re-verify every transaction at the new tip, BIP68 and the
@@ -1009,6 +1017,7 @@ impl Service<Request> for Mempool {
             if let Some(TipAction::Reset { height, hash }) = &tip_action {
                 self.reorg_resurrect.reset(
                     (*height, *hash),
+                    previous_tip_hash,
                     self.read_state.clone(),
                     self.verification_finished.clone(),
                 );
