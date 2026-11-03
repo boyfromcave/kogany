@@ -2439,25 +2439,42 @@ where
         let _ = queue_sender.send(unmined_transaction);
 
         let transaction_parameter = mempool::Gossip::Tx(raw_transaction.into());
-        let request = mempool::Request::Queue(vec![transaction_parameter]);
+        #[cfg(feature = "ycash")]
+        let mut queued_wait = types::ycash_reject::ALREADY_QUEUED_WAIT;
+        let queue_result = loop {
+            let request = mempool::Request::Queue(vec![transaction_parameter.clone()]);
 
-        let response = call_service(mempool, request).await?;
+            let response = call_service(mempool.clone(), request).await?;
 
-        let mut queue_results = match response {
-            mempool::Response::Queued(results) => results,
-            _ => unreachable!("incorrect response variant from mempool service"),
+            let mut queue_results = match response {
+                mempool::Response::Queued(results) => results,
+                _ => unreachable!("incorrect response variant from mempool service"),
+            };
+
+            assert_eq!(
+                queue_results.len(),
+                1,
+                "mempool service returned more results than expected"
+            );
+
+            let queue_result = queue_results
+                .pop()
+                .expect("there should be exactly one item in Vec")
+                .inspect_err(|err| tracing::debug!("sent transaction to mempool: {:?}", &err));
+            // kogany (S5): a peer's download of the same transaction is in flight; ycashd has no
+            // download queue and verifies the RPC's bytes, so wait for that download's verdict
+            // (then the mempool holds it, or the retry verifies these bytes) instead of
+            // reporting the transaction dropped.
+            #[cfg(feature = "ycash")]
+            if let Err(error) = &queue_result {
+                if types::ycash_reject::is_already_queued(error.as_ref()) && queued_wait > 0 {
+                    queued_wait -= 1;
+                    tokio::time::sleep(types::ycash_reject::ALREADY_QUEUED_POLL).await;
+                    continue;
+                }
+            }
+            break queue_result;
         };
-
-        assert_eq!(
-            queue_results.len(),
-            1,
-            "mempool service returned more results than expected"
-        );
-
-        let queue_result = queue_results
-            .pop()
-            .expect("there should be exactly one item in Vec")
-            .inspect_err(|err| tracing::debug!("sent transaction to mempool: {:?}", &err));
         // Ycash (W7-e): ycashd's code and text for the rejection, or the txid for a
         // transaction the mempool already holds.
         #[cfg(feature = "ycash")]
