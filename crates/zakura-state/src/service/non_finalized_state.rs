@@ -975,6 +975,18 @@ impl NonFinalizedState {
         );
         let mut contextual = contextual?;
 
+        // kogany (S5): `yellowback.test_fault` fires on a block being committed (not a
+        // template check, which runs on a copy without metrics), before its vault and YED
+        // verdicts (ycash6 `index.cpp:523`: "crash before judging block").
+        if self.should_count_metrics {
+            crate::service::yed::maybe_inject_yed_test_fault(
+                &finalized_state.config().yellowback,
+                contextual.height,
+                contextual.hash,
+            )
+            .unwrap_or_else(|e| e.stop_the_node("contextual validation"));
+        }
+
         // kogany (W4-c, W4-d): the block's vault delta over the parent fork's set state, pushed
         // onto the chain's overlay with the block; a vault rule violation rejects the block.
         contextual.vault_delta = Arc::new(check::vault::block_vault_delta(
@@ -987,21 +999,20 @@ impl NonFinalizedState {
         // kogany (W5-e, W5-f): the block's YED effect over the parent fork's index state, pushed
         // onto the chain's overlay with the block; stops the node when it cannot be evaluated,
         // and a module verdict rejects the block (U-21).
-        // kogany (S5): `yellowback.test_fault` fires on a block being committed (not a
-        // template check, which runs on a copy without metrics).
-        if self.should_count_metrics {
-            crate::service::yed::maybe_inject_yed_test_fault(
-                &finalized_state.config().yellowback,
-                contextual.height,
-            )
-            .unwrap_or_else(|e| e.stop_the_node("contextual validation"));
+        let yed_effect =
+            check::yed::block_yed_effect(&self.network, &new_chain, finalized_state, &contextual);
+        // ycashd's line for a block the module judges invalid (`index.cpp:544`, not on a
+        // template check).
+        if let (true, Err(ValidateContextError::YedRejected { detail, .. })) =
+            (self.should_count_metrics, &yed_effect)
+        {
+            tracing::info!(
+                "yellowback: block {} at {} is invalid: {detail}",
+                contextual.hash,
+                contextual.height.0
+            );
         }
-        contextual.yed_effect = Arc::new(check::yed::block_yed_effect(
-            &self.network,
-            &new_chain,
-            finalized_state,
-            &contextual,
-        )?);
+        contextual.yed_effect = Arc::new(yed_effect?);
 
         let parallel_update_start = Instant::now();
         let result = Self::validate_and_update_parallel(

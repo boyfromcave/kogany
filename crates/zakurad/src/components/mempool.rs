@@ -371,6 +371,9 @@ fn peer_action(error: &TransactionError) -> PeerAction {
         // Halo2 proofs use that upgrade's verifying key. The Sapling verifier
         // checks proofs and signatures together. Only v4 transactions have
         // Sprout signatures, so Ed25519 failures never ban.
+        // kogany (S5): ycashd's score table (`tip_recheck::ycash_script_ban`).
+        #[cfg(feature = "ycash")]
+        Script(_) if tip_recheck::ycash_script_ban(error) => Ban,
         Script(script_error) if script_error.is_script_failure() => BanV5AndLater,
         SaplingVerificationFailed
         | Halo2VerificationFailed

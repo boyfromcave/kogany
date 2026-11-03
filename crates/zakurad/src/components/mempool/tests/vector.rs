@@ -59,7 +59,7 @@ fn policy_rejection_does_not_start_a_cooldown() {
     );
 
     let advertiser_addr = PeerSocketAddr::from(([203, 0, 113, 7], 8233));
-    let consensus_error = TransactionError::Script(zakura_script::Error::ScriptInvalid);
+    let consensus_error = TransactionError::SaplingVerificationFailed;
     assert_ne!(
         consensus_error.mempool_misbehavior_score(),
         0,
@@ -88,7 +88,7 @@ fn policy_rejection_does_not_start_a_cooldown() {
 fn stale_verification_failures_do_not_start_cooldowns() {
     let peer = PeerSocketAddr::from(([203, 0, 113, 7], 8233));
     let error = TransactionDownloadVerifyError::Invalid {
-        error: TransactionError::Script(zakura_script::Error::ScriptInvalid),
+        error: TransactionError::SaplingVerificationFailed,
         advertiser_addr: Some(peer),
         tip_height: Some(block::Height(100)),
         transaction_version: 4,
@@ -182,10 +182,7 @@ fn failures_retried_after_a_tip_reset_ban_but_start_no_cooldown() {
 
     for (error, transaction_version) in [
         (TransactionError::DisabledAddToSproutPool, 4),
-        (
-            TransactionError::Script(zakura_script::Error::ScriptInvalid),
-            4,
-        ),
+        (TransactionError::SaplingVerificationFailed, 4),
     ] {
         let fresh = relayed_transaction_failure(error.clone(), transaction_version);
         assert_eq!(
@@ -308,7 +305,7 @@ fn upgrade_dependent_failures_ban_only_v5_and_later() {
     use zakura_chain::primitives::{ed25519, reddsa, redjubjub};
 
     for error in [
-        TransactionError::Script(zakura_script::Error::ScriptInvalid),
+        TransactionError::SaplingVerificationFailed,
         TransactionError::SaplingVerificationFailed,
         TransactionError::Halo2VerificationFailed,
         TransactionError::Ed25519(ed25519::Error::InvalidSignature),
@@ -494,7 +491,7 @@ fn transactions_for_the_previous_upgrade_start_no_cooldown_in_its_grace_period()
             retried_after_tip_reset: false,
         }
     };
-    let script_invalid = TransactionError::Script(zakura_script::Error::ScriptInvalid);
+    let script_invalid = TransactionError::SaplingVerificationFailed;
 
     for (failure, tip_upgrade, previous_upgrade, cooldown_in_grace_period) in [
         (
@@ -674,7 +671,7 @@ async fn repeated_cooldown_disconnects_peer_without_banning() {
         &mut mempool,
         &mut tx_verifier,
         &network,
-        TransactionError::Script(zakura_script::Error::ScriptInvalid),
+        TransactionError::SaplingVerificationFailed,
     )
     .await;
 
@@ -748,12 +745,8 @@ async fn reject_pushed_transaction(
 /// banned every honest peer that relayed them.
 #[tokio::test(flavor = "multi_thread")]
 async fn stale_mempool_rejects_invalid_peer_transaction_without_cooldown() -> Result<(), Report> {
-    assert_peer_error_starts_no_cooldown(
-        None,
-        false,
-        TransactionError::Script(zakura_script::Error::ScriptInvalid),
-    )
-    .await
+    assert_peer_error_starts_no_cooldown(None, false, TransactionError::SaplingVerificationFailed)
+        .await
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -771,7 +764,7 @@ async fn caught_up_mempool_does_not_cool_down_stale_verification() -> Result<(),
     assert_peer_error_starts_no_cooldown(
         Some(chrono::Utc::now() - chrono::Duration::minutes(300)),
         true,
-        TransactionError::Script(zakura_script::Error::ScriptInvalid),
+        TransactionError::SaplingVerificationFailed,
     )
     .await
 }
@@ -890,7 +883,7 @@ async fn zcashd_compat_peer_is_never_penalized() -> Result<(), Report> {
 
     // Test vectors from early Mainnet blocks are v1 and v2 transactions, so a
     // script failure starts a cooldown and a missing input bans.
-    let script_invalid = TransactionError::Script(zakura_script::Error::ScriptInvalid);
+    let script_invalid = TransactionError::SaplingVerificationFailed;
     for peer in [sidecar, mapped_sidecar] {
         assert_eq!(
             peer_penalties(peer, script_invalid.clone(), &Network::Mainnet).await,
@@ -931,7 +924,7 @@ async fn upgrade_grace_period_suppresses_cooldowns() -> Result<(), Report> {
         .into(),
     );
     let peer = PeerSocketAddr::from(([203, 0, 113, 7], 8233));
-    let script_invalid = TransactionError::Script(zakura_script::Error::ScriptInvalid);
+    let script_invalid = TransactionError::SaplingVerificationFailed;
     assert_eq!(
         peer_penalties(peer, script_invalid, &regtest).await,
         (false, false)
@@ -1166,9 +1159,7 @@ async fn invalid_peer_transaction_starts_a_cooldown_instead_of_a_ban() -> Result
             )
         })
         .await
-        .respond(Err(TransactionError::Script(
-            zakura_script::Error::ScriptInvalid,
-        )));
+        .respond(Err(TransactionError::SaplingVerificationFailed));
 
     timeout(Duration::from_secs(3), async {
         while !mempool.storage().contains_rejected(&at_limit_id) {
@@ -1271,7 +1262,7 @@ async fn crawled_transaction_from_cooling_down_peer_is_not_verified() -> Result<
                     )
                 })
                 .await
-                .respond(Err(TransactionError::Script(zakura_script::Error::ScriptInvalid)));
+                .respond(Err(TransactionError::SaplingVerificationFailed));
         }
 
         timeout(Duration::from_secs(3), async {

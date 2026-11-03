@@ -744,6 +744,19 @@ pub fn absurd_fee(txid: &str, fee: i64) -> Option<(i32, String)> {
 /// `sendrawtransaction`'s answer for a mempool rejection `error` (the queue's or the
 /// verifier's): `None` when ycashd would have answered the txid (the mempool already holds it),
 /// else ycashd's error.
+/// The mempool's `MempoolError::AlreadyQueued` text (`zakurad` `components/mempool/error.rs`).
+const ALREADY_QUEUED: &str = "transaction dropped because it is already queued for download";
+
+/// How often, and how many times, `sendrawtransaction` re-offers a transaction whose id a
+/// peer's download already holds (60 s in all, above the mempool's download timeout).
+pub(crate) const ALREADY_QUEUED_POLL: std::time::Duration = std::time::Duration::from_millis(100);
+pub(crate) const ALREADY_QUEUED_WAIT: u32 = 600;
+
+/// Is `error` the mempool's refusal of a transaction already queued for download?
+pub(crate) fn is_already_queued(error: &(dyn StdError + 'static)) -> bool {
+    error.to_string().contains(ALREADY_QUEUED)
+}
+
 pub(crate) fn send_raw_transaction_error(
     error: &(dyn StdError + 'static),
 ) -> Option<crate::server::jsonrpc::ErrorObject> {

@@ -96,6 +96,17 @@ pub(super) fn extra_misbehavior_score(error: &TransactionError) -> Option<u32> {
     .then(|| error.mempool_misbehavior_score())
 }
 
+/// Ycash's score table for a script failure (ycash6 `ContextualCheckInputs`, `src/main.cpp:3092`):
+/// an input that fails the mandatory flags is DoS 100 for every transaction version, because
+/// Ycash transactions are v4. The failures ycashd scores lower reach the mempool as other errors:
+/// a standard-only flag failure is `NonMandatoryScriptFlag` (DoS 0), a vault template that fails
+/// on this tip's set state is `VaultTemplateSetState` (DoS 0, `main.cpp:2231`), the previous
+/// epoch's branch ID is `OldConsensusBranchId` (DoS 10), and verifier or I/O errors are not
+/// script failures (0).
+pub(super) fn ycash_script_ban(error: &TransactionError) -> bool {
+    matches!(error, TransactionError::Script(script_error) if script_error.is_script_failure())
+}
+
 /// Is `tx` expired for a block at `next_height` (ycashd `IsExpiredTx`: `nExpiryHeight != 0 &&
 /// height > nExpiryHeight`)? Such a transaction stays in ycashd's mempool until the tip passes
 /// its expiry height, but no template may include it.
@@ -634,5 +645,33 @@ mod tests {
             extra_misbehavior_score(&TransactionError::YellowbackRejected { reason: "x".into() }),
             None
         );
+    }
+
+    #[test]
+    fn ycash_scores_mandatory_script_failures_100() {
+        use zakura_script::Error as ScriptError;
+        assert!(ycash_script_ban(&TransactionError::Script(
+            ScriptError::ScriptInvalid
+        )));
+        assert!(!ycash_script_ban(&TransactionError::Script(
+            ScriptError::TxIndex
+        )));
+        for error in [
+            TransactionError::NonMandatoryScriptFlag {
+                input_index: 0,
+                script_error: "x".into(),
+            },
+            TransactionError::VaultTemplateSetState {
+                input_index: 0,
+                script_error: "SCRIPT_ERR_SETSIG".into(),
+            },
+            TransactionError::VaultRejected {
+                reason: "bad-vault-act-noset".into(),
+                height: Height(201),
+                byte_level: false,
+            },
+        ] {
+            assert!(!ycash_script_ban(&error), "{error:?}");
+        }
     }
 }

@@ -814,3 +814,12 @@ fn old_consensus_branch_id_is_ycashds_text() {
         "16: old-consensus-branch-id (Expected 6d5b7a31, found e9ff75a6)"
     );
 }
+
+#[test]
+fn already_queued_is_waited_for() {
+    let queued: Box<dyn std::error::Error> =
+        "transaction dropped because it is already queued for download".into();
+    assert!(is_already_queued(queued.as_ref()));
+    let other: Box<dyn std::error::Error> = "transaction already exists in mempool".into();
+    assert!(!is_already_queued(other.as_ref()));
+}
