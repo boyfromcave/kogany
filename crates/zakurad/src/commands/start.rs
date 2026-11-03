@@ -235,6 +235,19 @@ impl StartCmd {
             .map_err(|error| eyre!("invalid consensus configuration: {error}"))
     }
 
+    /// kogany S5 (MINER-2, K22): ycashd's init refuses a `-yellowbackpayoutaddress` that is not
+    /// a transparent P2PKH address, with this text (ycash6 `src/init.cpp`).
+    #[cfg(feature = "ycash")]
+    fn validate_yellowback_payout_address(config: &ZakuradConfig) -> Result<(), Report> {
+        match config.mining.yellowback_payout_address.as_ref() {
+            Some(address) if !kogany_rpc::yed::live::is_p2pkh_address(address) => Err(eyre!(
+                "-yellowbackpayoutaddress must be a transparent P2PKH address: '{}'",
+                address.encode()
+            )),
+            _ => Ok(()),
+        }
+    }
+
     fn validate_debug_blocksync_throughput_config(config: &ZakuradConfig) -> Result<(), Report> {
         let Some(target_height) = config.sync.debug_blocksync_throughput_target_height else {
             return Ok(());
@@ -368,6 +381,8 @@ impl StartCmd {
 
         Self::validate_consensus_config(&config)?;
         Self::validate_debug_blocksync_throughput_config(&config)?;
+        #[cfg(feature = "ycash")]
+        Self::validate_yellowback_payout_address(&config)?;
         config.rpc.validate().map_err(|error| eyre!(error))?;
         // kogany (W6-b): the network-fee policy `yed_getinfo` reports, as ycashd's init sets it.
         #[cfg(feature = "ycash")]
@@ -1494,6 +1509,8 @@ impl StartCmd {
 
         Self::validate_consensus_config(&config).map_err(config_error)?;
         Self::validate_debug_blocksync_throughput_config(&config).map_err(config_error)?;
+        #[cfg(feature = "ycash")]
+        Self::validate_yellowback_payout_address(&config).map_err(config_error)?;
         config.rpc.validate().map_err(config_error)?;
         #[cfg(feature = "ycash")]
         config.mempool.yed_node_policy().map_err(config_error)?;
@@ -1533,6 +1550,27 @@ mod tests {
     use zakura_network::types::PeerServices;
     use zakura_network::P2pStack;
     use zakura_state::{PruningConfig, StorageMode};
+
+    /// kogany S5 (MINER-2): a non-P2PKH `mining.yellowback_payout_address` is refused at
+    /// startup with ycashd's text; a P2PKH one and none are accepted.
+    #[cfg(feature = "ycash")]
+    #[test]
+    fn ycash_yellowback_payout_address_must_be_p2pkh() {
+        let with = |address: Option<&str>| {
+            let mut config = ZakuradConfig::default();
+            config.mining.yellowback_payout_address = address.map(|a| a.parse().expect("address"));
+            StartCmd::validate_yellowback_payout_address(&config)
+        };
+        assert!(with(None).is_ok());
+        assert!(with(Some("s1WUAp94K9NPDh2S1GAYtWDRg7bzUSmZCNP")).is_ok());
+        let error = with(Some("s2xZAA8goa4uw6xXmWhBWFFzn9382MuGiZS"))
+            .expect_err("a P2SH payout address is refused")
+            .to_string();
+        assert!(
+            error.starts_with("-yellowbackpayoutaddress must be a transparent P2PKH address"),
+            "{error}"
+        );
+    }
 
     /// kogany: each Ycash test network's default RPC cookie is in its own directory, mainnet's
     /// stays at the cache root, and a configured directory is kept.

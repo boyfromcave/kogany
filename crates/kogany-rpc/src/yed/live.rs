@@ -74,6 +74,12 @@ pub fn set_payout_address(address: Option<&zcash_address::ZcashAddress>) {
     let _ = PAYOUT_KEY.set(key);
 }
 
+/// Whether `address` is a transparent P2PKH address (ycash6 init.cpp's K22 check on
+/// `-yellowbackpayoutaddress`).
+pub fn is_p2pkh_address(address: &zcash_address::ZcashAddress) -> bool {
+    address.clone().convert::<P2pkhKey>().is_ok()
+}
+
 /// The miner's payout key, `None` without a P2PKH miner address.
 pub fn payout_key() -> Option<[u8; 20]> {
     PAYOUT_KEY.get().copied().flatten()
@@ -488,10 +494,20 @@ where
 
     /// `yed_getblockverdict`: `EvaluateBlock` on a stored block whose parent is the index tip.
     async fn block_verdict(&self, hash: Hash32) -> Result<BlockVerdict, YedError> {
-        let block = self
+        let block = match self
             .block(HashOrHeight::Hash(block::Hash(hash.0)), true)
             .await?
-            .ok_or_else(|| YedError::plain(YedErrorKind::InvalidParameter, "block not found"))?;
+        {
+            Some(block) => block,
+            // ycashd's block index keeps a block contextual validation rejected (and an
+            // invalidated one): the verdict explains exactly that rejection.
+            None => self
+                .off_chain_block(block::Hash(hash.0))
+                .await?
+                .ok_or_else(|| {
+                    YedError::plain(YedErrorKind::InvalidParameter, "block not found")
+                })?,
+        };
         let (snap, p) = self.yed_snapshot().await?;
         let height = block.coinbase_height().map_or(-1, |h| i64::from(h.0));
         let tip = snap.index_tip();
@@ -745,6 +761,24 @@ where
         match self.header_height(at).await {
             Some(h) if self.body_pruned_at(h).await? => Err(YedError::pruned()),
             _ => Ok(None),
+        }
+    }
+
+    /// A block off the best chain: a side chain, an `invalidateblock` record or a recently
+    /// rejected block (`ReadRequest::OffChainBlock`).
+    async fn off_chain_block(
+        &self,
+        hash: block::Hash,
+    ) -> Result<Option<Arc<block::Block>>, YedError> {
+        match self
+            .read_state
+            .clone()
+            .oneshot(ReadRequest::OffChainBlock(hash))
+            .await
+        {
+            Ok(ReadResponse::OffChainBlock(found)) => Ok(found.map(|(block, _)| block)),
+            Ok(_) => Ok(None),
+            Err(e) => Err(YedError::plain(YedErrorKind::Internal, e.to_string())),
         }
     }
 

@@ -106,9 +106,14 @@ impl ReorgResurrect {
 
     /// Starts the reset task for the new best tip `tip` (replacing a running one). `finished` is
     /// notified when it is done, so the queue checker polls the mempool.
+    ///
+    /// `previous_tip` is the tip the mempool last saw: when nothing is kept (a mempool enabled
+    /// since the last restart that saw no block grow), the disconnected blocks are read back from
+    /// it through the state's off-chain block record.
     pub(super) fn reset<ZS>(
         &mut self,
         tip: (Height, block::Hash),
+        previous_tip: Option<block::Hash>,
         read_state: ZS,
         finished: Arc<Notify>,
     ) where
@@ -123,7 +128,7 @@ impl ReorgResurrect {
         }
         let kept: Vec<KeptBlock> = self.kept.iter().cloned().collect();
         self.pending = Some(tokio::spawn(async move {
-            let found = find(tip, kept, read_state).await;
+            let found = find(tip, previous_tip, kept, read_state).await;
             finished.notify_one();
             found
         }));
@@ -156,7 +161,12 @@ impl ReorgResurrect {
 }
 
 /// The reset task (see the module documentation).
-async fn find<ZS>(tip: (Height, block::Hash), kept: Vec<KeptBlock>, read_state: ZS) -> Found
+async fn find<ZS>(
+    tip: (Height, block::Hash),
+    previous_tip: Option<block::Hash>,
+    kept: Vec<KeptBlock>,
+    read_state: ZS,
+) -> Found
 where
     ZS: Service<zs::ReadRequest, Response = zs::ReadResponse, Error = BoxError>
         + Send
@@ -166,6 +176,36 @@ where
 {
     let mut found = Found::default();
     let mut highest_connected: Option<Height> = None;
+
+    // Nothing kept (a restart): ycashd's `DisconnectTip` reads the block from disk whatever the
+    // uptime, so walk back from the previous tip through the blocks off the best chain.
+    if kept.is_empty() {
+        let mut walked = Vec::new();
+        let mut next = previous_tip.filter(|hash| *hash != tip.1);
+        while let Some(hash) = next.take() {
+            if walked.len() >= KEPT_BLOCKS {
+                break;
+            }
+            let Ok(zs::ReadResponse::OffChainBlock(Some((block, _)))) = read_state
+                .clone()
+                .oneshot(zs::ReadRequest::OffChainBlock(hash))
+                .await
+            else {
+                break;
+            };
+            next = Some(block.header.previous_block_hash);
+            walked.push(block);
+        }
+        for block in walked.iter().rev() {
+            found.transactions.extend(
+                block
+                    .transactions
+                    .iter()
+                    .filter(|transaction| !transaction.is_coinbase())
+                    .cloned(),
+            );
+        }
+    }
     for block in kept {
         let depth = read_state
             .clone()
@@ -228,6 +268,68 @@ mod tests {
         block::Hash([byte; 32])
     }
 
+    /// With nothing kept (a mempool enabled since a restart), a reset walks back from the
+    /// previous tip through the state's off-chain block record and hands back those blocks'
+    /// non-coinbase transactions, oldest first (an `invalidateblock` right after a restart).
+    #[tokio::test]
+    async fn ycash_reset_with_nothing_kept_walks_back_from_the_previous_tip() {
+        let _init_guard = zakura_test::init();
+        let block_1: Block = zakura_test::vectors::BLOCK_MAINNET_1_BYTES
+            .zcash_deserialize_into()
+            .expect("the test block deserializes");
+        let spends: Vec<Arc<Transaction>> = Network::Mainnet
+            .unmined_transactions_in_blocks(..)
+            .map(|tx| tx.transaction.transaction().clone())
+            .filter(|tx| !tx.is_coinbase())
+            .take(2)
+            .collect();
+        let mut lower = block_1.clone();
+        lower.transactions.push(spends[0].clone());
+        let lower = Arc::new(lower);
+        let mut upper = block_1;
+        Arc::make_mut(&mut upper.header).previous_block_hash = lower.hash();
+        upper.transactions.push(spends[1].clone());
+        let upper = Arc::new(upper);
+        let tip = (Height(0), lower.header.previous_block_hash);
+        let off_chain = [(lower.hash(), lower.clone()), (upper.hash(), upper.clone())];
+
+        let read_state = service_fn(move |request: zs::ReadRequest| {
+            let off_chain = off_chain.clone();
+            async move {
+                Ok::<_, BoxError>(match request {
+                    zs::ReadRequest::OffChainBlock(hash) => zs::ReadResponse::OffChainBlock(
+                        off_chain
+                            .iter()
+                            .find(|(h, _)| *h == hash)
+                            .map(|(_, block)| (block.clone(), Height(1))),
+                    ),
+                    zs::ReadRequest::Block(_) => zs::ReadResponse::Block(None),
+                    other => panic!("unexpected request {other:?}"),
+                })
+            }
+        });
+        let mut resurrect = ReorgResurrect::default();
+        let finished = Arc::new(Notify::new());
+        resurrect.reset(tip, Some(upper.hash()), read_state, finished.clone());
+        finished.notified().await;
+        let mut returned = None;
+        for _ in 0..100 {
+            returned =
+                std::future::poll_fn(|cx| std::task::Poll::Ready(resurrect.poll_disconnected(cx)))
+                    .await;
+            if returned.is_some() {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+        let returned: Vec<_> = returned
+            .expect("the reset task finishes")
+            .iter()
+            .map(|tx| tx.hash())
+            .collect();
+        assert_eq!(returned, vec![spends[0].hash(), spends[1].hash()]);
+    }
+
     /// A reset hands back the non-coinbase transactions of the kept blocks the state no longer
     /// has in its best chain, oldest first, and forgets those blocks; the connected ones stay.
     #[tokio::test]
@@ -266,7 +368,7 @@ mod tests {
         });
         let finished = Arc::new(Notify::new());
         assert!(resurrect.is_idle(), "no reset task before a reset");
-        resurrect.reset((Height(10), hash(10)), read_state, finished.clone());
+        resurrect.reset((Height(10), hash(10)), None, read_state, finished.clone());
         assert!(
             !resurrect.is_idle(),
             "the mempool is not settled while a reset task runs"
