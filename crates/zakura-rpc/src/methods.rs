@@ -1401,6 +1401,37 @@ where
     BlockVerifierRouter: BlockVerifierService,
     SyncStatus: ChainSyncStatus + Clone + Send + Sync + 'static,
 {
+    /// kogany (S5, F-S5-7): waits, at most ten seconds, until the mempool has caught up with the
+    /// state's best tip: the reset seen, the disconnected blocks' transactions verified back in.
+    /// ycashd's `invalidateblock` / `reconsiderblock` return after `DisconnectTip` has refilled
+    /// the mempool, so a caller reads the mempool of the new tip; kogany's is asynchronous.
+    #[cfg(feature = "ycash")]
+    async fn ycash_wait_mempool_settled(&self) {
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
+        let Ok(zakura_state::ReadResponse::Tip(Some((_, tip)))) = self
+            .read_state
+            .clone()
+            .oneshot(zakura_state::ReadRequest::Tip)
+            .await
+        else {
+            return;
+        };
+        while tokio::time::Instant::now() < deadline {
+            if self.latest_chain_tip.best_tip_hash() == Some(tip)
+                && matches!(
+                    self.mempool
+                        .clone()
+                        .oneshot(mempool::Request::Settled)
+                        .await,
+                    Ok(mempool::Response::Settled(true))
+                )
+            {
+                return;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    }
+
     /// kogany (S5, F-S5-19): the block `hash` off the best chain (side chain, invalidated or
     /// rejected) and its height, as ycashd's block index still holds it.
     #[cfg(feature = "ycash")]
@@ -4566,12 +4597,17 @@ where
             .parse()
             .map_error(server::error::LegacyCode::InvalidParameter)?;
 
-        call_service(
+        let result = call_service(
             self.state.clone(),
             zakura_state::Request::InvalidateBlock(block_hash),
         )
         .await
-        .map(|rsp| assert_eq!(rsp, zakura_state::Response::Invalidated(block_hash)))
+        .map(|rsp| assert_eq!(rsp, zakura_state::Response::Invalidated(block_hash)));
+        #[cfg(feature = "ycash")]
+        if result.is_ok() {
+            self.ycash_wait_mempool_settled().await;
+        }
+        result
     }
 
     async fn reconsider_block(&self, block_hash: String) -> Result<Vec<block::Hash>> {
@@ -4590,7 +4626,10 @@ where
                 .oneshot(zakura_state::Request::ReconsiderBlock(block_hash))
                 .await;
             return match result {
-                Ok(zakura_state::Response::Reconsidered(block_hashes)) => Ok(block_hashes),
+                Ok(zakura_state::Response::Reconsidered(block_hashes)) => {
+                    self.ycash_wait_mempool_settled().await;
+                    Ok(block_hashes)
+                }
                 Ok(_) => unreachable!("unmatched response to a reconsider block request"),
                 // zakura-state's `ReconsiderError::MissingInvalidatedBlock` (not exported).
                 Err(error) if error.to_string().contains("was not previously invalidated") => {

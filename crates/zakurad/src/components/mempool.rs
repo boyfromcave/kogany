@@ -1632,6 +1632,18 @@ impl Service<Request> for Mempool {
                     async move { Ok(Response::CheckedForVerifiedTransactions) }.boxed()
                 }
 
+                // Ycash: caught up with the best tip (`invalidateblock` / `reconsiderblock`).
+                Request::Settled => {
+                    let tip_seen =
+                        self.latest_chain_tip.best_tip_hash() == Some(*last_seen_tip_hash);
+                    #[cfg(feature = "ycash")]
+                    let resurrect_idle = self.reorg_resurrect.is_idle();
+                    #[cfg(not(feature = "ycash"))]
+                    let resurrect_idle = true;
+                    let settled = tip_seen && resurrect_idle && tx_downloads.in_flight() == 0;
+                    async move { Ok(Response::Settled(settled)) }.boxed()
+                }
+
                 // Summary statistics for the mempool: count, total size, and memory usage.
                 //
                 // Used by the `getmempoolinfo` RPC method
@@ -1749,6 +1761,9 @@ impl Service<Request> for Mempool {
                         // all the work for this request is done in poll_ready
                         Response::CheckedForVerifiedTransactions
                     }
+
+                    // Nothing to catch up with.
+                    Request::Settled => Response::Settled(true),
 
                     // Return empty mempool stats
                     Request::QueueStats => Response::QueueStats {
