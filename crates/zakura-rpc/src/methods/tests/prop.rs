@@ -838,7 +838,10 @@ proptest! {
     }
 
     /// Test the queue functionality using `send_raw_transaction`
+    // Ycash queues a transaction only once the mempool accepts it (F-S5-K16); these drive a
+    // refused one into the queue.
     #[test]
+    #[cfg_attr(feature = "ycash", ignore)]
     fn rpc_queue_main_loop(tx in any::<Transaction>(), network in any::<Network>()) {
         prop_assume!(!(tx.is_coinbase() && tx.sapling_spends_per_anchor().count() > 0));
 
@@ -917,7 +920,10 @@ proptest! {
     }
 
     /// Test we receive all transactions that are sent in a channel
+    // Ycash queues a transaction only once the mempool accepts it (F-S5-K16); these drive a
+    // refused one into the queue.
     #[test]
+    #[cfg_attr(feature = "ycash", ignore)]
     fn rpc_queue_receives_all_txs_from_channel(txs in any::<[Transaction; 2]>(),
                                                network in any::<Network>()) {
         prop_assume!(txs.iter().all(|tx| !(tx.is_coinbase() && tx.sapling_spends_per_anchor().count() > 0)));
