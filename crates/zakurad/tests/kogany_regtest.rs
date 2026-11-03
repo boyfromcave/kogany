@@ -159,10 +159,19 @@ impl Node {
 
     /// Stops the node through the `stop` RPC, then starts it again on the same state.
     async fn restart(self) -> Result<Node> {
+        let mut child = self.child;
+        // Drain the captured output while the node shuts down: the shutdown flushes the log to
+        // stdout, and a Linux pipe that nobody reads fills (64 KiB) and blocks that write forever.
+        let drains: Vec<_> = [child.stdout.take(), child.stderr.take()]
+            .into_iter()
+            .flatten()
+            .map(|lines| std::thread::spawn(move || lines.for_each(drop)))
+            .collect();
         let _ = self.client.text_from_call("stop", "[]").await;
-        let output = self
-            .child
-            .wait_with_output_or_timeout(Duration::from_secs(120))?;
+        let output = child.wait_with_output_or_timeout(Duration::from_secs(120))?;
+        for drain in drains {
+            let _ = drain.join();
+        }
         let mut output = output;
         let dir = output
             .dir
