@@ -275,6 +275,17 @@ pub(crate) async fn restart_sleep(
     }
 }
 
+/// kogany (S5-K12): waits for a gossiped block that could not connect ([`Notify`] keeps one
+/// permit, so a gap seen during a round ends the following restart sleep at once). Without a
+/// notifier it never returns.
+#[cfg(feature = "ycash")]
+pub(crate) async fn gossip_gap_notified(notify: Option<&tokio::sync::Notify>) {
+    match notify {
+        Some(notify) => notify.notified().await,
+        None => std::future::pending().await,
+    }
+}
+
 /// Returns true if a `FindBlocks` hash list has the protocol maximum number of
 /// block hashes or fewer.
 ///
@@ -1031,6 +1042,13 @@ where
     /// peer to it, so a heavier tip is found within one round (ycashd syncs headers on connect).
     #[cfg(feature = "ycash")]
     peer_connected: Option<watch::Receiver<zn::AddressMetrics>>,
+
+    /// kogany (S5-K12): woken by the inbound downloads when a gossiped block is too far ahead of
+    /// the tip or its parent is missing; ends the restart sleep, so the gap is filled by the
+    /// next `FindBlocks` round rather than after the restart delay (by when a peer that mined
+    /// and left may be gone).
+    #[cfg(feature = "ycash")]
+    gossip_gap: Option<Arc<tokio::sync::Notify>>,
 }
 
 /// Polls the network to determine whether further blocks are available and
@@ -1181,6 +1199,8 @@ where
             trace,
             #[cfg(feature = "ycash")]
             peer_connected: None,
+            #[cfg(feature = "ycash")]
+            gossip_gap: None,
         };
 
         (new_syncer, sync_status)
@@ -1211,10 +1231,24 @@ where
                 "waiting to restart sync"
             );
             #[cfg(feature = "ycash")]
-            restart_sleep(restart_delay, self.peer_connected.as_mut()).await;
+            {
+                let gossip_gap = self.gossip_gap.clone();
+                tokio::select! {
+                    _ = restart_sleep(restart_delay, self.peer_connected.as_mut()) => {}
+                    _ = gossip_gap_notified(gossip_gap.as_deref()) => {
+                        info!("a gossiped block could not connect: restarting sync now");
+                    }
+                }
+            }
             #[cfg(not(feature = "ycash"))]
             sleep(restart_delay).await;
         }
+    }
+
+    /// kogany (S5-K12): wake the restart sleep when a gossiped block cannot connect.
+    #[cfg(feature = "ycash")]
+    pub fn set_gossip_gap_notify(&mut self, notify: Arc<tokio::sync::Notify>) {
+        self.gossip_gap = Some(notify);
     }
 
     /// kogany (S5-K11): wake the restart sleep when a new peer responds.

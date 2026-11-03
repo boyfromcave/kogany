@@ -42,3 +42,23 @@ async fn restart_sleep_runs_full_delay_without_new_peer() {
     drop(tx);
     assert!(!restart_sleep(Duration::from_secs(5), None).await);
 }
+
+/// kogany (S5-K12): a gap notified during a round (before the sleep starts) ends the next
+/// restart sleep at once; without a notifier the wait never ends.
+#[tokio::test(start_paused = true)]
+async fn gossip_gap_ends_restart_sleep() {
+    use crate::components::sync::gossip_gap_notified;
+    let notify = std::sync::Arc::new(tokio::sync::Notify::new());
+    notify.notify_one();
+    let start = tokio::time::Instant::now();
+    tokio::select! {
+        _ = restart_sleep(Duration::from_secs(60), None) => panic!("slept the full delay"),
+        _ = gossip_gap_notified(Some(&notify)) => {}
+    }
+    assert!(start.elapsed() < Duration::from_secs(1));
+    assert!(
+        tokio::time::timeout(Duration::from_secs(5), gossip_gap_notified(None))
+            .await
+            .is_err()
+    );
+}

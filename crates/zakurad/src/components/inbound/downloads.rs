@@ -434,6 +434,13 @@ struct TaskSpawner<ZN, ZV, ZS> {
     /// next drains the results (which waits for the next peer request).
     #[cfg(feature = "ycash")]
     misbehavior_sender: Option<tokio::sync::mpsc::Sender<(PeerSocketAddr, u32)>>,
+
+    /// kogany (S5-K12): woken when a gossiped block cannot connect (too far ahead of the tip, or
+    /// a missing parent with no recovery started), so the syncer runs its next `FindBlocks`
+    /// round at once instead of after the restart delay; a legacy peer's `inv` for a block
+    /// above a gap is otherwise dropped and the gap waits on the timer.
+    #[cfg(feature = "ycash")]
+    gossip_gap: Option<Arc<tokio::sync::Notify>>,
 }
 
 impl<ZN: Clone, ZV: Clone, ZS: Clone> Clone for TaskSpawner<ZN, ZV, ZS> {
@@ -449,6 +456,8 @@ impl<ZN: Clone, ZV: Clone, ZS: Clone> Clone for TaskSpawner<ZN, ZV, ZS> {
             spawned_sender: self.spawned_sender.clone(),
             #[cfg(feature = "ycash")]
             misbehavior_sender: self.misbehavior_sender.clone(),
+            #[cfg(feature = "ycash")]
+            gossip_gap: self.gossip_gap.clone(),
         }
     }
 }
@@ -605,6 +614,8 @@ where
                 spawned_sender,
                 #[cfg(feature = "ycash")]
                 misbehavior_sender: None,
+                #[cfg(feature = "ycash")]
+                gossip_gap: None,
             },
             pending: FuturesUnordered::new(),
             spawned_receiver,
@@ -620,6 +631,14 @@ where
         sender: tokio::sync::mpsc::Sender<(PeerSocketAddr, u32)>,
     ) -> Self {
         self.spawner.misbehavior_sender = Some(sender);
+        self
+    }
+
+    /// kogany (S5-K12): wake the syncer when a gossiped block cannot connect
+    /// ([`TaskSpawner::gossip_gap`]).
+    #[cfg(feature = "ycash")]
+    pub fn with_gossip_gap_notify(mut self, notify: Option<Arc<tokio::sync::Notify>>) -> Self {
+        self.spawner.gossip_gap = notify;
         self
     }
 
@@ -847,6 +866,14 @@ where
     /// never recover their own parents. The caller only calls this for children close enough
     /// to the tip that one hop could connect them, and whose headers carry valid proof of work,
     /// so a peer cannot occupy these slots with blocks that cost nothing to make.
+    /// kogany (S5-K12): a gossiped block cannot connect; the syncer's next round starts now.
+    #[cfg(feature = "ycash")]
+    fn notify_gossip_gap(&self) {
+        if let Some(notify) = &self.gossip_gap {
+            notify.notify_one();
+        }
+    }
+
     fn recover_parent(
         &self,
         parent: block::Hash,
@@ -1092,6 +1119,8 @@ where
                     "gossiped block height too far ahead of the tip: dropped downloaded block",
                 );
                 metrics::counter!("gossip.max.height.limit.dropped.block.count").increment(1);
+                #[cfg(feature = "ycash")]
+                spawner.notify_gossip_gap();
 
                 Err("gossiped block height too far ahead").map_err(|e| (e.into(), None))?;
             } else if block_height < min_accepted_height {
@@ -1168,6 +1197,13 @@ where
                         "outcome" => recovery.metric_label(),
                     )
                     .increment(1);
+                    #[cfg(feature = "ycash")]
+                    if !matches!(
+                        recovery,
+                        ParentRecovery::Attached | ParentRecovery::Requested
+                    ) {
+                        spawner.notify_gossip_gap();
+                    }
                 }
             }
 
