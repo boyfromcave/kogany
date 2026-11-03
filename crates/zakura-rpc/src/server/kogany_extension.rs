@@ -281,7 +281,7 @@ impl RpcServer {
 
         conf.listen_addr = Some(
             conf.admin_listen_addr
-                .expect("caller should make sure admin_listen_addr is set"),
+                .ok_or_else(|| std::io::Error::other("admin_listen_addr is not set"))?,
         );
         conf.admin_listen_addr = None;
         conf.enable_cookie_auth = true;

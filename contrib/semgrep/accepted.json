@@ -10,6 +10,119 @@
       "reason": "ycash6's code-scanning triage script, accepted there for the same reason (2026-10-24): its one subprocess call runs `gh api` with an argv list (no shell) built from constants and the workflow-supplied repository name, only in code-scanning.yml with that job's own token. A subprocess call anywhere else is still reported.",
       "by": "secops triage",
       "date": "2026-11-01"
+    },
+    {
+      "rule": "trailofbits.rs.panic-in-function-returning-result",
+      "paths": [
+        "*/tests/*",
+        "*/tests.rs",
+        "*/tests/*.rs"
+      ],
+      "reason": "Test code: a panic is how a test fails; the Result return is the test harness's, not an error path of the node.",
+      "by": "secops triage",
+      "date": "2026-11-02"
+    },
+    {
+      "rule": "trailofbits.rs.panic-in-function-returning-result",
+      "paths": [
+        "crates/zakurad/src/commands/start.rs"
+      ],
+      "reason": "Startup: kogany's RPC server start mirrors upstream's `.expect(\"server should start\")` beside it; a node that cannot bind its configured RPC port must stop at startup.",
+      "by": "secops triage",
+      "date": "2026-11-02"
+    },
+    {
+      "rule": "trailofbits.rs.panic-in-function-returning-result",
+      "paths": [
+        "crates/zakurad/src/components/mempool/storage.rs"
+      ],
+      "reason": "Weighted eviction pick: `pick` is drawn below the summed weights of the same candidate list, so `find` always matches; the expect states that invariant.",
+      "by": "secops triage",
+      "date": "2026-11-02"
+    },
+    {
+      "rule": "trailofbits.rs.panic-in-function-returning-result",
+      "paths": [
+        "crates/zakura-state/src/service/check/sequence_locks.rs"
+      ],
+      "reason": "Both expects are proved by the lines above them: time-based locks are rejected first, and a u32 coin height plus a 16-bit lock fits the u32 height after the range check.",
+      "by": "secops triage",
+      "date": "2026-11-02"
+    },
+    {
+      "rule": "trailofbits.rs.panic-in-function-returning-result",
+      "paths": [
+        "crates/zakura-rpc/src/methods/types/get_block_template.rs"
+      ],
+      "reason": "Upstream Zakura's line (only re-flowed around the Ycash regtest difficulty): the state's expected difficulty is always a valid compact value.",
+      "by": "secops triage",
+      "date": "2026-11-02"
+    },
+    {
+      "rule": "rust.lang.security.unsafe-usage",
+      "paths": [
+        "crates/kogany-pq/src/ffi.rs"
+      ],
+      "reason": "The post-quantum verifier FFI (SLH-DSA, Falcon-512) is necessarily unsafe; each call carries a SAFETY comment on the pointer and length contract, and the verifiers write through none of the pointers.",
+      "by": "secops triage",
+      "date": "2026-11-02"
+    },
+    {
+      "rule": "rust.lang.security.unsafe-usage",
+      "paths": [
+        "crates/zakurad/src/bin/zakurad/entry.rs"
+      ],
+      "reason": "libc::mallopt at process start before any worker thread, as its SAFETY comment states (upstream's allocator tuning, moved with the binary rename).",
+      "by": "secops triage",
+      "date": "2026-11-02"
+    },
+    {
+      "rule": "dockerfile.security.missing-user",
+      "paths": [
+        "docker/Dockerfile"
+      ],
+      "reason": "Upstream design: the runtime stage starts as root and entrypoint.sh drops to the image user with setpriv (Dockerfile comments at the runtime stage).",
+      "by": "secops triage",
+      "date": "2026-11-02"
+    },
+    {
+      "rule": "generic.secrets.gitleaks.generic-api-key",
+      "paths": [
+        "doc/yellowback-rpc-contract.json"
+      ],
+      "reason": "The RPC contract's example responses: placeholder addresses and a dummy key id, no secret.",
+      "by": "secops triage",
+      "date": "2026-11-02"
+    },
+    {
+      "rule": "python.lang.security.audit.dangerous-subprocess-use-audit",
+      "paths": [
+        "*/qa/*",
+        "qa/*",
+        "*/tests/data/*"
+      ],
+      "reason": "Test and gate harnesses: they launch the locally built koganyd / ycashd / client binaries with argv lists (no shell) from their own arguments; never run on untrusted input.",
+      "by": "secops triage",
+      "date": "2026-11-02"
+    },
+    {
+      "rule": "python.lang.security.audit.dynamic-urllib-use-detected",
+      "paths": [
+        "*/qa/*",
+        "qa/*"
+      ],
+      "reason": "Test and gate harnesses: the URL is the regtest node's own RPC endpoint on 127.0.0.1 the harness started.",
+      "by": "secops triage",
+      "date": "2026-11-02"
+    },
+    {
+      "rule": "python.lang.security.audit.non-literal-import",
+      "paths": [
+        "*/tests/data/*"
+      ],
+      "reason": "Fixture regenerator: imports the sibling test-data module by its computed path; a developer tool, not shipped.",
+      "by": "secops triage",
+      "date": "2026-11-02"
     }
   ]
 }
