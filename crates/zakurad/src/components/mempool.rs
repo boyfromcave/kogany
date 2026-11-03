@@ -669,9 +669,29 @@ pub struct Mempool {
     /// block is disconnected (kogany F-S5-7). Kept across mempool resets.
     #[cfg(feature = "ycash")]
     reorg_resurrect: reorg_resurrect::ReorgResurrect,
+
+    /// Ycash: sends ycashd's `reject` to the legacy peer that relayed a refused transaction
+    /// (kogany S5). Sends nothing until [`Mempool::set_legacy_reject_sender`].
+    #[cfg(feature = "ycash")]
+    legacy_reject: zn::ycash::LegacyRejectSender,
+
+    /// Ycash: the transactions refused with no relaying peer, verified again when a legacy peer
+    /// pushes them (kogany S5). At most [`MAX_LOCAL_REJECTIONS`].
+    #[cfg(feature = "ycash")]
+    local_rejections: HashSet<UnminedTxId>,
 }
 
+/// Ycash: the bound on [`Mempool`]'s locally refused transaction ids (cleared when reached).
+#[cfg(feature = "ycash")]
+const MAX_LOCAL_REJECTIONS: usize = 1000;
+
 impl Mempool {
+    /// Ycash: the handle that sends ycashd's transaction `reject` to legacy peers (kogany S5).
+    #[cfg(feature = "ycash")]
+    pub(crate) fn set_legacy_reject_sender(&mut self, sender: zn::ycash::LegacyRejectSender) {
+        self.legacy_reject = sender;
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         config: &Config,
@@ -716,6 +736,10 @@ impl Mempool {
             state_retries: Default::default(),
             #[cfg(feature = "ycash")]
             reorg_resurrect: Default::default(),
+            #[cfg(feature = "ycash")]
+            legacy_reject: Default::default(),
+            #[cfg(feature = "ycash")]
+            local_rejections: Default::default(),
         };
 
         // Make sure `is_enabled` is accurate.
@@ -1094,6 +1118,35 @@ impl Service<Request> for Mempool {
                     }
                     Ok(Err(boxed_err)) => {
                         let (tx_id, error) = *boxed_err;
+                        // Ycash: ycashd's `reject` to the relaying peer, before any ban
+                        // (`ycash6 src/main.cpp:8937-8947`; kogany S5).
+                        #[cfg(feature = "ycash")]
+                        if let TransactionDownloadVerifyError::Invalid {
+                            error,
+                            advertiser_addr: Some(peer),
+                            ..
+                        } = &error
+                        {
+                            use zakura_rpc::methods::ycash_reject::{
+                                transaction_reject, Context, CxxReject, REJECT_INVALID,
+                            };
+                            let (code, reason) = match transaction_reject(error, Context::Mempool) {
+                                CxxReject::Reject { code, reason } => (code, reason),
+                                CxxReject::Unmapped(text) => (REJECT_INVALID, text),
+                                // ycashd's orphan and duplicate paths send no reject.
+                                CxxReject::MissingInputs
+                                | CxxReject::AlreadyInChain
+                                | CxxReject::InMempool => {
+                                    (zn::ycash::REJECT_INTERNAL, String::new())
+                                }
+                            };
+                            self.legacy_reject.reject_transaction(
+                                *peer,
+                                code,
+                                &reason,
+                                tx_id.mined_id().0,
+                            );
+                        }
                         let zcashd_compat_peer_ips = &self.zcashd_compat_peer_ips;
                         let ban_peer = transaction_ban_peer(&error)
                             .filter(|peer| !is_zcashd_compat_peer(zcashd_compat_peer_ips, *peer));
@@ -1212,6 +1265,23 @@ impl Service<Request> for Mempool {
                         }
 
                         invalidated_ids.insert(tx_id);
+                        // Ycash: a transaction refused with no relaying peer (a local
+                        // `sendrawtransaction`) is verified again when a legacy peer relays it:
+                        // ycashd fills `recentRejects` only from P2P (`ycash6 src/main.cpp:
+                        // 8829-8947`), so that peer gets the `reject` and the score (kogany S5).
+                        #[cfg(feature = "ycash")]
+                        if matches!(
+                            &error,
+                            TransactionDownloadVerifyError::Invalid {
+                                advertiser_addr: None,
+                                ..
+                            }
+                        ) {
+                            if self.local_rejections.len() >= MAX_LOCAL_REJECTIONS {
+                                self.local_rejections.clear();
+                            }
+                            self.local_rejections.insert(tx_id);
+                        }
                         storage.reject_if_needed(tx_id, error);
                     }
                     Err((tx_id, _elapsed)) => {
@@ -1610,6 +1680,16 @@ impl Service<Request> for Mempool {
                             .increment(u64::try_from(transactions.len()).unwrap_or(u64::MAX));
                     } else {
                         for gossiped_tx in transactions {
+                            // Ycash: a pushed transaction refused only locally is verified
+                            // again (see `local_rejections`).
+                            #[cfg(feature = "ycash")]
+                            if matches!(
+                                (&gossiped_tx, &source),
+                                (Gossip::Tx(_), QueueSource::LegacySocket(_))
+                            ) && self.local_rejections.remove(&gossiped_tx.id())
+                            {
+                                storage.forget_tip_rejection(&gossiped_tx.id());
+                            }
                             if storage.should_download_or_verify(gossiped_tx.id()).is_err() {
                                 continue;
                             }

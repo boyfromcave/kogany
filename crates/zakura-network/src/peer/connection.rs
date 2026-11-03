@@ -580,6 +580,9 @@ pub(crate) struct ConnectionRequests<C> {
     pub(crate) client_rx: futures::channel::mpsc::Receiver<ClientRequest>,
     /// Block adverts, read even while a request is awaiting its response.
     pub(crate) block_advert_rx: tokio::sync::mpsc::Receiver<BlockAdvert>,
+    /// Messages sent to the peer outside a request (kogany S5: ycashd's `reject`); a closed
+    /// channel disables the branch.
+    pub(crate) side_message_rx: tokio::sync::mpsc::Receiver<Message>,
     pub(crate) minimum_peer_version: MinimumPeerVersion<C>,
     pub(crate) bans: BannedIps,
 }
@@ -624,6 +627,9 @@ where
 
     /// Receives block adverts independently of the current request's response.
     pub(super) block_advert_rx: tokio::sync::mpsc::Receiver<BlockAdvert>,
+
+    /// Messages sent to the peer outside a request (kogany S5).
+    pub(super) side_message_rx: tokio::sync::mpsc::Receiver<Message>,
 
     /// Live authorization, rechecked immediately before advert writes.
     minimum_peer_version: MinimumPeerVersion<C>,
@@ -699,6 +705,7 @@ where
         ConnectionRequests {
             client_rx,
             block_advert_rx,
+            side_message_rx,
             minimum_peer_version,
             bans,
         }: ConnectionRequests<C>,
@@ -717,6 +724,7 @@ where
             svc: inbound_service,
             client_rx: client_rx.into(),
             block_advert_rx,
+            side_message_rx,
             minimum_peer_version,
             bans,
             error_slot,
@@ -817,6 +825,10 @@ where
                         // A closed advert channel disables only this branch.
                         Some(advert) = self.block_advert_rx.recv() => {
                             self.send_block_advert(advert).await;
+                            continue;
+                        }
+                        Some(message) = self.side_message_rx.recv() => {
+                            self.send_side_message(message).await;
                             continue;
                         }
                         req = self.client_rx.next() => Either::Right(req),
@@ -936,6 +948,10 @@ where
                             self.send_block_advert(advert).await;
                             continue;
                         }
+                        Some(message) = self.side_message_rx.recv() => {
+                            self.send_side_message(message).await;
+                            continue;
+                        }
                     };
                     match peer_msg {
                         None => self.fail_with(PeerError::ConnectionClosed).await,
@@ -1037,6 +1053,13 @@ where
     /// acknowledges it once the local write completes.
     ///
     /// Does not change the state of any request that is awaiting its response.
+    /// Writes a message queued outside a request (kogany S5: ycashd's `reject`).
+    async fn send_side_message(&mut self, message: Message) {
+        if let Err(e) = self.peer_tx.send(message).await {
+            self.fail_with(e).await;
+        }
+    }
+
     async fn send_block_advert(&mut self, advert: BlockAdvert) {
         if advert.result.is_closed() {
             metrics::counter!("peer.canceled").increment(1);

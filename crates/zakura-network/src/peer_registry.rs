@@ -65,6 +65,10 @@ struct RegistryState {
     /// The connection task of each legacy connection, so an operator can close it
     /// (`disconnectnode`, kogany F-S5-6).
     legacy_connection_tasks: HashMap<ConnectionKey, AbortHandle>,
+    /// A side channel into each legacy connection, for the messages kogany sends a peer outside
+    /// a request (ycashd's `reject` for a refused transaction, kogany S5).
+    legacy_message_senders:
+        HashMap<ConnectionKey, tokio::sync::mpsc::Sender<crate::protocol::external::Message>>,
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
@@ -226,6 +230,31 @@ impl PeerRegistry {
         closed
     }
 
+    /// Queues `message` on every legacy connection to `addr` (dropped when its queue is full).
+    /// Returns the number of connections it was queued on.
+    pub(crate) fn send_legacy(
+        &self,
+        addr: PeerSocketAddr,
+        message: &crate::protocol::external::Message,
+    ) -> usize {
+        let state = self
+            .inner
+            .lock()
+            .expect("peer registry mutex is never poisoned");
+        let mut queued = 0;
+        for (key, peer) in &state.active_connections {
+            if peer.addr != addr {
+                continue;
+            }
+            if let Some(sender) = state.legacy_message_senders.get(key) {
+                if sender.try_send(message.clone()).is_ok() {
+                    queued += 1;
+                }
+            }
+        }
+        queued
+    }
+
     /// Is an outbound connection to `addr` open?
     pub(crate) fn has_outbound(&self, addr: PeerSocketAddr) -> bool {
         self.inner
@@ -255,6 +284,7 @@ impl PeerRegistry {
             .expect("peer registry mutex is never poisoned");
         state.active_connections.remove(key);
         state.legacy_connection_tasks.remove(key);
+        state.legacy_message_senders.remove(key);
     }
 }
 
@@ -287,6 +317,24 @@ impl PeerRegistryUpdater {
             .expect("peer registry mutex is never poisoned");
         if state.active_connections.contains_key(&self.key) {
             state.legacy_connection_tasks.insert(self.key.clone(), task);
+        }
+    }
+
+    /// Attach the side channel of this legacy connection, so [`PeerRegistry::send_legacy`] can
+    /// queue messages on it. Does nothing once the connection has left the registry.
+    pub(crate) fn attach_message_sender(
+        &self,
+        sender: tokio::sync::mpsc::Sender<crate::protocol::external::Message>,
+    ) {
+        let mut state = self
+            .registry
+            .inner
+            .lock()
+            .expect("peer registry mutex is never poisoned");
+        if state.active_connections.contains_key(&self.key) {
+            state
+                .legacy_message_senders
+                .insert(self.key.clone(), sender);
         }
     }
 

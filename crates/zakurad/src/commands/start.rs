@@ -677,7 +677,8 @@ impl StartCmd {
         );
 
         info!("initializing mempool");
-        let (mempool, mempool_transaction_subscriber) = Mempool::new(
+        #[allow(unused_mut)]
+        let (mut mempool, mempool_transaction_subscriber) = Mempool::new(
             &config.mempool,
             config.network.expose_peer_addresses,
             peer_set.clone(),
@@ -689,6 +690,14 @@ impl StartCmd {
             chain_tip_change.clone(),
             misbehavior_sender.clone(),
             zcashd_compat_block_gossip_peer_ips.clone(),
+        );
+        // Ycash (kogany S5): ycashd's `reject` for a refused relayed transaction.
+        #[cfg(feature = "ycash")]
+        mempool.set_legacy_reject_sender(
+            address_book
+                .lock()
+                .expect("address book lock is not poisoned")
+                .legacy_reject_sender(),
         );
         let mempool_verification_finished = mempool.verification_finished();
         let mempool = spawn_buffer(

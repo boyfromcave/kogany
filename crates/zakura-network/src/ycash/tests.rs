@@ -621,3 +621,39 @@ async fn disconnect_peer_closes_the_connection_and_keeps_the_address_out() {
     assert!(book.add_peer(peer), "addnode adds it again");
     assert!(book.get(peer).is_some());
 }
+
+/// kogany (S5): the transaction `reject` is ycashd's bytes (`ycash6 src/main.cpp:8943-8945`):
+/// `varstr "tx"`, the code byte, `varstr` reason cut to `MAX_REJECT_MESSAGE_LENGTH`, the txid.
+#[test]
+fn transaction_reject_is_ycashd_encoding() {
+    let txid = [0xab; 32];
+    let long = "x".repeat(200);
+    let message = transaction_reject_message(0x40, &long, txid).expect("a P2P code");
+    let mut bytes = BytesMut::new();
+    Codec::builder()
+        .for_network(&Network::Mainnet)
+        .finish()
+        .encode(message, &mut bytes)
+        .expect("a reject encodes");
+    assert_eq!(&bytes[4..16], b"reject\0\0\0\0\0\0");
+    let mut payload = vec![2, b't', b'x', 0x40, 111];
+    payload.extend_from_slice(&[b'x'; 111]);
+    payload.extend_from_slice(&txid);
+    assert_eq!(&bytes[24..], &payload[..]);
+
+    // The round trip reads the same message back.
+    let decoded = Codec::builder()
+        .for_network(&Network::Mainnet)
+        .finish()
+        .decode(&mut bytes)
+        .expect("a reject decodes")
+        .expect("a whole message");
+    assert_eq!(
+        decoded,
+        transaction_reject_message(0x40, &long, txid).expect("a P2P code")
+    );
+
+    // AcceptToMemoryPool's internal codes never go over P2P.
+    assert!(transaction_reject_message(REJECT_INTERNAL, "absurdly-high-fee", txid).is_none());
+    assert!(transaction_reject_message(0x102, "mempool conflict", txid).is_none());
+}

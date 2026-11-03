@@ -254,5 +254,75 @@ pub fn is_routable(ip: std::net::IpAddr) -> bool {
     }
 }
 
+/// ycashd's `MAX_REJECT_MESSAGE_LENGTH` (`ycash6 src/main.h:145`): the reason is cut to it.
+pub const MAX_REJECT_MESSAGE_LENGTH: usize = 111;
+
+/// ycashd's `REJECT_INTERNAL` (`ycash6 src/consensus/validation.h`): codes from it up are
+/// `AcceptToMemoryPool`'s own and never go over P2P.
+pub const REJECT_INTERNAL: u16 = 0x100;
+
+/// The `reject` ycashd sends the peer that relayed a transaction `AcceptToMemoryPool` refused
+/// (`ycash6 src/main.cpp:8937-8945`): `reject "tx" <code> <reason, cut to 111 bytes> <txid>`.
+/// `None` for an internal code (at or above [`REJECT_INTERNAL`]), which ycashd never sends.
+pub fn transaction_reject_message(
+    code: u16,
+    reason: &str,
+    txid: [u8; 32],
+) -> Option<crate::protocol::external::Message> {
+    use crate::protocol::external::RejectReason;
+    let ccode = match u8::try_from(code).ok().filter(|_| code < REJECT_INTERNAL)? {
+        0x01 => RejectReason::Malformed,
+        0x10 => RejectReason::Invalid,
+        0x11 => RejectReason::Obsolete,
+        0x12 => RejectReason::Duplicate,
+        0x40 => RejectReason::Nonstandard,
+        0x41 => RejectReason::Dust,
+        0x42 => RejectReason::InsufficientFee,
+        0x43 => RejectReason::Checkpoint,
+        _ => RejectReason::Other,
+    };
+    let mut end = reason.len().min(MAX_REJECT_MESSAGE_LENGTH);
+    while !reason.is_char_boundary(end) {
+        end -= 1;
+    }
+    Some(crate::protocol::external::Message::Reject {
+        message: "tx".to_owned(),
+        ccode,
+        reason: reason[..end].to_owned(),
+        data: Some(txid),
+    })
+}
+
+/// Sends ycashd's transaction `reject` to a legacy peer (kogany S5), through the address book's
+/// peer registry. A default handle sends nothing.
+#[derive(Clone, Debug, Default)]
+pub struct LegacyRejectSender {
+    registry: Option<crate::peer_registry::PeerRegistry>,
+}
+
+impl LegacyRejectSender {
+    pub(crate) fn new(registry: Option<crate::peer_registry::PeerRegistry>) -> Self {
+        Self { registry }
+    }
+
+    /// Queues [`transaction_reject_message`] on every legacy connection to `peer`; returns the
+    /// number of connections it was queued on.
+    pub fn reject_transaction(
+        &self,
+        peer: crate::PeerSocketAddr,
+        code: u16,
+        reason: &str,
+        txid: [u8; 32],
+    ) -> usize {
+        match (
+            &self.registry,
+            transaction_reject_message(code, reason, txid),
+        ) {
+            (Some(registry), Some(message)) => registry.send_legacy(peer, &message),
+            _ => 0,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests;
