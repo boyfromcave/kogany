@@ -329,6 +329,7 @@ pub(crate) fn without_yed_test_fault<R>(f: impl FnOnce() -> R) -> R {
 pub fn maybe_inject_yed_test_fault(
     config: &YellowbackConfig,
     height: Height,
+    hash: zakura_chain::block::Hash,
 ) -> Result<(), YedEvaluationFailed> {
     let Some(spec) = &config.test_fault else {
         return Ok(());
@@ -353,8 +354,20 @@ pub fn maybe_inject_yed_test_fault(
                 YED_TEST_FAULT_REASON.to_owned(),
             ))
         }
-        Some(YedTestFault::Crash(at)) if at == height => {
-            tracing::error!(?height, "yellowback.test_fault: crashing");
+        Some(YedTestFault::Crash(at)) if height >= at => {
+            // ycashd's line (`index.cpp:526`), written unbuffered: the kill drops the tracing
+            // writer's buffer.
+            eprintln!(
+                "yellowback: -yellowbacktestfault: crash before judging block {hash} at {}",
+                height.0
+            );
+            // ycashd's `raise(SIGKILL)`: no unwinding, no crash report holding the database lock.
+            #[cfg(unix)]
+            #[allow(unsafe_code)]
+            // SAFETY: `raise` has no preconditions; SIGKILL does not return.
+            unsafe {
+                libc::raise(libc::SIGKILL);
+            }
             std::process::abort()
         }
         _ => Ok(()),
@@ -767,15 +780,32 @@ mod ycash_test_fault_tests {
         };
         assert!(config.validate().is_ok());
         assert_eq!(config.regtest_only_key_set(), Some("test_fault"));
-        assert!(maybe_inject_yed_test_fault(&config, Height(4)).is_ok());
+        assert!(maybe_inject_yed_test_fault(
+            &config,
+            Height(4),
+            zakura_chain::block::Hash([0; 32])
+        )
+        .is_ok());
         // the startup backup replay never fires it, even past its height
-        assert!(without_yed_test_fault(|| maybe_inject_yed_test_fault(&config, Height(6))).is_ok());
+        assert!(without_yed_test_fault(|| maybe_inject_yed_test_fault(
+            &config,
+            Height(6),
+            zakura_chain::block::Hash([0; 32])
+        ))
+        .is_ok());
         // the first commit at or after the height does, once
-        let fired = maybe_inject_yed_test_fault(&config, Height(6)).expect_err("fires at 6");
+        let fired =
+            maybe_inject_yed_test_fault(&config, Height(6), zakura_chain::block::Hash([0; 32]))
+                .expect_err("fires at 6");
         // the stop's log line carries ycashd's AbortNode text (yellowback_mining.py:368)
         assert!(fired
             .to_string()
             .contains("Failed to write to the Yellowback index"));
-        assert!(maybe_inject_yed_test_fault(&config, Height(7)).is_ok());
+        assert!(maybe_inject_yed_test_fault(
+            &config,
+            Height(7),
+            zakura_chain::block::Hash([0; 32])
+        )
+        .is_ok());
     }
 }
