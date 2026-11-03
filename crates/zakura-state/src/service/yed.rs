@@ -304,8 +304,22 @@ impl YedTestFault {
 static YED_TEST_FAULT: std::sync::Mutex<Option<(String, Option<YedTestFault>)>> =
     std::sync::Mutex::new(None);
 
-/// Fires `config.test_fault` once, when `height` (a block being committed, not a template
-/// check) matches it: a storage fault is returned, a crash aborts the process. Regtest only (the
+thread_local! {
+    /// Set while startup replays the non-finalized backup: those blocks were committed before,
+    /// so the fault never fires on them (it is armed for blocks committed after start).
+    static YED_TEST_FAULT_SUPPRESSED: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Runs `f` (the startup backup replay) with `yellowback.test_fault` disarmed on this thread.
+pub(crate) fn without_yed_test_fault<R>(f: impl FnOnce() -> R) -> R {
+    let was = YED_TEST_FAULT_SUPPRESSED.with(|s| s.replace(true));
+    let result = f();
+    YED_TEST_FAULT_SUPPRESSED.with(|s| s.set(was));
+    result
+}
+
+/// Fires `config.test_fault` once, on the first block committed after start (not a template
+/// check, not the startup backup replay) at or after its height: a storage fault is returned, a crash aborts the process. Regtest only (the
 /// configuration refuses the key elsewhere).
 pub fn maybe_inject_yed_test_fault(
     config: &YellowbackConfig,
@@ -314,6 +328,9 @@ pub fn maybe_inject_yed_test_fault(
     let Some(spec) = &config.test_fault else {
         return Ok(());
     };
+    if YED_TEST_FAULT_SUPPRESSED.with(std::cell::Cell::get) {
+        return Ok(());
+    }
     let mut armed = YED_TEST_FAULT
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
@@ -324,7 +341,7 @@ pub fn maybe_inject_yed_test_fault(
         return Ok(());
     };
     match *fault {
-        Some(YedTestFault::Storage(at)) if at.is_none_or(|at| at == height) => {
+        Some(YedTestFault::Storage(at)) if at.is_none_or(|at| height >= at) => {
             *fault = None;
             tracing::error!(?height, "yellowback.test_fault: injecting a storage fault");
             Err(YedEvaluationFailed::Unhealthy(
@@ -746,7 +763,10 @@ mod ycash_test_fault_tests {
         assert!(config.validate().is_ok());
         assert_eq!(config.regtest_only_key_set(), Some("test_fault"));
         assert!(maybe_inject_yed_test_fault(&config, Height(4)).is_ok());
-        assert!(maybe_inject_yed_test_fault(&config, Height(5)).is_err());
-        assert!(maybe_inject_yed_test_fault(&config, Height(5)).is_ok());
+        // the startup backup replay never fires it, even past its height
+        assert!(without_yed_test_fault(|| maybe_inject_yed_test_fault(&config, Height(6))).is_ok());
+        // the first commit at or after the height does, once
+        assert!(maybe_inject_yed_test_fault(&config, Height(6)).is_err());
+        assert!(maybe_inject_yed_test_fault(&config, Height(7)).is_ok());
     }
 }

@@ -732,6 +732,15 @@ impl AddressBook {
             if updated.misbehavior() >= constants::MAX_PEER_MISBEHAVIOR_SCORE {
                 // Ban and skip outbound connections with excessively misbehaving peers.
                 let banned_ip = updated.addr.ip();
+                // Ycash (S5): ycashd's line for the same event (`src/main.cpp:2720`
+                // `Misbehaving`), which the shared regtest scripts read from the log.
+                #[cfg(feature = "ycash")]
+                tracing::info!(
+                    "Misbehaving: {} ({} -> {}) BAN THRESHOLD EXCEEDED",
+                    updated.addr,
+                    previous.as_ref().map_or(0, |p| p.misbehavior()),
+                    updated.misbehavior(),
+                );
                 self.bans_by_ip.insert(banned_ip);
 
                 // `most_recent_by_ip` is only populated when

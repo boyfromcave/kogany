@@ -106,6 +106,36 @@ fn coinbase(
 
 // ---- the coinbase tag ---------------------------------------------------------------------
 
+/// S5: with no `extra_coinbase_data` the coinbase input script is ycashd's
+/// `<height> OP_0 <COINBASE_FLAGS>` (`src/miner.cpp:291`), with and without a tag.
+#[test]
+fn untagged_data_is_ycashd_op_0() {
+    let network = Network::new_regtest(Default::default());
+    let tag = cxx_quote_tag(50_000);
+    for yellowback in [None, Some(miner_with(tag))] {
+        let flags = yellowback
+            .as_ref()
+            .map(YellowbackMiner::flags)
+            .unwrap_or_default();
+        let params = MinerParams {
+            data: zcash_script::pv::push_value(&[]),
+            ..miner_params(None, yellowback)
+        };
+        for height in [10, 200] {
+            let script = coinbase_script(&coinbase(&network, height, &params));
+            let mut tail = vec![0x00];
+            tail.extend_from_slice(&flags);
+            assert!(
+                script.ends_with(&tail),
+                "{height}: {}",
+                hex::encode(&script)
+            );
+            let push_len = if height <= 16 { 1 } else { 3 };
+            assert_eq!(script.len(), push_len + tail.len(), "{height}");
+        }
+    }
+}
+
 /// Every tagged coinbase of the golden vector: the tag kogany appends for the same tag fields is
 /// the bytes ycash6 wrote, it reads back the same, and `coinbaseaux.flags` is exactly those bytes.
 #[test]

@@ -137,10 +137,10 @@ impl<T, R> LiveYedState<T, R> {
     }
 }
 
+/// ycashd's `GetTime()`: the `setmocktime` clock when set (regtest), else the system clock, so
+/// a quote's age (MINER-1, `-yellowbackquotemaxage`) follows the mock clock as on ycashd.
 fn now_seconds() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_or(0, |d| i64::try_from(d.as_secs()).unwrap_or(i64::MAX))
+    zakura_rpc::server::kogany_extension::mock_clock::now()
 }
 
 /// ycash6 `PlainPQAddressVersion` (`src/key_io.cpp:25-31`, D-Q-20).
