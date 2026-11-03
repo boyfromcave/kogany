@@ -20,13 +20,11 @@ use zakura_chain::{
 use zakura_state::GetBlockTemplateChainInfo;
 
 use crate::config::mining;
-use crate::methods::{
-    types::{
-        get_block_template::{
-            proposal::proposal_block_from_template, BlockTemplateResponse, MinerParams,
-        },
-        long_poll::LongPollInput,
+use crate::methods::types::{
+    get_block_template::{
+        proposal::proposal_block_from_template, BlockTemplateResponse, MinerParams,
     },
+    long_poll::LongPollInput,
 };
 
 /// The chain history root the test state reports. A distinct fixed value rather than

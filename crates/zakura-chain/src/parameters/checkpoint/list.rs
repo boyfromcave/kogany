@@ -70,7 +70,6 @@ fn ycash_list_lines(list: &str) -> String {
         .collect()
 }
 
-
 /// Parsed mainnet checkpoint list, cached to avoid re-parsing on every use.
 static MAINNET_CHECKPOINT_LIST: LazyLock<Arc<CheckpointList>> = LazyLock::new(|| {
     Arc::new(
@@ -119,7 +118,8 @@ impl Network {
             // Only the hard-coded testnet list can be partial. (Not `is_regtest()`: this runs
             // while the default Regtest parameters are being built, and that check reads them.)
             Network::Testnet(params) => {
-                *params.checkpoints() == **TESTNET_CHECKPOINT_LIST && is_partial(TESTNET_CHECKPOINTS)
+                *params.checkpoints() == **TESTNET_CHECKPOINT_LIST
+                    && is_partial(TESTNET_CHECKPOINTS)
             }
         }
     }

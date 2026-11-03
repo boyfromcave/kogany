@@ -291,9 +291,11 @@ impl YedTestFault {
                 "yellowback.test_fault: {spec} has no kogany counterpart \
                  (no undo step, template-side index check or schema version)"
             )),
-            _ => Err("yellowback.test_fault: expected storage:<check|commit>[:<height>] \
+            _ => Err(
+                "yellowback.test_fault: expected storage:<check|commit>[:<height>] \
                       or crash:<height>"
-                .to_owned()),
+                    .to_owned(),
+            ),
         }
     }
 }
@@ -727,7 +729,14 @@ mod ycash_test_fault_tests {
             YedTestFault::parse("crash:9"),
             Ok(YedTestFault::Crash(Height(9)))
         );
-        for bad in ["storage:undo", "template", "schema", "storage:bogus", "crash:0", "x"] {
+        for bad in [
+            "storage:undo",
+            "template",
+            "schema",
+            "storage:bogus",
+            "crash:0",
+            "x",
+        ] {
             assert!(YedTestFault::parse(bad).is_err(), "{bad}");
         }
         let config = YellowbackConfig {

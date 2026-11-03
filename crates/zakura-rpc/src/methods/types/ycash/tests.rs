@@ -437,8 +437,18 @@ fn ycash_utxo_address_is_the_callers_name() {
     let keys: Vec<&String> = json.as_object().expect("object").keys().collect();
     assert_eq!(
         keys,
-        ["address", "txid", "outputIndex", "script", "satoshis", "height"]
+        [
+            "address",
+            "txid",
+            "outputIndex",
+            "script",
+            "satoshis",
+            "height"
+        ]
     );
     utxo.set_address_name("yr2named".to_owned());
-    assert_eq!(serde_json::to_value(&utxo).expect("json")["address"], "yr2named");
+    assert_eq!(
+        serde_json::to_value(&utxo).expect("json")["address"],
+        "yr2named"
+    );
 }

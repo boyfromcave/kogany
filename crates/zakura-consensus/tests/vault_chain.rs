@@ -56,7 +56,11 @@ impl Fixture {
             .iter()
             .enumerate()
             .map(|(i, b)| {
-                assert_eq!(b["height"].as_u64(), Some(i as u64 + 1), "blocks from height 1");
+                assert_eq!(
+                    b["height"].as_u64(),
+                    Some(i as u64 + 1),
+                    "blocks from height 1"
+                );
                 let bytes = hex::decode(b["hex"].as_str().expect("hex")).expect("hex decodes");
                 Recorded {
                     block: Arc::new(bytes.zcash_deserialize_into().expect("block parses")),
@@ -79,7 +83,10 @@ impl Fixture {
         match recorded {
             Some(hash) => hash,
             None => {
-                assert!(height < self.vault_activation, "recorded from the activation");
+                assert!(
+                    height < self.vault_activation,
+                    "recorded from the activation"
+                );
                 self.empty_statehash()
             }
         }
@@ -183,7 +190,15 @@ impl Node {
         (
             snapshot.tip.map(|(h, _)| h),
             // display order: the reversed internal bytes, as ycashd's `uint256::GetHex`
-            hex::encode(snapshot.state_hash().0.iter().rev().copied().collect::<Vec<u8>>()),
+            hex::encode(
+                snapshot
+                    .state_hash()
+                    .0
+                    .iter()
+                    .rev()
+                    .copied()
+                    .collect::<Vec<u8>>(),
+            ),
         )
     }
 
