@@ -1771,7 +1771,13 @@ fn ycash_invalidations_at_one_height_are_kept_by_hash() -> Result<()> {
 fn off_chain_blocks_are_found_by_hash() -> Result<()> {
     let _init_guard = zakura_test::init();
 
-    for network in Network::iter() {
+    // kogany: on Ycash the default testnet is past Heartwood at the vector height, so the vector
+    // blocks go on a pre-Heartwood testnet with Zcash Testnet's heights.
+    #[cfg(feature = "ycash")]
+    let networks = [Network::Mainnet, crate::tests::testnet_with_zcash_heights()];
+    #[cfg(not(feature = "ycash"))]
+    let networks = Network::iter();
+    for network in networks {
         let block1: Arc<Block> = Arc::new(network.test_block(653599, 583999).unwrap());
         let best = block1.make_fake_child().set_work(10);
         let side = block1.make_fake_child().set_work(5);
@@ -1793,11 +1799,17 @@ fn off_chain_blocks_are_found_by_hash() -> Result<()> {
         let (found, height) = state
             .off_chain_block(&side.hash())
             .expect("the side-chain block is found");
-        assert_eq!((found.hash(), height), (side.hash(), (height1 + 1).unwrap()));
+        assert_eq!(
+            (found.hash(), height),
+            (side.hash(), (height1 + 1).unwrap())
+        );
         let (found, height) = state
             .off_chain_block(&doomed.hash())
             .expect("the invalidated block is found");
-        assert_eq!((found.hash(), height), (doomed.hash(), (height1 + 2).unwrap()));
+        assert_eq!(
+            (found.hash(), height),
+            (doomed.hash(), (height1 + 2).unwrap())
+        );
         assert!(state.off_chain_block(&best.hash()).is_none());
         assert!(state.off_chain_block(&block1.hash()).is_none());
         assert!(state.off_chain_block(&block::Hash([7; 32])).is_none());

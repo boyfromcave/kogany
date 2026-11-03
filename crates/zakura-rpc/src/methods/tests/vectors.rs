@@ -698,7 +698,9 @@ async fn rpc_getblock() {
                 #[cfg(feature = "ycash")]
                 chain_history_root: Some(crate::methods::types::ycash::chain_history_root(
                     &Mainnet,
-                    block.coinbase_height().expect("vector blocks have a height"),
+                    block
+                        .coinbase_height()
+                        .expect("vector blocks have a height"),
                     expected_block_commitments,
                 )),
                 nonce: Some(expected_nonce),
@@ -763,7 +765,9 @@ async fn rpc_getblock() {
                 #[cfg(feature = "ycash")]
                 chain_history_root: Some(crate::methods::types::ycash::chain_history_root(
                     &Mainnet,
-                    block.coinbase_height().expect("vector blocks have a height"),
+                    block
+                        .coinbase_height()
+                        .expect("vector blocks have a height"),
                     expected_block_commitments,
                 )),
                 nonce: Some(expected_nonce),
@@ -1029,7 +1033,9 @@ async fn rpc_getblock() {
                 #[cfg(feature = "ycash")]
                 chain_history_root: Some(crate::methods::types::ycash::chain_history_root(
                     &Mainnet,
-                    block.coinbase_height().expect("vector blocks have a height"),
+                    block
+                        .coinbase_height()
+                        .expect("vector blocks have a height"),
                     expected_block_commitments,
                 )),
                 nonce: Some(expected_nonce),
@@ -1093,7 +1099,9 @@ async fn rpc_getblock() {
                 #[cfg(feature = "ycash")]
                 chain_history_root: Some(crate::methods::types::ycash::chain_history_root(
                     &Mainnet,
-                    block.coinbase_height().expect("vector blocks have a height"),
+                    block
+                        .coinbase_height()
+                        .expect("vector blocks have a height"),
                     expected_block_commitments,
                 )),
                 nonce: Some(expected_nonce),
@@ -2184,23 +2192,38 @@ async fn rpc_getblock_side_chain_verbosity2_does_not_panic() {
         .await
         .respond(ReadResponse::Depth(None));
 
-    // get_block: BlockAndSize, OrchardTree, BlockInfo x2
-    read_state
-        .expect_request_that(|req| matches!(req, ReadRequest::BlockAndSize(_)))
-        .await
-        .respond(ReadResponse::BlockAndSize(Some((block, block_size))));
-    read_state
-        .expect_request_that(|req| matches!(req, ReadRequest::OrchardTree(_)))
-        .await
-        .respond(ReadResponse::OrchardTree(Some(Default::default())));
-    read_state
-        .expect_request_that(|req| matches!(req, ReadRequest::BlockInfo(_)))
-        .await
-        .respond(ReadResponse::BlockInfo(None));
-    read_state
-        .expect_request_that(|req| matches!(req, ReadRequest::BlockInfo(_)))
-        .await
-        .respond(ReadResponse::BlockInfo(Some(BlockInfo::default())));
+    // kogany (S5, F-S5-19): on Ycash a block off the best chain is served from the block itself.
+    #[cfg(feature = "ycash")]
+    {
+        read_state
+            .expect_request(ReadRequest::OffChainBlock(block_hash))
+            .await
+            .respond(ReadResponse::OffChainBlock(Some((
+                block,
+                zakura_chain::block::Height(0),
+            ))));
+        let _ = block_size;
+    }
+    #[cfg(not(feature = "ycash"))]
+    {
+        // get_block: BlockAndSize, OrchardTree, BlockInfo x2
+        read_state
+            .expect_request_that(|req| matches!(req, ReadRequest::BlockAndSize(_)))
+            .await
+            .respond(ReadResponse::BlockAndSize(Some((block, block_size))));
+        read_state
+            .expect_request_that(|req| matches!(req, ReadRequest::OrchardTree(_)))
+            .await
+            .respond(ReadResponse::OrchardTree(Some(Default::default())));
+        read_state
+            .expect_request_that(|req| matches!(req, ReadRequest::BlockInfo(_)))
+            .await
+            .respond(ReadResponse::BlockInfo(None));
+        read_state
+            .expect_request_that(|req| matches!(req, ReadRequest::BlockInfo(_)))
+            .await
+            .respond(ReadResponse::BlockInfo(Some(BlockInfo::default())));
+    }
 
     block_future
         .await
