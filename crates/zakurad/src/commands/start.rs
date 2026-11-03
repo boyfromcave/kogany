@@ -690,6 +690,14 @@ impl StartCmd {
             latest_chain_tip.clone(),
             misbehavior_sender.clone(),
         );
+        // Ycash (kogany S5-K11): a newly connected peer starts a sync round at once.
+        #[cfg(feature = "ycash")]
+        syncer.set_peer_connected_watch(
+            address_book
+                .lock()
+                .expect("address book lock is not poisoned")
+                .address_metrics_watcher(),
+        );
 
         info!("initializing mempool");
         #[allow(unused_mut)]

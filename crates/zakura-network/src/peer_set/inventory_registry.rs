@@ -372,6 +372,20 @@ impl InventoryRegistry {
     /// Record the given inventory `change` for the peer `addr`.
     ///
     /// `Missing` markers are not updated until the registry rotates, for security reasons.
+    /// kogany (S5-K11): records that `peer` returned `hashes` in a `FindBlocks` response, so
+    /// the block downloads go to it first (ycashd asks the peer whose headers it took).
+    #[cfg(feature = "ycash")]
+    pub(crate) fn register_find_response(
+        &mut self,
+        peer: PeerSocketAddr,
+        hashes: &[zakura_chain::block::Hash],
+    ) {
+        let hashes: Vec<InventoryHash> = hashes.iter().copied().map(InventoryHash::Block).collect();
+        if let Some(change) = InventoryChange::new_available_multi(&hashes, peer) {
+            self.register(change);
+        }
+    }
+
     fn register(&mut self, change: InventoryChange) {
         let new_status = change.marker();
         let (invs, addr) = change.to_inner();

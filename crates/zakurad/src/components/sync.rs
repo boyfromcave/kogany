@@ -243,6 +243,38 @@ pub(crate) fn lookahead_limit_multiplier(network: &Network, height: Height) -> u
 /// See [`MIN_CHECKPOINT_CONCURRENCY_LIMIT`] for details.
 pub const MAX_TIPS_RESPONSE_HASH_COUNT: usize = 500;
 
+/// kogany (S5-K11): sleeps for `delay`, or less if the address book's `responded` count rises
+/// (a peer connected). Returns true when a new peer ended the sleep early.
+#[cfg(feature = "ycash")]
+pub(crate) async fn restart_sleep(
+    delay: Duration,
+    metrics: Option<&mut watch::Receiver<zn::AddressMetrics>>,
+) -> bool {
+    let Some(metrics) = metrics else {
+        sleep(delay).await;
+        return false;
+    };
+    let mut responded = metrics.borrow_and_update().responded;
+    let deadline = tokio::time::Instant::now() + delay;
+    loop {
+        tokio::select! {
+            _ = sleep_until(deadline) => return false,
+            changed = metrics.changed() => {
+                if changed.is_err() {
+                    sleep_until(deadline).await;
+                    return false;
+                }
+                let now = metrics.borrow_and_update().responded;
+                if now > responded {
+                    info!(responded = now, "a peer connected: restarting sync now");
+                    return true;
+                }
+                responded = now;
+            }
+        }
+    }
+}
+
 /// Returns true if a `FindBlocks` hash list has the protocol maximum number of
 /// block hashes or fewer.
 ///
@@ -992,6 +1024,13 @@ where
 
     /// Structured diagnostics for the legacy sync pipeline.
     trace: LegacySyncTrace,
+
+    /// kogany (S5-K11): the address book's metrics. A rise in `responded` (an `addnode`, an
+    /// outbound or inbound connection completing) ends the restart sleep, so the next
+    /// `FindBlocks` round runs at once; the peer set routes the first `FindBlocks` of a new
+    /// peer to it, so a heavier tip is found within one round (ycashd syncs headers on connect).
+    #[cfg(feature = "ycash")]
+    peer_connected: Option<watch::Receiver<zn::AddressMetrics>>,
 }
 
 /// Polls the network to determine whether further blocks are available and
@@ -1140,6 +1179,8 @@ where
             past_lookahead_limit_receiver,
             misbehavior_sender,
             trace,
+            #[cfg(feature = "ycash")]
+            peer_connected: None,
         };
 
         (new_syncer, sync_status)
@@ -1169,8 +1210,17 @@ where
                 state_tip = ?self.latest_chain_tip.best_tip_height(),
                 "waiting to restart sync"
             );
+            #[cfg(feature = "ycash")]
+            restart_sleep(restart_delay, self.peer_connected.as_mut()).await;
+            #[cfg(not(feature = "ycash"))]
             sleep(restart_delay).await;
         }
+    }
+
+    /// kogany (S5-K11): wake the restart sleep when a new peer responds.
+    #[cfg(feature = "ycash")]
+    pub fn set_peer_connected_watch(&mut self, metrics: watch::Receiver<zn::AddressMetrics>) {
+        self.peer_connected = Some(metrics);
     }
 
     /// Download and verify genesis.
@@ -2156,6 +2206,13 @@ where
                     debug!(new_hashes, "added hashes to download set");
                     metrics::histogram!("sync.obtain.response.hash.count")
                         .record(new_hashes as f64);
+                    // kogany (S5-K11): ycashd fetches a peer's heavier branch as soon as its
+                    // headers arrive; do not hold the new hashes for the fanout's slower peers
+                    // (a peer with nothing newer never answers `getblocks`, so it times out).
+                    #[cfg(feature = "ycash")]
+                    if new_hashes > 0 {
+                        break;
+                    }
                 }
                 Ok(_) => unreachable!("network returned wrong response"),
                 // We ignore this error because we made multiple fanout requests.
