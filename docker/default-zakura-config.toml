@@ -1,3 +1,5 @@
+# kogany: this file is upstream Zakura's, for a Zcash `zakurad` (Zcash ports). A `koganyd`
+# image uses Ycash ports: P2P 8833, RPC 8832 on mainnet (README.md "Ports").
 # Default configuration file for running Zebra in Docker.
 #
 # This file is tailored for Zebra running in Docker. Do not use it with Zebra
