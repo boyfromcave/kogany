@@ -1,3 +1,6 @@
+> **kogany:** this is upstream Zakura's README, kept for reference; it describes Zcash's `zakurad`.
+> kogany's ports differ (P2P 8833, RPC 8832 on mainnet): see [Ports](README.md#ports).
+
 <p align="center">
   <img width="500" height="133" src="https://zakura.com/assets/github/readme_banner.png" alt="Zakura banner">
 </p>

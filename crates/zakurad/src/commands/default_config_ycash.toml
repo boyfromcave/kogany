@@ -18,6 +18,9 @@
 # "Testnet" (the re-forked Ycash testnet, fast profile, P2P 18833, RPC 18832)
 # or "Regtest" (P2P 18344, RPC 18832). The RPC server is off until
 # rpc.listen_addr is set, for example listen_addr = "127.0.0.1:8832".
+# network.listen_addr below names the mainnet port; on Testnet or Regtest write
+# listen_addr = "[::]" (no port) and the port follows the network. kogany never
+# uses Zcash's ports (8233/8232, 18233/18232); README.md "Ports" has the table.
 #
 # CONFIGURATION SOURCES (in order of precedence, highest to lowest):
 #

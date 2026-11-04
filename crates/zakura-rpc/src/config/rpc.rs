@@ -16,12 +16,15 @@ pub struct Config {
     /// To enable the RPC server, set a listen address in the config:
     /// ```toml
     /// [rpc]
-    /// listen_addr = '127.0.0.1:8232'
+    /// listen_addr = '127.0.0.1:8832'
     /// ```
     ///
-    /// The recommended ports for the RPC server are:
-    /// - Mainnet: 127.0.0.1:8232
-    /// - Testnet: 127.0.0.1:18232
+    /// The recommended ports for the RPC server, Ycash ports (kogany, the `ycash`
+    /// feature; README.md "Ports"):
+    /// - Mainnet: 127.0.0.1:8832
+    /// - Testnet and Regtest: 127.0.0.1:18832
+    ///
+    /// Upstream Zakura on Zcash uses 8232 (Mainnet) and 18232 (Testnet).
     ///
     /// # Security
     ///
@@ -50,7 +53,7 @@ pub struct Config {
     /// companion to a restricted unauthenticated [`Self::listen_addr`]:
     /// ```toml
     /// [rpc]
-    /// listen_addr = '0.0.0.0:8232'
+    /// listen_addr = '0.0.0.0:8832'
     /// enable_cookie_auth = false
     /// admin_listen_addr = '127.0.0.1:8231'
     /// ```

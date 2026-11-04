@@ -91,7 +91,37 @@ the package version only, `/koganyd:1.8.0-rc1/`: ycashd keeps only `[A-Za-z0-9 .
 subversion, so a `+` would be dropped. Upstream's `zakurad` (built without the `ycash` feature)
 keeps Zakura's scheme.
 
-## Networks, ports and identifiers
+## Ports
+
+The one table of the ports kogany uses. A `koganyd` built with the `ycash` feature applies only
+Ycash ports by default; it never binds a Zcash port unless a config names one.
+
+| Network | kogany P2P | kogany RPC | Zcash P2P (not used) | Zcash RPC (not used) |
+| --- | --- | --- | --- | --- |
+| Mainnet | 8833 | 8832 | 8233 | 8232 |
+| Testnet, `fast` profile (`network = "Testnet"`) | 18833 | 18832 | 18233 | 18232 |
+| Testnet, `slow` profile | 18933 | 18932 | 18233 | 18232 |
+| Regtest | 18344 | 18832 | 18344 | 18232 |
+
+- The values equal ycashd's (`nDefaultPort`, `chainparamsbase.cpp`); the tests
+  `parameters::ycash` in `zakura-chain` and `ycash` in `zakura-network` check them.
+- P2P: the generated `kogany.toml` listens on `[::]:8833`. On a testnet or regtest write
+  `listen_addr = "[::]"` (no port) and the port follows `network`, or name the port above.
+- RPC: off until `rpc.listen_addr` is set; set it to the RPC port above, e.g. `127.0.0.1:8832`.
+  Regtest and the `fast` testnet share 18832, as in ycashd.
+- Regtest P2P 18344 is the one port Ycash shares with Zcash (zcashd's regtest port, kept by
+  ycashd). Regtest is local only; to run a Zcash regtest node beside it, give one of them
+  another `listen_addr`.
+- ycashd's legacy `testnet3` (P2P 19033) is not a kogany network (decision K-10).
+- Zcash peers: Ycash shares Zcash's mainnet and regtest network magic, so kogany cannot tell
+  a Zcash peer by magic alone. It refuses a Zcash peer by protocol version (Ycash peers advertise
+  at least 270013) and refuses any peer address on a Zcash port (8233, 8232, 18233, 18232), so a
+  `koganyd` and a Zcash node run side by side on one host without a port or peer conflict.
+- Docker: publish the Ycash ports, e.g. `docker run -p 8833:8833 koganyd` (add
+  `-p 8832:8832` and `ZAKURA_RPC__LISTEN_ADDR=0.0.0.0:8832` for RPC). The compose files and
+  configs under `docker/` are upstream's and use Zcash's ports for a Zcash `zakurad`.
+
+## Networks and identifiers
 
 Every value equals ycashd's (ycash6 `src/chainparams.cpp`, `src/chainparamsbase.cpp`); the test
 `parameters::ycash::identity_tests` in `zakura-chain` checks them and checks that none collides
@@ -107,7 +137,7 @@ with a Zcash network's on one host.
 - The RPC server is off until `rpc.listen_addr` is set; the RPC ports above are the ones to set.
   Regtest and the `fast` testnet share 18832, as in ycashd.
 - Ycash mainnet and regtest share Zcash's magic. A Zcash peer is refused by its protocol version
-  (Ycash peers advertise at least 270013) and by its port (8233, 18233), and the Zakura P2P v2
+  and by its port ([Ports](#ports)), and the Zakura P2P v2
   overlay, which identifies a chain by its genesis hash, is off (decision K-11).
 - User agent: `/koganyd:<package version>/`, e.g. `/koganyd:1.8.0-rc1/` ([Versioning](#versioning)).
 - Addresses: transparent `s1…`/`s3…` on mainnet, `sm…` on the testnets and regtest; Sapling
