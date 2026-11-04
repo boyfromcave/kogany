@@ -1,0 +1,3182 @@
+{
+ "bucket": "medium",
+ "sla_days": 90,
+ "findings": [
+  {
+   "fingerprint": "985458aa4e8255f8",
+   "rule": "trailofbits.generic.ssh-disable-host-key-checking",
+   "path": ".github/actions/do-wait-ssh/action.yml",
+   "line": 19,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "ca84c1ea40334473",
+   "rule": "trailofbits.generic.ssh-disable-host-key-checking",
+   "path": ".github/workflows-off/zakura-mempool-gossip.yml",
+   "line": 102,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "05148df65541829a",
+   "rule": "trailofbits.generic.ssh-disable-host-key-checking",
+   "path": ".github/workflows-off/zakura-mempool-gossip.yml",
+   "line": 118,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "6c907faba8949b53",
+   "rule": "trailofbits.generic.ssh-disable-host-key-checking",
+   "path": ".github/workflows-off/zakura-mempool-load.yml",
+   "line": 201,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "5bf11b15b561892f",
+   "rule": "trailofbits.generic.ssh-disable-host-key-checking",
+   "path": ".github/workflows-off/zakura-pr-node-bake.yml",
+   "line": 140,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "50a90f5453404893",
+   "rule": "trailofbits.generic.ssh-disable-host-key-checking",
+   "path": ".github/workflows-off/zakura-pr-node-bake.yml",
+   "line": 174,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "9f4006bbd1ca4ede",
+   "rule": "trailofbits.generic.ssh-disable-host-key-checking",
+   "path": ".github/workflows-off/zakura-pr-node-bake.yml",
+   "line": 182,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "e6d8e614ac2864b1",
+   "rule": "trailofbits.generic.ssh-disable-host-key-checking",
+   "path": ".github/workflows-off/zakura-pr-node.yml",
+   "line": 305,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "f59b9ab594cd5867",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/xtask/src/header_conformance.rs",
+   "line": 211,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "1ebf4b2638b59420",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/xtask/src/header_conformance.rs",
+   "line": 752,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "05b1b4226e269cae",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/xtask/src/sim_minimize.rs",
+   "line": 1133,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "faae98a0e0746c2c",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/xtask/src/sim_minimize.rs",
+   "line": 1138,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "e3c6472410b7f920",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-chain/src/amount.rs",
+   "line": 151,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "ecd17db5fdefb943",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-chain/src/amount.rs",
+   "line": 200,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "53b16556f2c04276",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-chain/src/amount.rs",
+   "line": 391,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "a5890d2816a3afed",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-chain/src/amount.rs",
+   "line": 425,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "60151edeb89de805",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-chain/src/amount.rs",
+   "line": 700,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "d86ac8268e44526b",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-chain/src/block.rs",
+   "line": 163,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "c184284a900f88d6",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-chain/src/block/header.rs",
+   "line": 112,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "1581ed6134964dc3",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-chain/src/block/serialize.rs",
+   "line": 96,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "eda066408b03d294",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-chain/src/block/serialize.rs",
+   "line": 143,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "0d72b569a6c97f0b",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-chain/src/common.rs",
+   "line": 67,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "d40e3e76d0cce12c",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-chain/src/history_tree.rs",
+   "line": 672,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "714ccc4e9a97d92c",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-chain/src/orchard/commitment.rs",
+   "line": 63,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "714ccc4e9a97d92c-1",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-chain/src/orchard/commitment.rs",
+   "line": 184,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "0c6df8b6094b38bc",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-chain/src/orchard/keys.rs",
+   "line": 85,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "99baa9498aacb0b2",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-chain/src/orchard/keys.rs",
+   "line": 89,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "f97bb150950f3b11",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-chain/src/orchard/note/nullifiers.rs",
+   "line": 26,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "bdfb588456987d46",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-chain/src/orchard/tree.rs",
+   "line": 236,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "cf9613bed03cb9db",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-chain/src/orchard/tree.rs",
+   "line": 492,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "47d91ab73c9dbe5f",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-chain/src/orchard/tree.rs",
+   "line": 535,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "f5540ae3461b09a6",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-chain/src/orchard/tree.rs",
+   "line": 542,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "b9b477ff6cd23635",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-chain/src/parallel/batch_frontier.rs",
+   "line": 258,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "31171b128e495ed5",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-chain/src/parallel/batch_frontier.rs",
+   "line": 347,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "71c845ce2f032547",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-chain/src/parallel/batch_frontier.rs",
+   "line": 356,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "87c73e942e8c0b12",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-chain/src/parallel/tree.rs",
+   "line": 72,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "3009e4a4472d691a",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-chain/src/parameters/network/subsidy.rs",
+   "line": 859,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "733474b1f67ead0f",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-chain/src/primitives/zcash_history.rs",
+   "line": 239,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "8dae2de9e4a4390b",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-chain/src/primitives/zcash_history.rs",
+   "line": 255,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "8dae2de9e4a4390b-1",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-chain/src/primitives/zcash_history.rs",
+   "line": 279,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "733474b1f67ead0f-1",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-chain/src/primitives/zcash_history.rs",
+   "line": 307,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "de5d396cb22f63b8",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-chain/src/primitives/zcash_history.rs",
+   "line": 333,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "85ba42b5a85f3394",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-chain/src/primitives/zcash_history.rs",
+   "line": 333,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "de5d396cb22f63b8-1",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-chain/src/primitives/zcash_history.rs",
+   "line": 371,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "85ba42b5a85f3394-1",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-chain/src/primitives/zcash_history.rs",
+   "line": 371,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "f6290662b616efa2",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-chain/src/primitives/zcash_primitives.rs",
+   "line": 158,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "4200d2d2ea01de1b",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-chain/src/sapling/keys.rs",
+   "line": 155,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "bd723e94b5774f30",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-chain/src/sapling/tree.rs",
+   "line": 102,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "18bf9b863df27e3a",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-chain/src/sapling/tree.rs",
+   "line": 233,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "45223e1ea43b5e76",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-chain/src/sapling/tree.rs",
+   "line": 277,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "b1ab1d7169cbf079",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-chain/src/sapling/tree.rs",
+   "line": 284,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "0f610078f3990363",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-chain/src/serialization/compact_size.rs",
+   "line": 246,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "d5016836c771cb4b",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-chain/src/serialization/zcash_serialize.rs",
+   "line": 118,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "3ed037483fd84fe8",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-chain/src/sprout/tree.rs",
+   "line": 263,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "87c1112183d0e999",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-chain/src/subtree_verify.rs",
+   "line": 155,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "cf5bd8affb496961",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-chain/src/transaction.rs",
+   "line": 1422,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "c2101ab54fd8218c",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-chain/src/transaction.rs",
+   "line": 1431,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "d0908fdb9abd5b0d",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-chain/src/transaction.rs",
+   "line": 1454,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "7ebef1a46730ec09",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-chain/src/transaction.rs",
+   "line": 1463,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "1923fce80788c51b",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-chain/src/transaction/arbitrary.rs",
+   "line": 312,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "028e6104d18af762",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-chain/src/transaction/arbitrary.rs",
+   "line": 338,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "81ed768ecea23098",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-chain/src/transaction/arbitrary.rs",
+   "line": 346,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "61b85611d582f581",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-chain/src/transaction/arbitrary.rs",
+   "line": 354,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "ab9cbd3c7140f905",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-chain/src/transaction/arbitrary.rs",
+   "line": 395,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "30a5ddd85e260a11",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-chain/src/transaction/arbitrary.rs",
+   "line": 414,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "7254ad66824ea6a9",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-chain/src/transaction/arbitrary.rs",
+   "line": 462,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "7254ad66824ea6a9-1",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-chain/src/transaction/arbitrary.rs",
+   "line": 471,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "9ee2018959f3e657",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-chain/src/transaction/arbitrary.rs",
+   "line": 481,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "9ee2018959f3e657-1",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-chain/src/transaction/arbitrary.rs",
+   "line": 492,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "18eb4d266d056f1e",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-chain/src/transaction/arbitrary.rs",
+   "line": 501,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "f65923fc5da9d895",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-chain/src/transaction/lock_time.rs",
+   "line": 113,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "b1eeab72ad81e3cc",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-chain/src/transaction/lock_time.rs",
+   "line": 125,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "6b6dae72a04c7879",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-chain/src/transaction/lock_time.rs",
+   "line": 130,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "f6b57f9706defd40",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-chain/src/transaction/serialize.rs",
+   "line": 46,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "f6b57f9706defd40-1",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-chain/src/transaction/serialize.rs",
+   "line": 62,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "d02aeacff654a70d",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-chain/src/transaction/serialize.rs",
+   "line": 78,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "3956bf875589a031",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-chain/src/transaction/serialize.rs",
+   "line": 370,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "044d70760fea9e3a",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-chain/src/transaction/serialize.rs",
+   "line": 376,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "14e920cda1e259fc",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-chain/src/transaction/serialize.rs",
+   "line": 791,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "14e920cda1e259fc-1",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-chain/src/transaction/serialize.rs",
+   "line": 849,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "d377a6b3cd7fc2a1",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-chain/src/transaction/serialize.rs",
+   "line": 1081,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "6bfbb4e5a9173574",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-chain/src/transaction/serialize.rs",
+   "line": 1086,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "ec2c538e0c820636",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-chain/src/value_balance.rs",
+   "line": 364,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "0e341b9386300c0b",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-chain/src/value_balance.rs",
+   "line": 541,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "5aac8e1cfeeabf35",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-chain/src/value_balance.rs",
+   "line": 548,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "ff58eb78cf03c5bc",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-chain/src/value_balance.rs",
+   "line": 555,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "ac5e7c9e54d81cdb",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-chain/src/value_balance.rs",
+   "line": 562,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "c5f3a6fc48932276",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-chain/src/value_balance.rs",
+   "line": 571,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "ec6eef726d3cf081",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-chain/src/value_balance.rs",
+   "line": 582,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "8f3cfff70a9e6452",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-chain/src/value_balance.rs",
+   "line": 593,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "a4658f2a839b3d99",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-chain/src/work/equihash.rs",
+   "line": 231,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "a4658f2a839b3d99-1",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-chain/src/work/equihash.rs",
+   "line": 313,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "5d05422f3d3c7ae4",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-chain/src/work/equihash.rs",
+   "line": 338,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "e6b192a3d43eaf55",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-consensus/src/transaction/check.rs",
+   "line": 92,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "72ac89430dfa1c18",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-consensus/src/transaction/check.rs",
+   "line": 309,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "71de7281f512f566",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-consensus/src/transaction/check.rs",
+   "line": 518,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "2603c301abd669dc",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-consensus/src/transaction/check.rs",
+   "line": 683,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "c607df145c1c493e",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-header-chain/src/fuzz/mod.rs",
+   "line": 502,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "6b5244631b40279d",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-header-chain/src/graph/mod.rs",
+   "line": 537,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "c7cf974f6ba6300c",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-header-chain/src/graph/mod.rs",
+   "line": 576,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "2a296f90146662cc",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-header-chain/src/graph/mod.rs",
+   "line": 779,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "0d65bca5ae793cba",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-header-chain/src/graph/mod.rs",
+   "line": 834,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "07e3e8731a9d1a7b",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-header-chain/src/graph/mod.rs",
+   "line": 1013,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "8621a2c1922cd252",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-header-chain/src/graph/mod.rs",
+   "line": 1095,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "dd1699ba422e9190",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-header-chain/src/graph/mod.rs",
+   "line": 1130,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "7e27ef4f9171e2fe",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-header-chain/src/graph/mod.rs",
+   "line": 1192,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "727fec675bcbd03a",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-header-chain/src/graph/mod.rs",
+   "line": 1208,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "8b5c3ce17ee93a9b",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-header-chain/src/graph/mod.rs",
+   "line": 1279,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "721bb369bc63e887",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-header-chain/src/graph/mod.rs",
+   "line": 1339,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "5cda12a3900662ab",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-header-chain/src/graph/overlay.rs",
+   "line": 217,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "af8812e1d4b87764",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-header-chain/src/graph/overlay.rs",
+   "line": 228,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "d8d66d075f7dfda8",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-header-chain/src/graph/overlay.rs",
+   "line": 252,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "8042b2d4dd8f8ac8",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-header-chain/src/graph/overlay.rs",
+   "line": 279,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "a11c88b3045b6adb",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-header-chain/src/graph/overlay.rs",
+   "line": 307,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "194c6c70009a1424",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-header-chain/src/graph/overlay.rs",
+   "line": 433,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "3e6f6d308b2c124d",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-header-chain/src/graph/overlay.rs",
+   "line": 614,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "14ffb7f163ed7d8c",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-header-chain/src/graph/overlay.rs",
+   "line": 684,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "47e28c03ae742b79",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-header-chain/src/graph/overlay.rs",
+   "line": 824,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "8f3d4c9ceb4b8c06",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-header-chain/src/graph/overlay.rs",
+   "line": 1105,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "3966971f412d69b6",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-header-chain/src/transition/invariants/checkpoint_finality.rs",
+   "line": 109,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "c9bd81bb687d6ca7",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-header-chain/src/transition/invariants/checks/indexes.rs",
+   "line": 70,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "5519b102c451a54f",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-header-chain/src/transition/invariants/checks/indexes.rs",
+   "line": 87,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "6700de5a15044294",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-header-chain/src/transition/planner/event_effects/header_admission.rs",
+   "line": 252,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "51188125c15f6c04",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-header-chain/src/transition/planner/event_effects/header_admission.rs",
+   "line": 284,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "8ebf0fa973f9c7f2",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-header-chain/src/transition/planner/projected_state.rs",
+   "line": 443,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "01bfe8e6e5525ddb",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-header-chain/src/transition/planner/projected_state.rs",
+   "line": 446,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "6ad153cd764dabf2",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-header-chain/src/transition/planner/projected_state.rs",
+   "line": 646,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "b3de34781e029a63",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-header-chain/src/transition/planner/retention/benchmark_support.rs",
+   "line": 24,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "c2d6a11b03eaf404",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-header-chain/src/transition/planner/retention/benchmark_support.rs",
+   "line": 73,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "fc11e071983c96bb",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-header-chain/src/transition/types/auxiliary.rs",
+   "line": 88,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "483861c2d009fedf",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-header-chain/src/validation/contextual/validate.rs",
+   "line": 52,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "3136afb1278d5fbd",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-mmr-tree/src/tree.rs",
+   "line": 159,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "83b9ef32036f7b54",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-mmr-tree/src/tree.rs",
+   "line": 182,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "81080e123a090a63",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-mmr-tree/src/tree.rs",
+   "line": 255,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "0de5249b85c379fc",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-network/src/config.rs",
+   "line": 718,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "bdb76dbf5b4e6b9b",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-network/src/peer/error.rs",
+   "line": 268,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "04da008a021ca1b0",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-network/src/peer/handshake.rs",
+   "line": 831,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "baf5eef6a6410a88",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-network/src/peer/handshake.rs",
+   "line": 844,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "3ec76da00c41a301",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-network/src/peer_cache_updater.rs",
+   "line": 67,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "c637523cd392322f",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-network/src/peer_set/initialize.rs",
+   "line": 361,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "b51d7f7e6fbef923",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-network/src/peer_set/initialize.rs",
+   "line": 450,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "a8c3d9a3e8236dda",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-network/src/peer_set/initialize.rs",
+   "line": 450,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "721dc1ca8cc30708",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-network/src/peer_set/initialize.rs",
+   "line": 527,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "07475b24578680f0",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-network/src/peer_set/initialize.rs",
+   "line": 1278,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "5ac4dc41314e750c",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-network/src/protocol/external/addr/v2.rs",
+   "line": 202,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "c6a9eded7ba16ba1",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-network/src/protocol/external/codec.rs",
+   "line": 868,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "c6a9eded7ba16ba1-1",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-network/src/protocol/external/codec.rs",
+   "line": 890,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "d01ab7644f7b99a9",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-network/src/zakura/block_sync/peer_routine/requester_tests.rs",
+   "line": 53,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "9593c3a6fc3fae4f",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-network/src/zakura/block_sync/reactor.rs",
+   "line": 269,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "79eb50659b33b642",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-network/src/zakura/block_sync/reactor.rs",
+   "line": 295,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "62d8e3d376c59998",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-network/src/zakura/block_sync/regulated/requester.rs",
+   "line": 266,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "db94747f0a3b66e1",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-network/src/zakura/discovery/requester.rs",
+   "line": 217,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "7732e6b7756adf9e",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-network/src/zakura/discovery/requester.rs",
+   "line": 262,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "34146452f94bf18f",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-network/src/zakura/example_reactor/exchange.rs",
+   "line": 385,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "2a8f072e064fffd6",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-network/src/zakura/example_reactor/exchange.rs",
+   "line": 401,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "c3dfd727c3c8f19e",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-network/src/zakura/example_reactor/exchange.rs",
+   "line": 417,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "4e3f999fe3753080",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-network/src/zakura/handler/service_session.rs",
+   "line": 150,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "496a98cbe3e7c7d7",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-network/src/zakura/handler/service_session.rs",
+   "line": 345,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "5a3674c4f25cd201",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-network/src/zakura/header_sync/service.rs",
+   "line": 392,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "fcc5ed228cfd540c",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-network/src/zakura/header_sync/v9/subscriber.rs",
+   "line": 528,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "15b80c14f1ab42ca",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-network/src/zakura/header_sync/v9/subscriber.rs",
+   "line": 540,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "6294563755bbf7d4",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-network/src/zakura/header_sync/v9/subscriber.rs",
+   "line": 597,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "be3913b36546ef17",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-network/src/zakura/header_sync/v9/subscriber.rs",
+   "line": 653,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "5edb123df77e0b4c",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-network/src/zakura/regulation/cadence.rs",
+   "line": 412,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "72014dc08cd965db",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-network/src/zakura/regulation/reservations.rs",
+   "line": 564,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "92db06ad7e8d625d",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-network/src/zakura/regulation/serve/sink.rs",
+   "line": 211,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "a010a36dc13c95b1",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-network/src/zakura/regulation/subscription/subscriber.rs",
+   "line": 319,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "3237fe5d1adc2702",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-network/src/zakura/regulation/subscription/subscriber.rs",
+   "line": 417,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "e7bce25fa7addbca",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-network/src/zakura/testkit/blocksync_fuzz/mod.rs",
+   "line": 113,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "1d8c15813a92fd49",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-network/src/zakura/testkit/mock_blocksync.rs",
+   "line": 1072,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "9558b39a9e662f16",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-network/src/zakura/testkit/mock_blocksync.rs",
+   "line": 1107,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "fc9081315549e06e",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-network/src/zakura/testkit/node.rs",
+   "line": 566,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "4a94160751992c9f",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-network/src/zakura/testkit/stream_conformance/node.rs",
+   "line": 175,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "da9a0c7db46e1e19",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-network/src/zakura/testkit/stream_conformance/raw.rs",
+   "line": 246,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "81d1ba4760ebf67f",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-node-services/src/rpc_client.rs",
+   "line": 174,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "ff5c949dce0e4021",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-quic/src/conn.rs",
+   "line": 388,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "5720ebb70267be6e",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-quic/src/endpoint.rs",
+   "line": 579,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "b5978843e4a39f9d",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-quic/src/endpoint.rs",
+   "line": 664,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "30afe6cb5f3bba19",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-quic/src/sim/net.rs",
+   "line": 416,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "ef0aa9f95bae1f8b",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-quic/src/socket.rs",
+   "line": 776,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "14c3f8a868474c4c",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-quic/src/socket.rs",
+   "line": 789,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "283ef0e4613b6d2b",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-quic/src/socket.rs",
+   "line": 801,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "d3558f29332e8522",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-rpc/src/indexer/methods.rs",
+   "line": 140,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "6394cf2c21759639",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-rpc/src/indexer/methods.rs",
+   "line": 231,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "1b64e4844ea03c0a",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-rpc/src/indexer/methods.rs",
+   "line": 318,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "1ca46d41d3b08aaf",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-rpc/src/indexer/methods.rs",
+   "line": 435,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "ee814e0f00957d4d",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-rpc/src/indexer/server.rs",
+   "line": 122,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "11bb4c5f1ec395f1",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-rpc/src/methods.rs",
+   "line": 2097,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "3fdbffe845d0ff6e",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-rpc/src/methods.rs",
+   "line": 2128,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "e2b513e0e9b70ac5",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-rpc/src/methods.rs",
+   "line": 2251,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "91ce4d1841fbb118",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-rpc/src/methods.rs",
+   "line": 2333,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "ad6d7dbf874b685e",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-rpc/src/methods.rs",
+   "line": 2467,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "e31352f6262f26c3",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-rpc/src/methods.rs",
+   "line": 2707,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "a621018a87b9a784",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-rpc/src/methods.rs",
+   "line": 2753,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "5465c143d184f59e",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-rpc/src/methods.rs",
+   "line": 2781,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "b38b6c844919abb0",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-rpc/src/methods.rs",
+   "line": 2803,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "b38b6c844919abb0-1",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-rpc/src/methods.rs",
+   "line": 2808,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "8640daf315bae081",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-rpc/src/methods.rs",
+   "line": 2971,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "93a838804a810172",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-rpc/src/methods.rs",
+   "line": 2997,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "eb18806693e26221",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-rpc/src/methods.rs",
+   "line": 3389,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "11bb4c5f1ec395f1-1",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-rpc/src/methods.rs",
+   "line": 4363,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "84c3a7439313fc4e",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-rpc/src/methods.rs",
+   "line": 4599,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "bd3239996190449c",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-rpc/src/methods.rs",
+   "line": 4609,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "e7dd1492a330b082",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-rpc/src/methods.rs",
+   "line": 4617,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "527088cba90affc7",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-rpc/src/methods.rs",
+   "line": 4908,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "6add0793984b680a",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-rpc/src/methods/types/transaction.rs",
+   "line": 276,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "d0f682a3112a07f6",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-rpc/src/methods/types/transaction.rs",
+   "line": 296,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "7b144348e46fa4ae",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-rpc/src/methods/types/transaction.rs",
+   "line": 348,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "0ae082edbe59eaa2",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-rpc/src/server.rs",
+   "line": 232,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "8f18414a2b712937",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-rpc/src/server.rs",
+   "line": 274,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "61b37ea25de3daaa",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-rpc/src/server.rs",
+   "line": 288,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "d98e02a5c14b1b50",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-rpc/src/server/http_request_compatibility.rs",
+   "line": 149,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "21b584acd1cedf51",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-rpc/src/server/http_request_compatibility.rs",
+   "line": 169,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "f1b00d622e6240e2",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-rpc/src/server/rpc_service.rs",
+   "line": 181,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "9d93e33e0a4947b2",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-rpc/src/server/rpc_service.rs",
+   "line": 192,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "6a9f974286df2cf5",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-rpc/src/server/rpc_service.rs",
+   "line": 197,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "08ecb26c05428d75",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-rpc/src/server/rpc_service.rs",
+   "line": 200,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "9049ab49513e3a40",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-rt/src/sim/sync/oneshot.rs",
+   "line": 77,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "cec9501dd5360ba5",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-script/src/lib.rs",
+   "line": 227,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "c4cf20aee17633c9",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service.rs",
+   "line": 438,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "e4cd14072a052487",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service.rs",
+   "line": 538,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "f84cfa6459afabc2",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service.rs",
+   "line": 594,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "5f8d5372e9f1cabc",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service.rs",
+   "line": 602,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "070d450e681a41f9",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service.rs",
+   "line": 636,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "dace4173800f66ae",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service.rs",
+   "line": 2369,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "1e6c8a6c839616d4",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service.rs",
+   "line": 3899,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "633de02adf36f500",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/block_range.rs",
+   "line": 139,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "5389ea6c35ee0d43",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/check.rs",
+   "line": 171,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "ab6519933b2e29e5",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/check.rs",
+   "line": 367,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "f0a792fcc83dec06",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/check.rs",
+   "line": 389,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "4f4d34c8c763eae5",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/check.rs",
+   "line": 520,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "4cf6c6df6e56f592",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/check/anchors.rs",
+   "line": 529,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "dcab6c514eb2054c",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/check/utxo.rs",
+   "line": 213,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "2601c8e9fd1749ec",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/finalized_state.rs",
+   "line": 488,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "dd0ce8bd98df0e45",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/finalized_state.rs",
+   "line": 707,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "dd0ce8bd98df0e45-1",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/finalized_state.rs",
+   "line": 796,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "dd0ce8bd98df0e45-2",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/finalized_state.rs",
+   "line": 819,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "51169e9d9b20b47c",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/finalized_state.rs",
+   "line": 1282,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "eca099e7c5108176",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/finalized_state/commitment_aux_verify.rs",
+   "line": 290,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "3b7cc97bced132f9",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/finalized_state/commitment_aux_verify.rs",
+   "line": 325,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "b72db4359c795a92",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/finalized_state/disk_db.rs",
+   "line": 1188,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "427ba94fec6a7109",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/finalized_state/disk_format/transparent.rs",
+   "line": 222,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "23b508403c41eb69",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/finalized_state/disk_format/transparent.rs",
+   "line": 238,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "cae4e6723f57f820",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/finalized_state/disk_format/upgrade.rs",
+   "line": 614,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "3debdd14bcdbac15",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/finalized_state/disk_format/upgrade.rs",
+   "line": 614,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "ae0a5ae4b7a84cee",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/finalized_state/disk_format/upgrade.rs",
+   "line": 620,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "cae4e6723f57f820-1",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/finalized_state/disk_format/upgrade.rs",
+   "line": 636,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "3debdd14bcdbac15-1",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/finalized_state/disk_format/upgrade.rs",
+   "line": 636,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "ae0a5ae4b7a84cee-1",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/finalized_state/disk_format/upgrade.rs",
+   "line": 651,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "b7531a6abfff17a5",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/finalized_state/disk_format/upgrade/add_ironwood_tree.rs",
+   "line": 55,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "b38638a7cb1abfe1",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/finalized_state/disk_format/upgrade/block_info_and_address_received.rs",
+   "line": 100,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "772d2c35c3a09b35",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/finalized_state/disk_format/upgrade/block_info_and_address_received.rs",
+   "line": 112,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "0d8d7e9f45d9af37",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/finalized_state/disk_format/upgrade/block_info_and_address_received.rs",
+   "line": 115,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "6023aacc3f5f5a39",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/finalized_state/disk_format/upgrade/block_info_and_address_received.rs",
+   "line": 207,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "6c253352355e2a67",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/finalized_state/disk_format/upgrade/block_info_and_address_received.rs",
+   "line": 214,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "9abe51b18998f36c",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/finalized_state/disk_format/upgrade/block_info_and_address_received.rs",
+   "line": 250,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "e136ac1def6b2662",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/finalized_state/disk_format/upgrade/block_info_and_address_received.rs",
+   "line": 326,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "8cc6149be692ab57",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/finalized_state/disk_format/upgrade/drop_tx_locs_by_spends.rs",
+   "line": 62,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "8e01de4bf9f24d15",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/finalized_state/disk_format/upgrade/track_tx_locs_by_spends.rs",
+   "line": 65,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "ac7fdec19c00f2c6",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/finalized_state/disk_format/upgrade/track_tx_locs_by_spends.rs",
+   "line": 84,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "c941c1975dac2c58",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/finalized_state/disk_format/upgrade/track_tx_locs_by_spends.rs",
+   "line": 88,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "0293ec63c30d7ba4",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/finalized_state/disk_format/upgrade/track_tx_locs_by_spends.rs",
+   "line": 105,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "13b3dd57bb22f022",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/finalized_state/header_chain.rs",
+   "line": 140,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "ca98f664f2ce2240",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/finalized_state/header_chain.rs",
+   "line": 2158,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "a95396d2a7d22c41",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/finalized_state/header_chain.rs",
+   "line": 3592,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "c9f0a00c4926f8ce",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/finalized_state/header_chain.rs",
+   "line": 3928,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "a9a977e26268fa94",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/finalized_state/header_chain.rs",
+   "line": 4705,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "5ebc00e044874c73",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/finalized_state/header_chain.rs",
+   "line": 4782,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "251b4901ad235a55",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/finalized_state/header_chain.rs",
+   "line": 6310,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "5e0e7b6dc718fac1",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/finalized_state/treestate_artifact.rs",
+   "line": 878,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "11b1cc7fbd5d1caa",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/finalized_state/treestate_artifact.rs",
+   "line": 879,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "2e3d5810d439b1f2",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/finalized_state/treestate_artifact.rs",
+   "line": 880,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "6c453e8fc0c8c434",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/finalized_state/treestate_export.rs",
+   "line": 221,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "619e3b6bb62efbba",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/finalized_state/treestate_export.rs",
+   "line": 883,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "2f1fb1cfb0ad6cf6",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/finalized_state/zakura_db/block.rs",
+   "line": 1505,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "f97bb2c85d03480d",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/finalized_state/zakura_db/block.rs",
+   "line": 1506,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "99f1ab5bce376aa7",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/finalized_state/zakura_db/block.rs",
+   "line": 1507,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "2cfb3789b374c22d",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/finalized_state/zakura_db/block.rs",
+   "line": 1510,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "ffb0d1ea2cae74e8",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/finalized_state/zakura_db/block.rs",
+   "line": 1511,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "d3d6f67617c7b673",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/finalized_state/zakura_db/block.rs",
+   "line": 1512,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "a768d584f1725ad4",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/finalized_state/zakura_db/chain.rs",
+   "line": 362,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "e4cdfef6b3d96b76",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/finalized_state/zakura_db/rollback.rs",
+   "line": 614,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "c5d27881480edc92",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/finalized_state/zakura_db/rollback.rs",
+   "line": 680,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "4ccdae660e2ba19a",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/finalized_state/zakura_db/rollback.rs",
+   "line": 850,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "46fddb605cdfe1b1",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/finalized_state/zakura_db/rollback.rs",
+   "line": 854,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "e8bab5185d501ddf",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/finalized_state/zakura_db/rollback.rs",
+   "line": 863,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "4ccdae660e2ba19a-1",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/finalized_state/zakura_db/rollback.rs",
+   "line": 881,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "46fddb605cdfe1b1-1",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/finalized_state/zakura_db/rollback.rs",
+   "line": 885,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "e8bab5185d501ddf-1",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/finalized_state/zakura_db/rollback.rs",
+   "line": 894,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "9cfbcdc70478d756",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/finalized_state/zakura_db/rollback.rs",
+   "line": 900,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "723d4648d5f2af01",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/finalized_state/zakura_db/rollback.rs",
+   "line": 928,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "48487aa938cec46d",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/finalized_state/zakura_db/rollback.rs",
+   "line": 1044,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "8c34becc8ab93f0d",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/finalized_state/zakura_db/rollback.rs",
+   "line": 1045,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "797fae5be3c428b9",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/finalized_state/zakura_db/rollback.rs",
+   "line": 1046,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "fd10c5a29b499a90",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/finalized_state/zakura_db/rollback.rs",
+   "line": 1047,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "e968b9e70e16ed70",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/finalized_state/zakura_db/rollback.rs",
+   "line": 1055,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "45ebe2fcef7325b3",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/finalized_state/zakura_db/rollback.rs",
+   "line": 1056,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "aca8e3ae07ad7498",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/finalized_state/zakura_db/rollback.rs",
+   "line": 1057,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "d5f213850a93044b",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/finalized_state/zakura_db/shielded.rs",
+   "line": 192,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "71e19dc0ed28b7fa",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/finalized_state/zakura_db/shielded.rs",
+   "line": 222,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "d6ea34ba8bdec320",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/finalized_state/zakura_db/transparent.rs",
+   "line": 398,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "1bedc11f9866677c",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/finalized_state/zakura_db/transparent.rs",
+   "line": 465,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "2e5acbe92ed2b732",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/non_finalized_state.rs",
+   "line": 617,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "00b8958cbda170d1",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/non_finalized_state.rs",
+   "line": 633,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "16df3deda99ae85b",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/non_finalized_state.rs",
+   "line": 684,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "93a5e238d33cb71c",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/non_finalized_state.rs",
+   "line": 693,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "200beea654118450",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/non_finalized_state.rs",
+   "line": 823,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "b2028f7ddddc1f35",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/non_finalized_state.rs",
+   "line": 887,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "be70745383610798",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/non_finalized_state.rs",
+   "line": 1099,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "688334ccd1ec34b2",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/non_finalized_state.rs",
+   "line": 1101,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "aa93755cee37e59e",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/non_finalized_state.rs",
+   "line": 1103,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "2338942d6c12a9b5",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/non_finalized_state/backup.rs",
+   "line": 204,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "d2a2d317675da93d",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/non_finalized_state/chain.rs",
+   "line": 1676,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "6752383328fa5e4a",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/non_finalized_state/chain.rs",
+   "line": 1677,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "4da377bf42fd48f7",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/non_finalized_state/chain.rs",
+   "line": 1751,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "32c99cb7463a8bff",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/non_finalized_state/chain.rs",
+   "line": 2141,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "b2544ca5a2e39ac0",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/non_finalized_state/chain.rs",
+   "line": 2143,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "ca3bc90c7c14956a",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/non_finalized_state/chain/index.rs",
+   "line": 72,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "2daac56ed98ff3ff",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/non_finalized_state/chain/index.rs",
+   "line": 73,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "920bfb13dc2ced9f",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/non_finalized_state/chain/index.rs",
+   "line": 154,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "56a66365ecd6b15d",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/non_finalized_state/chain/index.rs",
+   "line": 155,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "4a3b711327f052a2",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/non_finalized_state/chain/index.rs",
+   "line": 163,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "5af5335347461068",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/read/address/tx_id.rs",
+   "line": 80,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "b877e3e9aa267db4",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/read/address/tx_id.rs",
+   "line": 213,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "1596f31775a461f4",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/read/address/utxo.rs",
+   "line": 202,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "92fc7044aed22ba6",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/read/address/utxo.rs",
+   "line": 341,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "17765f2f59abac2b",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/read/difficulty.rs",
+   "line": 210,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "392fc299cfd29962",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/read/difficulty.rs",
+   "line": 258,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "f34c88cb803289ac",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/read/difficulty.rs",
+   "line": 266,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "72e310f9dc8a12e3",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/read/difficulty.rs",
+   "line": 350,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "c210869f401ddd30",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/read/difficulty.rs",
+   "line": 367,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "101fbf4c1ddec242",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/read/difficulty.rs",
+   "line": 370,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "346a1ab757572b3d",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/read/find.rs",
+   "line": 701,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "cd659b22ab1fd7e0",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/read/historical_tree.rs",
+   "line": 351,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "0deeadfe014cfa78",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/read/historical_tree.rs",
+   "line": 590,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "ea305bb9edf061e7",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/write.rs",
+   "line": 941,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "f51efca08333377b",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/write.rs",
+   "line": 1296,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "cd74d69c85a84804",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-state/src/service/write.rs",
+   "line": 2423,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "5c7a83b8d8096b34",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-storage/src/block/controlled.rs",
+   "line": 292,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "313e360a338e191b",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-storage/src/block/controlled.rs",
+   "line": 1095,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "2d1d8a375042ff54",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-storage/src/block/controlled.rs",
+   "line": 1117,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "2d1d8a375042ff54-1",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-storage/src/block/controlled.rs",
+   "line": 1129,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "f06689649cbe16f3",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-storage/src/block/controlled.rs",
+   "line": 1286,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "89451994d911c8bb",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-storage/src/block/evidence.rs",
+   "line": 510,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "52ea674ebc46bef7",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-storage/src/block/evidence.rs",
+   "line": 519,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "7f7bb635797cffa8",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-storage/src/block/evidence.rs",
+   "line": 550,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "2bc61fcd593cc605",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-storage/src/block/evidence.rs",
+   "line": 777,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "7fc15947ae2c3100",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-storage/src/full_state.rs",
+   "line": 527,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "ed56911da9f8f9f1",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-storage/src/full_state.rs",
+   "line": 686,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "d7f7fc6c025ddebf",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-storage/src/full_state.rs",
+   "line": 766,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "0c362022cafbb543",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-storage/src/header/controlled.rs",
+   "line": 637,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "e50be6fe4c6d3869",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-storage/src/header/controlled.rs",
+   "line": 674,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "e50dfc49dfa111d0",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-storage/src/header/evidence/model.rs",
+   "line": 353,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "d79129c95cac0814",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-storage/src/header/evidence/model.rs",
+   "line": 369,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "ab271af87bc142d4",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-storage/src/header/evidence/model.rs",
+   "line": 378,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "331ab187832ea096",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-storage/src/header/evidence/model.rs",
+   "line": 638,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "9034cf5fe71ede48",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-storage/src/header/evidence/model.rs",
+   "line": 783,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "37fa54823c64188e",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-storage/src/header/evidence/model.rs",
+   "line": 794,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "a1b51e65646cd4f8",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-storage/src/header/lease.rs",
+   "line": 285,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "9cf30bf3e3eab1e7",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-utils/src/bin/zakura-checkpoints/main.rs",
+   "line": 71,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "8cb00b10971509d6",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-utils/src/bin/zakura-checkpoints/main.rs",
+   "line": 183,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "9813cf049267bc98",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-utils/src/bin/zakura-checkpoints/main.rs",
+   "line": 202,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "8656e02f350e32da",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-utils/src/bin/zakura-checkpoints/main.rs",
+   "line": 218,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "c1d76ac2eed22943",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-utils/src/bin/zakura-checkpoints/main.rs",
+   "line": 274,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "31406938c468437e",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-utils/src/bin/zakura-checkpoints/offline.rs",
+   "line": 127,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "b6ab7e84c54d5bb6",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-utils/src/bin/zakura-checkpoints/offline.rs",
+   "line": 227,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "56f7f2432335ad37",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-utils/src/bin/zakura-checkpoints/offline.rs",
+   "line": 236,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "7613102ac87e6033",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-utils/src/bin/zakura-checkpoints/offline.rs",
+   "line": 293,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "63a2b12814535b53",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakurad/src/application.rs",
+   "line": 433,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "a59d8ed4b3ff6f0c",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakurad/src/application.rs",
+   "line": 444,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "f6a6aad0ed07d2dc",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakurad/src/commands/audit_historical_treestates.rs",
+   "line": 296,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "9001276f59204946",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakurad/src/commands/generate.rs",
+   "line": 37,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "9fddac3ddf86d7c5",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakurad/src/commands/generate.rs",
+   "line": 37,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "b7640561e1076700",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakurad/src/commands/start/zakura/header_sync_driver.rs",
+   "line": 1171,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "927f43824abc39bb",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakurad/src/commands/start/zakura/header_sync_driver.rs",
+   "line": 1173,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "641a106ef7c6205f",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakurad/src/components/mempool/downloads.rs",
+   "line": 605,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "18c17a7735a891af",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakurad/src/components/mempool/gossip.rs",
+   "line": 216,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "163f4b2d43bfeff1",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakurad/src/components/miner.rs",
+   "line": 201,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "e491f28f15a9df96",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakurad/src/components/miner.rs",
+   "line": 305,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "d957bfca09e83885",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakurad/src/components/miner.rs",
+   "line": 444,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "a407a54bfc9ba338",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakurad/src/components/miner.rs",
+   "line": 488,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "53521a19f3c90a16",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakurad/src/components/miner.rs",
+   "line": 558,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "8ebaa260bf5487fb",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakurad/src/components/miner.rs",
+   "line": 559,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "f22f01d3977f568b",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakurad/src/components/miner.rs",
+   "line": 565,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "69f65ba09a095526",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakurad/src/components/miner.rs",
+   "line": 592,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "d55b3228bc5c485f",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakurad/src/components/sync.rs",
+   "line": 1357,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "1a13c3d7be50808f",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakurad/src/components/sync.rs",
+   "line": 2362,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "de7a905fdeecf6a2",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakurad/src/components/sync.rs",
+   "line": 2467,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "ead8f35212662646",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakurad/src/components/sync.rs",
+   "line": 2537,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "58c4a8b43236ce4e",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakurad/src/components/sync/downloads.rs",
+   "line": 839,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "fcf07a17b859b947",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakurad/src/components/sync/downloads.rs",
+   "line": 859,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "2b935302a3188136",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakurad/src/config/loader.rs",
+   "line": 412,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "f1a37f98bbc06c12",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakurad/src/config/loader.rs",
+   "line": 532,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "721af36f4f384b0f",
+   "rule": "python.lang.security.audit.dangerous-subprocess-use-tainted-env-args",
+   "path": "deploy/nu7-fork/faucet.py",
+   "line": 230,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "60c3bc5e9339c48d",
+   "rule": "python.lang.security.audit.dangerous-subprocess-use-tainted-env-args",
+   "path": "deploy/zakura-mac-cranelift/cranelift/qualify.py",
+   "line": 49,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "6ace27bb715cabee",
+   "rule": "dockerfile.security.missing-user-entrypoint",
+   "path": "docker/Dockerfile",
+   "line": 121,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  },
+  {
+   "fingerprint": "546aae8809d17b0b",
+   "rule": "dockerfile.security.missing-user-entrypoint",
+   "path": "docker/Dockerfile",
+   "line": 248,
+   "first_seen": "2026-11-03",
+   "due": "2027-02-01"
+  }
+ ]
+}
