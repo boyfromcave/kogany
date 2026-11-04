@@ -154,4 +154,24 @@ mod tests {
         assert_eq!(parsed.rpc.cookie_dir, path);
         assert_eq!(parsed.state.cache_dir, path);
     }
+
+    /// kogany: the generated config and its defaults use Ycash's ports only, never
+    /// Zcash's (README.md "Ports").
+    #[cfg(feature = "ycash")]
+    #[test]
+    fn generated_config_uses_ycash_ports() {
+        let generated = default_config_toml(&ZakuradConfig::default());
+        let parsed: ZakuradConfig =
+            toml::from_str(&generated).expect("koganyd accepts the generated config");
+        assert_eq!(parsed.network.listen_addr.port(), 8833);
+        assert_eq!(parsed.rpc.listen_addr, None);
+
+        for (network, port) in [("Mainnet", 8833), ("Testnet", 18833), ("Regtest", 18344)] {
+            let config: ZakuradConfig = toml::from_str(&format!(
+                "[network]\nnetwork = \"{network}\"\nlisten_addr = \"[::]\"\n"
+            ))
+            .expect("a portless listen_addr parses");
+            assert_eq!(config.network.listen_addr.port(), port, "{network}");
+        }
+    }
 }

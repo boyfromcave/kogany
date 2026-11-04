@@ -1,3 +1,5 @@
+# kogany: this file is upstream Zakura's, for a Zcash `zakurad` (Zcash ports). A `koganyd`
+# image uses Ycash ports: P2P 8833, RPC 8832 on mainnet (README.md "Ports").
 # Zakura Observability Stack: Prometheus + Grafana + AlertManager
 # Usage: docker compose -f docker/docker-compose.observability.yml up
 #
