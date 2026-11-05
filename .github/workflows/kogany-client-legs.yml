@@ -48,7 +48,7 @@ jobs:
       LWD_REPO: https://github.com/boyfromcave/lightwalletd.git
       LWD_REV: a1d141e37776dcfb0e4be023661d59508ab5b616        # lightwalletd-dd vaults/kogany-compat (W7-d)
       YCASH6_REPO: boyfromcave/ycash6
-      YCASH6_BRANCH: vaults/kogany-compat
+      YCASH6_BRANCH: upgrade/vault
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -135,7 +135,7 @@ jobs:
       CHAINVIZ_REPO: https://github.com/boyfromcave/chain-viz.git
       CHAINVIZ_REV: 0165934bd65b87fa880c1263536718c525d33dd9   # chain-viz vaults/kogany-compat
       YCASH6_REPO: boyfromcave/ycash6
-      YCASH6_BRANCH: vaults/kogany-compat
+      YCASH6_BRANCH: upgrade/vault
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
