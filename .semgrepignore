@@ -1,5 +1,13 @@
 # Paths Semgrep never scans (contrib/semgrep/README.md). Semgrep scans git-tracked files only; this file
 # replaces its built-in ignore list, so the usual build and vendor directories are named here too.
+# Trees that are not kogany's code and never run here: upstream Zakura's DigitalOcean fleet tooling
+# (deploy/), the upstream workflows kept switched off (.github/workflows-off/, .github/README-kogany.md)
+# and the upstream release-review prompts. Their findings are upstream's to fix.
+deploy/
+.github/workflows-off/
+.github/release-review/
+# Vendored C reference code (PQClean Falcon, slh-dsa-c), byte-for-byte, pinned by csrc/SHA256SUMS.
+crates/kogany-pq/csrc/
 # Generated code (the gRPC bindings `cargo xtask generate-rpc-artifacts` writes): fixed by regenerating.
 crates/zakura-rpc/proto/__generated__/
 # Fixed test data: snapshots, proptest regressions and the cross-line vectors pinned from ycash6.
