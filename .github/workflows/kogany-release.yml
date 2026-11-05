@@ -95,7 +95,8 @@ jobs:
         with:
           toolchain: stable
           cache: false
-      - uses: ./.github/actions/setup-zakura-build
+      # No setup-zakura-build here: without a system RocksDB (ROCKSDB_LIB_DIR, librocksdb-dev) the
+      # build compiles the bundled RocksDB statically, so the released binary needs no RocksDB package.
       - name: cargo build --release koganyd --features ycash
         run: |
           set -euo pipefail
@@ -174,7 +175,7 @@ jobs:
           **Pre-release, not a qualified Ycash node line (kogany plan K-19). For the Ycash testnets only.**
 
           - Works: following Ycash mainnet and the fast testnet, the vault and Yellowback rules, the stock Ycash, `set_*`/`vault_*` and `yed_*` RPCs (rpcversion 8).
-          - Does not yet: the slow testnet profile has no config selector; no wallet; no Windows or Intel macOS build; Linux builds need the system RocksDB.
+          - Does not yet: the slow testnet profile has no config selector; no wallet; no Windows or Intel macOS build.
           - Get started: unpack, read `README.txt`, run `./koganyd -c testnet.toml start`. Verify with `sha256sum -c SHA256SUMS` and `cosign verify-blob`.
           - Docs: https://github.com/boyfromcave/kogany#readme
           MD

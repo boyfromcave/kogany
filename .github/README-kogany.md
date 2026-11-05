@@ -192,7 +192,8 @@ What kogany publishes and consumes (the workspace's `docs/plans/kogany/ci-design
 any other form, refuses a final `vX.Y.Z-ycash.N` (kogany is not a qualified line, plan K-19), and
 requires X.Y.Z to equal the `kogany` crate version in `crates/zakurad/Cargo.toml` (pre-release
 suffix ignored). Three native jobs build `koganyd` (`--release --features "default-release-binaries
-ycash"`, no Rust cache, so a release never restores a cache) on ubuntu-24.04, ubuntu-24.04-arm and
+ycash"`, no Rust cache, so a release never restores a cache; no system RocksDB, so the bundled one is
+linked statically) on ubuntu-24.04, ubuntu-24.04-arm and
 macos-14, and pack `koganyd_<tag>_<platform>.tar.gz` (`koganyd`, `README.txt`, the licences,
 `default_config_ycash.toml`; `.github/workflows/scripts/kogany-release-package.sh`) with an SPDX
 SBOM each. `publish` writes `SHA256SUMS`, signs it keylessly with cosign, attests build provenance
