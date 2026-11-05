@@ -4,7 +4,7 @@
 > node line (`koganyd`, the `ycash` build; see [README.md](README.md)). This file, and its
 > symlink, are upstream Zakura's guidelines and stay as upstream wrote them. Work on kogany is
 > governed first by the Yellowback workspace's `AGENTS.md` (its rules 1-8: minimal change,
-> the consensus review gate, naming, no attribution, the `vaults/kogany-compat` branch) and by
+> the consensus review gate, naming, no attribution, PRs against `upgrade/vault`: the `vaults/kogany-compat` hop was retired 2026-11-05 and is a record) and by
 > `docs/plans/kogany/kogany-yellowback-plan.md` there; where they conflict with this file, the
 > workspace rules win. Upstream's PR, changelog-fragment and deployment conventions below do not
 > apply to kogany's branches.

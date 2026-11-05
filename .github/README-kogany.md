@@ -225,7 +225,7 @@ Nothing has to be disabled first: the off set cannot run. When turning them on:
    (optionally the `SEMGREP_PR_TOKEN` secret, see `contrib/semgrep/README.md`).
 4. Optional secret `YCASH6_ARTIFACT_TOKEN` (a fine-grained token with Actions: read on
    `boyfromcave/ycash6`), only if the job token cannot download ycash6's public artifacts.
-5. Rulesets on `vaults/kogany-compat` and `upgrade/vault`, after the first green push run: the
+5. Rulesets on `upgrade/vault` (`vaults/kogany-compat` is a record since 2026-11-05, never committed to), after the first green push run: the
    required checks are the blocking jobs above (`audit self-test`, `audit greps`,
    `audit dormancy`, `audit workflows`, `audit cross-line (c)`, `audit vault-params (d)`, both
    `check`, every `clippy`, `rustfmt (kogany crates)`, every `kogany crates`, `(feature off)` and
