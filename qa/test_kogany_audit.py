@@ -153,6 +153,15 @@ class TriggerPolicyTest(unittest.TestCase):
         self.assertTrue(self.problems("on:\n  push:\n    branches-ignore: ['semgrep/**']\n"))
         self.assertTrue(self.problems("on:\n  push:\n    branches: [upgrade/vault]\n    tags: ['v*']\n"))
 
+    def test_only_the_release_workflow_builds_release_tags(self):
+        tag = "on:\n  push:\n    tags: ['v*-ycash.*']\n"
+        rel = lambda text: audit.trigger_problems("kogany-release.yml", audit.workflow_triggers(text))
+        self.assertEqual(rel(tag), [])
+        self.assertTrue(self.problems(tag))
+        self.assertTrue(rel("on:\n  push:\n    tags: ['v*']\n"))
+        self.assertTrue(rel("on:\n  push:\n"))
+        self.assertTrue(rel("on:\n  push:\n    branches: ['**']\n    tags: ['v*-ycash.*']\n"))
+
     def test_a_named_branch_under_ours_complies(self):
         self.assertEqual(self.problems("on:\n  push:\n    branches: ['vaults/kogany-compat']\n"), [])
 
