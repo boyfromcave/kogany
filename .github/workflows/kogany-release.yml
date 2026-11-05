@@ -1,0 +1,185 @@
+# Copyright (c) 2026 The Ycash developers
+# Distributed under the MIT software license, see the accompanying
+# file COPYING or https://www.opensource.org/licenses/mit-license.php .
+#
+name: kogany-release
+
+# koganyd pre-release binaries (the Yellowback lead architect, 2026-11-04): a pushed tag
+# `v<X.Y.Z>-ycash.<beta|rc><n>` on upgrade/vault builds `koganyd` (--features ycash, release
+# profile) natively for linux-x86_64, linux-aarch64 and macos-aarch64, and publishes them as a
+# GitHub pre-release with SBOMs, SHA256SUMS, a cosign keyless signature and build provenance.
+# kogany is not a qualified line (kogany plan K-19): final `vX.Y.Z-ycash.N` tags are refused.
+# Runs on no branch push and no pull request (.github/README-kogany.md "Cutting a pre-release").
+on:
+  push:
+    tags: ['v*-ycash.*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'an existing tag to (re)build and publish, e.g. v1.8.0-ycash.beta1'
+        type: string
+        required: true
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  CARGO_INCREMENTAL: '0'
+  CARGO_TERM_COLOR: always
+
+jobs:
+  guard:
+    name: guard (tag form, crate version)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    outputs:
+      tag: ${{ steps.check.outputs.tag }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: refs/tags/${{ inputs.tag || github.ref_name }}
+          persist-credentials: false
+      - id: check
+        name: Check the tag
+        env:
+          TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          set -euo pipefail
+          if [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-ycash\.[0-9]+$ ]]; then
+            echo "::error::$TAG is a final release tag; kogany is not a qualified line yet (kogany plan K-19), so only -ycash.betaN and -ycash.rcN pre-releases are cut"
+            exit 1
+          fi
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-ycash\.(beta|rc)[0-9]+$ ]]; then
+            echo "::error::$TAG does not match v<X.Y.Z>-ycash.<beta|rc><n>"
+            exit 1
+          fi
+          crate=$(sed -n 's/^version = "\(.*\)"$/\1/p' crates/zakurad/Cargo.toml | head -n1)
+          tagnum=${TAG#v}; tagnum=${tagnum%%-*}
+          cratenum=${crate%%[-+]*}
+          echo "tag $TAG: version $tagnum"
+          echo "crate kogany (crates/zakurad/Cargo.toml): version $crate, numeric part $cratenum"
+          if [[ "$tagnum" != "$cratenum" ]]; then
+            echo "::error::tag version $tagnum differs from the kogany crate version $cratenum"
+            exit 1
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: koganyd (${{ matrix.platform }})
+    needs: guard
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 120
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux-x86_64
+            runner: ubuntu-24.04
+          - platform: linux-aarch64
+            runner: ubuntu-24.04-arm
+          - platform: macos-aarch64
+            runner: macos-14
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: refs/tags/${{ needs.guard.outputs.tag }}
+          persist-credentials: false
+      - uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f #v2.0.0
+        with:
+          toolchain: stable
+          cache: false
+      # No setup-zakura-build here: without a system RocksDB (ROCKSDB_LIB_DIR, librocksdb-dev) the
+      # build compiles the bundled RocksDB statically, so the released binary needs no RocksDB package.
+      - name: cargo build --release koganyd --features ycash
+        run: |
+          set -euo pipefail
+          cargo build --release --locked -p kogany --bin koganyd --features "default-release-binaries ycash"
+      - name: koganyd --version
+        run: |
+          set -euo pipefail
+          ./target/release/koganyd --version
+          if [[ "$RUNNER_OS" == Linux ]]; then ldd target/release/koganyd; else otool -L target/release/koganyd; fi
+      - name: Package
+        env:
+          TAG: ${{ needs.guard.outputs.tag }}
+          PLATFORM: ${{ matrix.platform }}
+        run: |
+          set -euo pipefail
+          bash .github/workflows/scripts/kogany-release-package.sh "$TAG" "$PLATFORM" target/release/koganyd "$RUNNER_TEMP/out"
+      - uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
+        with:
+          file: ${{ runner.temp }}/out/koganyd_${{ needs.guard.outputs.tag }}_${{ matrix.platform }}.tar.gz
+          format: spdx-json
+          output-file: ${{ runner.temp }}/out/koganyd_${{ needs.guard.outputs.tag }}_${{ matrix.platform }}.spdx.json
+          upload-artifact: false
+          upload-release-assets: false
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: koganyd-${{ matrix.platform }}
+          path: ${{ runner.temp }}/out/
+          retention-days: 30
+          if-no-files-found: error
+
+  publish:
+    name: publish pre-release
+    needs: [guard, build]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: refs/tags/${{ needs.guard.outputs.tag }}
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: koganyd-*
+          path: dist
+          merge-multiple: true
+      - name: SHA256SUMS
+        run: |
+          set -euo pipefail
+          cd dist
+          sha256sum -- *.tar.gz > SHA256SUMS
+          cat SHA256SUMS
+      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+      - name: cosign sign-blob SHA256SUMS (keyless)
+        run: |
+          set -euo pipefail
+          cosign sign-blob --yes --bundle dist/SHA256SUMS.cosign.bundle dist/SHA256SUMS
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: dist/*.tar.gz
+      - name: gh release create
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.guard.outputs.tag }}
+        run: |
+          set -euo pipefail
+          notes="doc/release-notes/$TAG.md"
+          if [[ ! -f "$notes" ]]; then
+            notes="$RUNNER_TEMP/notes.md"
+            cat > "$notes" <<'MD'
+          Ycash node on Zakura (`koganyd`) with the vault network upgrade and the Ycash Yellowback (YED) module.
+
+          **Pre-release, not a qualified Ycash node line (kogany plan K-19). For the Ycash testnets only.**
+
+          - Works: following Ycash mainnet and the fast testnet, the vault and Yellowback rules, the stock Ycash, `set_*`/`vault_*` and `yed_*` RPCs (rpcversion 8).
+          - Does not yet: the slow testnet profile has no config selector; no wallet; no Windows or Intel macOS build.
+          - Get started: unpack, read `README.txt`, run `./koganyd -c testnet.toml start`. Verify with `sha256sum -c SHA256SUMS` and `cosign verify-blob`.
+          - Docs: https://github.com/boyfromcave/kogany#readme
+          MD
+          fi
+          gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --verify-tag --prerelease --draft=false \
+            --title "koganyd $TAG" --notes-file "$notes" \
+            dist/*.tar.gz dist/*.spdx.json dist/SHA256SUMS dist/SHA256SUMS.cosign.bundle

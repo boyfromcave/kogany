@@ -63,6 +63,7 @@ kogany  kogany-audit.yml               plan §5: audit legs (a)-(e), dormancy, w
 kogany  kogany-build.yml               plan §5: cargo check ycash off/on, clippy per crate group, rustfmt
 kogany  kogany-tests.yml               plan §5: kogany crates (dev/release/ci-tests), upstream crates, ycash subsets, fuzz verdicts, kogany-regtest
 kogany  kogany-bin.yml                 the zakurad-bin artifact (cross-line contract); reusable
+kogany  kogany-release.yml             the koganyd pre-release binaries (GitHub pre-release), on a pushed v*-ycash.* tag or dispatch only
 kogany  kogany-client-legs.yml         plan §5 W7-d/W8-c: lightwalletd-dd, chain-viz, yolo; report-only
 kogany  kogany-mixed.yml               plan §5 mixed-regtest, kogany side: ycash6 node-bin from a given run; report-only
 kogany  semgrep.yml                    security CI (ycash6/SECURITY-CI.md)

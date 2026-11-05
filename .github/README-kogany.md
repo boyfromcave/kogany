@@ -16,7 +16,7 @@ keeps to this policy, and the `workflows` leg of `kogany-audit.yml` fails when o
 
 | Event | Allowed |
 | --- | --- |
-| `push` | only with a `branches:` filter within `upgrade/vault` and `vaults/**`; no `branches-ignore`, no tag pushes |
+| `push` | only with a `branches:` filter within `upgrade/vault` and `vaults/**`; no `branches-ignore`, no tag pushes, except `kogany-release.yml`: tags `v*-ycash.*` only, no branch |
 | `pull_request` | only with a `branches:` filter (the base) within `upgrade/vault`, `vaults/**` and `kc/**` (agent branches are pushed without CI and tested by their pull request) |
 | `schedule` | yes: GitHub runs it from the default branch, `upgrade/vault`, only |
 | `workflow_dispatch`, `workflow_call` | yes (`workflow_call` only on `called` and `kogany` workflows) |
@@ -34,7 +34,7 @@ each of those cases. Upstream's own triggers in the kept workflows (`main`, `fea
 | kept | `.github/workflows/` | `lint.yml`, `tests-unit.yml`, `zakura-e2e.yml`, `docs-check.yml`, `test-crates.yml`, `header-fuzz.yml`, `rpc-fuzz.yml`: trimmed in place, every edit commented |
 | called | `.github/workflows/` | `zakura-cluster.yml` (reusable; `tests-unit.yml` and `zakura-e2e.yml` call it) |
 | off | `.github/workflows-off/` | the other 32 upstream workflows: the DigitalOcean fleet and deploy jobs, the release pipeline, `ci-alerts`, `coverage`, `benchmarks`, `legacy-pages`, the cranelift pair, `cross-platform`, `history-growth`, `test-docker`, `zcashd-compat-regtest`, `changelog`, `semver-checks` |
-| kogany | `.github/workflows/` | `kogany-audit.yml`, `kogany-build.yml`, `kogany-tests.yml`, `kogany-bin.yml`, `kogany-client-legs.yml`, `kogany-mixed.yml`, and the security CI `semgrep.yml`, `codeql.yml`, `secops.yml`, `code-scanning.yml` |
+| kogany | `.github/workflows/` | `kogany-audit.yml`, `kogany-build.yml`, `kogany-tests.yml`, `kogany-bin.yml`, `kogany-release.yml`, `kogany-client-legs.yml`, `kogany-mixed.yml`, and the security CI `semgrep.yml`, `codeql.yml`, `secops.yml`, `code-scanning.yml` |
 
 The trims, as K-15 states them:
 
@@ -115,6 +115,7 @@ re-runs its consumers.
 | | `vault fuzz verdicts` | the 3,735 ycash6 verdicts (W3-e) | yes | yes | 15 / 5 min |
 | | `kogany-regtest (report-only)` | nextest profile `kogany-regtest` (W4-e) | no, until the W4 gate | yes | 40 / 15 min |
 | `kogany-bin` | `koganyd-bin (ycash, dev)` | the `koganyd-bin` artifact (cross-line contract) | — | yes | 35 / 10 min |
+| `kogany-release` | `guard`, `koganyd (<platform>)`, `publish pre-release` | on a pushed `v*-ycash.*` tag or dispatch only: the pre-release binaries ("Cutting a pre-release") | — | each | 60 / — min |
 | `kogany-client-legs` | `koganyd / koganyd-bin` (called `kogany-bin`) | this run's `koganyd-bin` | — | yes | 35 / 10 min |
 | | `lightwalletd-dd`, `chain-viz`, `yolo` (each report-only) | the client unmodified at its pin against this run's koganyd (`crates/kogany-rpc/qa/kogany_client_legs.py`; yolo's `tests/regtest.rs` kogany mode with ycash6's node-bin) | no, until the lead architect flips one | each | 10–40 min |
 | `kogany-mixed` | `koganyd / koganyd-bin`, `ycash6 node-bin` | the two binaries | — | each | 35 / 1 min |
@@ -183,6 +184,27 @@ What kogany publishes and consumes (the workspace's `docs/plans/kogany/ci-design
   `kogany-client-legs.yml`.
 - The sidecar (W9) and parity (S5) nightlies follow the `kogany-mixed.yml` pattern with ycash6's
   test rig and yew's `yewd-bin`; they are added, scheduled, once the default branch carries them.
+
+## Cutting a pre-release
+
+`kogany-release.yml` (the Yellowback lead architect, 2026-11-04) runs only on a pushed tag
+`v<X.Y.Z>-ycash.<beta|rc><n>` (or a dispatch naming one) and on no branch. Its `guard` job refuses
+any other form, refuses a final `vX.Y.Z-ycash.N` (kogany is not a qualified line, plan K-19), and
+requires X.Y.Z to equal the `kogany` crate version in `crates/zakurad/Cargo.toml` (pre-release
+suffix ignored). Three native jobs build `koganyd` (`--release --features "default-release-binaries
+ycash"`, no Rust cache, so a release never restores a cache; no system RocksDB, so the bundled one is
+linked statically) on ubuntu-24.04, ubuntu-24.04-arm and
+macos-14, and pack `koganyd_<tag>_<platform>.tar.gz` (`koganyd`, `README.txt`, the licences,
+`default_config_ycash.toml`; `.github/workflows/scripts/kogany-release-package.sh`) with an SPDX
+SBOM each. `publish` writes `SHA256SUMS`, signs it keylessly with cosign, attests build provenance
+for the tarballs and runs `gh release create --prerelease`, with `doc/release-notes/<tag>.md` as
+the notes when it exists.
+
+```sh
+git checkout upgrade/vault && git pull --ff-only
+git tag -a v1.8.0-ycash.beta1 -m "koganyd v1.8.0-ycash.beta1 (pre-release)"
+git push origin v1.8.0-ycash.beta1
+```
 
 ## Turning Actions on
 

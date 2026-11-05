@@ -30,7 +30,7 @@ Legs (`all` runs every one; kogany-audit.yml runs each leg as its own job):
                   workflow_dispatch and workflow_call (no create, delete, merge_group,
                   pull_request_target, workflow_run, ...); push only with a branches filter within
                   upgrade/vault and vaults/**; pull_request only with a branches filter within
-                  upgrade/vault, vaults/** and kc/**; no branches-ignore, no tag pushes.
+                  upgrade/vault, vaults/** and kc/**; no branches-ignore, no tag pushes (except kogany-release.yml: tags v*-ycash.* only).
 
 The upstream pin. --upstream (or KOGANY_AUDIT_UPSTREAM) names it explicitly; by default it is
 the commit in qa/UPSTREAM_PIN, the upstream Zakura commit the tree is synced to, which an upstream
@@ -394,6 +394,10 @@ WORKFLOW_OFF_DIR = ".github/workflows-off"
 ALLOWED_EVENTS = ("push", "pull_request", "schedule", "workflow_dispatch", "workflow_call")
 PUSH_BRANCHES = ("upgrade/vault", "vaults/**")
 PR_BRANCHES = ("upgrade/vault", "vaults/**", "kc/**")
+# The one exception (the lead architect, 2026-11-04): the pre-release workflow runs on a pushed
+# release tag, `v<X.Y.Z>-ycash.<beta|rc><n>` (its guard job checks the exact form), and on no branch.
+RELEASE_WORKFLOW = "kogany-release.yml"
+RELEASE_TAGS = ("v*-ycash.*",)
 
 
 def _yaml_scalar(text):
@@ -524,8 +528,13 @@ def trigger_problems(name, triggers):
         config = config if isinstance(config, dict) else {}
         if "branches-ignore" in config:
             problems.append("%s: `%s` uses branches-ignore (runs on every other branch)" % (name, event))
+        if event == "push" and name == RELEASE_WORKFLOW and "branches" not in config:
+            tags = _as_list(config.get("tags"))
+            if "tags-ignore" in config or not tags or any(t not in RELEASE_TAGS for t in tags):
+                problems.append("%s: `push` tags must be exactly within %s" % (name, ", ".join(RELEASE_TAGS)))
+            continue
         if event == "push" and ("tags" in config or "tags-ignore" in config):
-            problems.append("%s: `push` has a tags filter (kogany pushes no tag to build)" % name)
+            problems.append("%s: `push` has a tags filter (only %s pushes a tag to build)" % (name, RELEASE_WORKFLOW))
         branches = _as_list(config.get("branches"))
         if not branches:
             problems.append("%s: `%s` has no branches filter (runs on every branch)" % (name, event))
