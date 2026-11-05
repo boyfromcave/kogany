@@ -262,7 +262,9 @@ pub fn release_version() -> Version {
 /// kogany: `/koganyd:<package version>/`, without the `+kogany.<n>.g<sha>` build metadata:
 /// ycashd keeps only `[A-Za-z0-9 .-/:]` of a peer's subversion (`SAFE_CHARS_SUBVERSION`,
 /// `ycash6 src/util/strencodings.cpp:25`, applied at `src/main.cpp:8020`), so a `+` would be
-/// dropped and the version run together.
+/// dropped and the version run together. A release build cut at a `v<X.Y.Z>-ycash.<beta|rc><n>`
+/// tag (`KOGANY_RELEASE_TAG`, set by `build.rs`) advertises the tag without its `v` instead:
+/// `/koganyd:1.8.0-ycash.beta1/` (`zakura_network::ycash::user_agent_for_release`).
 ///
 /// [BIP 14]: https://github.com/bitcoin/bips/blob/master/bip-0014.mediawiki
 #[cfg_attr(feature = "ycash", allow(unreachable_code))]
@@ -270,7 +272,10 @@ pub fn user_agent() -> String {
     let release_version = release_version();
     // kogany: `/koganyd:<version>/` on Ycash (`zakura_network::ycash::user_agent`).
     #[cfg(feature = "ycash")]
-    return zakura_network::ycash::user_agent(release_version);
+    return zakura_network::ycash::user_agent_for_release(
+        option_env!("KOGANY_RELEASE_TAG"),
+        release_version,
+    );
 
     format!("/Zakura:{release_version}/")
 }
@@ -621,10 +626,12 @@ mod kogany_version_tests {
     #[test]
     fn user_agent_carries_no_build_metadata() {
         let user_agent = user_agent();
-        assert_eq!(
-            user_agent,
-            format!("/koganyd:{}/", env!("CARGO_PKG_VERSION"))
-        );
+        let expected =
+            match option_env!("KOGANY_RELEASE_TAG").and_then(zakura_network::ycash::release_name) {
+                Some(name) => format!("/koganyd:{name}/"),
+                None => format!("/koganyd:{}/", env!("CARGO_PKG_VERSION")),
+            };
+        assert_eq!(user_agent, expected);
         // ycashd's SAFE_CHARS_SUBVERSION.
         assert!(user_agent
             .chars()

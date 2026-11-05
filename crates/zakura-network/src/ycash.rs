@@ -9,7 +9,8 @@
 //! - the protocol version table: ycashd's per-upgrade `nProtocolVersion` values and its
 //!   `MIN_PEER_PROTO_VERSION` floor of 270013, so a Zcash peer is refused at the handshake;
 //! - the version kogany advertises, ycash6's Vault-era 270200;
-//! - the user agent, `/koganyd:<version>/`;
+//! - the user agent, `/koganyd:<version>/`, where a release build cut at a
+//!   `v<X.Y.Z>-ycash.<beta|rc><n>` tag advertises the tag without its `v` (`/koganyd:1.8.0-ycash.beta1/`);
 //! - the inventory filter: `MSG_WTX` (ZIP 239) is never sent and is refused on receipt, as
 //!   ycash6 pins `CINV_WTX_VERSION` to an unreachable sentinel;
 //! - the default seeds and listen port;
@@ -57,6 +58,37 @@ pub const USER_AGENT_NAME: &str = "koganyd";
 /// Returns kogany's BIP 14 user agent for `release_version`: `/koganyd:<release_version>/`.
 pub fn user_agent(release_version: impl std::fmt::Display) -> String {
     format!("/{USER_AGENT_NAME}:{release_version}/")
+}
+
+/// Returns the release name of a kogany release tag, `v<X.Y.Z>-ycash.<beta|rc><n>` without its
+/// leading `v`, or `None` if `tag` is not of that shape.
+///
+/// The name holds only `[0-9a-z.-]`, all of them in ycashd's `SAFE_CHARS_SUBVERSION`
+/// (`ycash6 src/util/strencodings.cpp:25`), so a ycashd peer shows it unchanged.
+pub fn release_name(tag: &str) -> Option<&str> {
+    let name = tag.strip_prefix('v')?;
+    let (version, stage) = name.split_once("-ycash.")?;
+    let numbers: Vec<&str> = version.split('.').collect();
+    let digits = |s: &str| !s.is_empty() && s.bytes().all(|b| b.is_ascii_digit());
+    if numbers.len() != 3 || !numbers.iter().all(|n| digits(n)) {
+        return None;
+    }
+    let n = stage
+        .strip_prefix("beta")
+        .or_else(|| stage.strip_prefix("rc"))?;
+    digits(n).then_some(name)
+}
+
+/// Returns kogany's BIP 14 user agent: `/koganyd:<release name>/` if `release_tag` is a kogany
+/// release tag ([`release_name`]), otherwise `/koganyd:<crate_version>/` ([`user_agent`]).
+pub fn user_agent_for_release(
+    release_tag: Option<&str>,
+    crate_version: impl std::fmt::Display,
+) -> String {
+    match release_tag.and_then(release_name) {
+        Some(name) => user_agent(name),
+        None => user_agent(crate_version),
+    }
 }
 
 /// Returns ycashd's `nProtocolVersion` for `network_upgrade` on `network`: the minimum version
@@ -326,3 +358,44 @@ impl LegacyRejectSender {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod user_agent_tests {
+    use super::{release_name, user_agent_for_release};
+
+    #[test]
+    fn release_tag_names_the_user_agent() {
+        assert_eq!(
+            user_agent_for_release(Some("v1.8.0-ycash.beta1"), "1.8.0-rc1"),
+            "/koganyd:1.8.0-ycash.beta1/"
+        );
+        assert_eq!(
+            user_agent_for_release(Some("v1.8.0-ycash.rc12"), "1.8.0-rc1"),
+            "/koganyd:1.8.0-ycash.rc12/"
+        );
+    }
+
+    #[test]
+    fn no_or_foreign_tag_keeps_the_crate_version() {
+        assert_eq!(
+            user_agent_for_release(None, "1.8.0-rc1"),
+            "/koganyd:1.8.0-rc1/"
+        );
+        for tag in [
+            "v1.8.0",
+            "v1.8.0-rc1",
+            "1.8.0-ycash.beta1",
+            "v1.8.0-ycash.1",
+            "v1.8-ycash.beta1",
+            "v1.8.0-ycash.beta",
+            "v1.8.0-ycash.beta1-dirty",
+            "kogany-ycash-baseline",
+        ] {
+            assert_eq!(release_name(tag), None, "{tag}");
+            assert_eq!(
+                user_agent_for_release(Some(tag), "1.8.0-rc1"),
+                "/koganyd:1.8.0-rc1/"
+            );
+        }
+    }
+}
