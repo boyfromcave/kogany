@@ -74,8 +74,14 @@ pub(crate) fn min_specified_for_upgrade(
     network_upgrade: NetworkUpgrade,
 ) -> Version {
     let is_regtest = matches!(network, Testnet(params) if params.is_regtest());
+    // Shadow forks inherit mainnet's per-upgrade versions (`CTestNetShadowParams : CMainParams`).
+    let version_network = if profile::is_shadow_network(network) {
+        &Mainnet
+    } else {
+        network
+    };
 
-    Version(match (network, network_upgrade) {
+    Version(match (version_network, network_upgrade) {
         (_, Genesis) | (_, BeforeOverwinter) => 170_002,
         (Mainnet, Overwinter) => 170_005,
         (Testnet(_), Overwinter) => 170_003,
@@ -91,6 +97,8 @@ pub(crate) fn min_specified_for_upgrade(
         (Mainnet, Canopy) => 270_013,
         (Testnet(_), Canopy) if is_regtest => 170_012,
         (Testnet(_), Canopy) => 270_012,
+        // `UPGRADE_SHADOW.nProtocolVersion` (`ycash6 src/chainparams.cpp`, CTestNetShadowParams).
+        (_, Shadow) => 270_013,
         (Mainnet, Nu5) => 270_015,
         (Testnet(_), Nu5) if is_regtest => 170_050,
         (Testnet(_), Nu5) => 270_014,

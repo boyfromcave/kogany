@@ -254,7 +254,18 @@ impl PrecomputedTxData {
         nu: NetworkUpgrade,
         all_previous_outputs: Arc<Vec<transparent::Output>>,
     ) -> Result<PrecomputedTxData, Error> {
-        let tx = tx.to_librustzcash(nu)?;
+        let branch_id = nu.branch_id().ok_or(Error::InvalidConsensusBranchId)?;
+        Self::with_branch(tx, nu, branch_id, all_previous_outputs)
+    }
+
+    /// [`Self::new`] with the branch id signatures on this network commit to.
+    pub(crate) fn with_branch(
+        tx: &Transaction,
+        nu: NetworkUpgrade,
+        branch_id: crate::parameters::ConsensusBranchId,
+        all_previous_outputs: Arc<Vec<transparent::Output>>,
+    ) -> Result<PrecomputedTxData, Error> {
+        let tx = tx.to_librustzcash_with_branch(nu, branch_id)?;
 
         let txid_parts = tx.deref().digest(zp_tx::txid::TxIdDigester);
 

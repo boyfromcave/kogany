@@ -1052,6 +1052,9 @@ impl DTestnetParameters {
 #[serde(untagged)]
 enum DNetwork {
     DefaultForKind(NetworkKind),
+    /// `TestnetSlow` or `TestnetLegacy` (`ycash` feature). Serializes as that string.
+    #[cfg(feature = "ycash")]
+    YcashTestnet(String),
     ConfiguredRegtest {
         params: Box<DTestnetParameters>,
 
@@ -1075,6 +1078,19 @@ impl<'de> Deserialize<'de> for DNetwork {
             }
 
             fn visit_str<E: de::Error>(self, kind: &str) -> Result<DNetwork, E> {
+                #[cfg(feature = "ycash")]
+                {
+                    use std::str::FromStr;
+                    if let Ok(network) = zakura_chain::parameters::Network::from_str(kind) {
+                        if network == zakura_chain::parameters::Network::new_ycash_testnet_slow() {
+                            return Ok(DNetwork::YcashTestnet("TestnetSlow".to_owned()));
+                        }
+                        if network == zakura_chain::parameters::Network::new_ycash_testnet_legacy()
+                        {
+                            return Ok(DNetwork::YcashTestnet("TestnetLegacy".to_owned()));
+                        }
+                    }
+                }
                 NetworkKind::deserialize(kind.into_deserializer()).map(DNetwork::DefaultForKind)
             }
 
@@ -1250,25 +1266,45 @@ impl From<Config> for DConfig {
             expose_peer_addresses,
         }: Config,
     ) -> Self {
-        let dnetwork = match network.kind() {
-            NetworkKind::Testnet => match network
-                .parameters()
-                .filter(|params| !params.is_default_testnet())
-                .map(Into::into)
+        let dnetwork = if cfg!(feature = "ycash") && network == Network::new_ycash_testnet_slow() {
+            #[cfg(feature = "ycash")]
             {
-                Some(params) => DNetwork::ConfiguredTestnet(Box::new(params)),
-                None => DNetwork::DefaultForKind(NetworkKind::Testnet),
-            },
-
-            NetworkKind::Regtest => match network.parameters().map(Into::into) {
-                Some(params) => DNetwork::ConfiguredRegtest {
-                    params: Box::new(params),
-                    regtest: Some(true),
+                DNetwork::YcashTestnet("TestnetSlow".to_owned())
+            }
+            #[cfg(not(feature = "ycash"))]
+            {
+                unreachable!("the ycash profiles exist only in a ycash build")
+            }
+        } else if cfg!(feature = "ycash") && network == Network::new_ycash_testnet_legacy() {
+            #[cfg(feature = "ycash")]
+            {
+                DNetwork::YcashTestnet("TestnetLegacy".to_owned())
+            }
+            #[cfg(not(feature = "ycash"))]
+            {
+                unreachable!("the ycash profiles exist only in a ycash build")
+            }
+        } else {
+            match network.kind() {
+                NetworkKind::Testnet => match network
+                    .parameters()
+                    .filter(|params| !params.is_default_testnet())
+                    .map(Into::into)
+                {
+                    Some(params) => DNetwork::ConfiguredTestnet(Box::new(params)),
+                    None => DNetwork::DefaultForKind(NetworkKind::Testnet),
                 },
-                None => DNetwork::DefaultForKind(NetworkKind::Regtest),
-            },
 
-            other_kind => DNetwork::DefaultForKind(other_kind),
+                NetworkKind::Regtest => match network.parameters().map(Into::into) {
+                    Some(params) => DNetwork::ConfiguredRegtest {
+                        params: Box::new(params),
+                        regtest: Some(true),
+                    },
+                    None => DNetwork::DefaultForKind(NetworkKind::Regtest),
+                },
+
+                other_kind => DNetwork::DefaultForKind(other_kind),
+            }
         };
 
         DConfig {
@@ -1336,6 +1372,16 @@ impl<'de> Deserialize<'de> for Config {
             (DNetwork::DefaultForKind(NetworkKind::Testnet), None) => {
                 Network::new_default_testnet()
             }
+            #[cfg(feature = "ycash")]
+            (DNetwork::YcashTestnet(name), None) => match name.as_str() {
+                "TestnetSlow" => Network::new_ycash_testnet_slow(),
+                "TestnetLegacy" => Network::new_ycash_testnet_legacy(),
+                other => {
+                    return Err(de::Error::custom(format!(
+                        "unknown Ycash testnet profile {other}"
+                    )));
+                }
+            },
             (DNetwork::DefaultForKind(NetworkKind::Regtest), Some(params)) => {
                 params.reject_regtest_form_keys::<D::Error>()?;
                 build_configured_regtest::<D>(params)?
@@ -1352,7 +1398,10 @@ impl<'de> Deserialize<'de> for Config {
             }
         };
 
-        let listen_addr = match listen_addr.parse::<SocketAddr>().or_else(|_| format!("{listen_addr}:{}", network.default_port()).parse()) {
+        let listen_addr = match listen_addr
+            .parse::<SocketAddr>()
+            .or_else(|_| format!("{listen_addr}:{}", network.default_port()).parse())
+        {
             Ok(socket) => Ok(socket),
             Err(_) => match listen_addr.parse::<IpAddr>() {
                 Ok(ip) => Ok(SocketAddr::new(ip, network.default_port())),
@@ -1363,7 +1412,10 @@ impl<'de> Deserialize<'de> for Config {
         }?;
 
         let external_socket_addr = if let Some(address) = &external_addr {
-            match address.parse::<SocketAddr>().or_else(|_| format!("{address}:{}", network.default_port()).parse()) {
+            match address
+                .parse::<SocketAddr>()
+                .or_else(|_| format!("{address}:{}", network.default_port()).parse())
+            {
                 Ok(socket) => Ok(Some(socket)),
                 Err(_) => match address.parse::<IpAddr>() {
                     Ok(ip) => Ok(Some(SocketAddr::new(ip, network.default_port()))),

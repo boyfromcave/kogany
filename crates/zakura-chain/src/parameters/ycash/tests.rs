@@ -20,15 +20,27 @@ const MAINNET_BANDS: &[(u32, u32)] = &[
     (1_100_006, 0x19bd2d2f),
 ];
 
-/// As [`MAINNET_BANDS`], for the re-forked Ycash testnet's `slow` profile (`ycash6 src/chainparams.cpp:429-459`).
-const TESTNET_BANDS: &[(u32, u32)] = &[
+/// testnet-yb-slow and testnet-legacy follow mainnet's bands through H_S, then their own
+/// shadow id (`ycash6` `NetworkBranchId` of `UPGRADE_SHADOW`).
+const SHADOW_SLOW_BANDS: &[(u32, u32)] = &[
     (0, 0),
-    (207_500, 0x5ba81b19),
-    (280_000, 0x76b809bb),
-    (510_248, 0x374d694f),
-    (510_250, 0x8e471bd6),
-    (510_252, 0x66314da3),
-    (510_254, 0x19bd2d2f),
+    (347_500, 0x5ba81b19),
+    (419_200, 0x76b809bb),
+    (570_000, 0x374d694f),
+    (1_100_000, 0x8e471bd6),
+    (1_100_003, 0x66314da3),
+    (1_100_006, 0x19bd2d2f),
+    (3_080_000, super::SLOW_SHADOW_BRANCH_ID),
+];
+const SHADOW_LEGACY_BANDS: &[(u32, u32)] = &[
+    (0, 0),
+    (347_500, 0x5ba81b19),
+    (419_200, 0x76b809bb),
+    (570_000, 0x374d694f),
+    (1_100_000, 0x8e471bd6),
+    (1_100_003, 0x66314da3),
+    (1_100_006, 0x19bd2d2f),
+    (3_080_000, super::LEGACY_SHADOW_BRANCH_ID),
 ];
 
 fn branch_id_or_sprout(network: &Network, height: u32) -> u32 {
@@ -80,7 +92,24 @@ fn testnet_profiles_branch_ids_match_ycashd_bands() {
         TESTNET_FAST_BANDS,
         2_000_000,
     );
-    assert_bands(&Network::new_ycash_testnet_slow(), TESTNET_BANDS, 2_000_000);
+    assert_bands(
+        &Network::new_ycash_testnet_slow(),
+        SHADOW_SLOW_BANDS,
+        4_000_000,
+    );
+    assert_bands(
+        &Network::new_ycash_testnet_legacy(),
+        SHADOW_LEGACY_BANDS,
+        4_000_000,
+    );
+    assert_eq!(
+        Network::new_ycash_testnet_slow().vault_activation_height(),
+        None
+    );
+    assert_eq!(
+        Network::new_ycash_testnet_legacy().vault_activation_height(),
+        None
+    );
 }
 
 #[test]
@@ -182,6 +211,19 @@ fn ycash_identity_ports_magics_names() {
 
     assert!(fast.is_default_testnet());
     assert!(!slow.is_default_testnet());
+    let legacy = Network::new_ycash_testnet_legacy();
+    assert_eq!(legacy.default_port(), ports::TESTNET_LEGACY);
+    assert_eq!(params(&legacy).network_magic(), magics::TESTNET_LEGACY);
+    assert_eq!(legacy.genesis_hash(), Network::Mainnet.genesis_hash());
+    assert_eq!(slow.genesis_hash(), Network::Mainnet.genesis_hash());
+    assert_eq!(
+        "testnetslow".parse::<Network>().expect("slow").to_string(),
+        "TestnetSlow"
+    );
+    assert_eq!(
+        "legacy".parse::<Network>().expect("legacy").to_string(),
+        "TestnetLegacy"
+    );
     assert_eq!(slow.to_string(), "TestnetSlow");
     assert_eq!(slow.kind(), NetworkKind::Testnet);
     assert_eq!(Network::Mainnet.bip70_network_name(), "main");

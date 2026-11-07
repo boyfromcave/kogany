@@ -103,6 +103,7 @@ fn empty_ironwood_root() -> ironwood::tree::Root {
 fn parameters(checkpoint_blocks: Option<&[Arc<Block>]>) -> Network {
     let builder = ParametersBuilder::default()
         .with_activation_heights(ConfiguredActivationHeights {
+            shadow: None,
             ycash: None,
             vault: None,
             pq_falcon: None,

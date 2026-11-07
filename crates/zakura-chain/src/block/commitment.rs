@@ -131,14 +131,18 @@ impl Commitment {
             // activation bytes should still be used pre-NU5.
             //
             // See <https://zips.z.cash/zip-0221> and the [protocol specification §7.6](https://zips.z.cash/protocol/protocol.pdf).
-            (Canopy | Vault, _) if Some(height) == Heartwood.activation_height(network) => {
+            (Canopy | Shadow | Vault, _)
+                if Some(height) == Heartwood.activation_height(network) =>
+            {
                 if bytes == CHAIN_HISTORY_ACTIVATION_RESERVED {
                     Ok(ChainHistoryActivationReserved)
                 } else {
                     Err(InvalidChainHistoryActivationReserved { actual: bytes })
                 }
             }
-            (Heartwood | Canopy | Vault, _) => Ok(ChainHistoryRoot(ChainHistoryMmrRootHash(bytes))),
+            (Heartwood | Canopy | Shadow | Vault, _) => {
+                Ok(ChainHistoryRoot(ChainHistoryMmrRootHash(bytes)))
+            }
             (Nu5 | Nu6 | Nu6_1 | Nu6_2 | Nu6_3 | Nu7, _) => Ok(ChainHistoryBlockTxAuthCommitment(
                 ChainHistoryBlockTxAuthCommitmentHash(bytes),
             )),
@@ -373,7 +377,10 @@ pub enum CommitmentError {
         actual: [u8; 32],
     },
 
-    #[error("invalid chain history activation reserved block commitment: expected all zeroes, actual: {:?}",  hex::encode(actual))]
+    #[error(
+        "invalid chain history activation reserved block commitment: expected all zeroes, actual: {:?}",
+        hex::encode(actual)
+    )]
     InvalidChainHistoryActivationReserved { actual: [u8; 32] },
 
     #[error(
@@ -437,7 +444,9 @@ pub enum CommitmentError {
     #[error("invalid pre-Nu6_3 ironwood transaction count: expected {expected}, actual: {actual}")]
     InvalidPreNu6_3IronwoodTxCount { expected: u64, actual: u64 },
 
-    #[error("missing required block height: block commitments can't be parsed without a block height, block hash: {block_hash:?}")]
+    #[error(
+        "missing required block height: block commitments can't be parsed without a block height, block hash: {block_hash:?}"
+    )]
     MissingBlockHeight { block_hash: block::Hash },
 
     #[error("provided bytes are not a valid sapling root")]

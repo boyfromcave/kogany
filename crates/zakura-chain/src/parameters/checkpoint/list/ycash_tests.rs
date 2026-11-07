@@ -73,10 +73,7 @@ fn ycash_mainnet_list_carries_the_pins() {
 
 #[test]
 fn ycash_testnet_lists_stop_at_the_shared_history() {
-    for network in [
-        Network::new_default_testnet(),
-        Network::new_ycash_testnet_slow(),
-    ] {
+    for network in [Network::new_default_testnet()] {
         assert_pins(&network, TESTNET_PINS);
         assert_below_vault(&network);
         assert_eq!(
@@ -85,6 +82,35 @@ fn ycash_testnet_lists_stop_at_the_shared_history() {
             "the re-forked testnet's checkpoints above the fork come with its first rc"
         );
         assert!(network.ycash_checkpoint_list_is_partial());
+    }
+}
+
+#[test]
+fn ycash_shadow_lists_are_mainnet_through_the_split() {
+    use crate::parameters::ycash::{
+        SHADOW_ACTIVATION_HEIGHT, SHADOW_SPLIT_HASH, SHADOW_SPLIT_HEIGHT,
+    };
+    let mainnet = Network::Mainnet.checkpoint_list();
+    for network in [
+        Network::new_ycash_testnet_slow(),
+        Network::new_ycash_testnet_legacy(),
+    ] {
+        let list = network.checkpoint_list();
+        assert_eq!(list.hash(block::Height(0)), Some(network.genesis_hash()));
+        assert_eq!(network.genesis_hash(), Network::Mainnet.genesis_hash());
+        assert_eq!(list.max_height(), block::Height(SHADOW_SPLIT_HEIGHT));
+        assert_eq!(
+            list.hash(block::Height(SHADOW_SPLIT_HEIGHT)),
+            Some(SHADOW_SPLIT_HASH.parse().expect("hash"))
+        );
+        assert!(!network.ycash_checkpoint_list_is_partial());
+        for (height, hash) in mainnet.iter_cloned() {
+            if height.0 >= SHADOW_ACTIVATION_HEIGHT.0 {
+                assert_eq!(list.hash(height), None, "{height:?}");
+            } else if height.0 != SHADOW_SPLIT_HEIGHT {
+                assert_eq!(list.hash(height), Some(hash), "{height:?}");
+            }
+        }
     }
 }
 

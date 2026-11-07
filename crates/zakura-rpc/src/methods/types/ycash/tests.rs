@@ -157,6 +157,10 @@ fn testnet_profile_matches_ycashd() {
         testnet_profile(&Network::new_ycash_testnet_slow()).as_deref(),
         Some("slow")
     );
+    assert_eq!(
+        testnet_profile(&Network::new_ycash_testnet_legacy()).as_deref(),
+        Some("legacy")
+    );
 }
 
 /// `Base58Check(version || payload)`, for building addresses in the tests below.

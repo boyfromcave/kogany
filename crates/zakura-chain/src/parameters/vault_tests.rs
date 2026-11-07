@@ -473,7 +473,9 @@ fn vault_takes_canopy_behaviour_in_every_match() {
     assert_eq!(Vault.target_spacing(), Canopy.target_spacing());
     assert_eq!(Vault.averaging_window(), Canopy.averaging_window());
     assert_eq!(Vault.next_upgrade(), Some(Nu5));
-    assert_eq!(Canopy.next_upgrade(), Some(Vault));
+    assert_eq!(Canopy.next_upgrade(), Some(Shadow));
+    assert_eq!(Shadow.next_upgrade(), Some(Vault));
+    assert_eq!(Shadow.target_spacing(), Canopy.target_spacing());
     assert_eq!(
         NetworkUpgrade::from(zcash_protocol::consensus::NetworkUpgrade::Vault),
         Vault
@@ -483,7 +485,7 @@ fn vault_takes_canopy_behaviour_in_every_match() {
         Height::MAX
     ));
     // Ordinal gates read Vault as Canopy-era (K-1).
-    assert!(Vault > Canopy && Vault < Nu5);
+    assert!(Shadow > Canopy && Shadow < Vault && Vault < Nu5);
 
     // history_tree.rs `_ if branch_id().is_none()` (both trees) and header-chain
     // `preparation.rs` `_ => u32::MAX`: Vault has a branch ID, so neither wildcard is reached.

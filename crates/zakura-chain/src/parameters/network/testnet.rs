@@ -192,6 +192,7 @@ impl From<&BTreeMap<Height, NetworkUpgrade>> for ConfiguredActivationHeights {
                 NetworkUpgrade::Blossom => &mut configured_activation_heights.blossom,
                 NetworkUpgrade::Heartwood => &mut configured_activation_heights.heartwood,
                 NetworkUpgrade::Canopy => &mut configured_activation_heights.canopy,
+                NetworkUpgrade::Shadow => &mut configured_activation_heights.shadow,
                 NetworkUpgrade::Vault => &mut configured_activation_heights.vault,
                 NetworkUpgrade::Nu5 => &mut configured_activation_heights.nu5,
                 NetworkUpgrade::Nu6 => &mut configured_activation_heights.nu6,
@@ -595,6 +596,11 @@ pub struct ConfiguredActivationHeights {
     pub heartwood: Option<u32>,
     /// Activation height for `Canopy` network upgrade.
     pub canopy: Option<u32>,
+    /// Activation height for the testnet shadow fork (`UPGRADE_SHADOW`, H_S + 1).
+    ///
+    /// Only testnet-yb-slow and testnet-legacy set it. The branch id is per network, not this height.
+    #[serde(rename = "Shadow", default, skip_serializing_if = "Option::is_none")]
+    pub shadow: Option<u32>,
     /// Activation height for the Ycash `Vault` network upgrade (branch ID `0x6d5b7a31`, ycashd's
     /// `-nuparams=6d5b7a31:<h>`). Default `None`: Regtest never back-fills it.
     #[serde(rename = "Vault", default, skip_serializing_if = "Option::is_none")]
@@ -647,6 +653,7 @@ impl ConfiguredActivationHeights {
             blossom,
             heartwood,
             canopy,
+            shadow,
             vault,
             pq_falcon,
             nu5,
@@ -673,6 +680,7 @@ impl ConfiguredActivationHeights {
             blossom,
             heartwood,
             canopy,
+            shadow,
             vault,
             pq_falcon,
             nu5,
@@ -696,6 +704,7 @@ impl ConfiguredActivationHeights {
             self.blossom,
             self.heartwood,
             self.canopy,
+            self.shadow,
             self.vault,
             self.nu5,
             self.nu6,
@@ -721,6 +730,7 @@ impl ConfiguredActivationHeights {
             blossom: self.blossom.or(base.blossom),
             heartwood: self.heartwood.or(base.heartwood),
             canopy: self.canopy.or(base.canopy),
+            shadow: self.shadow.or(base.shadow),
             vault: self.vault.or(base.vault),
             pq_falcon: self.pq_falcon.or(base.pq_falcon),
             nu5: self.nu5.or(base.nu5),
@@ -995,6 +1005,7 @@ impl ParametersBuilder {
             blossom,
             heartwood,
             canopy,
+            shadow,
             vault,
             pq_falcon,
             nu5,
@@ -1055,6 +1066,7 @@ impl ParametersBuilder {
                 .chain(blossom.into_iter().map(|h| (h, Blossom)))
                 .chain(heartwood.into_iter().map(|h| (h, Heartwood)))
                 .chain(canopy.into_iter().map(|h| (h, Canopy)))
+                .chain(shadow.into_iter().map(|h| (h, Shadow)))
                 .chain(vault.into_iter().map(|h| (h, Vault)))
                 .chain(nu5.into_iter().map(|h| (h, Nu5)))
                 .chain(nu6.into_iter().map(|h| (h, Nu6)))
@@ -1990,6 +2002,10 @@ impl Network {
             // parses (`KeyIO::ZecToYec`, `ycash6 src/chainparams.cpp:1009-1024`).
             #[cfg(feature = "ycash")]
             Network::Mainnet => &crate::parameters::ycash::ydf::MAINNET_FOUNDER_ADDRESSES,
+            #[cfg(feature = "ycash")]
+            Network::Testnet(_) if crate::parameters::ycash::is_shadow_network(self) => {
+                &crate::parameters::ycash::ydf::MAINNET_FOUNDER_ADDRESSES
+            }
             #[cfg(feature = "ycash")]
             Network::Testnet(_) => &crate::parameters::ycash::ydf::TESTNET_FOUNDER_ADDRESSES,
             #[cfg(not(feature = "ycash"))]

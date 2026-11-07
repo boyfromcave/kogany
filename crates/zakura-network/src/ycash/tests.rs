@@ -75,10 +75,18 @@ fn version_table_is_ycashd_n_protocol_version() {
         }
     }
 
-    // The slow testnet profile is a testnet like the fast one.
+    // Shadow forks use mainnet's Canopy version. The shadow upgrade itself is 270013.
     assert_eq!(
         min_specified_for_upgrade(&Network::new_ycash_testnet_slow(), NetworkUpgrade::Canopy),
-        Version(270_012),
+        Version(270_013),
+    );
+    assert_eq!(
+        min_specified_for_upgrade(&Network::new_ycash_testnet_slow(), NetworkUpgrade::Shadow),
+        Version(270_013),
+    );
+    assert_eq!(
+        min_specified_for_upgrade(&Network::new_ycash_testnet_legacy(), NetworkUpgrade::Shadow),
+        Version(270_013),
     );
 }
 

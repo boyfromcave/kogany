@@ -360,6 +360,7 @@ fn build_testnet(a: u32) -> Result<Network, String> {
 fn build_regtest() -> Result<Network, String> {
     let one = Some(1);
     let heights = ConfiguredActivationHeights {
+        shadow: None,
         before_overwinter: one,
         overwinter: one,
         sapling: one,

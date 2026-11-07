@@ -129,6 +129,21 @@ impl CachedFfiTransaction {
         })
     }
 
+    /// [`Self::new`] using `network`'s branch id for `nu` (shadow-fork profiles).
+    pub fn new_on(
+        network: &zakura_chain::parameters::Network,
+        transaction: Arc<zakura_chain::transaction::Transaction>,
+        all_previous_outputs: Arc<Vec<transparent::Output>>,
+        nu: NetworkUpgrade,
+    ) -> Result<Self, Error> {
+        let sighasher = transaction.sighasher_on(network, nu, all_previous_outputs.clone())?;
+        Ok(Self {
+            transaction,
+            all_previous_outputs,
+            sighasher,
+        })
+    }
+
     /// Returns the transparent inputs for this transaction.
     pub fn inputs(&self) -> &[transparent::Input] {
         self.transaction.inputs()

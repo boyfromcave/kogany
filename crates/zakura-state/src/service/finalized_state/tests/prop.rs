@@ -300,6 +300,7 @@ fn v4_transaction_with_interstitial_anchor(old_anchor_tree: &SproutTree) -> Arc<
 fn vct_test_network() -> Network {
     ParametersBuilder::default()
         .with_activation_heights(ConfiguredActivationHeights {
+            shadow: None,
             ycash: None,
             vault: None,
             pq_falcon: None,
@@ -423,6 +424,7 @@ fn all_upgrades_and_wrong_commitments_with_fake_activation_heights() -> Result<(
 
     let network = ParametersBuilder::default()
         .with_activation_heights(ConfiguredActivationHeights {
+            shadow: None,
             ycash: None,
             vault: None,
             pq_falcon: None,

@@ -52,6 +52,13 @@ pub enum NetworkUpgrade {
     Heartwood,
     /// The Zcash protocol after the Canopy upgrade.
     Canopy,
+    /// The testnet shadow-fork epoch (`UPGRADE_SHADOW`): Canopy's rules under a per-network
+    /// branch id (`ycash6` `SLOW_SHADOW_BRANCH_ID` / `LEGACY_SHADOW_BRANCH_ID`).
+    ///
+    /// Scheduled only on testnet-yb-slow and testnet-legacy, at H_S + 1. It has no single
+    /// branch id in [`CONSENSUS_BRANCH_IDS`]; [`ConsensusBranchId::current`] supplies the
+    /// network's id. A new epoch, so the history tree restarts here.
+    Shadow,
     /// The Ycash vault upgrade (branch ID `0x6d5b7a31`): the vault lock/unlock primitive and the
     /// YED rule module, on a Canopy-era (v4-only) chain.
     ///
@@ -93,6 +100,7 @@ const NETWORK_UPGRADES: &[NetworkUpgrade] = &[
     Blossom,
     Heartwood,
     Canopy,
+    Shadow,
     Vault,
     Nu5,
     Nu6,
@@ -486,6 +494,12 @@ impl Network {
     pub(crate) fn is_kogany_upgrade_scheduled(&self, nu: NetworkUpgrade) -> bool {
         match nu {
             Vault => self.vault_activation_height().is_some(),
+            // Only where the activation map lists it. The fallback in `activation_height`
+            // would otherwise read the next upgrade's height.
+            Shadow => self
+                .activation_map()
+                .values()
+                .any(|scheduled| *scheduled == Shadow),
             Ycash => cfg!(feature = "ycash"),
             _ => true,
         }
@@ -630,6 +644,18 @@ impl NetworkUpgrade {
             .map(|&(_, branch_id)| branch_id)
     }
 
+    /// The branch id of this upgrade on `network`.
+    ///
+    /// Shadow and slow's Vault are per network (`ycash6` `NetworkBranchId`). Every other
+    /// upgrade uses [`Self::branch_id`].
+    pub fn branch_id_on(&self, network: &Network) -> Option<ConsensusBranchId> {
+        #[cfg(feature = "ycash")]
+        if let Some(id) = crate::parameters::ycash::profile_branch_id(network, *self) {
+            return Some(id);
+        }
+        self.branch_id()
+    }
+
     /// Returns the target block spacing for the network upgrade.
     ///
     /// Based on [`PRE_BLOSSOM_POW_TARGET_SPACING`] and
@@ -639,7 +665,7 @@ impl NetworkUpgrade {
             Genesis | BeforeOverwinter | Overwinter | Sapling | Ycash => {
                 PRE_BLOSSOM_POW_TARGET_SPACING
             }
-            Blossom | Heartwood | Canopy | Vault | Nu5 | Nu6 | Nu6_1 | Nu6_2 | Nu6_3 => {
+            Blossom | Heartwood | Canopy | Shadow | Vault | Nu5 | Nu6 | Nu6_1 | Nu6_2 | Nu6_3 => {
                 POST_BLOSSOM_POW_TARGET_SPACING.into()
             }
             Nu7 => POST_NU7_POW_TARGET_SPACING.into(),
@@ -689,6 +715,22 @@ impl NetworkUpgrade {
     ) -> Option<Duration> {
         match (network, height) {
             // TODO: Move `TESTNET_MINIMUM_DIFFICULTY_START_HEIGHT` to a field on testnet::Parameters (#8364)
+            (Network::Testnet(_params), height)
+                if {
+                    #[cfg(feature = "ycash")]
+                    {
+                        crate::parameters::ycash::is_shadow_network(network)
+                            && height.0 < crate::parameters::ycash::SHADOW_ACTIVATION_HEIGHT.0
+                    }
+                    #[cfg(not(feature = "ycash"))]
+                    {
+                        let _ = (network, height);
+                        false
+                    }
+                } =>
+            {
+                None
+            }
             (Network::Testnet(_params), height)
                 if height < TESTNET_MINIMUM_DIFFICULTY_START_HEIGHT =>
             {
@@ -745,7 +787,9 @@ impl NetworkUpgrade {
     pub fn averaging_window(&self) -> usize {
         match self {
             Genesis | BeforeOverwinter | Overwinter | Sapling | Ycash | Blossom | Heartwood
-            | Canopy | Vault | Nu5 | Nu6 | Nu6_1 | Nu6_2 | Nu6_3 => PRE_NU7_POW_AVERAGING_WINDOW,
+            | Canopy | Shadow | Vault | Nu5 | Nu6 | Nu6_1 | Nu6_2 | Nu6_3 => {
+                PRE_NU7_POW_AVERAGING_WINDOW
+            }
             Nu7 => POST_NU7_POW_AVERAGING_WINDOW,
 
             #[cfg(zcash_unstable = "zfuture")]
@@ -830,6 +874,6 @@ impl ConsensusBranchId {
     ///
     /// Returns None if the network has no branch id at this height.
     pub fn current(network: &Network, height: block::Height) -> Option<ConsensusBranchId> {
-        NetworkUpgrade::current(network, height).branch_id()
+        NetworkUpgrade::current(network, height).branch_id_on(network)
     }
 }

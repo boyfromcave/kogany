@@ -251,6 +251,7 @@ pub fn ydf_mandate_end_height(network: &Network) -> Height {
     match network {
         Network::Mainnet => mandate_end::MAINNET,
         Network::Testnet(params) if params.is_regtest() => mandate_end::REGTEST,
+        Network::Testnet(_) if super::is_shadow_network(network) => mandate_end::MAINNET,
         Network::Testnet(_) => mandate_end::TESTNET,
     }
 }
@@ -259,6 +260,7 @@ pub fn ydf_mandate_end_height(network: &Network) -> Height {
 pub fn ydf_address_list(network: &Network) -> &'static [&'static str] {
     match network {
         Network::Mainnet => &MAINNET_YDF_ADDRESSES,
+        Network::Testnet(_) if super::is_shadow_network(network) => &MAINNET_YDF_ADDRESSES,
         Network::Testnet(_) => &TESTNET_YDF_ADDRESSES,
     }
 }

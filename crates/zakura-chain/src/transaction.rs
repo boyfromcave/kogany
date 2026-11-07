@@ -47,8 +47,8 @@ use crate::{
     memory::{vec_capacity_bytes, AttributedMemorySize},
     orchard,
     parameters::{
-        Network, NetworkUpgrade, OVERWINTER_VERSION_GROUP_ID, SAPLING_VERSION_GROUP_ID,
-        TX_V5_VERSION_GROUP_ID,
+        ConsensusBranchId, Network, NetworkUpgrade, OVERWINTER_VERSION_GROUP_ID,
+        SAPLING_VERSION_GROUP_ID, TX_V5_VERSION_GROUP_ID,
     },
     primitives::{ed25519, Bctv14Proof, Groth16Proof},
     sapling,
@@ -426,6 +426,21 @@ impl Transaction {
         all_previous_outputs: Arc<Vec<transparent::Output>>,
     ) -> Result<sighash::SigHasher, Error> {
         sighash::SigHasher::new(self, nu, all_previous_outputs)
+    }
+
+    /// [`Self::sighasher`] using this network's branch id for `nu`.
+    ///
+    /// testnet-yb-slow and testnet-legacy commit to their own shadow and Vault ids.
+    pub fn sighasher_on(
+        &self,
+        network: &Network,
+        nu: NetworkUpgrade,
+        all_previous_outputs: Arc<Vec<transparent::Output>>,
+    ) -> Result<sighash::SigHasher, Error> {
+        let Some(branch_id) = nu.branch_id_on(network) else {
+            return Err(Error::InvalidConsensusBranchId);
+        };
+        sighash::SigHasher::with_branch(self, nu, branch_id, all_previous_outputs)
     }
 
     /// Compute the authorizing data commitment of this transaction as specified
@@ -1860,13 +1875,24 @@ impl Transaction {
         &self,
         nu: NetworkUpgrade,
     ) -> Result<zcash_primitives::transaction::Transaction, crate::Error> {
-        if self.network_upgrade().is_some_and(|tx_nu| tx_nu != nu) {
-            return Err(crate::Error::InvalidConsensusBranchId);
-        }
-
         let Some(branch_id) = nu.branch_id() else {
             return Err(crate::Error::InvalidConsensusBranchId);
         };
+        self.to_librustzcash_with_branch(nu, branch_id)
+    }
+
+    /// As [`Self::to_librustzcash`], with the branch id the signature commits to.
+    ///
+    /// Shadow-fork profiles use a per-network id (`NetworkUpgrade::branch_id_on`) rather than
+    /// the one id in the global table.
+    pub(crate) fn to_librustzcash_with_branch(
+        &self,
+        nu: NetworkUpgrade,
+        branch_id: ConsensusBranchId,
+    ) -> Result<zcash_primitives::transaction::Transaction, crate::Error> {
+        if self.network_upgrade().is_some_and(|tx_nu| tx_nu != nu) {
+            return Err(crate::Error::InvalidConsensusBranchId);
+        }
 
         let Ok(branch_id) = consensus::BranchId::try_from(branch_id) else {
             return Err(crate::Error::InvalidConsensusBranchId);

@@ -168,11 +168,12 @@ fn inherited(a: &str, b: &str) -> bool {
         .any(|&(x, y)| (x, y) == (a, b) || (x, y) == (b, a))
 }
 
-/// The networks kogany runs (decision K-10: mainnet, the two re-forked testnet profiles and
-/// regtest; the `legacy` profile and testnet3 are not kogany's), with kogany's live values.
+/// The networks kogany runs: mainnet, the three public testnets (fast, slow, legacy) and
+/// regtest. ycashd 4.5.0's testnet3 is not one of them.
 fn kogany_rows() -> Vec<(NetRow, Network)> {
     let fast = Network::new_default_testnet();
     let slow = Network::new_ycash_testnet_slow();
+    let legacy = Network::new_ycash_testnet_legacy();
     let regtest = Network::new_regtest(Default::default());
     let row = |network, class, net: &Network, rpc_port| NetRow {
         network,
@@ -209,6 +210,15 @@ fn kogany_rows() -> Vec<(NetRow, Network)> {
                 ycash::ports::rpc::TESTNET_SLOW,
             ),
             slow.clone(),
+        ),
+        (
+            row(
+                "ycash-testnet-legacy",
+                Public,
+                &legacy,
+                ycash::ports::rpc::TESTNET_LEGACY,
+            ),
+            legacy.clone(),
         ),
         (
             row("ycash-regtest", Local, &regtest, ycash::ports::rpc::REGTEST),
@@ -556,12 +566,14 @@ fn network_names_equal_ycashd() {
             ("Mainnet", "mainnet", "main"),
             ("Testnet", "testnet", "test"),
             ("TestnetSlow", "testnetslow", "test"),
+            ("TestnetLegacy", "testnetlegacy", "test"),
             ("Regtest", "regtest", "test"),
         ]
         .map(|(a, b, c)| (a.to_string(), b.to_string(), c.to_string()))
     );
     // `getblockchaininfo.chain` is `regtest` on Regtest (`zakura-rpc` `types::ycash::chain_name`).
-    assert!(rows[3].1.is_regtest());
+    assert!(rows[4].1.is_regtest());
+    assert_eq!(rows[3].1.vault_activation_height(), None);
     // Vault: none on mainnet and on the slow profile, 510,400 on the fast profile (ycashd's).
     assert_eq!(rows[0].1.vault_activation_height(), None);
     assert_eq!(
