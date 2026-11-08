@@ -1,0 +1,4 @@
+{
+  "name": "Kogany",
+  "install": "bash .cursor/cloud-install.sh"
+}
