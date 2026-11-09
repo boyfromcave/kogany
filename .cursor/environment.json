@@ -1,4 +1,4 @@
 {
   "name": "Kogany",
-  "install": "bash .cursor/cloud-install.sh"
+  "install": "[ ! -d '/agent/repos/kogany' ] || cd '/agent/repos/kogany' || exit $?\nbash .cursor/cloud-install.sh"
 }
