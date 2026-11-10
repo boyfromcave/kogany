@@ -401,9 +401,13 @@ where
             Some(height) if height <= self.max_checkpoint_height => {
                 self.checkpoint.call(block).map_err(Into::into).boxed()
             }
-            // kogany: a partial Ycash list stops at the shared prefix (fast: 510,247). Blocks
-            // above that list are verified semantically, including the re-fork before Canopy.
-            // A complete list already covers the mandatory checkpoint, so this arm is unused.
+            // kogany: with a partial Ycash list (W1-Y4), a pre-Canopy block above its last
+            // checkpoint can be neither checkpointed nor semantically verified (K-9): the
+            // checkpoint verifier rejects it as `TooHigh`, rather than the state asserting.
+            #[cfg(feature = "ycash")]
+            Some(height) if height <= self.checkpoint.network().mandatory_checkpoint_height() => {
+                self.checkpoint.call(block).map_err(Into::into).boxed()
+            }
             // This also covers blocks with no height, which the block verifier
             // will reject immediately.
             _ => self.block.call(request).map_err(Into::into).boxed(),
@@ -685,8 +689,8 @@ pub fn init_checkpoint_list(config: Config, network: &Network) -> (Arc<Checkpoin
         tracing::warn!(
             max_checkpoint = ?list.max_height(),
             mandatory_checkpoint = ?network.mandatory_checkpoint_height(),
-            "the Ycash checkpoint list is partial: blocks above its last checkpoint are \
-             verified semantically, including the re-fork before Canopy"
+            "the Ycash checkpoint list is partial: blocks above its last checkpoint and below \
+             Canopy are rejected until a list reaching Canopy ships"
         );
     }
 
