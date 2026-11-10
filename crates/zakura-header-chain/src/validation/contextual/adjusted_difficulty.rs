@@ -204,8 +204,15 @@ impl AdjustedDifficulty {
                     height < end
                 }
         };
+        // pow.cpp reads the scheduled `UPGRADE_YCASH` height; `activation_height` would
+        // fall back to a later upgrade's height on a network that never schedules Ycash.
+        let ycash_start = NetworkUpgrade::Ycash
+            .activation_height(&self.network)
+            .filter(|&start| {
+                NetworkUpgrade::current(&self.network, start) == NetworkUpgrade::Ycash
+            });
         if is_fast_network(&self.network) {
-            if let Some(start) = NetworkUpgrade::Ycash.activation_height(&self.network) {
+            if let Some(start) = ycash_start {
                 if in_window(start.0, true) {
                     return Some(limit);
                 }
@@ -216,7 +223,7 @@ impl AdjustedDifficulty {
         }
         let scaled = matches!(self.network, Network::Mainnet) || is_shadow_network(&self.network);
         if scaled {
-            if let Some(start) = NetworkUpgrade::Ycash.activation_height(&self.network) {
+            if let Some(start) = ycash_start {
                 if in_window(start.0, false) {
                     let spacing = NetworkUpgrade::target_spacing_for_height(
                         &self.network,

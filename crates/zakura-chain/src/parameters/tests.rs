@@ -275,6 +275,8 @@ const NETWORK_UPGRADES_IN_ORDER: &[NetworkUpgrade] = &[
     Blossom,
     Heartwood,
     Canopy,
+    // kogany: the shadow testnets' split upgrade, between Canopy and Vault.
+    Shadow,
     // kogany: the Vault upgrade, between Canopy and NU5 (plan K-1).
     Vault,
     Nu5,
