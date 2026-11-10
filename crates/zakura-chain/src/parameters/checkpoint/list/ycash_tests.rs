@@ -35,8 +35,8 @@ const TESTNET_PINS: &[(u32, &str)] = &[
         "001e9a2d2e2892b88e9998cf7b079b41d59dd085423a921fe8386cecc42287b8",
     ),
     (
-        510_247,
-        "0000ec904003d5591290064b0b4d3ccddffe87ef2a3a131284438959bf68fb31",
+        510_253,
+        "0297aad933fdf3f5e07acff13992e138ab4fec56033cdfa3a3815535ff049dbb",
     ),
 ];
 
@@ -72,16 +72,16 @@ fn ycash_mainnet_list_carries_the_pins() {
 }
 
 #[test]
-fn ycash_testnet_lists_stop_at_the_shared_history() {
+fn ycash_testnet_list_reaches_the_mandatory_checkpoint() {
     let network = Network::new_default_testnet();
     assert_pins(&network, TESTNET_PINS);
     assert_below_vault(&network);
     assert_eq!(
         network.checkpoint_list().max_height(),
-        ycash::testnet::LAST_SHARED_HEIGHT,
-        "the re-forked testnet's checkpoints above the fork come with its first rc"
+        network.mandatory_checkpoint_height(),
+        "the re-fork below Canopy is checkpointed; Canopy on is verified semantically"
     );
-    assert!(network.ycash_checkpoint_list_is_partial());
+    assert!(network.checkpoint_list().max_height() > ycash::testnet::LAST_SHARED_HEIGHT);
 }
 
 #[test]
