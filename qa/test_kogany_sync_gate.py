@@ -111,6 +111,14 @@ class CheckpointsTest(unittest.TestCase):
             summary = checkpoints.check_list(entries, pins, vault, up, shared)
             self.assertIn(0, summary["pins_covered"], network)
             self.assertTrue(any(line.startswith("# PARTIAL") or line.startswith("# COMPLETE") for line in header))
+            if network == "testnet":
+                heights = [h for h, _ in entries]
+                self.assertEqual(heights[-1], checkpoints.TESTNET_MANDATORY_HEIGHT)
+                self.assertNotIn(checkpoints.TESTNET_LAST_SHARED_HEIGHT, heights)
+                self.assertNotIn(checkpoints.TESTNET_FORK_PIN, [block_hash for _, block_hash in entries])
+                self.assertEqual(checkpoints.TESTNET_PINS[checkpoints.TESTNET_MANDATORY_HEIGHT], entries[-1][1])
+                generated_header, generated_entries, _ = checkpoints.fast_testnet_checkpoint_list(REPO)
+                self.assertEqual((header, entries), (generated_header, generated_entries))
 
     def test_a_wrong_pin_or_a_vault_epoch_checkpoint_fails(self):
         entries = [(0, "a" * 64), (400, "b" * 64)]
