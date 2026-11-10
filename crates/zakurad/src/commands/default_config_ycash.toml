@@ -15,10 +15,12 @@
 # what differs on Ycash.
 #
 # Networks: network = "Mainnet" (Ycash mainnet, P2P 8833, RPC 8832),
-# "Testnet" (the re-forked Ycash testnet, fast profile, P2P 18833, RPC 18832)
-# or "Regtest" (P2P 18344, RPC 18832). The RPC server is off until
-# rpc.listen_addr is set, for example listen_addr = "127.0.0.1:8832".
-# network.listen_addr below names the mainnet port; on Testnet or Regtest write
+# "Testnet" (the re-forked Ycash testnet, fast profile, P2P 18833, RPC 18832),
+# "TestnetSlow" (the slow profile, P2P 18933, RPC 18932), "TestnetLegacy"
+# (the legacy profile, P2P 19033, RPC 19032) or "Regtest" (P2P 18344, RPC
+# 18832). The RPC server is off until rpc.listen_addr is set, for example
+# listen_addr = "127.0.0.1:8832".
+# network.listen_addr below names the mainnet port; on a testnet or Regtest write
 # listen_addr = "[::]" (no port) and the port follows the network. kogany never
 # uses Zcash's ports (8233/8232, 18233/18232); README.md "Ports" has the table.
 #
