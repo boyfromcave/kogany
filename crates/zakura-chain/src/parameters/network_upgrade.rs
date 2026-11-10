@@ -648,6 +648,7 @@ impl NetworkUpgrade {
     ///
     /// Shadow and slow's Vault are per network (`ycash6` `NetworkBranchId`). Every other
     /// upgrade uses [`Self::branch_id`].
+    #[cfg_attr(not(feature = "ycash"), allow(unused_variables))]
     pub fn branch_id_on(&self, network: &Network) -> Option<ConsensusBranchId> {
         #[cfg(feature = "ycash")]
         if let Some(id) = crate::parameters::ycash::profile_branch_id(network, *self) {

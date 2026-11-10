@@ -249,6 +249,7 @@ impl PrecomputedTxData {
     ///
     /// [ZIP-252]: <https://zips.z.cash/zip-0252>
     /// [ZIP-253]: <https://zips.z.cash/zip-0253>
+    #[cfg(test)]
     pub(crate) fn new(
         tx: &Transaction,
         nu: NetworkUpgrade,

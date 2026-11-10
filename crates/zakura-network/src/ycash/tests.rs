@@ -472,6 +472,7 @@ fn peer_ports_of_zcash_and_other_ycash_networks_are_refused() {
         (Network::Mainnet, 8833),
         (fast.clone(), 18833),
         (Network::new_ycash_testnet_slow(), 18933),
+        (Network::new_ycash_testnet_legacy(), 19033),
         (regtest.clone(), 18344),
     ] {
         assert_eq!(valid(addr(own), network.clone()), Ok(()));

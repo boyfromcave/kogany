@@ -323,7 +323,7 @@ impl super::Network {
             .and_then(|builder| builder.with_genesis_hash(MAINNET_GENESIS_HASH))
             .and_then(|builder| builder.with_activation_heights(configured))
             .and_then(|builder| builder.with_target_difficulty_limit(limit))
-            .and_then(|builder| Ok(builder.with_max_block_time_start_height(Height(2))))
+            .map(|builder| builder.with_max_block_time_start_height(Height(2)))
             .and_then(|builder| {
                 builder.with_checkpoints(ConfiguredCheckpoints::HeightsAndHashes(
                     shadow_checkpoint_pairs(),

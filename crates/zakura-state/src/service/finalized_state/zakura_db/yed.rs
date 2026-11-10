@@ -193,6 +193,7 @@ pub fn yed_network_params(
             Network::Mainnet => kogany_yellowback::params::main_params(),
             // testnet-yb-fast uses the scaled column. slow and legacy use mainnet's column;
             // legacy never reaches here because Vault is unscheduled.
+            #[cfg(feature = "ycash")]
             Network::Testnet(_) if zakura_chain::parameters::ycash::is_fast_network(network) => {
                 kogany_yellowback::params::test_fast_params()
             }

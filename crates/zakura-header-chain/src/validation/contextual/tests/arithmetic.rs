@@ -1,7 +1,7 @@
 use chrono::{DateTime, Duration};
 use zakura_chain::{
     block,
-    parameters::{testnet::Parameters, Network},
+    parameters::testnet::Parameters,
     work::difficulty::{ExpandedDifficulty, ParameterDifficulty as _, U256},
 };
 
@@ -42,6 +42,8 @@ fn custom_target_scaling_clamps_before_overflowing_u256() {
 #[cfg(feature = "ycash")]
 #[test]
 fn ycash_fork_windows_reset_to_the_pow_limit() {
+    use zakura_chain::parameters::Network;
+
     let hard = ExpandedDifficulty::from(U256::from(1u64)).to_compact();
     let time = DateTime::from_timestamp(1_700_000_000, 0).expect("timestamp");
     let context = vec![(hard, time); POW_ADJUSTMENT_BLOCK_SPAN];

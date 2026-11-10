@@ -1047,6 +1047,18 @@ impl DTestnetParameters {
     }
 }
 
+/// The config name of a ycash shadow testnet profile, which has no `NetworkKind` of its own.
+#[cfg(feature = "ycash")]
+fn ycash_profile_name(network: &Network) -> Option<&'static str> {
+    if *network == Network::new_ycash_testnet_slow() {
+        Some("TestnetSlow")
+    } else if *network == Network::new_ycash_testnet_legacy() {
+        Some("TestnetLegacy")
+    } else {
+        None
+    }
+}
+
 /// Network configuration used during deserialization.
 #[derive(Serialize)]
 #[serde(untagged)]
@@ -1081,14 +1093,12 @@ impl<'de> Deserialize<'de> for DNetwork {
                 #[cfg(feature = "ycash")]
                 {
                     use std::str::FromStr;
-                    if let Ok(network) = zakura_chain::parameters::Network::from_str(kind) {
-                        if network == zakura_chain::parameters::Network::new_ycash_testnet_slow() {
-                            return Ok(DNetwork::YcashTestnet("TestnetSlow".to_owned()));
-                        }
-                        if network == zakura_chain::parameters::Network::new_ycash_testnet_legacy()
-                        {
-                            return Ok(DNetwork::YcashTestnet("TestnetLegacy".to_owned()));
-                        }
+                    if let Some(name) = zakura_chain::parameters::Network::from_str(kind)
+                        .ok()
+                        .as_ref()
+                        .and_then(ycash_profile_name)
+                    {
+                        return Ok(DNetwork::YcashTestnet(name.to_owned()));
                     }
                 }
                 NetworkKind::deserialize(kind.into_deserializer()).map(DNetwork::DefaultForKind)
@@ -1266,46 +1276,30 @@ impl From<Config> for DConfig {
             expose_peer_addresses,
         }: Config,
     ) -> Self {
-        let dnetwork = if cfg!(feature = "ycash") && network == Network::new_ycash_testnet_slow() {
-            #[cfg(feature = "ycash")]
+        let dnetwork = match network.kind() {
+            NetworkKind::Testnet => match network
+                .parameters()
+                .filter(|params| !params.is_default_testnet())
+                .map(Into::into)
             {
-                DNetwork::YcashTestnet("TestnetSlow".to_owned())
-            }
-            #[cfg(not(feature = "ycash"))]
-            {
-                unreachable!("the ycash profiles exist only in a ycash build")
-            }
-        } else if cfg!(feature = "ycash") && network == Network::new_ycash_testnet_legacy() {
-            #[cfg(feature = "ycash")]
-            {
-                DNetwork::YcashTestnet("TestnetLegacy".to_owned())
-            }
-            #[cfg(not(feature = "ycash"))]
-            {
-                unreachable!("the ycash profiles exist only in a ycash build")
-            }
-        } else {
-            match network.kind() {
-                NetworkKind::Testnet => match network
-                    .parameters()
-                    .filter(|params| !params.is_default_testnet())
-                    .map(Into::into)
-                {
-                    Some(params) => DNetwork::ConfiguredTestnet(Box::new(params)),
-                    None => DNetwork::DefaultForKind(NetworkKind::Testnet),
-                },
+                Some(params) => DNetwork::ConfiguredTestnet(Box::new(params)),
+                None => DNetwork::DefaultForKind(NetworkKind::Testnet),
+            },
 
-                NetworkKind::Regtest => match network.parameters().map(Into::into) {
-                    Some(params) => DNetwork::ConfiguredRegtest {
-                        params: Box::new(params),
-                        regtest: Some(true),
-                    },
-                    None => DNetwork::DefaultForKind(NetworkKind::Regtest),
+            NetworkKind::Regtest => match network.parameters().map(Into::into) {
+                Some(params) => DNetwork::ConfiguredRegtest {
+                    params: Box::new(params),
+                    regtest: Some(true),
                 },
+                None => DNetwork::DefaultForKind(NetworkKind::Regtest),
+            },
 
-                other_kind => DNetwork::DefaultForKind(other_kind),
-            }
+            other_kind => DNetwork::DefaultForKind(other_kind),
         };
+        #[cfg(feature = "ycash")]
+        let dnetwork = ycash_profile_name(&network)
+            .map(|name| DNetwork::YcashTestnet(name.to_owned()))
+            .unwrap_or(dnetwork);
 
         DConfig {
             listen_addr: listen_addr.to_string(),

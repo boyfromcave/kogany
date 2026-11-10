@@ -192,6 +192,7 @@ fn generate_chain(network: &Network) -> Vec<Arc<Block>> {
             | NetworkUpgrade::Blossom
             | NetworkUpgrade::Heartwood
             | NetworkUpgrade::Canopy
+            | NetworkUpgrade::Shadow
             | NetworkUpgrade::Vault => Transaction::V4 {
                 inputs: vec![input],
                 outputs: Vec::new(),

@@ -151,14 +151,15 @@ pub(crate) fn default_listen_addr() -> std::net::SocketAddr {
     std::net::SocketAddr::from((std::net::Ipv6Addr::UNSPECIFIED, profile::ports::MAINNET))
 }
 
-/// The default P2P ports of the Ycash networks kogany runs: mainnet, the `fast` and `slow` testnet
-/// profiles and regtest (`nDefaultPort`, `ycash6 src/chainparams.cpp:228,648,669,822`). A peer
+/// The default P2P ports of the Ycash networks kogany runs: mainnet, the `fast`, `slow` and
+/// `legacy` testnet profiles and regtest (`nDefaultPort`, `ycash6 src/chainparams.cpp`). A peer
 /// on one of them is preferred, as Zakura prefers Zcash's ports; one on another Ycash network's
 /// port is refused, as Zakura refuses the other Zcash network's.
-pub const P2P_PORTS: [u16; 4] = [
+pub const P2P_PORTS: [u16; 5] = [
     profile::ports::MAINNET,
     profile::ports::TESTNET_FAST,
     profile::ports::TESTNET_SLOW,
+    profile::ports::TESTNET_LEGACY,
     profile::ports::REGTEST,
 ];
 

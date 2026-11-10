@@ -160,7 +160,8 @@ fn previous_epoch(network: &Network, height: Height) -> Option<NetworkUpgrade> {
     let (current, activation_height) =
         NetworkUpgrade::current_with_activation_height(network, height);
     let previous = NetworkUpgrade::current(network, activation_height.previous().ok()?);
-    (previous.branch_id().is_some() && previous.branch_id() != current.branch_id())
+    let previous_branch = previous.branch_id_on(network);
+    (previous_branch.is_some() && previous_branch != current.branch_id_on(network))
         .then_some(previous)
 }
 
@@ -389,6 +390,20 @@ mod tests {
             "bad-vault-act-sigs",
             [long.as_slice()]
         ));
+    }
+
+    #[test]
+    fn shadow_epoch_previous_is_canopy() {
+        let height = zakura_chain::parameters::ycash::SHADOW_ACTIVATION_HEIGHT;
+        for network in [
+            Network::new_ycash_testnet_slow(),
+            Network::new_ycash_testnet_legacy(),
+        ] {
+            assert_eq!(
+                previous_epoch(&network, height),
+                Some(NetworkUpgrade::Canopy)
+            );
+        }
     }
 
     #[test]

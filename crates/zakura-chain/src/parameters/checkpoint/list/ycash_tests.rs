@@ -73,16 +73,15 @@ fn ycash_mainnet_list_carries_the_pins() {
 
 #[test]
 fn ycash_testnet_lists_stop_at_the_shared_history() {
-    for network in [Network::new_default_testnet()] {
-        assert_pins(&network, TESTNET_PINS);
-        assert_below_vault(&network);
-        assert_eq!(
-            network.checkpoint_list().max_height(),
-            ycash::testnet::LAST_SHARED_HEIGHT,
-            "the re-forked testnet's checkpoints above the fork come with its first rc"
-        );
-        assert!(network.ycash_checkpoint_list_is_partial());
-    }
+    let network = Network::new_default_testnet();
+    assert_pins(&network, TESTNET_PINS);
+    assert_below_vault(&network);
+    assert_eq!(
+        network.checkpoint_list().max_height(),
+        ycash::testnet::LAST_SHARED_HEIGHT,
+        "the re-forked testnet's checkpoints above the fork come with its first rc"
+    );
+    assert!(network.ycash_checkpoint_list_is_partial());
 }
 
 #[test]
