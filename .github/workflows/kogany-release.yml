@@ -98,6 +98,9 @@ jobs:
       # No setup-zakura-build here: without a system RocksDB (ROCKSDB_LIB_DIR, librocksdb-dev) the
       # build compiles the bundled RocksDB statically, so the released binary needs no RocksDB package.
       - name: cargo build --release koganyd --features ycash
+        env:
+          # The user agent carries the release name (`/koganyd:1.8.0-ycash.beta1/`, build.rs).
+          KOGANY_RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
         run: |
           set -euo pipefail
           cargo build --release --locked -p kogany --bin koganyd --features "default-release-binaries ycash"

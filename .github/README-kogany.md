@@ -198,7 +198,9 @@ macos-14, and pack `koganyd_<tag>_<platform>.tar.gz` (`koganyd`, `README.txt`, t
 `default_config_ycash.toml`; `.github/workflows/scripts/kogany-release-package.sh`) with an SPDX
 SBOM each. `publish` writes `SHA256SUMS`, signs it keylessly with cosign, attests build provenance
 for the tarballs and runs `gh release create --prerelease`, with `doc/release-notes/<tag>.md` as
-the notes when it exists.
+the notes when it exists. The build sets `KOGANY_RELEASE_TAG` to the tag, so the released
+`koganyd` advertises the BIP 14 user agent `/koganyd:<X.Y.Z>-ycash.<beta|rc><n>/` (a local build
+does too when its clean checkout is exactly at such a tag; otherwise `/koganyd:<crate version>/`).
 
 ```sh
 git checkout upgrade/vault && git pull --ff-only

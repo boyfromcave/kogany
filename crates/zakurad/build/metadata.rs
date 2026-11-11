@@ -10,9 +10,11 @@ use std::{
 #[allow(clippy::print_stderr)]
 pub fn emit() {
     println!("cargo:rerun-if-env-changed=SOURCE_DATE_EPOCH");
+    println!("cargo:rerun-if-env-changed=KOGANY_RELEASE_TAG");
 
     emit_cargo_metadata();
     emit_rustc_metadata();
+    emit_kogany_release_tag();
 
     if let Err(error) = emit_git_metadata() {
         // Source archives and `cargo install` builds do not have a `.git`
@@ -96,6 +98,32 @@ fn emit_git_metadata() -> Result<(), String> {
     emit_env("VERGEN_GIT_SHA", sha);
 
     Ok(())
+}
+
+/// kogany: the release tag the build is cut at, for the user agent
+/// (`zakura_network::ycash::user_agent_for_release`, which validates its shape). The release
+/// workflow sets `KOGANY_RELEASE_TAG`; a local build falls back to a clean checkout exactly at a
+/// `v*-ycash.*` tag. Anything else emits nothing, and the user agent carries the crate version.
+fn emit_kogany_release_tag() {
+    let tag = match env::var("KOGANY_RELEASE_TAG") {
+        Ok(tag) if !tag.is_empty() => Some(tag),
+        _ => git(&["status", "--porcelain", "--untracked-files=no"])
+            .ok()
+            .filter(|status| status.is_empty())
+            .and_then(|_| {
+                git(&[
+                    "describe",
+                    "--tags",
+                    "--exact-match",
+                    "--match",
+                    "v*-ycash.*",
+                ])
+                .ok()
+            }),
+    };
+    if let Some(tag) = tag {
+        emit_env("KOGANY_RELEASE_TAG", tag);
+    }
 }
 
 /// kogany's baseline tag: the commit the Ycash work was cut from (plan §4.2). `koganyd`'s build
