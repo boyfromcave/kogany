@@ -258,6 +258,14 @@ class RepositoryTest(unittest.TestCase):
         self.git("commit", "-q", "-am", "edit\n\nGenerated " + "with a tool")
         self.assertEqual(self.run_legs("greps"), 1)
 
+    def test_the_footer_pattern_is_not_evaded_by_emphasis_or_spacing(self):
+        footer = audit.COMMIT_ATTRIBUTION
+        for text in ("_Generated " + "with a tool_", "__generated " + "with__", "(Generated " + "with", "1generated " + "with",
+                     "> generated\u00a0" + "with", "Generated\n" + "with", "\tGENERATED  " + "with"):
+            self.assertTrue(footer.search(text), repr(text))
+        for text in ("Re" + "generated with the tool", "auto" + "generated with care"):
+            self.assertFalse(footer.search(text), repr(text))
+
     def upstream_sync(self, message):
         """An upstream commit past the pin (on branch `upstream-next`), merged into `work`."""
         self.git("checkout", "-q", "-b", "upstream-next", "kogany-legacy")
