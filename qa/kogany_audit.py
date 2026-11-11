@@ -60,6 +60,8 @@ WORKFLOW_STATES = ("kept", "called", "off", "kogany")
 # Leg (e). The names rule 6 retires, and the attribution rule 8 forbids. A match inside a path
 # token (one with a `/` and no `://`) cites an upstream file and is allowed, as rule 6 allows; an
 # attribution match never is. The patterns are written split so this file does not match itself.
+# The commit-message footer pattern must not follow a letter ("regenerated with <tool>" is prose);
+# markdown emphasis, digits and punctuation before it, and any whitespace between its two words, still match.
 NAMING = re.compile("|".join([
     "Digi" + "Dollar", "digi" + "dollar", "y" + "dollar", "YDollar".replace("YD", "Y" + "D"),
     r"\by" + "d_",
@@ -68,7 +70,7 @@ ATTRIBUTION = re.compile("|".join([
     "Co-" + "Authored-By", "Clau" + "de", r"clau" + r"de\.ai", "Generated " + "with", "Anthro" + "pic",
 ]))
 COMMIT_ATTRIBUTION = re.compile("|".join([
-    "clau" + "de", "co-" + "authored", "anthro" + "pic", "generated " + "with",
+    "clau" + "de", "co-" + "authored", "anthro" + "pic", r"(?<![A-Za-z])generated\s+" + "with",
 ]), re.IGNORECASE)
 # Files that hold the patterns themselves.
 GREP_EXEMPT = {"qa/kogany_audit.py", "qa/test_kogany_audit.py"}
