@@ -1,4 +1,4 @@
-//! The result shapes of the `yed_*` read RPCs (`ycash6/doc/yellowback-rpc.md`, rpcversion 8;
+//! The result shapes of the `yed_*` read RPCs (`ycash6/doc/yellowback-rpc.md`, rpcversion 9;
 //! `doc/yellowback-rpc-contract.json`), field for field and in ycashd's field order
 //! (`src/rpc/yellowback.cpp`). Every value is already formatted: hex strings, addresses,
 //! decimal strings for 256-bit weights; an `Option` serialises as `null` unless the field is
@@ -513,7 +513,7 @@ pub struct TokenJson {
     pub height: i64,
     /// The YED address.
     pub address: String,
-    /// The `s…` or `sq…` twin.
+    /// The `s…`, `sqf…` or `sqs…` twin.
     pub transparent_address: String,
 }
 

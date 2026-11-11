@@ -169,9 +169,9 @@ fn base58check(version: &[u8], payload: &[u8]) -> String {
     kogany_yellowback::codecs::base58::encode_base58_check(&data)
 }
 
-/// `validateaddress` of a plain-YEC post-quantum address (W7-c, `ycash6 src/key_io.cpp:318-339`,
-/// `src/rpc/misc.cpp` `DescribeAddressVisitor`): this network's version and a registered scheme
-/// only; the script is the TX_PQPKH `<keyHash> OP_<scheme> OP_CHECKPQSIG`.
+/// `validateaddress` of a plain-YEC post-quantum address (W7-c, D-9, `ycash6 src/key_io.cpp`,
+/// `src/rpc/misc.cpp` `DescribeAddressVisitor`): one of this network's per-scheme versions only;
+/// the script is the TX_PQPKH `<keyHash> OP_<scheme> OP_CHECKPQSIG`.
 #[test]
 fn pq_addresses_decode_as_ycashd() {
     let regtest = Network::new_regtest(Default::default());
@@ -181,9 +181,13 @@ fn pq_addresses_decode_as_ycashd() {
             .try_into()
             .expect("32 bytes");
 
-    for scheme in [1u8, 2] {
-        let address = base58check(&[0x4C, 0x51], &[&[scheme][..], &key_hash].concat());
-        assert!(address.starts_with("rq"), "{address}");
+    // regtest: 4c5655 `rqs…` (SLH-DSA, 1), 4c54ef `rqf…` (FN-DSA-512, 2)
+    for (scheme, version, prefix) in [
+        (1u8, [0x4C, 0x56, 0x55], "rqs"),
+        (2u8, [0x4C, 0x54, 0xEF], "rqf"),
+    ] {
+        let address = base58check(&version, &key_hash);
+        assert!(address.starts_with(prefix), "{address}");
         assert_eq!(address.len(), 53);
         let pq = decode_pq_address(&regtest, &address).expect("a registered scheme decodes");
         assert_eq!(pq.address, address);
@@ -193,22 +197,26 @@ fn pq_addresses_decode_as_ycashd() {
             pq.script_pub_key,
             format!("20{}{:02x}c2", hex::encode(key_hash), 0x50 + scheme)
         );
+        // The pre-D-9 form of the same key (2-byte version || scheme || keyHash) is refused.
+        let old = base58check(&[0x4C, 0x51], &[&[scheme][..], &key_hash].concat());
+        assert!(old.starts_with("rq"));
+        assert_eq!(decode_pq_address(&regtest, &old), None);
+        let answer = super::super::validate_address::validate_address(regtest.clone(), old)
+            .expect("validateaddress answers");
+        assert!(!answer.is_valid());
     }
 
-    // An unregistered scheme, another network's version, and the Yellowback forms are not
-    // destinations.
-    let unregistered = base58check(&[0x4C, 0x51], &[&[3u8][..], &key_hash].concat());
-    assert_eq!(decode_pq_address(&regtest, &unregistered), None);
-    let testnet_form = base58check(&[0x4F, 0x61], &[&[1u8][..], &key_hash].concat());
-    assert!(testnet_form.starts_with("tq"));
+    // Another network's version, and the Yellowback forms, are not destinations.
+    let testnet_form = base58check(&[0x4F, 0x66, 0x7F], &key_hash);
+    assert!(testnet_form.starts_with("tqs"));
     assert_eq!(decode_pq_address(&regtest, &testnet_form), None);
     assert!(decode_pq_address(&Network::new_default_testnet(), &testnet_form).is_some());
-    let mainnet_form = base58check(&[0x4D, 0xD9], &[&[2u8][..], &key_hash].concat());
-    assert!(mainnet_form.starts_with("sq"));
+    let mainnet_form = base58check(&[0x4D, 0xDD, 0x04], &key_hash);
+    assert!(mainnet_form.starts_with("sqf"));
     assert!(decode_pq_address(&Network::Mainnet, &mainnet_form).is_some());
     assert_eq!(decode_pq_address(&regtest, &mainnet_form), None);
-    let yed_pq = base58check(&[0x57, 0x10], &[&[1u8][..], &key_hash].concat());
-    assert!(yed_pq.starts_with("yr"));
+    let yed_pq = base58check(&[0x57, 0x15, 0xAA], &key_hash);
+    assert!(yed_pq.starts_with("yrs"));
     assert_eq!(decode_pq_address(&regtest, &yed_pq), None);
     let yed_key = base58check(&[0x20, 0x02], &key_hash[..20]);
     assert!(yed_key.starts_with("yr"));
@@ -217,7 +225,10 @@ fn pq_addresses_decode_as_ycashd() {
     let answer = super::super::validate_address::validate_address(regtest.clone(), yed_key)
         .expect("validateaddress answers");
     assert!(!answer.is_valid());
-    let address = base58check(&[0x4C, 0x51], &[&[2u8][..], &key_hash].concat());
+    let answer = super::super::validate_address::validate_address(regtest.clone(), yed_pq)
+        .expect("validateaddress answers");
+    assert!(!answer.is_valid());
+    let address = base58check(&[0x4C, 0x54, 0xEF], &key_hash);
     let answer = super::super::validate_address::validate_address(regtest, address.clone())
         .expect("validateaddress answers");
     assert_eq!(
@@ -393,8 +404,8 @@ fn ycash_chain_history_root_follows_heartwood() {
     assert_eq!(chain_history_root(&network, Height(106), c), c);
 }
 
-/// S5 parity (`wallet_pq_address`): an insight address parameter may be a YED form; `yr…` names
-/// the same post-quantum key as `rq…`, and `yr…` of a P2PKH key its `tm…` address.
+/// S5 parity (`wallet_pq_address`): an insight address parameter may be a YED form; `yrs…` names
+/// the same post-quantum key as `rqs…` (D-9), and `yr…` of a P2PKH key its `tm…` address.
 #[test]
 fn ycash_insight_address_takes_the_yed_forms() {
     use kogany_vault::{Hash32, PqOwner};
@@ -414,6 +425,8 @@ fn ycash_insight_address_takes_the_yed_forms() {
         &p,
     )
     .expect("a yr… address");
+    assert!(rq.to_string().starts_with("rqs"), "{rq}");
+    assert!(yr.starts_with("yrs"), "{yr}");
     assert_eq!(insight_address(&rq.to_string()), Some(rq));
     assert_eq!(insight_address(&yr), Some(rq));
     let t = transparent::Address::from_pub_key_hash(NetworkKind::Testnet, [4; 20]);
@@ -455,4 +468,74 @@ fn ycash_utxo_address_is_the_callers_name() {
         serde_json::to_value(&utxo).expect("json")["address"],
         "yr2named"
     );
+}
+
+/// D-9: a TX_PQPKH output's verbose `scriptPubKey` (`getrawtransaction 1`, `getblock 2`,
+/// `gettxout`) names it by its scheme-visible plain-YEC address, exactly the shared vector of
+/// its network and scheme (`testdata/yellowback/pq_address_vectors.json`, byte-identical to
+/// ycash6's); `validateaddress` describes every such vector and refuses the YED forms and every
+/// invalid vector on every network.
+#[test]
+fn verbose_script_pub_key_and_validateaddress_use_the_shared_vectors() {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../testdata/yellowback/pq_address_vectors.json");
+    let v: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(path).expect("the pinned vectors")).expect("json");
+    let network = |n: &str| match n {
+        "main" => Network::Mainnet,
+        "test" => Network::new_default_testnet(),
+        "regtest" => Network::new_regtest(Default::default()),
+        other => panic!("network {other}"),
+    };
+    let networks = ["main", "test", "regtest"];
+    let mut plain = 0;
+    for row in v["valid"].as_array().expect("valid") {
+        let address = row["address"].as_str().expect("address");
+        let key_hash = row["keyhash"].as_str().expect("keyhash");
+        let scheme = row["scheme"].as_u64().expect("scheme");
+        let script = transparent::Script::new(
+            &hex::decode(format!("20{key_hash}{:02x}c2", 0x50 + scheme)).expect("hex"),
+        );
+        let own = network(row["network"].as_str().expect("network"));
+        if row["coin"] == "yed" {
+            for n in networks {
+                let answer =
+                    super::super::validate_address::validate_address(network(n), address.into())
+                        .expect("validateaddress answers");
+                assert!(!answer.is_valid(), "YED {address} on {n}");
+            }
+            continue;
+        }
+        plain += 1;
+        assert_eq!(
+            super::super::ycash_script::script_pub_key_fields(
+                &script,
+                "nonstandard".to_owned(),
+                &own
+            ),
+            (
+                Some(1),
+                "pqpubkeyhash".to_owned(),
+                Some(vec![address.to_owned()])
+            )
+        );
+        let pq = decode_pq_address(&own, address).expect("its own network decodes it");
+        assert_eq!(pq.address, address);
+        assert_eq!(u64::from(pq.scheme), scheme);
+        assert_eq!(pq.key_hash, key_hash);
+        assert_eq!(pq.script_pub_key, hex::encode(script.as_raw_bytes()));
+        let answer = super::super::validate_address::validate_address(own, address.into())
+            .expect("validateaddress answers");
+        assert!(answer.is_valid(), "{address}");
+    }
+    assert_eq!(plain, 36);
+    for row in v["invalid"].as_array().expect("invalid") {
+        let address = row["address"].as_str().expect("address");
+        for n in networks {
+            let answer =
+                super::super::validate_address::validate_address(network(n), address.into())
+                    .expect("validateaddress answers");
+            assert!(!answer.is_valid(), "{} {address} on {n}", row["reason"]);
+        }
+    }
 }

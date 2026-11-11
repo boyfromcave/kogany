@@ -214,11 +214,11 @@ async fn every_method_answers_from_the_mock() {
 }
 
 #[tokio::test]
-async fn getinfo_is_rpcversion_8_at_the_golden_tip() {
+async fn getinfo_is_rpcversion_9_at_the_golden_tip() {
     let s = mock();
     let info = call(&s, "yed_getinfo", json!([])).await["result"].clone();
     assert_eq!(info["rpcversion"], YED_RPC_VERSION);
-    assert_eq!(info["rpcversion"], 8);
+    assert_eq!(info["rpcversion"], 9);
     assert_eq!(info["enabled"], true);
     assert_eq!(info["network"], "regtest");
     assert_eq!(info["height"], 440);
@@ -229,8 +229,17 @@ async fn getinfo_is_rpcversion_8_at_the_golden_tip() {
     assert_eq!(info["protectedByIndex"], false);
     let p = &info["params"];
     assert_eq!(p["addressVersion"], "2002");
-    assert_eq!(p["pqAddressVersion"], "5710");
-    assert_eq!(p["pq"]["plainAddressVersion"], "4c51");
+    // D-9: one 3-byte version per scheme, keyed by the scheme number (`yrs…`/`yrf…`, `rqs…`/`rqf…`).
+    assert_eq!(p["pqAddressVersion"], json!({"1": "5715aa", "2": "571444"}));
+    // ycashd's key order (its std::map): scheme 1 first.
+    for v in [&p["pqAddressVersion"], &p["pq"]["plainAddressVersion"]] {
+        let keys: Vec<&String> = v.as_object().unwrap().keys().collect();
+        assert_eq!(keys, ["1", "2"]);
+    }
+    assert_eq!(
+        p["pq"]["plainAddressVersion"],
+        json!({"1": "4c5655", "2": "4c54ef"})
+    );
     assert_eq!(p["pq"]["falconHeight"], 400);
     assert_eq!(p["pq"]["schemes"], json!([1, 2]));
     assert_eq!(p["fees"]["protocol"]["bands"][2]["uptoCents"], Value::Null);
@@ -490,11 +499,13 @@ async fn listtokens_takes_every_address_form() {
         hash: kogany_vault::Hash32([0x44; 32]),
     };
     let pq = kogany_yellowback::codecs::address::encode_pq_address(&owner, &params).unwrap();
+    assert!(pq.starts_with("yrf") && pq.len() == 53, "{pq}");
     let r3 = call(&s, "yed_listtokens", json!([[pq]])).await["result"].clone();
     let rows3 = r3.as_array().unwrap();
     assert_eq!(rows3.len(), 1, "{r3}");
+    assert_eq!(rows3[0]["address"], pq);
     let plain = rows3[0]["transparentAddress"].as_str().unwrap().to_owned();
-    assert!(plain.starts_with("rq"), "{plain}");
+    assert!(plain.starts_with("rqf") && plain.len() == 53, "{plain}");
     assert_eq!(
         call(&s, "yed_listtokens", json!([[plain]])).await["result"],
         r3

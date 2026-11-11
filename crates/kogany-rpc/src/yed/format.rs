@@ -5,8 +5,10 @@
 use kogany_vault::{template::hash160, OutPoint, PqOwner, PubKeyBytes};
 use kogany_yellowback::{
     codecs::{
-        address::{decode_address, decode_pq_address, encode_address, encode_pq_address},
-        base58::{decode_base58_check, encode_base58_check},
+        address::{
+            decode_address, decode_pq, decode_pq_address, encode_address, encode_pq,
+            encode_pq_address, PqAddressVersions,
+        },
         payload::Payload,
         script::{bond_script, Holder},
     },
@@ -28,8 +30,9 @@ pub struct Fmt<'a> {
     pub network: &'a Network,
     /// The Yellowback parameters (YED address versions).
     pub params: &'a Params,
-    /// The plain-YEC post-quantum address version (`sq`/`tq`/`rq`, D-Q-20).
-    pub plain_pq_version: [u8; 2],
+    /// The plain-YEC post-quantum address versions, one per scheme (`sqf`/`sqs`, `tqf`/`tqs`,
+    /// `rqf`/`rqs`; D-Q-20, D-9).
+    pub plain_pq_versions: &'a PqAddressVersions,
 }
 
 impl Fmt<'_> {
@@ -68,12 +71,10 @@ impl Fmt<'_> {
         encode_pq_address(owner, self.params).unwrap_or_default()
     }
 
-    /// The plain-YEC post-quantum address of a key (`sq…`/`tq…`/`rq…`, D-Q-20).
+    /// The plain-YEC post-quantum address of a key (`sqf…`/`sqs…`, `tqf…`/`tqs…`, `rqf…`/`rqs…`;
+    /// D-Q-20, D-9), `""` for an unregistered scheme (ycash6 `EncodePQAddress`).
     pub fn plain_pq_address(&self, owner: &PqOwner) -> String {
-        let mut data = self.plain_pq_version.to_vec();
-        data.push(owner.scheme);
-        data.extend_from_slice(&owner.hash.0);
-        encode_base58_check(&data)
+        encode_pq(owner, self.plain_pq_versions).unwrap_or_default()
     }
 
     /// A holder's YED address and its plain-YEC twin.
@@ -95,18 +96,8 @@ impl Fmt<'_> {
         }
         // The plain-YEC post-quantum form first: a ycash build of zakura-chain parses it as a
         // transparent::Address too (its index key, W9-c finding 3).
-        if let Some(owner) = decode_base58_check(s).and_then(|data| {
-            let body = data
-                .strip_prefix(self.plain_pq_version.as_slice())?
-                .to_vec();
-            let (scheme, hash) = body.split_first()?;
-            Some(PqOwner {
-                scheme: *scheme,
-                hash: kogany_vault::Hash32::from_slice(hash)?,
-            })
-        }) {
-            return kogany_vault::template::is_known_pq_scheme(owner.scheme)
-                .then_some(Holder::Pq(owner));
+        if let Some(owner) = decode_pq(s, self.plain_pq_versions) {
+            return Some(Holder::Pq(owner));
         }
         let a = s.parse::<transparent::Address>().ok()?;
         // A P2PKH address of this network: it re-encodes to itself here (regtest shares

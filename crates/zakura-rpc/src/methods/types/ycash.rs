@@ -211,16 +211,15 @@ where
     })
 }
 
-/// The version bytes of a plain-YEC post-quantum address for a network
-/// (`PlainPQAddressVersion`, `ycash6 src/key_io.cpp:25-31`, decision D-Q-20): `0x4DD9` `sq…` on
-/// Mainnet, `0x4F61` `tq…` on the testnets, `0x4C51` `rq…` on Regtest, keyed by ycashd's network
+/// The versions of a plain-YEC post-quantum address for a network (`PlainPQAddressVersions`,
+/// `ycash6 src/key_io.cpp`, decisions D-Q-20 and D-9): one 3-byte version per scheme, `sqf…`/`sqs…`
+/// on Mainnet, `tqf…`/`tqs…` on the testnets, `rqf…`/`rqs…` on Regtest, keyed by ycashd's network
 /// name ([`chain_name`]).
-pub fn pq_address_version(network: &Network) -> [u8; 2] {
-    match chain_name(network).as_str() {
-        "main" => [0x4D, 0xD9],
-        "regtest" => [0x4C, 0x51],
-        _ => [0x4F, 0x61],
-    }
+pub fn pq_address_versions(
+    network: &Network,
+) -> &'static kogany_yellowback::codecs::address::PqAddressVersions {
+    use kogany_yellowback::codecs::address::{plain_pq_address_versions, PLAIN_PQ_VERSIONS_TEST};
+    plain_pq_address_versions(&chain_name(network)).unwrap_or(&PLAIN_PQ_VERSIONS_TEST)
 }
 
 /// A plain-YEC post-quantum address (`CPQKeyID`) as `validateaddress` describes it.
@@ -238,29 +237,23 @@ pub struct PqAddress {
 }
 
 /// Decodes a plain-YEC post-quantum address of `network`, as ycashd's `DecodeDestination` does
-/// after the transparent forms (`ycash6 src/key_io.cpp:318-339`): `Base58Check(version ||
-/// scheme || keyHash)`, 35 bytes, this network's version and a registered scheme only. A
-/// Yellowback `yb…`/`yt…`/`yr…` address is not a destination: ycashd's `validateaddress` answers
-/// `isvalid` false for it (N9, `yed_validateaddress` is the call), and so does this.
+/// after the transparent forms (`ycash6 src/key_io.cpp`, D-9): `Base58Check(version || keyHash)`,
+/// 35 bytes, one of this network's per-scheme versions and a registered scheme only; the pre-D-9
+/// form is refused. A Yellowback `yb…`/`yt…`/`yr…` address is not a destination: ycashd's
+/// `validateaddress` answers `isvalid` false for it (N9, `yed_validateaddress` is the call), and
+/// so does this.
 pub fn decode_pq_address(network: &Network, encoded: &str) -> Option<PqAddress> {
     use kogany_yellowback::codecs::{
-        base58::{decode_base58_check, encode_base58_check},
+        address::{decode_pq, encode_pq},
         script::pq_key_script,
     };
 
-    let data = decode_base58_check(encoded)?;
-    let version = pq_address_version(network);
-    if data.len() != version.len() + 1 + 32 || data[..2] != version {
-        return None;
-    }
-    let owner = kogany_vault::PqOwner {
-        scheme: data[2],
-        hash: kogany_vault::Hash32::from_slice(&data[3..])?,
-    };
+    let versions = pq_address_versions(network);
+    let owner = decode_pq(encoded, versions)?;
     // `pq_key_script` refuses an unregistered scheme (`pq::IsKnownScheme`).
     let script = pq_key_script(&owner)?;
     Some(PqAddress {
-        address: encode_base58_check(&data),
+        address: encode_pq(&owner, versions)?,
         script_pub_key: hex::encode(script),
         scheme: owner.scheme,
         key_hash: hex::encode(owner.hash.0),

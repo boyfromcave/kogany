@@ -261,7 +261,8 @@ impl<T: ChainTip + Send + Sync + 'static> YedReadState for MockYedState<T> {
                     max_tx_fee_zat: 10_000_000,
                 },
                 falcon_active_next: params.is_pq_falcon_active(GOLDEN_TIP_HEIGHT + 1),
-                plain_pq_address_version: [0x4c, 0x51],
+                plain_pq_address_versions:
+                    kogany_yellowback::codecs::address::PLAIN_PQ_VERSIONS_REGTEST,
             },
             index: Arc::new(Fixture {
                 params,

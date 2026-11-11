@@ -223,17 +223,19 @@ def strip_wallet(answer):
 
 
 def pq_addresses():
-    """(label, address, expected scheme or None) for regtest."""
+    """(label, address, expected scheme or None) for regtest: the scheme-visible forms (D-9, one
+    3-byte version per network and scheme) and the pre-D-9 form, which is no address."""
     key_hash = bytes(range(32))
     return [
-        ('rq… SLH-DSA-SHA2-128s', base58check(b'\x4c\x51\x01' + key_hash), 1),
-        ('rq… FN-DSA-512', base58check(b'\x4c\x51\x02' + key_hash), 2),
-        ('rq… unregistered scheme 3', base58check(b'\x4c\x51\x03' + key_hash), None),
-        ('tq… (the testnets\')', base58check(b'\x4f\x61\x01' + key_hash), None),
-        ('sq… (mainnet\'s)', base58check(b'\x4d\xd9\x02' + key_hash), None),
-        ('yr… YED post-quantum', base58check(b'\x57\x10\x01' + key_hash), None),
+        ('rqs… SLH-DSA-SHA2-128s', base58check(b'\x4c\x56\x55' + key_hash), 1),
+        ('rqf… FN-DSA-512', base58check(b'\x4c\x54\xef' + key_hash), 2),
+        ('rq… pre-D-9 form', base58check(b'\x4c\x51\x01' + key_hash), None),
+        ('rq… pre-D-9 form, unregistered scheme 3', base58check(b'\x4c\x51\x03' + key_hash), None),
+        ('tqs… (the testnets\')', base58check(b'\x4f\x66\x7f' + key_hash), None),
+        ('sqf… (mainnet\'s)', base58check(b'\x4d\xdd\x04' + key_hash), None),
+        ('yrs… YED post-quantum', base58check(b'\x57\x15\xaa' + key_hash), None),
         ('yr… YED key hash', base58check(b'\x20\x02' + key_hash[:20]), None),
-        ('rq… bad checksum', base58check(b'\x4c\x51\x01' + key_hash)[:-1] + '1', None),
+        ('rqs… bad checksum', base58check(b'\x4c\x56\x55' + key_hash)[:-1] + '1', None),
     ], key_hash
 
 
@@ -346,8 +348,8 @@ def testnet_cases(args, cases, procs):
         answer, yanswer = z.ok('validateaddress', addr), y.ok('validateaddress', addr)
         cases.check('validateaddress %s on the testnet = ycashd\'s (but ismine/iswatchonly)' % label,
                     strip_wallet(yanswer) == answer, '%r | %r' % (yanswer, answer))
-        if label.startswith('tq'):
-            cases.check('validateaddress tq… is valid on the testnet',
+        if label.startswith('tqs'):
+            cases.check('validateaddress tqs… is valid on the testnet',
                         answer.get('isvalid') is True and answer.get('pqscheme') == 1, answer)
 
 

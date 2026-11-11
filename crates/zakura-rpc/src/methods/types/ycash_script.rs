@@ -8,9 +8,10 @@
 //! `src/script/standard.cpp` `Solver`, `ExtractDestinations`, `GetTxnOutputType`).
 //!
 //! Zakura's shape differs on the Ycash script kinds: the vault primitive's templates
-//! (`vault`, `vaultintent`), the post-quantum key hash (`pqpubkeyhash`, with its `sq…`/`tq…`/`rq…`
-//! address) and channel (`pqchannel`), and on two stock ones: a bare multisig lists its keys'
-//! P2PKH addresses with `reqSigs` the threshold, and a P2PK lists its key's.
+//! (`vault`, `vaultintent`), the post-quantum key hash (`pqpubkeyhash`, with its `sqf…`/`sqs…`,
+//! `tqf…`/`tqs…` or `rqf…`/`rqs…` address, D-9) and channel (`pqchannel`), and on two stock ones: a
+//! bare multisig lists its keys' P2PKH addresses with `reqSigs` the threshold, and a P2PK lists
+//! its key's.
 
 use zakura_chain::{
     parameters::Network,
@@ -96,28 +97,14 @@ fn encode_destination(destination: Destination, network: &Network) -> Option<Str
         Destination::ScriptHash(hash) => {
             transparent::Address::from_script_hash(network.t_addr_kind(), hash).to_string()
         }
-        Destination::PqKeyHash(id) => {
-            if !kogany_vault::template::is_known_pq_scheme(id.scheme) {
-                return None;
-            }
-            let mut data = pq_address_version(network).to_vec();
-            data.push(id.scheme);
-            data.extend_from_slice(&id.key_hash);
-            kogany_yellowback::codecs::base58::encode_base58_check(&data)
-        }
+        Destination::PqKeyHash(id) => kogany_yellowback::codecs::address::encode_pq(
+            &kogany_vault::PqOwner {
+                scheme: id.scheme,
+                hash: kogany_vault::Hash32(id.key_hash),
+            },
+            super::ycash::pq_address_versions(network),
+        )?,
     })
-}
-
-/// `PlainPQAddressVersion` (`ycash6 src/key_io.cpp:25-31`): `sq…` on Mainnet, `tq…` on the
-/// testnets, `rq…` on Regtest.
-fn pq_address_version(network: &Network) -> [u8; 2] {
-    if network.is_regtest() {
-        [0x4C, 0x51]
-    } else if network.is_a_test_network() {
-        [0x4F, 0x61]
-    } else {
-        [0x4D, 0xD9]
-    }
 }
 
 /// `CPubKey::ValidSize`.

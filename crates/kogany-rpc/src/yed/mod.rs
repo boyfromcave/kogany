@@ -39,8 +39,10 @@ pub use wallet::{
     YedWalletRefusal, YedWalletRefusalDispatch, YedWalletRefusalImpl, WALLET_METHODS,
 };
 
-/// `YELLOWBACK_RPC_VERSION` (`ycash6/src/rpc/yellowback.cpp`): `8`, the fee structure.
-pub const YED_RPC_VERSION: i64 = 8;
+/// `YELLOWBACK_RPC_VERSION` (`ycash6/src/rpc/yellowback.cpp`): `9`, scheme-visible post-quantum
+/// address prefixes (D-9: `params.pqAddressVersion` and `params.pq.plainAddressVersion` are objects
+/// keyed by scheme); `8` was the fee structure.
+pub const YED_RPC_VERSION: i64 = 9;
 
 /// The `yed_*` read and node-state methods over `state`, and the wallet refusals, for `network`.
 pub fn extension(state: Arc<dyn YedReadState>, network: &Network) -> RpcExtension {

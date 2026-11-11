@@ -27,7 +27,7 @@ use kogany_yellowback::{
         payload::{find_payload, Payload},
         tag::{find_tag, height_prefix},
     },
-    params::{PRICE_MAX, PRICE_MIN},
+    params::{PqAddressVersions, PRICE_MAX, PRICE_MIN},
     state::{block_hash_at, eligible_payees, evaluate_block, TxLogType},
 };
 use tower::{Service, ServiceExt};
@@ -149,13 +149,13 @@ fn now_seconds() -> i64 {
     zakura_rpc::server::kogany_extension::mock_clock::now()
 }
 
-/// ycash6 `PlainPQAddressVersion` (`src/key_io.cpp:25-31`, D-Q-20).
-fn plain_pq_address_version(network: &str) -> [u8; 2] {
-    match network {
-        "main" => [0x4D, 0xD9],
-        "test" => [0x4F, 0x61],
-        _ => [0x4C, 0x51],
-    }
+/// ycash6 `PlainPQAddressVersions` (`src/key_io.cpp`, D-Q-20, D-9); the regtest table for a
+/// network ycashd does not name, as before.
+fn plain_pq_address_versions(network: &str) -> PqAddressVersions {
+    use kogany_yellowback::codecs::address::{
+        plain_pq_address_versions, PLAIN_PQ_VERSIONS_REGTEST,
+    };
+    *plain_pq_address_versions(network).unwrap_or(&PLAIN_PQ_VERSIONS_REGTEST)
 }
 
 #[async_trait]
@@ -232,7 +232,7 @@ where
                 },
                 network_fees,
                 falcon_active_next: params.is_pq_falcon_active(tip_height.saturating_add(1)),
-                plain_pq_address_version: plain_pq_address_version(params.network),
+                plain_pq_address_versions: plain_pq_address_versions(params.network),
             },
             index: Arc::new(index),
         }))

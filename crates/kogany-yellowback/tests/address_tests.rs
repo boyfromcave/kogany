@@ -3,7 +3,7 @@
 // file COPYING or https://www.opensource.org/licenses/mit-license.php .
 
 //! ycash6 `src/test/yellowback_address_tests.cpp` (`prefixes_and_roundtrip`, `mainnet_yb_vectors`,
-//! `rejects_garbage`), extended to the post-quantum 53-character form (quantum spec §4), the C++
+//! `rejects_garbage`), extended to the post-quantum 53-character form (quantum spec §4, D-9), the C++
 //! Base58 decoder's acceptance (`src/base58.cpp`), and the owners of `pq_wallet_vectors.json`.
 //!
 //! The PQ and testnet/regtest known answers were computed with ycash6's independent Python
@@ -107,82 +107,49 @@ fn rejects_garbage() {
     assert!(decode_address(&encode_base58_check(&data), &main).is_none());
 }
 
-/// Known answers from `yellowback_model.py` (see the file header) for both forms on the three
-/// networks; the PQ form is 53 characters with the same prefixes.
+/// Known answers from `yellowback_model.py` (see the file header) for the key-hash form on the
+/// three networks. The post-quantum form's known answers are the shared D-9 vectors
+/// (`tests/pq_address_vectors.rs`).
 #[test]
-fn pq_addresses_53_characters_known_answers() {
-    let slh = Hash32::from_slice(
-        &hex::decode("73efa99cd22fe553222b1db6a6a021b3cba29dafd4fb4dfb50be69abcfcf9364").unwrap(),
-    )
-    .unwrap();
-    let rows: [(usize, &str, &str, &str, &str, &str); 3] = [
+fn key_hash_known_answers_on_every_network() {
+    let rows: [(usize, &str, &str); 3] = [
         (
             0,
             "ybCxAdkN4XYouwZHde9wgVkDDujbS9ByGQz",
             "ybcHmcrfMEjGnkzRifaGzysV1YErNnEcqyf",
-            "yb5su7q3DBbMB7Efeo2xRAVJmU8XjTCoZgSjryg4BuiudZk7Cx5EU",
-            "yb5wncBW7FJCXZWJpCr7fAPwy1xkxtWDFS221CAMZhiDeLjBHdsWi",
-            "yb5tnBGDjRGgh3RWwnhy6Ke5CDyrjDHb885VYHmH3atY3KAiRLbp4",
         ),
         (
             1,
             "yt79VzJtAM8GiHm9Gfmw4s1eGLvR42YuPKp",
             "ytWV6yRBT4Jjb7CHMhCGPM8v3yRfzYuRUN3",
-            "yt6ZQsPUfKGhzAkBzPkM7iWBn66dkTKzAQFNrKuu5NkaUwowPfLVW",
-            "yt6dJMjwZNyZLd1q9oZWMiQpydvrytdPr9pezYQCTAjtVio7KiffW",
-            "yt6aHvpfBYx3W6w3HPRMnsexCqwxkDQmiqt8Xe17w3vCthEWWcSf8",
         ),
         (
             2,
             "yr6TV4mPioDxLCbSqYgGUSPHLCQ8LVNj2v7",
             "yrVo63sh1WQRD22ava6bnvWZ7puPH6iyLcP",
-            "yr2Sas8S4s7t4XW1Eegpca4rxc1pcmUBz84f2VZ3kW42X1BDR7x8X",
-            "yr2WUMUtxvpjQymeQ4VyrZyWA9r3rCmbfsdwAi3M8J3LXnAGrkb5E",
-            "yr2TTvZcb6oDaTgrXeMqHjDdPMs9cXYyYZhQhoeGcBDevkbiDcTX7",
         ),
     ];
     let nets = nets();
-    for (i, p00, pff, pq1_00, pq2_ff, pq1_slh) in rows {
-        let (p, prefix) = &nets[i];
+    for (i, p00, pff) in rows {
+        let (p, _) = &nets[i];
         assert_eq!(encode_address(&[0; 20], p), p00);
         assert_eq!(encode_address(&[0xff; 20], p), pff);
-        let cases = [
-            (
-                PqOwner {
-                    scheme: 1,
-                    hash: Hash32::ZERO,
-                },
-                pq1_00,
-            ),
-            (
-                PqOwner {
-                    scheme: 2,
-                    hash: Hash32([0xff; 32]),
-                },
-                pq2_ff,
-            ),
-            (
-                PqOwner {
-                    scheme: 1,
-                    hash: slh,
-                },
-                pq1_slh,
-            ),
-        ];
-        for (o, want) in cases {
-            let a = encode_pq_address(&o, p).unwrap();
-            assert_eq!(a, want);
-            assert_eq!(a.len(), 53);
-            assert!(a.starts_with(prefix));
-            assert_eq!(decode_pq_address(&a, p), Some(o));
-            assert_eq!(decode_any_address(&a, p), Some(Holder::Pq(o)));
-            assert!(decode_address(&a, p).is_none());
-            for (q, _) in nets.iter().filter(|(q, _)| q.network != p.network) {
-                assert!(
-                    decode_pq_address(&a, q).is_none(),
-                    "{a} is not a {} address",
-                    q.network
-                );
+    }
+}
+
+/// D-9: the scheme is in the 3-byte version, so the prefix names it on every network.
+#[test]
+fn pq_address_prefix_names_the_scheme() {
+    for (p, prefix) in nets() {
+        for (scheme, letter) in [(1u8, 's'), (2u8, 'f')] {
+            for hash in [Hash32::ZERO, Hash32([0xff; 32]), Hash32([0x5a; 32])] {
+                let o = PqOwner { scheme, hash };
+                let a = encode_pq_address(&o, &p).unwrap();
+                assert_eq!(a.len(), 53);
+                assert!(a.starts_with(&format!("{prefix}{letter}")), "{a}");
+                assert_eq!(decode_pq_address(&a, &p), Some(o));
+                assert_eq!(decode_any_address(&a, &p), Some(Holder::Pq(o)));
+                assert!(decode_address(&a, &p).is_none());
             }
         }
     }
@@ -191,6 +158,7 @@ fn pq_addresses_53_characters_known_answers() {
 #[test]
 fn pq_address_registered_schemes_only() {
     let main = main_params();
+    let versions = main.pq_address_versions.unwrap();
     for scheme in 0..=255u8 {
         let o = PqOwner {
             scheme,
@@ -202,34 +170,37 @@ fn pq_address_registered_schemes_only() {
             known,
             "scheme {scheme}"
         );
-        // A well-formed payload with an unregistered scheme does not decode.
-        let mut data = main.pq_address_version.unwrap().to_vec();
-        data.push(scheme);
-        data.extend_from_slice(&[0x5a; 32]);
-        assert_eq!(
-            decode_pq_address(&encode_base58_check(&data), &main).is_some(),
-            known
-        );
+        // The pre-D-9 form (2-byte version || scheme || keyHash) never decodes, whatever the
+        // scheme byte, and neither does a 3-byte version followed by a scheme byte.
+        for version in [
+            vec![0x56, 0xAB],
+            versions[0].1.to_vec(),
+            versions[1].1.to_vec(),
+        ] {
+            let mut data = version;
+            data.push(scheme);
+            data.extend_from_slice(&[0x5a; 32]);
+            assert!(decode_pq_address(&encode_base58_check(&data), &main).is_none());
+        }
     }
     // Wrong body length for the PQ form.
-    let mut data = main.pq_address_version.unwrap().to_vec();
-    data.extend_from_slice(&[1; 32]);
-    assert!(decode_pq_address(&encode_base58_check(&data), &main).is_none());
-    // A network without version bytes (Params::default, the C++ empty vector) decodes nothing.
+    for (_, version) in versions {
+        for len in [0, 20, 31, 33] {
+            let mut data = version.to_vec();
+            data.extend_from_slice(&vec![1; len]);
+            assert!(decode_pq_address(&encode_base58_check(&data), &main).is_none());
+        }
+    }
+    // A network without version bytes (Params::default, the C++ empty vector and map) encodes no
+    // post-quantum address and decodes nothing.
     let none = Params::default();
     assert!(decode_address(&encode_address(&[1; 20], &none), &none).is_none());
-    assert!(decode_pq_address(
-        &encode_pq_address(
-            &PqOwner {
-                scheme: 1,
-                hash: Hash32::ZERO
-            },
-            &none
-        )
-        .unwrap(),
-        &none
-    )
-    .is_none());
+    let o = PqOwner {
+        scheme: 1,
+        hash: Hash32::ZERO,
+    };
+    assert!(encode_pq_address(&o, &none).is_none());
+    assert!(decode_pq_address(&encode_pq_address(&o, &main).unwrap(), &none).is_none());
 }
 
 /// `src/base58.cpp`'s acceptance: C-string semantics, leading/trailing C white space, nothing else.
@@ -312,7 +283,7 @@ fn pq_wallet_vectors_owner_addresses() {
         for (p, prefix) in nets() {
             let a = encode_pq_address(&o, &p).unwrap();
             assert_eq!(a.len(), 53);
-            assert!(a.starts_with(prefix));
+            assert!(a.starts_with(&format!("{prefix}s")), "{a}");
             assert_eq!(decode_pq_address(&a, &p), Some(o));
         }
     }

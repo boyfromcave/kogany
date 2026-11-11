@@ -8,7 +8,7 @@
 //!   `vault_list`, `vault_decodescript`; `ycash6/doc/vault-rpc.md`), over a
 //!   [`state::VaultReadState`].
 //! - [`yed`]: Ycash Yellowback (YED)'s node-context RPCs (`yed_*`, `ycash6/doc/yellowback-rpc.md`,
-//!   rpcversion 8) over a [`yed::YedReadState`] (plan W5-e/W5-f), and the wallet-context ones
+//!   rpcversion 9) over a [`yed::YedReadState`] (plan W5-e/W5-f), and the wallet-context ones
 //!   refused (`-32601`; yewd serves them, K-3).
 //! - [`state`]: the read boundary; [`live`]: its implementation over the node's set state
 //!   (plan W4-d); [`mock`]: the prototype's states.

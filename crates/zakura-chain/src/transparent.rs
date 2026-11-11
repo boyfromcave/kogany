@@ -23,7 +23,7 @@ use crate::{
 };
 
 #[cfg(all(feature = "ycash", test))]
-pub(crate) use address::plain_pq_address_version;
+pub(crate) use address::plain_pq_address_versions;
 pub use address::Address;
 #[cfg(feature = "ycash")]
 pub use destination::{Destination, PqKeyId};
@@ -363,7 +363,7 @@ impl Output {
         #[cfg(feature = "ycash")]
         if let Some(id) = self.lock_script.pq_key_id() {
             return Some(Address::PayToPqKeyHash {
-                // the plain post-quantum versions differ on Regtest (`rq…`), unlike t-addresses
+                // the plain post-quantum versions differ on Regtest (`rqf…`/`rqs…`), unlike t-addresses
                 network_kind: net.kind(),
                 scheme: id.scheme,
                 key_hash: id.key_hash,

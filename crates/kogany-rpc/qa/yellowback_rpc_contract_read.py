@@ -10,7 +10,7 @@
 
 It reuses ycash6's own checker, unmodified: the `Contract` class of
 `qa/rpc-tests/yellowback_rpc_contract.py` with its `OPTIONAL` and `NULLABLE` tables, over
-`doc/yellowback-rpc-contract.json` (rpcversion 8). The 27 node-context methods are kogany's (the
+`doc/yellowback-rpc-contract.json` (rpcversion 9). The 27 node-context methods are kogany's (the
 25 reads and the node-state `yed_setquote` and `yed_addattestation`); the 25 wallet-context
 methods are yewd's (plan K-3, K-20), and kogany must answer them `-32601`.
 
@@ -289,10 +289,14 @@ def live_checks(rig, checker, contract, wallet):
     r = LiveRun(k, y, checker, contract)
     mint = rig.mint['txid']
 
-    # A plain post-quantum payment (W9-c finding 3): YEC to the vault owner's rq... address.
+    # A plain post-quantum payment (W9-c finding 3): YEC to the vault owner's rqs.../rqf... address
+    # (D-9: the 3-byte version names the scheme; the yed_getinfo table is the source).
     vault = y.call('yed_getvault', mint)
-    pq_address = b58(bytes.fromhex('4c51') + bytes([vault['ownerScheme']]) + bytes.fromhex(vault['ownerHash']))
-    fresh_pq = b58(bytes.fromhex('4c51') + bytes([2]) + bytes(32))
+    plain_versions = k.call('yed_getinfo')['params']['pq']['plainAddressVersion']
+    assert plain_versions == {'1': '4c5655', '2': '4c54ef'}, plain_versions
+    pq_address = b58(bytes.fromhex(plain_versions[str(vault['ownerScheme'])]) + bytes.fromhex(vault['ownerHash']))
+    assert pq_address[:3] == {1: 'rqs', 2: 'rqf'}[vault['ownerScheme']] and len(pq_address) == 53, pq_address
+    fresh_pq = b58(bytes.fromhex(plain_versions['2']) + bytes(32))
     for address in (pq_address, fresh_pq):
         for method in ('getaddresstxids', 'getaddressutxos'):
             r.both(method, {'addresses': [address]}, check=False)
@@ -303,12 +307,18 @@ def live_checks(rig, checker, contract, wallet):
         r.both(method, {'addresses': [pq_address]}, check=False)
     utxos = k.call('getaddressutxos', {'addresses': [pq_address]})
     assert [u['txid'] for u in utxos] == [pq_txid], utxos
+    assert [u['address'] for u in utxos] == [pq_address], utxos
+    assert k.call('getaddresstxids', {'addresses': [pq_address]}) == [pq_txid]
+    raw = k.call('getrawtransaction', pq_txid, 1)
+    named = [o['scriptPubKey'].get('addresses') for o in raw['vout'] if o['scriptPubKey']['type'] == 'pqpubkeyhash']
+    assert named == [[pq_address]], named
+    assert k.call('validateaddress', pq_address)['pqscheme'] == vault['ownerScheme']
     kb, yb = k.call('getaddressbalance', {'addresses': [pq_address]}), y.call('getaddressbalance', {'addresses': [pq_address]})
     assert (kb['balance'], kb['received']) == (yb['balance'], yb['received']), (kb, yb)
     print('getaddress* with the plain post-quantum %s: kogany = ycash6 (%d zat)' % (pq_address, kb['balance']))
 
     info = r.both('yed_getinfo', same=False)
-    assert info['rpcversion'] == 8 and info['enabled'] is True, info
+    assert info['rpcversion'] == 9 and info['enabled'] is True, info
     tip, ref = info['height'], info['height'] - info['params']['refLag']
     r.both('yed_getstatehash')
     r.both('yed_getstatehash', tip)
@@ -441,7 +451,7 @@ def main(argv=None):
 
     checker = load_checker(args.ycash6)
     contract = checker.Contract(os.path.join(args.ycash6, 'doc', 'yellowback-rpc-contract.json'))
-    assert contract.doc['rpcversion'] == 8, contract.doc['rpcversion']
+    assert contract.doc['rpcversion'] == 9, contract.doc['rpcversion']
     documented = sorted(k for k in contract.doc if k.startswith('yed_'))
     wallet = sorted(set(documented) - set(NODE_METHODS))
     assert len(NODE_METHODS) == 27 and len(wallet) == 25, (len(NODE_METHODS), len(wallet))
@@ -463,7 +473,7 @@ def main(argv=None):
 
     r = Run(n, checker, contract)
     info = r.check('yed_getinfo')
-    assert info['rpcversion'] == 8 and info['enabled'] is True, info
+    assert info['rpcversion'] == 9 and info['enabled'] is True, info
     tip = info['height']
     print('yed_getinfo: rpcversion %d, network %s, height %d, statehash at the tip below' % (info['rpcversion'], info['network'], tip))
     sh = r.check('yed_getstatehash')

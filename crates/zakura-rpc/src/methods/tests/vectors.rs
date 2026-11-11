@@ -6210,3 +6210,136 @@ async fn rpc_preciousblock_malformed_hash_is_an_invalid_parameter() {
     read_state.expect_no_requests().await;
     mempool.expect_no_requests().await;
 }
+
+/// Ycash (D-9): the address-index RPCs (`getaddressbalance`, `getaddresstxids`,
+/// `getaddressutxos`) take a post-quantum key by its scheme-visible plain-YEC form (`rqf…`) and
+/// by its YED form (`yrf…`), and ask the index for the same key; the pre-D-9 form (`rq…`) is an
+/// invalid address (-5) that never reaches the index.
+#[cfg(feature = "ycash")]
+#[tokio::test(flavor = "multi_thread")]
+async fn ycash_address_index_rpcs_take_the_d9_forms() {
+    use std::collections::{BTreeMap, HashSet};
+
+    let _init_guard = zakura_test::init();
+    let network = Network::new_regtest(Default::default());
+    let key_hash = [0x42u8; 32];
+    let pq = transparent::Address::PayToPqKeyHash {
+        network_kind: NetworkKind::Regtest,
+        scheme: 2,
+        key_hash,
+    };
+    let plain = pq.to_string();
+    assert!(plain.starts_with("rqf") && plain.len() == 53, "{plain}");
+    let yed = kogany_yellowback::codecs::address::encode_pq_address(
+        &kogany_vault::PqOwner {
+            scheme: 2,
+            hash: kogany_vault::Hash32(key_hash),
+        },
+        &kogany_yellowback::params::params_for_network("regtest").expect("regtest"),
+    )
+    .expect("a registered scheme");
+    assert!(yed.starts_with("yrf") && yed.len() == 53, "{yed}");
+    let mut old = vec![0x4C, 0x51, 2];
+    old.extend_from_slice(&key_hash);
+    let old = kogany_yellowback::codecs::base58::encode_base58_check(&old);
+    assert!(old.starts_with("rq") && !old.starts_with("rqf"));
+
+    let mempool: MockService<_, _, _, BoxError> = MockService::build().for_unit_tests();
+    let state: MockService<_, _, _, BoxError> = MockService::build().for_unit_tests();
+    let mut read_state: MockService<_, _, _, BoxError> = MockService::build().for_unit_tests();
+    let (tip, tip_sender) = MockChainTip::new();
+    tip_sender.send_best_tip_height(Height(10));
+    let (_tx, rx) = tokio::sync::watch::channel(None);
+    let (rpc, _queue) = mock_rpc(
+        network,
+        Buffer::new(mempool.clone(), 1),
+        Buffer::new(state.clone(), 1),
+        Buffer::new(read_state.clone(), 1),
+        tip,
+        rx,
+    );
+    let want: HashSet<transparent::Address> = [pq].into();
+
+    for text in [plain.clone(), yed.clone()] {
+        // getaddressbalance
+        let call = tokio::spawn({
+            let rpc = rpc.clone();
+            let text = text.clone();
+            async move {
+                rpc.get_address_balance(GetAddressBalanceRequest::new(vec![text]))
+                    .await
+            }
+        });
+        read_state
+            .expect_request(ReadRequest::AddressBalance(want.clone()))
+            .await
+            .respond(ReadResponse::AddressBalance {
+                balance: Amount::try_from(7).expect("a valid amount"),
+                received: 9,
+            });
+        let balance = call.await.expect("joins").expect("a valid address");
+        assert_eq!((balance.balance, balance.received), (7, 9), "{text}");
+
+        // getaddresstxids
+        let call = tokio::spawn({
+            let rpc = rpc.clone();
+            let text = text.clone();
+            async move {
+                rpc.get_address_tx_ids(GetAddressTxIdsRequest {
+                    addresses: vec![text],
+                    start: Some(1),
+                    end: Some(10),
+                })
+                .await
+            }
+        });
+        read_state
+            .expect_request(ReadRequest::TransactionIdsByAddresses {
+                addresses: want.clone(),
+                height_range: Height(1)..=Height(10),
+            })
+            .await
+            .respond(ReadResponse::AddressesTransactionIds(BTreeMap::new()));
+        assert_eq!(
+            call.await.expect("joins").expect("a valid address"),
+            Vec::<String>::new()
+        );
+
+        // getaddressutxos: the index is asked for the same key
+        let call = tokio::spawn({
+            let rpc = rpc.clone();
+            let text = text.clone();
+            async move {
+                rpc.get_address_utxos(GetAddressUtxosRequest::new(vec![text], false))
+                    .await
+            }
+        });
+        read_state
+            .expect_request(ReadRequest::UtxosByAddresses(want.clone()))
+            .await
+            .respond(Err::<ReadResponse, BoxError>("test: no index".into()));
+        assert!(call.await.expect("joins").is_err());
+    }
+
+    // The pre-D-9 form is no address on any of the three.
+    let err = rpc
+        .get_address_balance(GetAddressBalanceRequest::new(vec![old.clone()]))
+        .await
+        .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::ServerError(-5).code());
+    let err = rpc
+        .get_address_tx_ids(GetAddressTxIdsRequest {
+            addresses: vec![old.clone()],
+            start: Some(1),
+            end: Some(10),
+        })
+        .await
+        .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::ServerError(-5).code());
+    let err = rpc
+        .get_address_utxos(GetAddressUtxosRequest::new(vec![old], false))
+        .await
+        .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::ServerError(-5).code());
+    read_state.expect_no_requests().await;
+}

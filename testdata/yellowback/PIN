@@ -1,5 +1,5 @@
 # Byte-identical copies of the C++ lines' cross-line vector files (plan §4.2 rule 4 (i)).
-# Source: boyfromcave/ycash6 @ 65cb4ae0ff (vaults/kogany-compat). Never edit; a change is a PIN bump.
+# Source: boyfromcave/ycash6 @ 3ec56e4074 (up/b2-pq-prefix, PR #95). Never edit; a change is a PIN bump.
 # sha256  kogany-path  ycash6-path
 2f7a3ab2fc909bca4772957f15696e8ed5f6feec6914f957e016adf5d0fd7dc8  testdata/yellowback/vault_vectors.json  src/test/data/vault_vectors.json
 1a146175d7815b825a3c961bb41d85a5a3b59ae7f62b468a8550ec5bd1f23be5  testdata/yellowback/pq_vectors.json  src/test/data/pq_vectors.json
@@ -10,3 +10,4 @@ db792673f777953bb0fad6dae9613bf80041b467e0a1959a56c85b668b577413  testdata/yello
 23acd1d3c0474eaf1ca1a4d9941332fc3df8c3d1e0e659bd28ddc3b3b72be0a7  testdata/yellowback/yellowback_pq_vectors.json  src/test/data/yellowback_pq_vectors.json
 b3547f1adbd5a322ac5d3821d4a33344f7e544f5b6d5c22ff01d8a1fb2e85bf7  testdata/yellowback/pq_acvp_slhdsa.json  src/test/data/pq_acvp_slhdsa.json
 5afd31f5debd290c2f68f42a759eed0121641bf4fe36e6ecd6ab2d81eba048cb  testdata/yellowback/pq_falcon_kat.json  src/test/data/pq_falcon_kat.json
+dbbd1da05d995d659e1e9f8a671197e141c272998722d6cca85cdbdb52b61797  testdata/yellowback/pq_address_vectors.json  src/test/data/pq_address_vectors.json

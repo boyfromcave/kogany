@@ -218,7 +218,7 @@ impl YedRpcImpl {
         Fmt {
             network: &self.network,
             params: &s.params,
-            plain_pq_version: s.node.plain_pq_address_version,
+            plain_pq_versions: &s.node.plain_pq_address_versions,
         }
     }
 }

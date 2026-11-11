@@ -498,23 +498,53 @@ fn address_prefixes_hrps_and_coin_type_equal_ycashd() {
         zcash_test
     );
 
-    // The plain-YEC post-quantum versions, `sq…`/`tq…`/`rq…` (`PlainPQAddressVersion`).
-    use crate::transparent::plain_pq_address_version as pq;
-    assert_eq!(pq(NetworkKind::Mainnet), [0x4d, 0xd9]);
-    assert_eq!(pq(NetworkKind::Testnet), [0x4f, 0x61]);
-    assert_eq!(pq(NetworkKind::Regtest), [0x4c, 0x51]);
+    // The plain-YEC post-quantum versions, one per scheme (`PlainPQAddressVersions`, D-9):
+    // `sqf…`/`sqs…`, `tqf…`/`tqs…`, `rqf…`/`rqs…` (scheme 2 FN-DSA-512, scheme 1 SLH-DSA).
+    use crate::transparent::plain_pq_address_versions as pq;
+    assert_eq!(
+        *pq(NetworkKind::Mainnet),
+        [(2, [0x4d, 0xdd, 0x04]), (1, [0x4d, 0xde, 0x6a])]
+    );
+    assert_eq!(
+        *pq(NetworkKind::Testnet),
+        [(2, [0x4f, 0x65, 0x19]), (1, [0x4f, 0x66, 0x7f])]
+    );
+    assert_eq!(
+        *pq(NetworkKind::Regtest),
+        [(2, [0x4c, 0x54, 0xef]), (1, [0x4c, 0x56, 0x55])]
+    );
 
-    // The Yellowback (YED) versions, `yb…`/`yt…`/`yr…`, 35 and 53 characters.
+    // The Yellowback (YED) versions: `yb…`/`yt…`/`yr…` in 35 characters, and post-quantum
+    // `ybf…`/`ybs…`, `ytf…`/`yts…`, `yrf…`/`yrs…` in 53.
     use kogany_yellowback::params::params_for_network;
     let yed = |id| {
         let p = params_for_network(id).expect("a ycashd network id");
-        (p.address_version.unwrap(), p.pq_address_version.unwrap())
+        (p.address_version.unwrap(), p.pq_address_versions.unwrap())
     };
-    assert_eq!(yed("main"), ([0x1f, 0xdd], [0x56, 0xab]));
-    assert_eq!(yed("test"), ([0x20, 0x07], [0x57, 0x1e]));
-    assert_eq!(yed("regtest"), ([0x20, 0x02], [0x57, 0x10]));
+    assert_eq!(
+        yed("main"),
+        (
+            [0x1f, 0xdd],
+            [(2, [0x56, 0xae, 0xde]), (1, [0x56, 0xb0, 0x44])]
+        )
+    );
+    assert_eq!(
+        yed("test"),
+        (
+            [0x20, 0x07],
+            [(2, [0x57, 0x21, 0xc9]), (1, [0x57, 0x23, 0x30])]
+        )
+    );
+    assert_eq!(
+        yed("regtest"),
+        (
+            [0x20, 0x02],
+            [(2, [0x57, 0x14, 0x44]), (1, [0x57, 0x15, 0xaa])]
+        )
+    );
 
-    // Every two-byte version on one network is distinct, so no address decodes as two kinds.
+    // Every version on one network is distinct (and no 3-byte version starts with a 2-byte one),
+    // so no address decodes as two kinds.
     for (kind, id, p2pkh, p2sh) in [
         (
             NetworkKind::Mainnet,
@@ -536,10 +566,15 @@ fn address_prefixes_hrps_and_coin_type_equal_ycashd() {
         ),
     ] {
         let (yed_plain, yed_pq) = yed(id);
-        let versions = [p2pkh, p2sh, pq(kind), yed_plain, yed_pq];
+        let mut versions: Vec<Vec<u8>> = vec![p2pkh.to_vec(), p2sh.to_vec(), yed_plain.to_vec()];
+        versions.extend(pq(kind).iter().map(|(_, v)| v.to_vec()));
+        versions.extend(yed_pq.iter().map(|(_, v)| v.to_vec()));
         for (i, a) in versions.iter().enumerate() {
             for b in &versions[i + 1..] {
-                assert_ne!(a, b, "{id}: two address kinds share a version");
+                assert!(
+                    !a.starts_with(b) && !b.starts_with(a),
+                    "{id}: two address kinds share a version"
+                );
             }
         }
     }
