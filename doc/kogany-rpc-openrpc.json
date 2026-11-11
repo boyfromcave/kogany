@@ -1437,7 +1437,7 @@
   "x-kogany": {
     "contracts": {
       "doc/vault-rpc-contract.json": {
-        "sha256": "bd31d4259e4027d1c1170841a408c29819d214b9b0f10efec407d872f1f2954e"
+        "sha256": "adfa40fad76eb613f420946cdf941adac95af98c63045f621e2bfbaafe09f350"
       },
       "doc/yellowback-rpc-contract.json": {
         "sha256": "039de3182e7d27031764fc89d01986f34fde8e7bf0298fec06dd529fd4320c4b"
