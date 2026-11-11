@@ -160,7 +160,8 @@ fn previous_epoch(network: &Network, height: Height) -> Option<NetworkUpgrade> {
     let (current, activation_height) =
         NetworkUpgrade::current_with_activation_height(network, height);
     let previous = NetworkUpgrade::current(network, activation_height.previous().ok()?);
-    (previous.branch_id().is_some() && previous.branch_id() != current.branch_id())
+    let previous_branch = previous.branch_id_on(network);
+    (previous_branch.is_some() && previous_branch != current.branch_id_on(network))
         .then_some(previous)
 }
 
@@ -202,10 +203,10 @@ pub fn check_template_input(
     let standard =
         ScriptContext::new(network.clone(), height, Some(state.clone())).with_standard_policy();
     let current = NetworkUpgrade::current(network, height);
-    let current_branch = current.branch_id().map_or(0, u32::from);
+    let current_branch = current.branch_id_on(network).map_or(0, u32::from);
     let previous = previous_epoch(network, height);
     let previous_branch = previous
-        .and_then(|nu| nu.branch_id())
+        .and_then(|nu| nu.branch_id_on(network))
         .map_or(current_branch, u32::from);
 
     let mut first_error = None;
@@ -215,7 +216,12 @@ pub fn check_template_input(
                 cached.is_valid_in(input_index, &standard)
             } else {
                 match previous.map(|nu| {
-                    CachedFfiTransaction::new(tx.clone(), Arc::new(spent_outputs.clone()), nu)
+                    CachedFfiTransaction::new_on(
+                        network,
+                        tx.clone(),
+                        Arc::new(spent_outputs.clone()),
+                        nu,
+                    )
                 }) {
                     Some(Ok(cached_previous)) => {
                         cached_previous.is_valid_in(input_index, &standard)
@@ -276,14 +282,15 @@ pub fn non_mandatory_script_failure(
             .map(|error| (input_index, error))
     })?;
     if let Some(previous) = previous_epoch(network, height) {
-        let passes_previous = CachedFfiTransaction::new(
+        let passes_previous = CachedFfiTransaction::new_on(
+            network,
             tx.clone(),
             Arc::new(cached.all_previous_outputs().clone()),
             previous,
         )
         .is_ok_and(|old| old.is_valid_in(input_index, &consensus).is_ok());
         if passes_previous {
-            let branch = |nu: NetworkUpgrade| nu.branch_id().map_or(0, u32::from);
+            let branch = |nu: NetworkUpgrade| nu.branch_id_on(network).map_or(0, u32::from);
             return Some(TransactionError::OldConsensusBranchId {
                 expected: branch(NetworkUpgrade::current(network, height)),
                 found: branch(previous),
@@ -383,6 +390,20 @@ mod tests {
             "bad-vault-act-sigs",
             [long.as_slice()]
         ));
+    }
+
+    #[test]
+    fn shadow_epoch_previous_is_canopy() {
+        let height = zakura_chain::parameters::ycash::SHADOW_ACTIVATION_HEIGHT;
+        for network in [
+            Network::new_ycash_testnet_slow(),
+            Network::new_ycash_testnet_legacy(),
+        ] {
+            assert_eq!(
+                previous_epoch(&network, height),
+                Some(NetworkUpgrade::Canopy)
+            );
+        }
     }
 
     #[test]

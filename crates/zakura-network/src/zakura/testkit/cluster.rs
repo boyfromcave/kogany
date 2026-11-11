@@ -1150,6 +1150,7 @@ mod tests {
                 blossom: Some(1),
                 heartwood: Some(1),
                 canopy: Some(1),
+                shadow: None,
                 nu5: None,
                 nu6: None,
                 nu6_1: None,
@@ -1935,7 +1936,7 @@ mod tests {
                     ending @ (BlockSyncMessage::BlocksDone { .. }
                     | BlockSyncMessage::RangeUnavailable { .. }) => return Ok((hashes, ending)),
                     message => {
-                        return Err(format!("unexpected message in {label}: {message:?}").into())
+                        return Err(format!("unexpected message in {label}: {message:?}").into());
                     }
                 }
             }
@@ -2067,7 +2068,7 @@ mod tests {
                     } => return Ok::<_, BoxError>((start_height, count)),
                     BlockSyncMessage::Status(_) => {}
                     msg => {
-                        return Err(format!("unexpected native block-sync message: {msg:?}").into())
+                        return Err(format!("unexpected native block-sync message: {msg:?}").into());
                     }
                 }
             }

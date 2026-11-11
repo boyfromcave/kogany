@@ -43,11 +43,10 @@ pub fn chain_name(network: &Network) -> String {
 }
 
 /// The `testnetprofile` field of `getblockchaininfo`: on the Ycash testnets only, the profile
-/// name ycashd compiles in (`strTestnetProfile`, `ycash6 src/chainparams.cpp:639,661`; the field
-/// is pushed when it is not empty, `src/rpc/blockchain.cpp:1688-1689`). The `slow` profile is the
-/// testnet with its magic ([`Network::new_ycash_testnet_slow`]); every other testnet, the default
-/// one and a configured one, is the `fast` profile, as for its default port. kogany drops the
-/// `legacy` profile (decision K-10). Absent on Mainnet and Regtest.
+/// name ycashd compiles in (`strTestnetProfile`; the field is pushed when it is not empty,
+/// `ycash6 src/rpc/blockchain.cpp`). `slow` and `legacy` are the shadow-fork magics; every other
+/// testnet, including the default `fast` profile and a configured one, is reported as `fast`.
+/// Absent on Mainnet and Regtest.
 pub fn testnet_profile(network: &Network) -> Option<String> {
     if !network.is_a_test_network() || network.is_regtest() {
         return None;
@@ -55,6 +54,8 @@ pub fn testnet_profile(network: &Network) -> Option<String> {
     Some(
         if network.magic() == magics::TESTNET_SLOW {
             "slow"
+        } else if network.magic() == magics::TESTNET_LEGACY {
+            "legacy"
         } else {
             "fast"
         }

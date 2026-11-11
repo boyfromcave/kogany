@@ -185,6 +185,71 @@ impl AdjustedDifficulty {
         self.network.clone()
     }
 
+    /// Ycash's fork-window difficulty (`ycash6` `src/pow.cpp`): the fast profile resets to
+    /// the PoW limit across the Ycash activation and the next averaging window; mainnet and
+    /// the shadow forks scale that window by how late the block is; the shadow activation
+    /// itself resets to the PoW limit the same way.
+    #[cfg(feature = "ycash")]
+    fn ycash_fork_difficulty(&self) -> Option<CompactDifficulty> {
+        use zakura_chain::parameters::ycash::{self, is_fast_network, is_shadow_network};
+        let height = self.candidate_height.0;
+        let window = u32::try_from(self.averaging_window()).unwrap_or(17);
+        let limit = self.network.target_difficulty_limit().to_compact();
+        let in_window = |start: u32, inclusive_end: bool| {
+            let end = start.saturating_add(window);
+            height >= start
+                && if inclusive_end {
+                    height <= end
+                } else {
+                    height < end
+                }
+        };
+        // pow.cpp reads the scheduled `UPGRADE_YCASH` height; `activation_height` would
+        // fall back to a later upgrade's height on a network that never schedules Ycash.
+        let ycash_start = NetworkUpgrade::Ycash
+            .activation_height(&self.network)
+            .filter(|&start| {
+                NetworkUpgrade::current(&self.network, start) == NetworkUpgrade::Ycash
+            });
+        if is_fast_network(&self.network) {
+            if let Some(start) = ycash_start {
+                if in_window(start.0, true) {
+                    return Some(limit);
+                }
+            }
+        }
+        if is_shadow_network(&self.network) && in_window(ycash::SHADOW_ACTIVATION_HEIGHT.0, true) {
+            return Some(limit);
+        }
+        let scaled = matches!(self.network, Network::Mainnet) || is_shadow_network(&self.network);
+        if scaled {
+            if let Some(start) = ycash_start {
+                if in_window(start.0, false) {
+                    let spacing = NetworkUpgrade::target_spacing_for_height(
+                        &self.network,
+                        self.candidate_height,
+                    );
+                    let gap = self.candidate_time - *self.relevant_times.first();
+                    let multiplier = if gap > spacing * 12 {
+                        Some(64u64)
+                    } else if gap > spacing * 6 {
+                        Some(128)
+                    } else if gap > spacing * 2 {
+                        Some(256)
+                    } else {
+                        None
+                    };
+                    if let Some(multiplier) = multiplier {
+                        let target = U256::from(self.network.target_difficulty_limit())
+                            / U256::from(multiplier);
+                        return ExpandedDifficulty::from(target).to_compact().into();
+                    }
+                }
+            }
+        }
+        None
+    }
+
     /// Returns the averaging window selected by the candidate block's upgrade.
     fn averaging_window(&self) -> usize {
         NetworkUpgrade::averaging_window_for_height(&self.network, self.candidate_height)
@@ -198,6 +263,10 @@ impl AdjustedDifficulty {
     /// The difficulty calculation implements `ThresholdBits` from the Zcash specification and the Testnet
     /// minimum difficulty adjustment from ZIPs 205 and 208.
     pub fn expected_difficulty_threshold(&self) -> CompactDifficulty {
+        #[cfg(feature = "ycash")]
+        if let Some(threshold) = self.ycash_fork_difficulty() {
+            return threshold;
+        }
         if NetworkUpgrade::is_testnet_min_difficulty_block(
             &self.network,
             self.candidate_height,

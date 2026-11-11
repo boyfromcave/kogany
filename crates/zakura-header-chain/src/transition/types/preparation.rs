@@ -359,7 +359,7 @@ pub(crate) fn hash_network_policy(
     hasher.update(max_time_height.0.to_le_bytes());
     for (height, upgrade) in network.activation_list() {
         hasher.update(height.0.to_le_bytes());
-        let (branch_tag, upgrade_code) = match upgrade.branch_id() {
+        let (branch_tag, upgrade_code) = match upgrade.branch_id_on(network) {
             Some(branch) => (1_u8, u32::from(branch)),
             None => (
                 0,

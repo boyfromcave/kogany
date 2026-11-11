@@ -116,6 +116,7 @@ impl Version {
             (Mainnet, Heartwood) => 170_011,
             (Testnet(_), Canopy) => 170_012,
             (Mainnet, Canopy) => 170_013,
+            (_, Shadow) => 270_013,
             // ycashd's `UPGRADE_VAULT.nProtocolVersion` on every network
             // (`ycash6 src/chainparams.cpp:154,463,766`). Only a network that schedules Vault
             // reaches it; W1-Y5 owns the rest of this table.

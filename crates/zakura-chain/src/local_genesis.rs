@@ -410,7 +410,10 @@ fn configured_activation_heights(
         return Err("latest_network_upgrade must be BeforeOverwinter or later".into());
     }
 
-    if latest_network_upgrade >= Overwinter && latest_network_upgrade.branch_id().is_none() {
+    if latest_network_upgrade != Shadow
+        && latest_network_upgrade >= Overwinter
+        && latest_network_upgrade.branch_id().is_none()
+    {
         return Err("latest_network_upgrade must have a consensus branch ID".into());
     }
 
@@ -424,6 +427,7 @@ fn configured_activation_heights(
         blossom: (latest_network_upgrade >= Blossom).then_some(activation_height),
         heartwood: (latest_network_upgrade >= Heartwood).then_some(activation_height),
         canopy: (latest_network_upgrade >= Canopy).then_some(activation_height),
+        shadow: (latest_network_upgrade == Shadow).then_some(activation_height),
         // Vault is scheduled only explicitly (kogany plan §2.2), never as a later upgrade's
         // implicit predecessor.
         vault: (latest_network_upgrade == Vault).then_some(activation_height),

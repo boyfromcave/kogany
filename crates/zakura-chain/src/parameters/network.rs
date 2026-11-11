@@ -410,7 +410,11 @@ impl FromStr for Network {
     fn from_str(string: &str) -> Result<Self, Self::Err> {
         match string.to_lowercase().as_str() {
             "mainnet" => Ok(Network::Mainnet),
-            "testnet" => Ok(Network::new_default_testnet()),
+            "testnet" | "testnetfast" | "fast" => Ok(Network::new_default_testnet()),
+            #[cfg(feature = "ycash")]
+            "testnetslow" | "slow" => Ok(Network::new_ycash_testnet_slow()),
+            #[cfg(feature = "ycash")]
+            "testnetlegacy" | "legacy" => Ok(Network::new_ycash_testnet_legacy()),
             _ => Err(InvalidNetworkError(string.to_owned())),
         }
     }

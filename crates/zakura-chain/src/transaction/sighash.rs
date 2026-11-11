@@ -9,7 +9,7 @@ use zcash_transparent::sighash::SighashType;
 
 use super::{zip244::Zip244SighashCache, Transaction};
 
-use crate::parameters::NetworkUpgrade;
+use crate::parameters::{ConsensusBranchId, NetworkUpgrade};
 use crate::{transparent, Error};
 
 use crate::primitives::zcash_primitives::{sighash, sighash_v4_raw, PrecomputedTxData};
@@ -167,7 +167,7 @@ impl SigHasher {
     ///
     /// - If `trans` can't be converted to its `librustzcash` equivalent. This could happen, for
     ///   example, if `trans` contains the `nConsensusBranchId` field, and `nu` doesn't match it.
-    ///   More details in [`PrecomputedTxData::new`].
+    ///   More details in [`PrecomputedTxData::with_branch`].
     /// - If `nu` doesn't contain a consensus branch id convertible to its `librustzcash`
     ///   equivalent.
     pub fn new(
@@ -175,11 +175,25 @@ impl SigHasher {
         nu: NetworkUpgrade,
         all_previous_outputs: Arc<Vec<transparent::Output>>,
     ) -> Result<Self, Error> {
-        let precomputed_tx_data = PrecomputedTxData::new(trans, nu, all_previous_outputs.clone())?;
+        let Some(branch_id) = nu.branch_id() else {
+            return Err(Error::InvalidConsensusBranchId);
+        };
+        Self::with_branch(trans, nu, branch_id, all_previous_outputs)
+    }
+
+    /// [`Self::new`] with an explicit consensus branch id.
+    pub fn with_branch(
+        trans: &Transaction,
+        nu: NetworkUpgrade,
+        branch_id: ConsensusBranchId,
+        all_previous_outputs: Arc<Vec<transparent::Output>>,
+    ) -> Result<Self, Error> {
+        let precomputed_tx_data =
+            PrecomputedTxData::with_branch(trans, nu, branch_id, all_previous_outputs.clone())?;
 
         Ok(SigHasher {
             precomputed_tx_data,
-            v4: V4Sighash::new(trans, nu, &all_previous_outputs),
+            v4: V4Sighash::new(trans, branch_id, &all_previous_outputs),
             zip244: Zip244SighashCache::new(trans, &all_previous_outputs),
         })
     }

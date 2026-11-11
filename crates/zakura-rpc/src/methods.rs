@@ -2311,7 +2311,7 @@ where
             // but zcashd defines them based on ZIPs.
             //
             // All the network upgrades with a consensus branch ID are the same in Zebra and zcashd.
-            if let Some(branch_id) = network_upgrade.branch_id() {
+            if let Some(branch_id) = network_upgrade.branch_id_on(network) {
                 // zcashd's RPC seems to ignore Disabled network upgrades, so Zebra does too.
                 let status = if tip_height >= activation_height {
                     NetworkUpgradeStatus::Active
@@ -2334,12 +2334,12 @@ where
         let consensus = TipConsensusBranch {
             chain_tip: ConsensusBranchIdHex(
                 NetworkUpgrade::current(network, tip_height)
-                    .branch_id()
+                    .branch_id_on(network)
                     .unwrap_or(ConsensusBranchId::RPC_MISSING_ID),
             ),
             next_block: ConsensusBranchIdHex(
                 NetworkUpgrade::current(network, next_block_height)
-                    .branch_id()
+                    .branch_id_on(network)
                     .unwrap_or(ConsensusBranchId::RPC_MISSING_ID),
             ),
         };

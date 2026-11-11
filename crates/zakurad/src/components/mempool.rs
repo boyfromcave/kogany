@@ -204,7 +204,9 @@ fn upgrade_grace_period(network: &Network, height: block::Height) -> Option<Netw
     let (upgrade, activation_height) =
         NetworkUpgrade::current_with_activation_height(network, height);
 
-    if upgrade.branch_id().is_none() || height - activation_height >= UPGRADE_GRACE_PERIOD_BLOCKS {
+    if upgrade.branch_id_on(network).is_none()
+        || height - activation_height >= UPGRADE_GRACE_PERIOD_BLOCKS
+    {
         return None;
     }
 

@@ -19,8 +19,8 @@ use super::ZakuradCmd;
     clap(
         name = "koganyd",
         author = "The Ycash developers (kogany: a fork of Zakura by Valar Group)",
-        about = "koganyd, the kogany Ycash full node: Ycash mainnet, the fast and slow testnets \
-                 and regtest, with the vault network upgrade and the Ycash Yellowback (YED) rule \
+        about = "koganyd, the kogany Ycash full node: Ycash mainnet, the fast, slow and legacy \
+                 testnets and regtest, with the vault network upgrade and the Ycash Yellowback (YED) rule \
                  module. Default config: kogany.toml in the preference directory; default \
                  state, peer cache and RPC cookie: the kogany directory in the cache directory.",
         long_about = None

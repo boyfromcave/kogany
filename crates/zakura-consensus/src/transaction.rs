@@ -664,7 +664,7 @@ where
 
             let nu = req.upgrade(&network);
             let cached_ffi_transaction =
-                Arc::new(CachedFfiTransaction::new(tx.clone(), Arc::new(spent_outputs), nu).map_err(|_| TransactionError::UnsupportedByNetworkUpgrade(tx.version(), nu))?);
+                Arc::new(CachedFfiTransaction::new_on(&network, tx.clone(), Arc::new(spent_outputs), nu).map_err(|_| TransactionError::UnsupportedByNetworkUpgrade(tx.version(), nu))?);
 
             tracing::trace!(?tx_id, "got state UTXOs");
 
@@ -901,7 +901,9 @@ where
         {
             Ok(median_time_past)
         } else {
-            unreachable!("Request::BestChainNextMedianTimePast always responds with BestChainNextMedianTimePast")
+            unreachable!(
+                "Request::BestChainNextMedianTimePast always responds with BestChainNextMedianTimePast"
+            )
         }
     }
 
@@ -1206,6 +1208,7 @@ where
             | NetworkUpgrade::Blossom
             | NetworkUpgrade::Heartwood
             | NetworkUpgrade::Canopy
+            | NetworkUpgrade::Shadow
             | NetworkUpgrade::Vault
             | NetworkUpgrade::Nu5
             | NetworkUpgrade::Nu6
@@ -1323,6 +1326,7 @@ where
             | NetworkUpgrade::Blossom
             | NetworkUpgrade::Heartwood
             | NetworkUpgrade::Canopy
+            | NetworkUpgrade::Shadow
             // kogany: v4 only under Vault (U-26, ycash6 `bad-vault-tx-version-group-id`).
             | NetworkUpgrade::Vault => Err(TransactionError::UnsupportedByNetworkUpgrade(
                 transaction.version(),

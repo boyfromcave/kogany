@@ -16,7 +16,10 @@ use crate::{
 pub fn decrypts_successfully(tx: &Transaction, network: &Network, height: Height) -> bool {
     let nu = NetworkUpgrade::current(network, height);
 
-    let Ok(tx) = tx.to_librustzcash(nu) else {
+    let Some(branch_id) = nu.branch_id_on(network) else {
+        return false;
+    };
+    let Ok(tx) = tx.to_librustzcash_with_branch(nu, branch_id) else {
         return false;
     };
 
@@ -164,6 +167,38 @@ mod tests {
             !super::decrypts_successfully(&orchard_tx, &network, height),
             "the same V3 ciphertext must not be accepted as an Orchard output"
         );
+    }
+
+    #[test]
+    #[cfg(feature = "ycash")]
+    fn shadow_epoch_coinbase_converts_with_the_network_branch_id() {
+        let height = crate::parameters::ycash::SHADOW_ACTIVATION_HEIGHT;
+        let coinbase = Transaction::V4 {
+            inputs: vec![transparent::Input::Coinbase {
+                height,
+                data: vec![],
+                sequence: u32::MAX,
+            }],
+            outputs: vec![],
+            lock_time: LockTime::unlocked(),
+            expiry_height: height,
+            joinsplit_data: None,
+            sapling_shielded_data: None,
+        };
+
+        for network in [
+            Network::new_ycash_testnet_slow(),
+            Network::new_ycash_testnet_legacy(),
+        ] {
+            assert_eq!(
+                NetworkUpgrade::current(&network, height),
+                NetworkUpgrade::Shadow
+            );
+            assert!(
+                super::decrypts_successfully(&coinbase, &network, height),
+                "{network}: a shadow-epoch coinbase must convert under the network's branch id"
+            );
+        }
     }
 
     fn v2_action_from_test_vector(v: &zakura_test::vectors::TestVector) -> Action<()> {

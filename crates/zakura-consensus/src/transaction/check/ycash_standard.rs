@@ -854,7 +854,7 @@ pub fn standard_script_check(
             .iter()
             .map(|o| Some(o.lock_script.as_raw_bytes())),
     );
-    let cached = zakura_script::CachedFfiTransaction::new(tx, spent_outputs, nu)
+    let cached = zakura_script::CachedFfiTransaction::new_on(network, tx, spent_outputs, nu)
         .map_err(|error| (0, error))?;
     let context =
         zakura_script::ScriptContext::new(network.clone(), height, None).with_standard_policy();

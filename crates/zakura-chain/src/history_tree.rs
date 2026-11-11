@@ -136,10 +136,13 @@ impl NonEmptyHistoryTree {
                 });
             }
             // Every history tree node commits to its network upgrade's branch ID.
-            _ if network_upgrade.branch_id().is_none() => {
+            _ if network_upgrade.branch_id_on(network).is_none() => {
                 return Err(HistoryTreeError::MissingBranchId { network_upgrade });
             }
-            NetworkUpgrade::Heartwood | NetworkUpgrade::Canopy | NetworkUpgrade::Vault => {
+            NetworkUpgrade::Heartwood
+            | NetworkUpgrade::Canopy
+            | NetworkUpgrade::Shadow
+            | NetworkUpgrade::Vault => {
                 let tree = Tree::<PreOrchard>::new_from_cache(
                     network,
                     network_upgrade,
@@ -235,10 +238,13 @@ impl NonEmptyHistoryTree {
             }
             // Every history tree node commits to its network upgrade's branch ID.
             // Builds without an NU7 branch ID reach this arm at NU7 activation.
-            _ if network_upgrade.branch_id().is_none() => {
+            _ if network_upgrade.branch_id_on(network).is_none() => {
                 return Err(HistoryTreeError::MissingBranchId { network_upgrade });
             }
-            NetworkUpgrade::Heartwood | NetworkUpgrade::Canopy | NetworkUpgrade::Vault => {
+            NetworkUpgrade::Heartwood
+            | NetworkUpgrade::Canopy
+            | NetworkUpgrade::Shadow
+            | NetworkUpgrade::Vault => {
                 let (tree, entry) = Tree::<PreOrchard>::new_from_parts(
                     network,
                     HistoryTreeBlockParts {

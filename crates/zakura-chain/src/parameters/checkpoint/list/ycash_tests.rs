@@ -35,8 +35,8 @@ const TESTNET_PINS: &[(u32, &str)] = &[
         "001e9a2d2e2892b88e9998cf7b079b41d59dd085423a921fe8386cecc42287b8",
     ),
     (
-        510_247,
-        "0000ec904003d5591290064b0b4d3ccddffe87ef2a3a131284438959bf68fb31",
+        510_253,
+        "0297aad933fdf3f5e07acff13992e138ab4fec56033cdfa3a3815535ff049dbb",
     ),
 ];
 
@@ -72,19 +72,44 @@ fn ycash_mainnet_list_carries_the_pins() {
 }
 
 #[test]
-fn ycash_testnet_lists_stop_at_the_shared_history() {
+fn ycash_testnet_list_reaches_the_mandatory_checkpoint() {
+    let network = Network::new_default_testnet();
+    assert_pins(&network, TESTNET_PINS);
+    assert_below_vault(&network);
+    assert_eq!(
+        network.checkpoint_list().max_height(),
+        network.mandatory_checkpoint_height(),
+        "the re-fork below Canopy is checkpointed; Canopy on is verified semantically"
+    );
+    assert!(network.checkpoint_list().max_height() > ycash::testnet::LAST_SHARED_HEIGHT);
+}
+
+#[test]
+fn ycash_shadow_lists_are_mainnet_through_the_split() {
+    use crate::parameters::ycash::{
+        SHADOW_ACTIVATION_HEIGHT, SHADOW_SPLIT_HASH, SHADOW_SPLIT_HEIGHT,
+    };
+    let mainnet = Network::Mainnet.checkpoint_list();
     for network in [
-        Network::new_default_testnet(),
         Network::new_ycash_testnet_slow(),
+        Network::new_ycash_testnet_legacy(),
     ] {
-        assert_pins(&network, TESTNET_PINS);
-        assert_below_vault(&network);
+        let list = network.checkpoint_list();
+        assert_eq!(list.hash(block::Height(0)), Some(network.genesis_hash()));
+        assert_eq!(network.genesis_hash(), Network::Mainnet.genesis_hash());
+        assert_eq!(list.max_height(), block::Height(SHADOW_SPLIT_HEIGHT));
         assert_eq!(
-            network.checkpoint_list().max_height(),
-            ycash::testnet::LAST_SHARED_HEIGHT,
-            "the re-forked testnet's checkpoints above the fork come with its first rc"
+            list.hash(block::Height(SHADOW_SPLIT_HEIGHT)),
+            Some(SHADOW_SPLIT_HASH.parse().expect("hash"))
         );
-        assert!(network.ycash_checkpoint_list_is_partial());
+        assert!(!network.ycash_checkpoint_list_is_partial());
+        for (height, hash) in mainnet.iter_cloned() {
+            if height.0 >= SHADOW_ACTIVATION_HEIGHT.0 {
+                assert_eq!(list.hash(height), None, "{height:?}");
+            } else if height.0 != SHADOW_SPLIT_HEIGHT {
+                assert_eq!(list.hash(height), Some(hash), "{height:?}");
+            }
+        }
     }
 }
 

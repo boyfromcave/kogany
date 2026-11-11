@@ -8,8 +8,9 @@
 //!
 //! The Vault upgrade is runtime-gated by its height ([`Network::is_vault_active`], W2-b): this
 //! module only carries the heights ycashd compiles in. Ycash mainnet has none (set by the
-//! gate-passing release, upgrade plan P8), the `fast` testnet profile has 510,400, the `slow`
-//! profile none, and Regtest takes `Vault` from its configured activation heights.
+//! gate-passing release, upgrade plan P8), the `fast` testnet profile has 510,400, the shadow
+//! profiles (`slow`, `legacy`) have none until an rc sets slow's, and Regtest takes `Vault`
+//! from its configured activation heights.
 //!
 //! [`Network::is_vault_active`]: super::Network::is_vault_active
 //!
@@ -52,8 +53,10 @@ pub mod mainnet {
         "0000014fbc5917ba8bcacf3336faf588d86b32443aa3a490a587af5750c77ec5";
 }
 
-/// Network upgrade activation heights on the re-forked Ycash testnet, shared by its `fast` and
-/// `slow` profiles (decision K-10; the legacy testnet3 profile is dropped).
+/// Network upgrade activation heights on the re-forked Ycash testnet, the `fast` profile.
+///
+/// testnet-yb-slow and testnet-legacy are shadow forks of mainnet (`new_ycash_testnet_slow`,
+/// `new_ycash_testnet_legacy`), not this table.
 ///
 /// `ycash6 src/chainparams.cpp:429-459` (`CTestNetParams`): Zcash testnet history through
 /// 510,247, the new fork block at 510,248, then Blossom, Heartwood and Canopy two blocks apart.
@@ -101,10 +104,7 @@ pub(super) const MAINNET_ACTIVATION_HEIGHTS: &[(Height, NetworkUpgrade)] = &[
     (mainnet::CANOPY, Canopy),
 ];
 
-/// Ycash testnet activation list, in height order: the default (`fast`) profile's. The `slow`
-/// profile is the same without Vault ([`Network::new_ycash_testnet_slow`]).
-///
-/// [`Network::new_ycash_testnet_slow`]: super::Network::new_ycash_testnet_slow
+/// Ycash testnet activation list, in height order: the default (`fast`) profile's.
 pub(super) const TESTNET_ACTIVATION_HEIGHTS: &[(Height, NetworkUpgrade)] = &[
     (Height(0), Genesis),
     (testnet::BEFORE_OVERWINTER, BeforeOverwinter),
@@ -126,8 +126,10 @@ pub mod magics {
 
     /// The re-forked Ycash testnet, `fast` profile (`testnet-yb-fast`).
     pub const TESTNET_FAST: Magic = Magic([0xf7, 0x79, 0x62, 0xd3]);
-    /// The re-forked Ycash testnet, `slow` profile (`testnet-yb-slow`).
+    /// testnet-yb-slow, the shadow fork of mainnet.
     pub const TESTNET_SLOW: Magic = Magic([0xf7, 0x79, 0x62, 0xd4]);
+    /// testnet-legacy, the shadow fork of mainnet with no Vault activation.
+    pub const TESTNET_LEGACY: Magic = Magic([0xf7, 0x79, 0x62, 0xd5]);
 }
 
 /// Default P2P ports (`nDefaultPort`, `ycash6 src/chainparams.cpp:228,648,669,824`).
@@ -138,6 +140,8 @@ pub mod ports {
     pub const TESTNET_FAST: u16 = 18833;
     /// Ycash testnet, `slow` profile.
     pub const TESTNET_SLOW: u16 = 18933;
+    /// Ycash testnet, `legacy` profile.
+    pub const TESTNET_LEGACY: u16 = 19033;
     /// Ycash regtest.
     pub const REGTEST: u16 = 18344;
 
@@ -149,6 +153,8 @@ pub mod ports {
         pub const TESTNET_FAST: u16 = 18832;
         /// Ycash testnet, `slow` profile.
         pub const TESTNET_SLOW: u16 = 18932;
+        /// Ycash testnet, `legacy` profile.
+        pub const TESTNET_LEGACY: u16 = 19032;
         /// Ycash regtest: the same as the `fast` testnet's, as in ycashd
         /// (`ycash6 src/chainparamsbase.cpp:62,73`; `ref/ycash src/chainparamsbase.cpp:48,62`).
         /// Two such nodes on one host need an explicit `rpc.listen_addr`, as two ycashd do.
@@ -174,6 +180,86 @@ pub mod seeds {
 pub mod names {
     /// The `slow` Ycash testnet profile.
     pub const TESTNET_SLOW: &str = "TestnetSlow";
+    /// The `legacy` Ycash testnet profile.
+    pub const TESTNET_LEGACY: &str = "TestnetLegacy";
+}
+
+/// Last Ycash mainnet block copied into testnet-yb-slow and testnet-legacy
+/// (`ycash6` `TESTNET_SHADOW_SPLIT_HEIGHT`).
+pub const SHADOW_SPLIT_HEIGHT: u32 = 3_079_999;
+
+/// `UPGRADE_SHADOW` activates at H_S + 1 on both shadow profiles.
+pub const SHADOW_ACTIVATION_HEIGHT: Height = Height(SHADOW_SPLIT_HEIGHT + 1);
+
+/// Block hash of H_S (`ycash6` `TESTNET_SHADOW_SPLIT_HASH`).
+pub const SHADOW_SPLIT_HASH: &str =
+    "000005030be4763e433447000ef6b98c7ce310a8b0b7bb50f1a6aca3d31e4bef";
+
+/// Ycash mainnet genesis, also the shadow forks' genesis (`ycash6` `CMainParams`).
+pub const MAINNET_GENESIS_HASH: &str =
+    "00040fe8ec8471911baa1db1266ea15dd06b4a8a5c453883c000b031973dce08";
+
+/// testnet-yb-slow shadow branch id (`SLOW_SHADOW_BRANCH_ID`).
+pub const SLOW_SHADOW_BRANCH_ID: u32 = 0x57a2_4d5d;
+/// testnet-yb-slow Vault branch id (`SLOW_VAULT_BRANCH_ID`).
+pub const SLOW_VAULT_BRANCH_ID: u32 = 0xe1f1_cc08;
+/// testnet-legacy shadow branch id (`LEGACY_SHADOW_BRANCH_ID`).
+pub const LEGACY_SHADOW_BRANCH_ID: u32 = 0x3570_6728;
+
+/// Whether `network` is testnet-yb-slow or testnet-legacy.
+pub fn is_shadow_network(network: &super::Network) -> bool {
+    let magic = network.magic();
+    magic == magics::TESTNET_SLOW || magic == magics::TESTNET_LEGACY
+}
+
+/// Whether `network` is the fast re-fork (`f77962d3`).
+pub fn is_fast_network(network: &super::Network) -> bool {
+    network.magic() == magics::TESTNET_FAST
+}
+
+/// Branch id override for this profile. `None` means the global [`NetworkUpgrade::branch_id`] table.
+pub fn profile_branch_id(
+    network: &super::Network,
+    upgrade: super::NetworkUpgrade,
+) -> Option<super::ConsensusBranchId> {
+    use super::NetworkUpgrade::*;
+    let magic = network.magic();
+    if magic == magics::TESTNET_SLOW {
+        return match upgrade {
+            Shadow => Some(super::ConsensusBranchId(SLOW_SHADOW_BRANCH_ID)),
+            Vault => Some(super::ConsensusBranchId(SLOW_VAULT_BRANCH_ID)),
+            _ => None,
+        };
+    }
+    if magic == magics::TESTNET_LEGACY {
+        return match upgrade {
+            Shadow => Some(super::ConsensusBranchId(LEGACY_SHADOW_BRANCH_ID)),
+            _ => None,
+        };
+    }
+    None
+}
+
+/// Mainnet checkpoints at heights below the shadow activation, plus the H_S pin.
+pub fn shadow_checkpoint_pairs() -> Vec<(Height, crate::block::Hash)> {
+    let mut items: Vec<(Height, crate::block::Hash)> = super::Network::Mainnet
+        .checkpoint_list()
+        .iter_cloned()
+        .filter(|(height, _)| height.0 < SHADOW_ACTIVATION_HEIGHT.0)
+        .collect();
+    let split_hash = SHADOW_SPLIT_HASH
+        .parse()
+        .expect("the H_S checkpoint hash parses");
+    if let Some(existing) = items
+        .iter_mut()
+        .find(|(height, _)| height.0 == SHADOW_SPLIT_HEIGHT)
+    {
+        existing.1 = split_hash;
+    } else {
+        items.push((Height(SHADOW_SPLIT_HEIGHT), split_hash));
+    }
+    items.sort_by_key(|(height, _)| height.0);
+    items
 }
 
 /// kogany's default file-system names (the identity table: `parameters/ycash/identity_tests.rs`).
@@ -202,31 +288,49 @@ pub(super) fn testnet_default_port(params: &super::testnet::Parameters) -> u16 {
         ports::REGTEST
     } else if params.network_magic() == magics::TESTNET_SLOW {
         ports::TESTNET_SLOW
+    } else if params.network_magic() == magics::TESTNET_LEGACY {
+        ports::TESTNET_LEGACY
     } else {
         ports::TESTNET_FAST
     }
 }
 
 impl super::Network {
-    /// Creates the re-forked Ycash testnet's `slow` profile: the `fast` profile's consensus
-    /// values with the `slow` profile's magic and name (`CTestNetSlowParams`,
-    /// `ycash6 src/chainparams.cpp:658-672`). The two profiles differ only in Vault parameters:
-    /// the `slow` profile has no Vault height until its first rc (testnet plan T-15).
+    /// testnet-yb-slow: mainnet through H_S, then `UPGRADE_SHADOW` under `0x57a24d5d`.
+    /// Vault has no height until slow's rc (`CTestNetSlowParams`).
     pub fn new_ycash_testnet_slow() -> Self {
-        let heights = super::testnet::ConfiguredActivationHeights {
-            vault: None,
-            ..TESTNET_ACTIVATION_HEIGHTS
-                .iter()
-                .copied()
-                .collect::<std::collections::BTreeMap<_, _>>()
-                .into()
-        };
+        Self::new_ycash_shadow(names::TESTNET_SLOW, magics::TESTNET_SLOW)
+    }
+
+    /// testnet-legacy: the same shadow fork under `0x35706728`, Vault never scheduled
+    /// (`CTestNetLegacyParams`).
+    pub fn new_ycash_testnet_legacy() -> Self {
+        Self::new_ycash_shadow(names::TESTNET_LEGACY, magics::TESTNET_LEGACY)
+    }
+
+    fn new_ycash_shadow(name: &str, magic: super::network::magic::Magic) -> Self {
+        use super::testnet::ConfiguredCheckpoints;
+        use super::NetworkUpgrade::*;
+        use crate::work::difficulty::ParameterDifficulty as _;
+        let mut heights: std::collections::BTreeMap<_, _> =
+            MAINNET_ACTIVATION_HEIGHTS.iter().copied().collect();
+        heights.insert(SHADOW_ACTIVATION_HEIGHT, Shadow);
+        let configured = super::testnet::ConfiguredActivationHeights::from(heights);
+        let limit = Self::Mainnet.target_difficulty_limit();
         super::testnet::Parameters::build()
-            .with_network_name(names::TESTNET_SLOW)
-            .and_then(|builder| builder.with_network_magic(magics::TESTNET_SLOW))
-            .and_then(|builder| builder.with_activation_heights(heights))
+            .with_network_name(name)
+            .and_then(|builder| builder.with_network_magic(magic))
+            .and_then(|builder| builder.with_genesis_hash(MAINNET_GENESIS_HASH))
+            .and_then(|builder| builder.with_activation_heights(configured))
+            .and_then(|builder| builder.with_target_difficulty_limit(limit))
+            .map(|builder| builder.with_max_block_time_start_height(Height(2)))
+            .and_then(|builder| {
+                builder.with_checkpoints(ConfiguredCheckpoints::HeightsAndHashes(
+                    shadow_checkpoint_pairs(),
+                ))
+            })
             .and_then(|builder| builder.to_network())
-            .expect("the hard-coded slow testnet profile is a valid configured testnet")
+            .expect("the hard-coded shadow testnet profile is a valid configured testnet")
     }
 }
 

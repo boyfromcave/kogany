@@ -110,6 +110,7 @@ impl VctFastSyncedChain {
     pub fn generate() -> Self {
         let network = ParametersBuilder::default()
             .with_activation_heights(ConfiguredActivationHeights {
+                shadow: None,
                 ycash: None,
                 vault: None,
                 pq_falcon: None,
