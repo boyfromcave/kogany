@@ -204,7 +204,6 @@ class Recorder:
         assert self.a.ok('getrawmempool') == [txid], 'the shape is mined alone'
         block = self.mine()[0]
         height = self.a.ok('getblock', block)['height']
-        # The wallet has seen the block (its notes marked spent) before the next shape is built.
         # The wallet has seen the block (its notes marked spent) before the next shape is built:
         # ycash-dd's wallet catches up asynchronously, and a z_sendmany built before that picks
         # the note just spent (bad-txns-sapling-duplicate-nullifier).

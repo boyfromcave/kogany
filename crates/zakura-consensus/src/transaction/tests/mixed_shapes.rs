@@ -147,6 +147,16 @@ impl Fixture {
     }
 }
 
+/// Whether a verifier error is `want`.
+///
+/// Run these tests one per process, as nextest does (CI's `kogany-ycash` profile). Under
+/// `cargo test` they share the global batch verifiers with tests on other runtimes, and an
+/// answer can come back as `InternalDowncastError` (`ServiceError { inner: Closed }` or a
+/// cancelled join) instead of the verdict.
+fn refused_with(error: &str, want: &str) -> bool {
+    error.contains(want)
+}
+
 /// A TX_PQPKH scriptSig `<sig chunks> <s> <pk chunks> <p>`: the signature (its last byte the
 /// hash type) and the public key.
 fn pq_sig_and_key(script_sig: &[u8]) -> (Vec<u8>, Vec<u8>) {
@@ -249,7 +259,7 @@ async fn mixed_shapes_verify_at_their_height_and_not_before_vault() {
         NetworkUpgrade::current(&f.network, before),
         NetworkUpgrade::Canopy
     );
-    for (name, txid, height, _) in &f.shapes {
+    for (name, txid, height, pq) in &f.shapes {
         let tx = f.txs[txid].0.as_ref().clone();
         assert!(tx.has_sapling_shielded_data(), "{name} has Sapling parts");
         assert_eq!(
@@ -257,10 +267,20 @@ async fn mixed_shapes_verify_at_their_height_and_not_before_vault() {
             Ok(()),
             "{name} verifies at its height"
         );
+        // With a PQ input the script check fails first (0xc2 is no opcode before Vault);
+        // without one, the Sapling signatures (they bind the Vault branch ID).
+        let want = if pq.is_empty() {
+            "SaplingVerificationFailed"
+        } else {
+            "BadOpcode"
+        };
+        let error = f
+            .verify(tx, before)
+            .await
+            .expect_err("invalid before the Vault height");
         assert!(
-            f.verify(tx, before).await.is_err(),
-            "{name} is invalid before the Vault height (its Sapling and PQ signatures bind the \
-             Vault branch ID, and OP_CHECKPQSIG is not an opcode there)"
+            refused_with(&error, want),
+            "{name} before the Vault height: {want} expected, got {error}"
         );
     }
 }
@@ -277,7 +297,7 @@ async fn a_wrong_pq_signature_or_a_changed_sapling_output_is_invalid() {
                 .await
                 .expect_err("a changed PQ signature fails");
             assert!(
-                error.contains("Script") || error.contains("script"),
+                refused_with(&error, "ScriptInvalid"),
                 "{name}: the PQ input fails its script (the Sapling signatures do not cover \
                  scriptSigs): {error}"
             );
@@ -287,9 +307,20 @@ async fn a_wrong_pq_signature_or_a_changed_sapling_output_is_invalid() {
         // a PQ input, by the PQ signature too.
         let changed = flipped_from_end(&tx, 64 + 1 + 192 + 40);
         assert_ne!(changed.hash(), tx.hash());
+        // With a PQ input its script fails first (the PQ signature covers the output);
+        // without one, the binding signature.
+        let want = if pq.is_empty() {
+            "SaplingVerificationFailed"
+        } else {
+            "ScriptInvalid"
+        };
+        let error = f
+            .verify(changed, *height)
+            .await
+            .expect_err("a changed Sapling output is invalid");
         assert!(
-            f.verify(changed, *height).await.is_err(),
-            "{name}: a changed Sapling output invalidates the transaction"
+            refused_with(&error, want),
+            "{name}: a changed Sapling output: {want} expected, got {error}"
         );
     }
 }
