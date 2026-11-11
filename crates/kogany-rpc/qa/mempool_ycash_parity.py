@@ -53,6 +53,16 @@ three policy modes, each a restart of both nodes:
   policy, so the relay verdicts stay the floor's: a spend at the minimum relay fee is accepted by
   both, the vault RPCs' size-priced owner spend too.
 
+- `mixed` (beta2 W4.4, only with `--ycash-dd-bin`): a fifth chain with Vault at height 1 and
+  Falcon from 0 on both nodes (ycashd `-pqfalcon=1`, kogany `pq_falcon_height = 0`), standardness
+  on, and the ycash-dd (v4.5.0 line) ycashd as the wallet, because only its `z_sendmany` pays a
+  post-quantum address from a Sapling source today (plan §2). The wallet shields coinbase into a
+  Sapling address, then sends from it to its own SLH-DSA and FN-DSA-512 addresses: Sapling spends,
+  a TX_PQPKH output and Sapling change in one transaction, which kogany must accept as ycashd
+  did. The other mixed shapes have no wallet that builds them yet (a PQ input with Sapling
+  outputs; Sapling to a vault lock) or need the YED module live (a Sapling-funded `yed_mint`);
+  the recorded chain in `testdata/mixed-shapes/` and its replays cover them.
+
 Every mode also offers a P2PKH spend whose public key is pushed non-minimally: valid in a block,
 refused by `STANDARD_SCRIPT_VERIFY_FLAGS` (`MINIMALDATA`) in every mempool, regtest included.
 
@@ -901,10 +911,11 @@ MODES = {
               'yellowback_max_tx_fee_usd_micro = 5000000', 'yellowback_max_tx_fee = 2000000000',
               'max_tx_fee = 50000000', 'yellowback_fee = 20000', 'yellowback_mint_lag = 10']),
     'tip': (['-blockunpaidactionlimit=0'], []),
+    'mixed': (['-acceptnonstdtxn=0', '-pqfalcon=1'], ['accept_non_standard = false']),
 }
 
 # The modes that run on a chain of their own with Vault at height 1.
-VAULT_CHAIN_MODES = ('vault', 'tip', 'fees')
+VAULT_CHAIN_MODES = ('vault', 'tip', 'fees', 'mixed')
 
 # The modes whose ycashd applies IsStandardTx / AreInputsStandard (`-acceptnonstdtxn=0`).
 STRICT_MODES = ('standard', 'vault')
@@ -929,12 +940,12 @@ def start_ycashd(bindir, workdir, port, rpcport, mineraddress, extra, vault=Fals
     return subprocess.Popen(args, stdout=log, stderr=subprocess.STDOUT)
 
 
-def kogany_toml(workdir, base_port, miner, extra, vault=False):
+def kogany_toml(workdir, base_port, miner, extra, vault=False, falcon=False):
     toml = base.zakurad_toml(workdir, base_port + 10, base_port + 11, base_port + 12, miner)
     if vault:
         canopy = 'Canopy = 1\n'
         assert canopy in toml
-        toml = toml.replace(canopy, canopy + 'Vault = 1\n')
+        toml = toml.replace(canopy, canopy + 'Vault = 1\n' + ('pq_falcon_height = 0\n' if falcon else ''))
     marker = '[mempool]\ndebug_enable_at_height = 0\n'
     assert marker in toml
     return toml.replace(marker, marker + ''.join(line + '\n' for line in extra))
@@ -992,6 +1003,10 @@ def run(args):
             run_vault(args, v, os.path.join(workdir, 'tip'), procs, mode='tip')
         if 'fees' in args.modes:
             run_fees(args, v, os.path.join(workdir, 'fees'), procs)
+        for k in list(procs):
+            base.stop(procs.pop(k))
+        if 'mixed' in args.modes:
+            run_mixed(args, v, os.path.join(workdir, 'mixed'), procs)
     finally:
         for k in list(procs):
             base.stop(procs.pop(k))
@@ -1040,6 +1055,63 @@ def run_vault(args, v, workdir, procs, mode='vault'):
     mempool_point(chain, v, 'vault')
     chain.mine()
     mempool_point(chain, v, 'vault/after-block')
+
+
+def cases_mixed(chain, v):
+    """Sapling spends next to a TX_PQPKH output (beta2 W4.4): ycash-dd's `z_sendmany` from a
+    Sapling address to its own PQ addresses, one per scheme; kogany is offered the same bytes."""
+    y, z = chain.y, chain.z
+    mode = 'mixed'
+    zaddr = y.ok('z_getnewaddress', 'sapling')
+    opid = y.ok('z_shieldcoinbase', '*', zaddr, 0.0001, 10)['opid']
+    offer_wallet_tx(chain, v, '%s/z_shieldcoinbase' % mode, wait_operation(y, opid))
+    mempool_point(chain, v, '%s/shielded' % mode)
+    chain.mine()
+    wait_until(lambda: y.ok('z_getbalance', zaddr, 1) >= 10, 'the Sapling notes')
+    for scheme, kind in ((1, 'pqslh'), (2, 'pq')):
+        address = y.ok('getnewaddress', '', kind)
+        if y.ok('validateaddress', address)['pqscheme'] != scheme:
+            raise base.RpcError('getnewaddress "%s" did not give a scheme-%d address' % (kind, scheme))
+        txid = wait_operation(y, y.ok('z_sendmany', zaddr, [{'address': address, 'amount': 2}], 1, 0.001))
+        raw = y.ok('getrawtransaction', txid, 1)
+        if not raw['vShieldedSpend'] or not any(o['scriptPubKey']['hex'].endswith('c2') for o in raw['vout']):
+            raise base.RpcError('%s is not Sapling spends with a TX_PQPKH output' % txid)
+        offer_wallet_tx(chain, v, '%s/z_sendmany-sapling-to-pq-scheme-%d' % (mode, scheme), txid)
+        mempool_point(chain, v, '%s/sapling-to-pq-%d' % (mode, scheme))
+        chain.mine()
+        # ycash-dd's wallet marks the spent note a moment after the block (a z_sendmany built
+        # before that picks it again: bad-txns-sapling-duplicate-nullifier).
+        wait_until(lambda: y.ok('gettransaction', txid)['confirmations'] >= 1, 'the mined send')
+        time.sleep(1)
+
+
+def run_mixed(args, v, workdir, procs):
+    """The `mixed` mode on its own chain: Vault at 1, Falcon from 0, ycash-dd as the wallet."""
+    if not args.ycash_dd_bin:
+        raise base.RpcError('the mixed mode needs --ycash-dd-bin (only its z_sendmany pays a PQ address)')
+    os.makedirs(workdir, exist_ok=True)
+    p = args.port_base + 90
+    y = base.Node('ycash-dd', p + 1, 'u:p')
+    z = base.Node('kogany', p + 11)
+    yextra, zextra = MODES['mixed']
+    procs['y'] = start_ycashd(args.ycash_dd_bin, workdir, p, p + 1, None, [], vault=True)
+    base.wait_up(y, procs['y'], 'ycashd')
+    miner = y.ok('getnewaddress')
+    base.stop(procs.pop('y'))
+    procs['y'] = start_ycashd(args.ycash_dd_bin, workdir, p, p + 1, miner, yextra, vault=True)
+    base.wait_up(y, procs['y'], 'ycashd')
+    procs['z'] = base.start_zakurad(args.zakurad, workdir,
+                                    kogany_toml(workdir, p, miner, zextra, vault=True, falcon=True))
+    base.wait_up(z, procs['z'], 'zakurad')
+    print('\n== mode mixed: ycash-dd %s -nuparams=%s:1, kogany [mempool] %s, Vault = 1, Falcon 0'
+          % (yextra, VAULT_BRANCH_ID, zextra))
+    chain = Chain(y, z)
+    chain.mine(1)
+    chain.mine(200)
+    base.wait_balance(y, 100)
+    mempool_point(chain, v, 'mixed/start')
+    cases_mixed(chain, v)
+    mempool_point(chain, v, 'mixed/after-block')
 
 
 def cases_fees(chain, v):
@@ -1126,6 +1198,7 @@ def main(argv=None):
     ap.add_argument('--koganyd', '--zakurad', dest='zakurad', default=os.getenv('KOGANY_BIN'),
                     help='koganyd (the --features ycash build; --zakurad is its old name)')
     ap.add_argument('--ycash6-bin', default=base.DEFAULT_YCASH6_BIN, help='directory holding ycashd')
+    ap.add_argument('--ycash-dd-bin', help='directory holding the ycash-dd ycashd (the mixed mode)')
     ap.add_argument('--workdir', help='keep the datadirs here (default: a temporary directory)')
     ap.add_argument('--keep', action='store_true', help='keep the temporary directory')
     ap.add_argument('--port-base', type=int, default=28700)
