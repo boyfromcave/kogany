@@ -509,8 +509,7 @@ impl Transaction {
                 )
             });
         assert_eq!(
-            remaining_input_value,
-            remaining_transaction_value,
+            remaining_input_value, remaining_transaction_value,
             "fix_remaining_value and remaining_transaction_value calculated different remaining values"
         );
 
@@ -797,6 +796,7 @@ impl Arbitrary for Transaction {
             | NetworkUpgrade::Blossom
             | NetworkUpgrade::Heartwood
             | NetworkUpgrade::Canopy
+            | NetworkUpgrade::Shadow
             | NetworkUpgrade::Vault => Self::v4_strategy(ledger_state),
             NetworkUpgrade::Nu5
             | NetworkUpgrade::Nu6

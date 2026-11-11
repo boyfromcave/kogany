@@ -9,7 +9,7 @@ use zcash_transparent::sighash::{
 
 use super::SigHash;
 use crate::{
-    parameters::{NetworkUpgrade, SAPLING_VERSION_GROUP_ID},
+    parameters::SAPLING_VERSION_GROUP_ID,
     primitives::ZkSnarkProof,
     sapling,
     serialization::ZcashSerialize,
@@ -164,10 +164,10 @@ impl V4Sighash {
     /// Returns precomputed data for V4 transactions, and `None` for other versions.
     pub(super) fn new(
         transaction: &Transaction,
-        network_upgrade: NetworkUpgrade,
+        branch_id: crate::parameters::ConsensusBranchId,
         all_previous_outputs: &[transparent::Output],
     ) -> Option<Self> {
-        let consensus_branch_id = u32::from(network_upgrade.branch_id()?);
+        let consensus_branch_id = u32::from(branch_id);
 
         match transaction {
             Transaction::V4 {

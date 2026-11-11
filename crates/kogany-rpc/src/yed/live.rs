@@ -897,8 +897,12 @@ where
         };
         let nu = NetworkUpgrade::current(network, height);
         let tx = Arc::new(tx);
-        let cached = match zakura_script::CachedFfiTransaction::new(tx.clone(), Arc::new(spent), nu)
-        {
+        let cached = match zakura_script::CachedFfiTransaction::new_on(
+            network,
+            tx.clone(),
+            Arc::new(spent),
+            nu,
+        ) {
             Ok(c) => c,
             Err(e) => {
                 return (
@@ -908,7 +912,7 @@ where
                         script_error_text(&e)
                     )),
                     unconfirmed,
-                )
+                );
             }
         };
         let context = zakura_script::ScriptContext::new(network.clone(), height, vault_state)

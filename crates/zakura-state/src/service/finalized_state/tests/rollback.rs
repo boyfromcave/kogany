@@ -956,6 +956,7 @@ fn rollback_truncates_commitment_roots_above_the_target_tip() {
 fn modern_rollback_network() -> Network {
     TestnetParameters::build()
         .with_activation_heights(ConfiguredActivationHeights {
+            shadow: None,
             ycash: None,
             vault: None,
             pq_falcon: None,

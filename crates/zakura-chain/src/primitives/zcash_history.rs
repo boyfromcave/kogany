@@ -200,7 +200,7 @@ impl<V: Version> Tree<V> {
         peaks: &BTreeMap<u32, Entry>,
         extra: &BTreeMap<u32, Entry>,
     ) -> Result<Self, io::Error> {
-        let branch_id = network_upgrade.branch_id().ok_or_else(|| {
+        let branch_id = network_upgrade.branch_id_on(network).ok_or_else(|| {
             io::Error::new(io::ErrorKind::InvalidInput, "missing consensus branch ID")
         })?;
         let mut peaks_vec = Vec::new();
@@ -240,7 +240,7 @@ impl<V: Version> Tree<V> {
             .coinbase_height()
             .expect("block must have coinbase height during contextual verification");
         let network_upgrade = NetworkUpgrade::current(network, height);
-        if network_upgrade.branch_id().is_none() {
+        if network_upgrade.branch_id_on(network).is_none() {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
                 "missing consensus branch ID",
@@ -265,7 +265,7 @@ impl<V: Version> Tree<V> {
         parts: HistoryTreeBlockParts<'_>,
     ) -> Result<(Self, Entry), io::Error> {
         let network_upgrade = NetworkUpgrade::current(network, parts.height);
-        if network_upgrade.branch_id().is_none() {
+        if network_upgrade.branch_id_on(network).is_none() {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
                 "missing consensus branch ID",
@@ -409,7 +409,7 @@ impl Version for zakura_mmr_tree::V1 {
         let header = parts.header;
         let network_upgrade = NetworkUpgrade::current(network, height);
         let branch_id = network_upgrade
-            .branch_id()
+            .branch_id_on(network)
             .expect("history trees only exist for network upgrades with a branch ID");
         let block_hash = header.hash().0;
         let time: u32 = header
@@ -438,6 +438,7 @@ impl Version for zakura_mmr_tree::V1 {
             // since the V1::NodeData is included inside the V2::NodeData.
             NetworkUpgrade::Heartwood
             | NetworkUpgrade::Canopy
+            | NetworkUpgrade::Shadow
             | NetworkUpgrade::Vault
             | NetworkUpgrade::Nu5
             | NetworkUpgrade::Nu6

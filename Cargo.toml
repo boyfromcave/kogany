@@ -202,31 +202,31 @@ dependent-version = "fix"
 # At the fork's -legacy base each patched crate packages file for file to the
 # crates.io tarball this lock pinned before (fork scripts/verify_crates_io.py).
 [patch.crates-io]
-zakura-address          = { git = "https://github.com/boyfromcave/zakura-common-ycash", rev = "049895445b6fe7a9db20b484736008952a6d6d94" }
-zakura-bellman          = { git = "https://github.com/boyfromcave/zakura-common-ycash", rev = "049895445b6fe7a9db20b484736008952a6d6d94" }
-zakura-bls12-381        = { git = "https://github.com/boyfromcave/zakura-common-ycash", rev = "049895445b6fe7a9db20b484736008952a6d6d94" }
-zakura-equihash         = { git = "https://github.com/boyfromcave/zakura-common-ycash", rev = "049895445b6fe7a9db20b484736008952a6d6d94" }
-zakura-halo2-gadgets    = { git = "https://github.com/boyfromcave/zakura-common-ycash", rev = "049895445b6fe7a9db20b484736008952a6d6d94" }
-zakura-halo2-poseidon   = { git = "https://github.com/boyfromcave/zakura-common-ycash", rev = "049895445b6fe7a9db20b484736008952a6d6d94" }
-zakura-halo2-proofs     = { git = "https://github.com/boyfromcave/zakura-common-ycash", rev = "049895445b6fe7a9db20b484736008952a6d6d94" }
-zakura-jubjub           = { git = "https://github.com/boyfromcave/zakura-common-ycash", rev = "049895445b6fe7a9db20b484736008952a6d6d94" }
-zakura-note-encryption  = { git = "https://github.com/boyfromcave/zakura-common-ycash", rev = "049895445b6fe7a9db20b484736008952a6d6d94" }
-zakura-orchard          = { git = "https://github.com/boyfromcave/zakura-common-ycash", rev = "049895445b6fe7a9db20b484736008952a6d6d94" }
-zakura-orchard-legacy   = { git = "https://github.com/boyfromcave/zakura-common-ycash", rev = "049895445b6fe7a9db20b484736008952a6d6d94" }
-zakura-pairing          = { git = "https://github.com/boyfromcave/zakura-common-ycash", rev = "049895445b6fe7a9db20b484736008952a6d6d94" }
-zakura-pasta-curves     = { git = "https://github.com/boyfromcave/zakura-common-ycash", rev = "049895445b6fe7a9db20b484736008952a6d6d94" }
-zakura-primitives       = { git = "https://github.com/boyfromcave/zakura-common-ycash", rev = "049895445b6fe7a9db20b484736008952a6d6d94" }
-zakura-protocol         = { git = "https://github.com/boyfromcave/zakura-common-ycash", rev = "049895445b6fe7a9db20b484736008952a6d6d94" }
-zakura-reddsa           = { git = "https://github.com/boyfromcave/zakura-common-ycash", rev = "049895445b6fe7a9db20b484736008952a6d6d94" }
-zakura-redjubjub        = { git = "https://github.com/boyfromcave/zakura-common-ycash", rev = "049895445b6fe7a9db20b484736008952a6d6d94" }
-zakura-sapling-crypto   = { git = "https://github.com/boyfromcave/zakura-common-ycash", rev = "049895445b6fe7a9db20b484736008952a6d6d94" }
-zakura-sensei           = { git = "https://github.com/boyfromcave/zakura-common-ycash", rev = "049895445b6fe7a9db20b484736008952a6d6d94" }
-zakura-sensei-artifacts = { git = "https://github.com/boyfromcave/zakura-common-ycash", rev = "049895445b6fe7a9db20b484736008952a6d6d94" }
-zakura-sensei-macros    = { git = "https://github.com/boyfromcave/zakura-common-ycash", rev = "049895445b6fe7a9db20b484736008952a6d6d94" }
-zakura-sensei-shared    = { git = "https://github.com/boyfromcave/zakura-common-ycash", rev = "049895445b6fe7a9db20b484736008952a6d6d94" }
-zakura-sinsemilla       = { git = "https://github.com/boyfromcave/zakura-common-ycash", rev = "049895445b6fe7a9db20b484736008952a6d6d94" }
-zakura-transparent      = { git = "https://github.com/boyfromcave/zakura-common-ycash", rev = "049895445b6fe7a9db20b484736008952a6d6d94" }
-zakura-zcash-script     = { git = "https://github.com/boyfromcave/zakura-common-ycash", rev = "049895445b6fe7a9db20b484736008952a6d6d94" }
+zakura-address          = { git = "https://github.com/boyfromcave/zakura-common-ycash", rev = "9e5b70bb04f628c3c53fd0bde45d7b51715c168e" }
+zakura-bellman          = { git = "https://github.com/boyfromcave/zakura-common-ycash", rev = "9e5b70bb04f628c3c53fd0bde45d7b51715c168e" }
+zakura-bls12-381        = { git = "https://github.com/boyfromcave/zakura-common-ycash", rev = "9e5b70bb04f628c3c53fd0bde45d7b51715c168e" }
+zakura-equihash         = { git = "https://github.com/boyfromcave/zakura-common-ycash", rev = "9e5b70bb04f628c3c53fd0bde45d7b51715c168e" }
+zakura-halo2-gadgets    = { git = "https://github.com/boyfromcave/zakura-common-ycash", rev = "9e5b70bb04f628c3c53fd0bde45d7b51715c168e" }
+zakura-halo2-poseidon   = { git = "https://github.com/boyfromcave/zakura-common-ycash", rev = "9e5b70bb04f628c3c53fd0bde45d7b51715c168e" }
+zakura-halo2-proofs     = { git = "https://github.com/boyfromcave/zakura-common-ycash", rev = "9e5b70bb04f628c3c53fd0bde45d7b51715c168e" }
+zakura-jubjub           = { git = "https://github.com/boyfromcave/zakura-common-ycash", rev = "9e5b70bb04f628c3c53fd0bde45d7b51715c168e" }
+zakura-note-encryption  = { git = "https://github.com/boyfromcave/zakura-common-ycash", rev = "9e5b70bb04f628c3c53fd0bde45d7b51715c168e" }
+zakura-orchard          = { git = "https://github.com/boyfromcave/zakura-common-ycash", rev = "9e5b70bb04f628c3c53fd0bde45d7b51715c168e" }
+zakura-orchard-legacy   = { git = "https://github.com/boyfromcave/zakura-common-ycash", rev = "9e5b70bb04f628c3c53fd0bde45d7b51715c168e" }
+zakura-pairing          = { git = "https://github.com/boyfromcave/zakura-common-ycash", rev = "9e5b70bb04f628c3c53fd0bde45d7b51715c168e" }
+zakura-pasta-curves     = { git = "https://github.com/boyfromcave/zakura-common-ycash", rev = "9e5b70bb04f628c3c53fd0bde45d7b51715c168e" }
+zakura-primitives       = { git = "https://github.com/boyfromcave/zakura-common-ycash", rev = "9e5b70bb04f628c3c53fd0bde45d7b51715c168e" }
+zakura-protocol         = { git = "https://github.com/boyfromcave/zakura-common-ycash", rev = "9e5b70bb04f628c3c53fd0bde45d7b51715c168e" }
+zakura-reddsa           = { git = "https://github.com/boyfromcave/zakura-common-ycash", rev = "9e5b70bb04f628c3c53fd0bde45d7b51715c168e" }
+zakura-redjubjub        = { git = "https://github.com/boyfromcave/zakura-common-ycash", rev = "9e5b70bb04f628c3c53fd0bde45d7b51715c168e" }
+zakura-sapling-crypto   = { git = "https://github.com/boyfromcave/zakura-common-ycash", rev = "9e5b70bb04f628c3c53fd0bde45d7b51715c168e" }
+zakura-sensei           = { git = "https://github.com/boyfromcave/zakura-common-ycash", rev = "9e5b70bb04f628c3c53fd0bde45d7b51715c168e" }
+zakura-sensei-artifacts = { git = "https://github.com/boyfromcave/zakura-common-ycash", rev = "9e5b70bb04f628c3c53fd0bde45d7b51715c168e" }
+zakura-sensei-macros    = { git = "https://github.com/boyfromcave/zakura-common-ycash", rev = "9e5b70bb04f628c3c53fd0bde45d7b51715c168e" }
+zakura-sensei-shared    = { git = "https://github.com/boyfromcave/zakura-common-ycash", rev = "9e5b70bb04f628c3c53fd0bde45d7b51715c168e" }
+zakura-sinsemilla       = { git = "https://github.com/boyfromcave/zakura-common-ycash", rev = "9e5b70bb04f628c3c53fd0bde45d7b51715c168e" }
+zakura-transparent      = { git = "https://github.com/boyfromcave/zakura-common-ycash", rev = "9e5b70bb04f628c3c53fd0bde45d7b51715c168e" }
+zakura-zcash-script     = { git = "https://github.com/boyfromcave/zakura-common-ycash", rev = "9e5b70bb04f628c3c53fd0bde45d7b51715c168e" }
 
 # udon 0.2.0 and bento 0.1.0 were published from earlier commits than the
 # fork base, which changed them without a version bump; keep the crates.io

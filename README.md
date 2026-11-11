@@ -100,7 +100,8 @@ Ycash ports by default; it never binds a Zcash port unless a config names one.
 | --- | --- | --- | --- | --- |
 | Mainnet | 8833 | 8832 | 8233 | 8232 |
 | Testnet, `fast` profile (`network = "Testnet"`) | 18833 | 18832 | 18233 | 18232 |
-| Testnet, `slow` profile | 18933 | 18932 | 18233 | 18232 |
+| Testnet, `slow` profile (`network = "TestnetSlow"`) | 18933 | 18932 | 18233 | 18232 |
+| Testnet, `legacy` profile (`network = "TestnetLegacy"`) | 19033 | 19032 | 18233 | 18232 |
 | Regtest | 18344 | 18832 | 18344 | 18232 |
 
 - The values equal ycashd's (`nDefaultPort`, `chainparamsbase.cpp`); the tests
@@ -112,7 +113,7 @@ Ycash ports by default; it never binds a Zcash port unless a config names one.
 - Regtest P2P 18344 is the one port Ycash shares with Zcash (zcashd's regtest port, kept by
   ycashd). Regtest is local only; to run a Zcash regtest node beside it, give one of them
   another `listen_addr`.
-- ycashd's legacy `testnet3` (P2P 19033) is not a kogany network (decision K-10).
+- `network = "TestnetLegacy"` is testnet-legacy (P2P 19033, magic `f77962d5`), the shadow fork with no Vault activation. ycashd 4.5.0's testnet3 is not a kogany network.
 - Zcash peers: Ycash shares Zcash's mainnet and regtest network magic, so kogany cannot tell
   a Zcash peer by magic alone. It refuses a Zcash peer by protocol version (Ycash peers advertise
   at least 270013) and refuses any peer address on a Zcash port (8233, 8232, 18233, 18232), so a
@@ -132,6 +133,7 @@ with a Zcash network's on one host.
 | Ycash mainnet (`Mainnet`) | 8833 | 8832 | `24e92764` | `main` | |
 | Ycash testnet, `fast` profile (`Testnet`) | 18833 | 18832 | `f77962d3` | `test` | `fast` |
 | Ycash testnet, `slow` profile (`TestnetSlow`) | 18933 | 18932 | `f77962d4` | `test` | `slow` |
+| Ycash testnet, `legacy` profile (`TestnetLegacy`) | 19033 | 19032 | `f77962d5` | `test` | `legacy` |
 | Ycash regtest (`Regtest`) | 18344 | 18832 | `aae83f5f` | `regtest` | |
 
 - The RPC server is off until `rpc.listen_addr` is set; the RPC ports above are the ones to set.
@@ -144,9 +146,9 @@ with a Zcash network's on one host.
   `ys…`, `ytestsapling…`, `yregtestsapling…`; post-quantum `sq…`, `tq…`, `rq…`; Yellowback (YED)
   `yb…`, `yt…`, `yr…`. Coin type 347 on mainnet.
 - DNS seed: `seed.ycash.xyz` on mainnet; the testnet has fixed seeds only.
-- The legacy `testnet3` profile of ycashd is not one of kogany's networks (decision K-10).
-- The `slow` profile is built in (`Network::new_ycash_testnet_slow`) but `kogany.toml` has no
-  selector for it yet: `network = "Testnet"` is the `fast` profile.
+- ycashd 4.5.0's testnet3 is not one of kogany's networks.
+- `network = "Testnet"` is testnet-yb-fast. `network = "TestnetSlow"` and
+  `network = "TestnetLegacy"` are the shadow forks of mainnet through height 3,079,999.
 
 ## Directories and files
 

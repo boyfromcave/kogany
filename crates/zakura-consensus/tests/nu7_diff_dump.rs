@@ -339,6 +339,7 @@ fn build_testnet(a: u32) -> Result<Network, String> {
             NetworkUpgrade::Blossom => h.blossom = v,
             NetworkUpgrade::Heartwood => h.heartwood = v,
             NetworkUpgrade::Canopy => h.canopy = v,
+            NetworkUpgrade::Shadow => h.shadow = v,
             NetworkUpgrade::Vault => h.vault = v,
             NetworkUpgrade::Nu5 => h.nu5 = v,
             NetworkUpgrade::Nu6 => h.nu6 = v,
@@ -360,6 +361,7 @@ fn build_testnet(a: u32) -> Result<Network, String> {
 fn build_regtest() -> Result<Network, String> {
     let one = Some(1);
     let heights = ConfiguredActivationHeights {
+        shadow: None,
         before_overwinter: one,
         overwinter: one,
         sapling: one,

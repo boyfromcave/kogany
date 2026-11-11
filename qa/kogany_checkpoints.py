@@ -34,9 +34,11 @@ the node syncs: it resumes after the last checkpoint, exactly as `--last-checkpo
 
 `testnet` writes `ycash-test-checkpoints.txt`: the re-forked Ycash testnet shares Zcash testnet's
 history through 510,247 (`ycash/LAST_SHARED_HEIGHT`, ycash6 `src/chainparams.cpp:571-583`, the
-testnet-prefix-v1 manifest), so its list is Zakura's `test-checkpoints.txt` cut at that height plus
-ycashd's 510,247 pin. Checkpoints above the fork come with the testnet's first rc (no Ycash testnet
-node exists to generate them from yet).
+testnet-prefix-v1 manifest). The list is Zakura's `test-checkpoints.txt` cut at that height, then
+the fast profile's mandatory checkpoint at 510,253 (Canopy minus one, the hash both
+testnet-yb-fast seeds serve). ycashd's 510,247 pin stays out of the list: 510,253 is 6 blocks
+later, under the 17-block minimum gap, and the hash chain from 510,000 through 510,253 covers it.
+Blocks from Canopy (510,254) on are verified semantically.
 
 Stdlib only; `main(argv=None)`.
 """
@@ -94,10 +96,14 @@ MAINNET_VAULT_HEIGHT = None
 
 # The re-forked Ycash testnet (`ycash6 src/chainparams.cpp:571-583`).
 TESTNET_LAST_SHARED_HEIGHT = 510_247
+# ycashd's fork pin. Not a list entry: Canopy-1 is only 6 blocks later.
+TESTNET_FORK_PIN = "0000ec904003d5591290064b0b4d3ccddffe87ef2a3a131284438959bf68fb31"
+# Fast profile: Canopy activates at 510,254, so the mandatory checkpoint is 510,253.
+TESTNET_MANDATORY_HEIGHT = 510_253
 TESTNET_PINS = {
     0: "05a60a92d99d85997cce3b87616c089f6124d7342af37106edc76126334a2c38",
     38000: "001e9a2d2e2892b88e9998cf7b079b41d59dd085423a921fe8386cecc42287b8",
-    510247: "0000ec904003d5591290064b0b4d3ccddffe87ef2a3a131284438959bf68fb31",
+    510253: "0297aad933fdf3f5e07acff13992e138ab4fec56033cdfa3a3815535ff049dbb",
 }
 # `fast` profile Vault height (`ycash6 src/chainparams.cpp:640`); the `slow` profile has none.
 TESTNET_VAULT_HEIGHT = 510_400
@@ -304,21 +310,32 @@ def cmd_mainnet(args, repo):
     return 0
 
 
-def cmd_testnet(args, repo):
-    out = args.out or os.path.join(repo, YCASH_TESTNET)
+def fast_testnet_checkpoint_list(repo):
+    """Header and entries of `ycash-test-checkpoints.txt`.
+
+    Shared Zcash testnet history through the fork, then the fast mandatory
+    checkpoint. The fork pin is not an entry: it is 6 blocks under that
+    checkpoint, and the minimum gap is 17.
+    """
     _, upstream = read_list(os.path.join(repo, UPSTREAM_TESTNET))
     entries = [(h, b) for h, b in upstream if h <= TESTNET_LAST_SHARED_HEIGHT]
-    if entries[-1][0] != TESTNET_LAST_SHARED_HEIGHT:
-        entries.append((TESTNET_LAST_SHARED_HEIGHT, TESTNET_PINS[TESTNET_LAST_SHARED_HEIGHT]))
+    entries.append((TESTNET_MANDATORY_HEIGHT, TESTNET_PINS[TESTNET_MANDATORY_HEIGHT]))
     header = [
         "# Ycash testnet checkpoints for kogany's `ycash` profile, `fast` and `slow` (W1-Y4; K-9, K-10; M24-14).",
-        "# Zcash testnet's shared history through %d (Zakura's test-checkpoints.txt cut there) plus"
-        % TESTNET_LAST_SHARED_HEIGHT,
-        "# ycashd's %d pin (ycash6 src/chainparams.cpp:571-583, testnet-prefix-v1)." % TESTNET_LAST_SHARED_HEIGHT,
-        "# PARTIAL: through %d. Canopy-1 (510,253) is not covered: the re-forked testnet's blocks above"
-        % TESTNET_LAST_SHARED_HEIGHT,
-        "# %d come with its first rc; never at or above Vault (fast profile %d)." % (TESTNET_LAST_SHARED_HEIGHT, TESTNET_VAULT_HEIGHT),
+        "# Zcash testnet's shared history through %d (Zakura's test-checkpoints.txt cut there) plus" % TESTNET_LAST_SHARED_HEIGHT,
+        "# the re-forked testnet's Canopy-1 block %d (the mandatory checkpoint), as served by both" % TESTNET_MANDATORY_HEIGHT,
+        "# testnet-yb-fast seeds. Its chain passes through ycashd's %d pin (ycash6" % TESTNET_LAST_SHARED_HEIGHT,
+        "# src/chainparams.cpp:571-583, testnet-prefix-v1), which the 17-block minimum gap keeps out of the",
+        "# list. Blocks from Canopy (%d) on are verified semantically; never at or above Vault (%d)." % (TESTNET_MANDATORY_HEIGHT + 1, TESTNET_VAULT_HEIGHT),
+        "# PARTIAL: for a configured testnet that reuses this list with a later Canopy, the list stops",
+        "# below its mandatory checkpoint (W1-Y4).",
     ]
+    return header, entries, upstream
+
+
+def cmd_testnet(args, repo):
+    out = args.out or os.path.join(repo, YCASH_TESTNET)
+    header, entries, upstream = fast_testnet_checkpoint_list(repo)
     summary = check_list(entries, TESTNET_PINS, TESTNET_VAULT_HEIGHT, upstream, TESTNET_LAST_SHARED_HEIGHT + 1)
     write_list(out, header, entries)
     print(json.dumps(dict(summary, file=out)))

@@ -191,8 +191,12 @@ pub fn yed_network_params(
         }
         match network {
             Network::Mainnet => kogany_yellowback::params::main_params(),
-            // kogany has no testnet-yb-fast profile selector yet: the testnet column (mainnet's
-            // values), as ycash6's testnet-yb-slow and testnet-legacy.
+            // testnet-yb-fast uses the scaled column. slow and legacy use mainnet's column;
+            // legacy never reaches here because Vault is unscheduled.
+            #[cfg(feature = "ycash")]
+            Network::Testnet(_) if zakura_chain::parameters::ycash::is_fast_network(network) => {
+                kogany_yellowback::params::test_fast_params()
+            }
             Network::Testnet(_) => kogany_yellowback::params::test_params(),
         }
     };
@@ -297,7 +301,9 @@ pub enum YedEvaluationFailed {
     },
 
     /// The stored tip was written under another `SCHEMA_VERSION` or network.
-    #[error("the index was written under schema {stored_schema} on {stored_network:?}; this binary has schema {schema} on {network:?}")]
+    #[error(
+        "the index was written under schema {stored_schema} on {stored_network:?}; this binary has schema {schema} on {network:?}"
+    )]
     Schema {
         /// The stored tip's schema.
         stored_schema: u32,

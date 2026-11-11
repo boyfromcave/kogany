@@ -319,6 +319,7 @@ fn generated_nu5_graph_matches_full_state_before_finalization() {
     fn network(checkpoint_blocks: Option<&[Arc<Block>]>) -> Network {
         let builder = ParametersBuilder::default()
             .with_activation_heights(ConfiguredActivationHeights {
+                shadow: None,
                 ycash: None,
                 vault: None,
                 pq_falcon: None,

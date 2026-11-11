@@ -1,8 +1,11 @@
 # Ycash testnet checkpoints for kogany's `ycash` profile, `fast` and `slow` (W1-Y4; K-9, K-10; M24-14).
 # Zcash testnet's shared history through 510247 (Zakura's test-checkpoints.txt cut there) plus
-# ycashd's 510247 pin (ycash6 src/chainparams.cpp:571-583, testnet-prefix-v1).
-# PARTIAL: through 510247. Canopy-1 (510,253) is not covered: the re-forked testnet's blocks above
-# 510247 come with its first rc; never at or above Vault (fast profile 510400).
+# the re-forked testnet's Canopy-1 block 510253 (the mandatory checkpoint), as served by both
+# testnet-yb-fast seeds. Its chain passes through ycashd's 510247 pin (ycash6
+# src/chainparams.cpp:571-583, testnet-prefix-v1), which the 17-block minimum gap keeps out of the
+# list. Blocks from Canopy (510254) on are verified semantically; never at or above Vault (510400).
+# PARTIAL: for a configured testnet that reuses this list with a later Canopy, the list stops
+# below its mandatory checkpoint (W1-Y4).
 0 05a60a92d99d85997cce3b87616c089f6124d7342af37106edc76126334a2c38
 400 000393fe014f5ff5de7c9f0aa669ee074c9a7743a6bdc1d1686149b4b36090d8
 800 0003bef995cd09a4a2bcb96580fa435ed10c0b44239191fafc825477e84a325d
@@ -1279,4 +1282,4 @@
 509200 0000243bc1cf3635c6336605ed8ee2e715fd7faed92c537e23e9cf4427a3767f
 509600 00020a3da832a57c5748466668826b3d10802add3b759b676c191b97d6f7ebe3
 510000 00003d164a0b76a2d7e14adbe0c4463eb84ad8c0004067476b6fa40b51c10154
-510247 0000ec904003d5591290064b0b4d3ccddffe87ef2a3a131284438959bf68fb31
+510253 0297aad933fdf3f5e07acff13992e138ab4fec56033cdfa3a3815535ff049dbb
