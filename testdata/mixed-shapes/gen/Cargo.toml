@@ -1,0 +1,27 @@
+# Copyright (c) 2026 The Ycash developers
+# Distributed under the MIT software license, see the accompanying
+# file COPYING or https://www.opensource.org/licenses/mit-license.php .
+#
+# The Sapling half of the mixed-shape fixtures (testdata/mixed-shapes/record.py runs it): builds a
+# v4 transaction with Sapling spends and outputs next to transparent inputs whose scriptSigs stay
+# empty for ycashd's `signrawtransaction` to fill. Not a workspace member and not built in CI: it
+# needs the Sapling proving parameters, which only the recording machine has.
+
+[package]
+name = "mixed-shapes-gen"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[workspace]
+
+[dependencies]
+blake2b_simd = "1"
+hex = "0.4"
+rand_chacha = "0.10"
+rand_core = "0.10"
+serde_json = "1"
+sapling = { package = "zakura-sapling-crypto", git = "https://github.com/boyfromcave/zakura-common-ycash", rev = "9e5b70bb04f628c3c53fd0bde45d7b51715c168e" }
+zcash_note_encryption = { package = "zakura-note-encryption", git = "https://github.com/boyfromcave/zakura-common-ycash", rev = "9e5b70bb04f628c3c53fd0bde45d7b51715c168e" }
+sha2 = "0.10"
+zip32 = { version = "0.2", default-features = false }
