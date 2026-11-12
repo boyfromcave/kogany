@@ -67,7 +67,7 @@ These differences are kept: the RPC server is upstream Zakura's, and the wallet 
   "Invalid params" (jsonrpsee, every method of `zakura-rpc` and `kogany-rpc`). ycashd checks the
   count in its RPC table before the handler and answers `-32602` "Not enough parameters for
   method `<m>`. Needed …" (or "Too many parameters …") followed by the method's help text. The
-  Yellowback lead architect's decision (2026-11-12): the fix lives in the façade, not here. yewd
+  beta2 decision (2026-11-12): the fix lives in the façade, not here. yewd
   answers ycashd's `-32602` with ycashd's help for every method it forwards to `koganyd`
   (`yewd/facade/src/ycashd_rpc.json`, the `forwarded` section). Clients that call `koganyd`
   directly see `-1`.
