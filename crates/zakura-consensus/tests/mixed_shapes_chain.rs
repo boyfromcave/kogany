@@ -1,12 +1,16 @@
-//! Beta2 address-interop plan W4.1: the recorded C++ chain of transactions that mix Sapling
-//! spends and outputs with the Vault upgrade's transparent scripts (`testdata/mixed-shapes/`,
-//! recorded by `record.py` on a ycash-dd node with a ycash6 node following) goes through
-//! kogany's full block pipeline: every block, each mixed shape mined alone in its own block,
-//! commits; the tip is the C++ tip.
+//! Beta2 address-interop plan W4.1: the recorded C++ chains of transactions that mix Sapling
+//! spends and outputs with the Vault upgrade's transparent scripts (`testdata/mixed-shapes/`:
+//! `chain.json`, recorded by `record.py` on a ycash-dd node with a ycash6 node following, and
+//! `chain2.json`, recorded by `record2.py` on a ycash6 wallet node with a ycash-dd node
+//! following) go through kogany's full block pipeline: every block, each mixed shape mined alone
+//! in its own block, commits; the tip is the C++ tip.
 //!
-//! The shapes: Sapling to a TX_PQPKH output (SLH-DSA and FN-DSA-512), a TX_PQPKH input to
-//! Sapling (each scheme), Sapling to a vault-lock output, and a Sapling spend and a PQ input
-//! together paying a vault lock, a PQ output and Sapling change.
+//! The shapes of `chain.json`: Sapling to a TX_PQPKH output (SLH-DSA and FN-DSA-512), a TX_PQPKH
+//! input to Sapling (each scheme), Sapling to a vault-lock output, and a Sapling spend and a PQ
+//! input together paying a vault lock, a PQ output and Sapling change. `chain2.json` adds the
+//! ycash6 wallet's shapes (Sapling to PQ, PQ to Sapling with PQ change, a Sapling-funded
+//! `vault_lock`), an FN-DSA-512 input beside a Sapling spend, a Sapling spend and an SLH-DSA
+//! input paying a PQ output and PQ change, and a vault unlock whose fee a Sapling spend pays.
 //!
 //! A Ycash build only (`--features ycash`): the recorded blocks are Ycash regtest blocks.
 //!
@@ -31,8 +35,10 @@ use zakura_state as zs;
 type BoxError = Box<dyn std::error::Error + Send + Sync + 'static>;
 type Mempool = tower::util::BoxCloneService<mempool::Request, mempool::Response, BoxError>;
 
-fn fixture() -> serde_json::Value {
-    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../testdata/mixed-shapes/chain.json");
+fn fixture(file: &str) -> serde_json::Value {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../testdata/mixed-shapes")
+        .join(file);
     serde_json::from_slice(&std::fs::read(path).expect("the fixture is committed"))
         .expect("the fixture is JSON")
 }
@@ -56,7 +62,17 @@ fn network(doc: &serde_json::Value) -> Network {
 #[tokio::test(flavor = "multi_thread")]
 async fn mixed_shape_chain_commits_through_the_pipeline() {
     let _init_guard = zakura_test::init();
-    let doc = fixture();
+    commits_through_the_pipeline("chain.json", 6).await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn mixed_shape_chain2_commits_through_the_pipeline() {
+    let _init_guard = zakura_test::init();
+    commits_through_the_pipeline("chain2.json", 8).await;
+}
+
+async fn commits_through_the_pipeline(file: &str, expected_shapes: usize) {
+    let doc = fixture(file);
     let network = network(&doc);
     let blocks: Vec<Arc<Block>> = doc["blocks"]
         .as_array()
@@ -70,7 +86,7 @@ async fn mixed_shape_chain_commits_through_the_pipeline() {
 
     // Every shape is in the block the recording says, alone beside the coinbase.
     let shapes = doc["shapes"].as_object().expect("shapes");
-    assert_eq!(shapes.len(), 6, "six mixed shapes");
+    assert_eq!(shapes.len(), expected_shapes, "{file}: the mixed shapes");
     for (name, shape) in shapes {
         let height = shape["height"].as_u64().expect("a height") as usize;
         let block = &blocks[height - 1];
