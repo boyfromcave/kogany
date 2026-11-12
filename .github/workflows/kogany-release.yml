@@ -54,8 +54,10 @@ jobs:
             echo "::error::$TAG is a final release tag; kogany is not a qualified line yet (kogany plan K-19), so only -ycash.betaN and -ycash.rcN pre-releases are cut"
             exit 1
           fi
-          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-ycash\.(beta|rc)[0-9]+$ ]]; then
-            echo "::error::$TAG does not match v<X.Y.Z>-ycash.<beta|rc><n>"
+          # At most five digits per number: the bound the user agent and build.rs apply
+          # (zakura_network::ycash::MAX_RELEASE_DIGITS).
+          if [[ ! "$TAG" =~ ^v[0-9]{1,5}\.[0-9]{1,5}\.[0-9]{1,5}-ycash\.(beta|rc)[0-9]{1,5}$ ]]; then
+            echo "::error::$TAG does not match v<X.Y.Z>-ycash.<beta|rc><n> (at most five digits per number)"
             exit 1
           fi
           crate=$(sed -n 's/^version = "\(.*\)"$/\1/p' crates/zakurad/Cargo.toml | head -n1)
@@ -99,8 +101,9 @@ jobs:
       # build compiles the bundled RocksDB statically, so the released binary needs no RocksDB package.
       - name: cargo build --release koganyd --features ycash
         env:
-          # The user agent carries the release name (`/koganyd:1.8.0-ycash.beta1/`, build.rs).
-          KOGANY_RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+          # The user agent carries the release name (`/koganyd:1.8.0-ycash.beta1/`, build.rs),
+          # from the tag the guard job checked.
+          KOGANY_RELEASE_TAG: ${{ needs.guard.outputs.tag }}
         run: |
           set -euo pipefail
           cargo build --release --locked -p kogany --bin koganyd --features "default-release-binaries ycash"

@@ -413,11 +413,10 @@ mod tests {
         use tracing_subscriber::layer::SubscriberExt;
 
         let (last_warn_error_sender, last_warn_error_receiver) = watch::channel(None);
-        let subscriber = tracing_subscriber::registry().with(
-            crate::components::tracing::LastWarnErrorLayer {
+        let subscriber =
+            tracing_subscriber::registry().with(crate::components::tracing::LastWarnErrorLayer {
                 last_warn_error_sender,
-            },
-        );
+            });
 
         let (sender, receiver) = ChainTipMetrics::channel();
         tracing::subscriber::with_default(subscriber, || {

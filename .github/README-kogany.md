@@ -201,7 +201,8 @@ is split off first (`objcopy --only-keep-debug`, then `--strip-debug --add-gnu-d
 `koganyd_<tag>_<platform>.debug.tar.gz`; the binary keeps its symbol table, and `koganyd.debug`
 put beside it restores file:line in backtraces (macOS leaves the DWARF in the object files). `publish` writes `SHA256SUMS`, signs it keylessly with cosign, attests build provenance
 for the tarballs and runs `gh release create --prerelease`, with `doc/release-notes/<tag>.md` as
-the notes when it exists. The build sets `KOGANY_RELEASE_TAG` to the tag, so the released
+the notes when it exists. The build sets `KOGANY_RELEASE_TAG` to the tag the guard checked (at most
+five digits per number; `build.rs` fails the build on any other value), so the released
 `koganyd` advertises the BIP 14 user agent `/koganyd:<X.Y.Z>-ycash.<beta|rc><n>/` (a local build
 does too when its clean checkout is exactly at such a tag; otherwise `/koganyd:<crate version>/`).
 

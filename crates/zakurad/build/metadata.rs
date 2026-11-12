@@ -101,12 +101,22 @@ fn emit_git_metadata() -> Result<(), String> {
 }
 
 /// kogany: the release tag the build is cut at, for the user agent
-/// (`zakura_network::ycash::user_agent_for_release`, which validates its shape). The release
-/// workflow sets `KOGANY_RELEASE_TAG`; a local build falls back to a clean checkout exactly at a
-/// `v*-ycash.*` tag. Anything else emits nothing, and the user agent carries the crate version.
+/// (`zakura_network::ycash::user_agent_for_release`). The release workflow sets
+/// `KOGANY_RELEASE_TAG`; a value that is not a kogany release tag ([`is_kogany_release_tag`])
+/// fails the build, so it never reaches `cargo:rustc-env` unchecked. A local build without the
+/// variable falls back to a clean checkout exactly at a `v*-ycash.*` tag, and reruns when a tag is
+/// added or the index changes ([`emit_git_rerun_triggers`]). Anything else emits nothing, and the
+/// user agent carries the crate version.
 fn emit_kogany_release_tag() {
     let tag = match env::var("KOGANY_RELEASE_TAG") {
-        Ok(tag) if !tag.is_empty() => Some(tag),
+        Ok(tag) if !tag.is_empty() => {
+            assert!(
+                is_kogany_release_tag(&tag),
+                "KOGANY_RELEASE_TAG={tag:?} is not a kogany release tag \
+                 v<X.Y.Z>-ycash.<beta|rc><n> (at most {MAX_RELEASE_DIGITS} digits per number)"
+            );
+            Some(tag)
+        }
         _ => git(&["status", "--porcelain", "--untracked-files=no"])
             .ok()
             .filter(|status| status.is_empty())
@@ -119,11 +129,39 @@ fn emit_kogany_release_tag() {
                     "v*-ycash.*",
                 ])
                 .ok()
-            }),
+            })
+            .filter(|tag| is_kogany_release_tag(tag)),
     };
     if let Some(tag) = tag {
         emit_env("KOGANY_RELEASE_TAG", tag);
     }
+}
+
+/// The most digits in each number of a release tag: `zakura_network::ycash::MAX_RELEASE_DIGITS`
+/// (a build script cannot use the crate; `kogany_version_tests` checks the two agree).
+pub(crate) const MAX_RELEASE_DIGITS: usize = 5;
+
+/// Is `tag` a kogany release tag, `v<X.Y.Z>-ycash.<beta|rc><n>` with 1 to
+/// [`MAX_RELEASE_DIGITS`] digits per number? The shape `zakura_network::ycash::release_name`
+/// accepts; it also keeps anything but `[0-9a-z.-]` (a newline, a second `cargo:` directive) out
+/// of the emitted value.
+pub(crate) fn is_kogany_release_tag(tag: &str) -> bool {
+    let digits = |s: &str| {
+        (1..=MAX_RELEASE_DIGITS).contains(&s.len()) && s.bytes().all(|b| b.is_ascii_digit())
+    };
+    let Some((version, stage)) = tag
+        .strip_prefix('v')
+        .and_then(|name| name.split_once("-ycash."))
+    else {
+        return false;
+    };
+    let numbers: Vec<&str> = version.split('.').collect();
+    numbers.len() == 3
+        && numbers.iter().all(|n| digits(n))
+        && stage
+            .strip_prefix("beta")
+            .or_else(|| stage.strip_prefix("rc"))
+            .is_some_and(digits)
 }
 
 /// kogany's baseline tag: the commit the Ycash work was cut from (plan §4.2). `koganyd`'s build
@@ -144,6 +182,19 @@ fn emit_git_rerun_triggers() -> Result<(), String> {
             if let Ok(resolved) = git(&["rev-parse", "--git-path", path]) {
                 emit_rerun_if_exists(Path::new(&resolved));
             }
+        }
+    }
+
+    // kogany: the `git describe` fallbacks (the release tag, `KOGANY_GIT_DESCRIBE`) and the
+    // `-dirty` mark also depend on the tags and on the tree's state. A new tag lands in
+    // `refs/tags/` (a directory: Cargo reruns when anything in it changes) or `packed-refs`
+    // (above); `git add`, `commit`, `checkout`, `stash` and `reset` rewrite the index, and so does
+    // `git status` when it refreshes stat data, so an edit is seen once the index is touched. An
+    // unstaged edit nobody has run git on since is not; the release workflow sets
+    // `KOGANY_RELEASE_TAG` and does not depend on this.
+    for path in ["refs/tags", "index"] {
+        if let Ok(resolved) = git(&["rev-parse", "--git-path", path]) {
+            emit_rerun_if_exists(Path::new(&resolved));
         }
     }
 
