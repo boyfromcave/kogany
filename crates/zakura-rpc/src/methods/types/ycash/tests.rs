@@ -239,6 +239,7 @@ fn pq_addresses_decode_as_ycashd() {
             "scriptPubKey": format!("20{}52c2", hex::encode(key_hash)),
             "isscript": false,
             "pqscheme": 2,
+            "pqschemename": "FN-DSA-512",
             "pqkeyhash": hex::encode(key_hash),
         })
     );

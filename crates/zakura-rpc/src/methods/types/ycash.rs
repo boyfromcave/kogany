@@ -232,8 +232,20 @@ pub struct PqAddress {
     pub script_pub_key: String,
     /// The scheme: 1 = SLH-DSA-SHA2-128s, 2 = FN-DSA-512 (`pqscheme`).
     pub scheme: u8,
+    /// The scheme's name (`pqschemename`, `ycash6 src/wallet/rpcwallet.cpp` `PQSchemeName`).
+    pub scheme_name: &'static str,
     /// The 32-byte key hash as pushed in the script, in hex (`pqkeyhash`).
     pub key_hash: String,
+}
+
+/// The name ycashd gives a post-quantum scheme (`ycash6 src/wallet/rpcwallet.cpp`, `PQSchemeName`).
+pub fn pq_scheme_name(scheme: u8) -> &'static str {
+    use kogany_vault::template::{PQ_SCHEME_FN_DSA_512, PQ_SCHEME_SLH_DSA_SHA2_128S};
+    match scheme {
+        PQ_SCHEME_SLH_DSA_SHA2_128S => "SLH-DSA-SHA2-128s",
+        PQ_SCHEME_FN_DSA_512 => "FN-DSA-512",
+        _ => "unknown",
+    }
 }
 
 /// Decodes a plain-YEC post-quantum address of `network`, as ycashd's `DecodeDestination` does
@@ -256,6 +268,7 @@ pub fn decode_pq_address(network: &Network, encoded: &str) -> Option<PqAddress> 
         address: encode_pq(&owner, versions)?,
         script_pub_key: hex::encode(script),
         scheme: owner.scheme,
+        scheme_name: pq_scheme_name(owner.scheme),
         key_hash: hex::encode(owner.hash.0),
     })
 }

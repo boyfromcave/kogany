@@ -190,7 +190,7 @@ CLIENT_FIELDS = {
                         # is live (ycash6 src/rpc/mining.cpp:830-847).
                         r'coinbaseaux(\.flags)?|yellowback(\.\w+)?|'
                         r'coinbase\.(header|versiongroupid|height_push|outputs.*|locktime)|proposal.*)$',
-    'validateaddress': r'\.(isvalid|address|scriptPubKey|pqscheme|pqkeyhash)$',
+    'validateaddress': r'\.(isvalid|address|scriptPubKey|pqscheme|pqschemename|pqkeyhash)$',
     'getblocksubsidy': r'\.(miner|founders|totalblocksubsidy)$',
 }
 

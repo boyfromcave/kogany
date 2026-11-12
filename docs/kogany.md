@@ -57,3 +57,36 @@ behaviours follow ycashd's there, each against Zakura's own:
   (`MAX_INBOUND_CONCURRENCY_PER_PEER`, 5) refuses is kept, bounded, and requested again when a
   slot frees, as ycashd keeps every announced id in its request queue: a burst of announcements is
   fully downloaded.
+
+## Where a `koganyd` answers differently from ycashd
+
+These differences are kept: the RPC server is upstream Zakura's, and the wallet in front of a
+`koganyd` (yewd, in yew's `yewd/`) gives users ycashd's answers.
+
+- **Wrong argument counts.** A call with too few or too many arguments answers `-1`
+  "Invalid params" (jsonrpsee, every method of `zakura-rpc` and `kogany-rpc`). ycashd checks the
+  count in its RPC table before the handler and answers `-32602` "Not enough parameters for
+  method `<m>`. Needed …" (or "Too many parameters …") followed by the method's help text. The
+  beta2 decision (2026-11-12): the fix lives in the façade, not here. yewd
+  answers ycashd's `-32602` with ycashd's help for every method it forwards to `koganyd`
+  (`yewd/facade/src/ycashd_rpc.json`, the `forwarded` section). Clients that call `koganyd`
+  directly see `-1`.
+- **Wallet fields.** `koganyd` has no wallet. It omits `ismine` / `iswatchonly`
+  (`validateaddress`, `z_validateaddress`), `wallet` (`vault_list` rows), the wallet half of
+  `getinfo` (`balance`, `keypoolsize`, `keypoololdest`, `walletversion`) and
+  `protectedByIndex: true` (`yed_getinfo`). yewd adds them from its wallet.
+- **`getaddressbalance` has no `txcount`.** ycash6 added the count of distinct transactions
+  (`src/rpc/misc.cpp`, before beta2); `koganyd` answers `balance` and `received` only.
+- **Node fields from Zakura.** `getblockchaininfo` has no `upgrades.<id>.info`, `softforks`,
+  `transactions`, `fullyNotified` or `initial_block_download_complete`, and adds
+  `nsmValueBalanceZat`. `getnetworkinfo` has no `warningstimestamp`. `getmininginfo` has no
+  `difficulty`, `errors`, `errorstimestamp`, `generate`, `genproclimit`, `localsolps` or
+  `pooledtx`.
+
+For post-quantum addresses (`sqf…`/`sqs…`, the YED `ybf…`/`ybs…`), the answers match ycashd's
+field for field (2026-11-12, regtest, `koganyd` against ycash6 6.22.0-beta2):
+`validateaddress` (with `pqscheme`, `pqschemename`, `pqkeyhash`), `z_validateaddress`,
+`getaddressutxos` (with and without `chainInfo`), `getaddresstxids`, `getaddressdeltas`,
+`getaddressmempool` (apart from `timestamp`, each node's own arrival time), `getaddressbalance`
+(apart from `txcount`, above), `yed_listtokens`, `yed_getvault`, `yed_gettxinfo`, `yed_listvaults`,
+`vault_decodescript`, `vault_list`, `set_getinfo` and `vault_getinfo`.
