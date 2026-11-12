@@ -196,9 +196,15 @@ ycash"`, no Rust cache, so a release never restores a cache; no system RocksDB, 
 linked statically) on ubuntu-24.04, ubuntu-24.04-arm and
 macos-14, and pack `koganyd_<tag>_<platform>.tar.gz` (`koganyd`, `README.txt`, the licences,
 `default_config_ycash.toml`; `.github/workflows/scripts/kogany-release-package.sh`) with an SPDX
-SBOM each. `publish` writes `SHA256SUMS`, signs it keylessly with cosign, attests build provenance
+SBOM each. On Linux the DWARF the release profile keeps (`debug = "line-tables-only"`, as upstream)
+is split off first (`objcopy --only-keep-debug`, then `--strip-debug --add-gnu-debuglink`) into
+`koganyd_<tag>_<platform>.debug.tar.gz`; the binary keeps its symbol table, and `koganyd.debug`
+put beside it restores file:line in backtraces (macOS leaves the DWARF in the object files). `publish` writes `SHA256SUMS`, signs it keylessly with cosign, attests build provenance
 for the tarballs and runs `gh release create --prerelease`, with `doc/release-notes/<tag>.md` as
-the notes when it exists.
+the notes when it exists. The build sets `KOGANY_RELEASE_TAG` to the tag the guard checked (at most
+five digits per number; `build.rs` fails the build on any other value), so the released
+`koganyd` advertises the BIP 14 user agent `/koganyd:<X.Y.Z>-ycash.<beta|rc><n>/` (a local build
+does too when its clean checkout is exactly at such a tag; otherwise `/koganyd:<crate version>/`).
 
 ```sh
 git checkout upgrade/vault && git pull --ff-only

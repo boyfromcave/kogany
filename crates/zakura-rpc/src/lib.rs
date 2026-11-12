@@ -40,3 +40,5 @@ pub use methods::types::ycash_reject::script_error_string as ycash_script_error_
 // kogany S5: the insight reads' address parameter, YED forms included.
 #[cfg(feature = "ycash")]
 pub use methods::types::ycash::insight_address as ycash_insight_address;
+#[cfg(feature = "ycash")]
+pub use methods::types::ycash::insight_address_on as ycash_insight_address_on;

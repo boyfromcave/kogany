@@ -17,7 +17,9 @@ and syncs the chain from the restarted sidecar (`-yellowbackattestorset`,
 `-yellowbackpayoutaddress`). The sidecar quotes (`yed_setquote`), registers attestors 0..2 (ycash6's
 `register_and_arm` keys and `build_register_tx`), mines until the layer is ARMED and the price
 windows are full, feeds the attestations of R = tip - REF_LAG to both nodes, and mints
-(`yed_mint`, the two-step carrier flow).
+(`yed_mint`, the two-step carrier flow). With `--mint-from-sapling` the mint is funded from a
+Sapling address of the sidecar (Sapling spends beside the vault and YED outputs, beta2 W4.4),
+and kogany must carry it.
 
 ycash6's test framework (`qa/rpc-tests/test_framework`, the tree `--ycash6` names) builds the
 registrations and signs the attestations; it is imported unmodified. `LiveRig` is also the
@@ -314,14 +316,41 @@ class LiveRig:
             out.append(att)
         return out
 
-    def do_mint(self, lock_blocks):
-        """`yed_mint` on the sidecar (two-step: the carrier, then the mint) while mining."""
+    def shield(self, amount=20):
+        """A Sapling address of the sidecar's wallet holding `amount` YEC (minus the fee), for a
+        Sapling-funded mint (beta2 W4.4): a transparent coin, then `z_sendmany` into the
+        address, both mined. Returns the address."""
+        taddr = self.sidecar.getnewaddress()
+        zaddr = self.sidecar.z_getnewaddress('sapling')
+        self.sidecar.sendtoaddress(taddr, amount)
+        self.mine(1)
+        # the wallet catches up with the block asynchronously
+        wait_for('the coin of %s in the wallet' % taddr,
+                 lambda: float(self.sidecar.z_getbalance(taddr, 1)) >= amount, 120)
+        opid = self.sidecar.z_sendmany(taddr, [{'address': zaddr, 'amount': amount - 1}], 1, None,
+                                       'NoPrivacy')
+
+        def done():
+            status = self.sidecar.z_getoperationstatus([opid])[0]
+            if status['status'] == 'failed':
+                # not a RigError, which wait_for retries
+                raise RuntimeError('z_sendmany into the Sapling address failed: %r' % status.get('error'))
+            return status['status'] == 'success'
+        wait_for('the shielding z_sendmany', done, 300)
+        self.mine(1)
+        wait_for('the Sapling note in the wallet', lambda: float(self.sidecar.z_getbalance(zaddr)) >= amount - 1, 120)
+        return zaddr
+
+    def do_mint(self, lock_blocks, source=''):
+        """`yed_mint` on the sidecar (two-step: the carrier, then the mint) while mining, funded
+        from `source` (default: the wallet's transparent coins; a Sapling address spends its
+        notes in the minting transaction)."""
         self.feed()
         box = {}
 
         def run():
             try:
-                box['result'] = self.sidecar.call('yed_mint', MINT_CENTS, lock_blocks, '', '', True, timeout=900)
+                box['result'] = self.sidecar.call('yed_mint', MINT_CENTS, lock_blocks, source, '', True, timeout=900)
             except Exception as e:  # noqa: BLE001 -- reported below
                 box['error'] = e
         t = threading.Thread(target=run)
@@ -345,13 +374,22 @@ def main(argv=None):
     ap.add_argument('--ycash6', required=True, help='a ycash6 tree (its qa/rpc-tests test framework)')
     ap.add_argument('--dir', required=True)
     ap.add_argument('--keep', action='store_true', help='leave both nodes running')
+    ap.add_argument('--mint-from-sapling', action='store_true',
+                    help='fund the mint from a Sapling address (beta2 W4.4): kogany must follow the chain '
+                         'that carries Sapling spends beside the vault and YED outputs')
     args = ap.parse_args(argv)
     rig = LiveRig(args.zakurad, args.ycashd, args.ycash6, args.dir)
     try:
         rig.up()
         info = rig.arm()
         lock = info['params']['classes'][0]['minBlocks']
-        rig.do_mint(lock)
+        rig.do_mint(lock, rig.shield() if args.mint_from_sapling else '')
+        if args.mint_from_sapling:
+            minted = rig.kogany.getrawtransaction(rig.mint['txid'], 1)
+            if not minted.get('vShieldedSpend') or rig.mint.get('fundedFrom') != 'sapling':
+                raise RigError(-1, 'the mint is not Sapling-funded: %r' % rig.mint)
+            print('kogany carries the Sapling-funded mint %s at height %s (%d Sapling spends)'
+                  % (rig.mint['txid'], minted.get('height'), len(minted['vShieldedSpend'])))
         print(json.dumps({'dir': rig.dir, 'kogany': rig.kogany.url, 'sidecar': rig.sidecar.url, 'setid': rig.setid,
                           'height': rig.kogany.getblockcount(), 'mint': rig.mint}, indent=2, default=str))
     finally:

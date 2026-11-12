@@ -54,8 +54,10 @@ jobs:
             echo "::error::$TAG is a final release tag; kogany is not a qualified line yet (kogany plan K-19), so only -ycash.betaN and -ycash.rcN pre-releases are cut"
             exit 1
           fi
-          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-ycash\.(beta|rc)[0-9]+$ ]]; then
-            echo "::error::$TAG does not match v<X.Y.Z>-ycash.<beta|rc><n>"
+          # At most five digits per number: the bound the user agent and build.rs apply
+          # (zakura_network::ycash::MAX_RELEASE_DIGITS).
+          if [[ ! "$TAG" =~ ^v[0-9]{1,5}\.[0-9]{1,5}\.[0-9]{1,5}-ycash\.(beta|rc)[0-9]{1,5}$ ]]; then
+            echo "::error::$TAG does not match v<X.Y.Z>-ycash.<beta|rc><n> (at most five digits per number)"
             exit 1
           fi
           crate=$(sed -n 's/^version = "\(.*\)"$/\1/p' crates/zakurad/Cargo.toml | head -n1)
@@ -98,9 +100,40 @@ jobs:
       # No setup-zakura-build here: without a system RocksDB (ROCKSDB_LIB_DIR, librocksdb-dev) the
       # build compiles the bundled RocksDB statically, so the released binary needs no RocksDB package.
       - name: cargo build --release koganyd --features ycash
+        env:
+          # The user agent carries the release name (`/koganyd:1.8.0-ycash.beta1/`, build.rs),
+          # from the tag the guard job checked.
+          KOGANY_RELEASE_TAG: ${{ needs.guard.outputs.tag }}
         run: |
           set -euo pipefail
           cargo build --release --locked -p kogany --bin koganyd --features "default-release-binaries ycash"
+      # Upstream keeps `debug = "line-tables-only"` in the release profile for file:line in panic
+      # backtraces, and ships the binary unstripped. On Linux that DWARF stays in the binary (beta1
+      # linux-x86_64: 168 MB, 110 MB of it .debug_*), while the macOS linker leaves it in the object
+      # files, so the Linux tarballs were twice the macOS one. Split it off: koganyd keeps its symbol
+      # table (function names in backtraces) and a .gnu_debuglink to koganyd.debug, published as its
+      # own tarball; put koganyd.debug beside koganyd and backtraces show file:line again.
+      - name: Split the debug info off (Linux)
+        if: runner.os == 'Linux'
+        env:
+          TAG: ${{ needs.guard.outputs.tag }}
+          PLATFORM: ${{ matrix.platform }}
+        run: |
+          set -euo pipefail
+          cd target/release
+          ls -l koganyd
+          objcopy --only-keep-debug koganyd koganyd.debug
+          objcopy --strip-debug --add-gnu-debuglink=koganyd.debug koganyd
+          ls -l koganyd koganyd.debug
+          readelf -S --wide koganyd > "$RUNNER_TEMP/sections"
+          if grep -q ' \.debug_info ' "$RUNNER_TEMP/sections"; then
+            echo "::error::koganyd still carries .debug_info"
+            exit 1
+          fi
+          readelf --string-dump=.gnu_debuglink koganyd > "$RUNNER_TEMP/debuglink"
+          grep -q 'koganyd\.debug' "$RUNNER_TEMP/debuglink"
+          mkdir -p "$RUNNER_TEMP/out"
+          tar -czf "$RUNNER_TEMP/out/koganyd_${TAG}_${PLATFORM}.debug.tar.gz" koganyd.debug
       - name: koganyd --version
         run: |
           set -euo pipefail

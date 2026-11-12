@@ -120,6 +120,17 @@ jobs:
         env:
           CRATE: ${{ matrix.crate }}
         run: cargo nextest run --locked --profile kogany-ycash -p "$CRATE" --features "$CRATE/ycash"
+      # The release build sets KOGANY_RELEASE_TAG (kogany-release.yml); this rebuilds kogany's unit
+      # tests with a tag set and checks the advertised user agent against a literal.
+      - name: kogany user agent with KOGANY_RELEASE_TAG set
+        if: matrix.crate == 'kogany'
+        env:
+          KOGANY_RELEASE_TAG: v1.8.0-ycash.beta99
+          KOGANY_EXPECT_USER_AGENT: /koganyd:1.8.0-ycash.beta99/
+        run: >-
+          cargo nextest run --locked --profile kogany-ycash -p kogany --features kogany/ycash --lib
+          -E 'test(=application::kogany_version_tests::user_agent_is_the_expected_literal)
+          | test(=application::kogany_version_tests::user_agent_carries_no_build_metadata)'
 
   vault-fuzz-verdicts:
     name: vault fuzz verdicts

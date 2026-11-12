@@ -262,7 +262,9 @@ pub fn release_version() -> Version {
 /// kogany: `/koganyd:<package version>/`, without the `+kogany.<n>.g<sha>` build metadata:
 /// ycashd keeps only `[A-Za-z0-9 .-/:]` of a peer's subversion (`SAFE_CHARS_SUBVERSION`,
 /// `ycash6 src/util/strencodings.cpp:25`, applied at `src/main.cpp:8020`), so a `+` would be
-/// dropped and the version run together.
+/// dropped and the version run together. A release build cut at a `v<X.Y.Z>-ycash.<beta|rc><n>`
+/// tag (`KOGANY_RELEASE_TAG`, set by `build.rs`) advertises the tag without its `v` instead:
+/// `/koganyd:1.8.0-ycash.beta1/` (`zakura_network::ycash::user_agent_for_release`).
 ///
 /// [BIP 14]: https://github.com/bitcoin/bips/blob/master/bip-0014.mediawiki
 #[cfg_attr(feature = "ycash", allow(unreachable_code))]
@@ -270,7 +272,10 @@ pub fn user_agent() -> String {
     let release_version = release_version();
     // kogany: `/koganyd:<version>/` on Ycash (`zakura_network::ycash::user_agent`).
     #[cfg(feature = "ycash")]
-    return zakura_network::ycash::user_agent(release_version);
+    return zakura_network::ycash::user_agent_for_release(
+        option_env!("KOGANY_RELEASE_TAG"),
+        release_version,
+    );
 
     format!("/Zakura:{release_version}/")
 }
@@ -531,6 +536,12 @@ fn start(command: &EntryPoint) -> Result<(Arc<ZakuradConfig>, Tracing), Report> 
     Ok((Arc::new(config), tracing))
 }
 
+/// kogany: the build script (`build/metadata.rs`), compiled into the tests for its tag check.
+#[cfg(all(test, feature = "ycash"))]
+#[allow(dead_code, clippy::print_stdout, clippy::print_stderr)]
+#[path = "../build/metadata.rs"]
+mod kogany_build_metadata;
+
 #[cfg(all(test, feature = "ycash"))]
 mod kogany_version_tests {
     use semver::{BuildMetadata, Version};
@@ -621,13 +632,84 @@ mod kogany_version_tests {
     #[test]
     fn user_agent_carries_no_build_metadata() {
         let user_agent = user_agent();
-        assert_eq!(
-            user_agent,
-            format!("/koganyd:{}/", env!("CARGO_PKG_VERSION"))
-        );
+        if option_env!("KOGANY_RELEASE_TAG").is_none() {
+            assert_eq!(
+                user_agent,
+                format!("/koganyd:{}/", env!("CARGO_PKG_VERSION"))
+            );
+        }
+        assert!(user_agent.starts_with("/koganyd:") && user_agent.ends_with('/'));
+        assert!(!user_agent.contains('+'), "{user_agent}");
+        assert!(user_agent.len() <= 64, "{user_agent}");
         // ycashd's SAFE_CHARS_SUBVERSION.
         assert!(user_agent
             .chars()
             .all(|c| c.is_ascii_alphanumeric() || " .-/:".contains(c)));
+    }
+
+    /// The advertised string, compared with a literal the caller states: CI's tagged build
+    /// (`kogany-tests.yml`, job `kogany (ycash)`) sets `KOGANY_RELEASE_TAG` at build time and
+    /// `KOGANY_EXPECT_USER_AGENT` (e.g. `/koganyd:1.8.0-ycash.beta99/`) at run time. Without the
+    /// expectation there is nothing to compare.
+    #[test]
+    fn user_agent_is_the_expected_literal() {
+        let Ok(expected) = std::env::var("KOGANY_EXPECT_USER_AGENT") else {
+            return;
+        };
+        assert_eq!(
+            option_env!("KOGANY_RELEASE_TAG").is_some(),
+            expected != format!("/koganyd:{}/", env!("CARGO_PKG_VERSION")),
+            "KOGANY_RELEASE_TAG at build time: {:?}",
+            option_env!("KOGANY_RELEASE_TAG")
+        );
+        assert_eq!(user_agent(), expected);
+    }
+
+    /// The build script refuses exactly the tags the user agent would not name, so a release
+    /// build either advertises its tag or fails.
+    #[test]
+    fn build_script_tag_check_agrees_with_the_user_agent() {
+        use zakura_network::ycash::{release_name, user_agent_for_release, MAX_RELEASE_DIGITS};
+
+        assert_eq!(
+            super::kogany_build_metadata::MAX_RELEASE_DIGITS,
+            MAX_RELEASE_DIGITS
+        );
+        let long = format!("v1.8.{}-ycash.beta1", "9".repeat(240));
+        for tag in [
+            "v1.8.0-ycash.beta1",
+            "v1.8.0-ycash.beta2",
+            "v1.8.0-ycash.rc12",
+            "v99999.99999.99999-ycash.beta99999",
+            "v123456.8.0-ycash.beta1",
+            "v1.8.0-ycash.rc123456",
+            long.as_str(),
+            "v1.8.0",
+            "v1.8.0-rc1",
+            "1.8.0-ycash.beta1",
+            "v1.8.0-ycash.1",
+            "v1.8-ycash.beta1",
+            "v1.8.0-ycash.beta",
+            "v1.8.0-ycash.beta1-dirty",
+            "v1.8.0-ycash.beta1\ncargo:rustc-env=X=Y",
+            "v1.8.0-ycash.Beta1",
+            "",
+        ] {
+            assert_eq!(
+                super::kogany_build_metadata::is_kogany_release_tag(tag),
+                release_name(tag).is_some(),
+                "{tag:?}"
+            );
+        }
+        // The advertised strings for given tags, as literals.
+        for (tag, expected) in [
+            ("v1.8.0-ycash.beta2", "/koganyd:1.8.0-ycash.beta2/"),
+            ("v1.8.1-ycash.rc1", "/koganyd:1.8.1-ycash.rc1/"),
+        ] {
+            assert_eq!(
+                user_agent_for_release(Some(tag), super::release_version()),
+                expected
+            );
+        }
     }
 }

@@ -59,6 +59,9 @@ mod prop;
 mod vault;
 // kogany: BIP68 relative lock-times (W3-d).
 mod bip68;
+// kogany: transactions mixing Sapling parts with PQ and vault scripts (beta2 W4.1, W4.2).
+#[cfg(feature = "ycash")]
+mod mixed_shapes;
 
 /// Returns the timeout duration for tests, extended when running under coverage
 /// instrumentation to account for the performance overhead.

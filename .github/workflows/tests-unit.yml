@@ -593,7 +593,7 @@ jobs:
         run: |
           symbolizer="$(command -v llvm-symbolizer || find /usr/lib -path '/usr/lib/llvm-*/bin/llvm-symbolizer' | sort -V | tail -n1)"
           if [ -z "$symbolizer" ] || ! "$symbolizer" --version > /dev/null; then
-            sudo apt-get install -y llvm
+            sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20 install -y llvm
             symbolizer="$(command -v llvm-symbolizer)"
           fi
           "$symbolizer" --version | head -n2
