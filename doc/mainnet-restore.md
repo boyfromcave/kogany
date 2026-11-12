@@ -58,15 +58,16 @@ for the tarball plus its unpacked size (pruned: 5.4 + 6.7 GB; archive: 22 + 24 G
    fi
    ```
 
-2. For a pruned bundle, configure pruned storage. This writes a new config file; with an existing
-   one, add the section to it instead.
+2. For a pruned bundle, configure pruned storage. This writes a new config file only if there is
+   none; an existing one is left alone, and you add the section to it by hand.
 
    ```sh
    mkdir -p "$(dirname "$CONF")"
-   cat > "$CONF" <<'EOF'
-   [state.storage_mode.pruned]
-   tx_retention = 34560
-   EOF
+   if [ -e "$CONF" ]; then
+     echo "$CONF exists: add [state.storage_mode.pruned] with tx_retention = 34560 to it"
+   else
+     printf '[state.storage_mode.pruned]\ntx_retention = 34560\n' > "$CONF"
+   fi
    ```
 
 3. Fetch the small files of the newest height, then the tarball, in an empty directory.
@@ -92,24 +93,52 @@ for the tarball plus its unpacked size (pruned: 5.4 + 6.7 GB; archive: 22 + 24 G
    Both must succeed: `Signature and comment signature verified`, and `OK` for the tarball and
    `manifest.json`. The trusted comment names the release and height the bundle was cut from.
 
-5. Replace the state and check its format.
+5. Replace the mainnet state and check its format. Run this as one block, in the shell where you
+   ran steps 1 and 3 (it needs `CACHE` and `T`) and in the download directory (it reads
+   `manifest.json`). It does nothing unless koganyd is stopped and the bundle's `state_format` is
+   the one this koganyd writes (30.2.0). It moves the old mainnet state aside instead of deleting
+   it, and touches nothing else: the testnet and regtest state, and any other format's
+   `state/v<major>/`, stay as they are.
 
    ```sh
-   rm -rf "$CACHE/state" "$CACHE/non_finalized_state"
-   mkdir -p "$CACHE" && tar -xzf "$T" -C "$CACHE"
-   cat "$CACHE/state/v30/mainnet/version"     # must equal the manifest's state_format: 30.2.0
+   if [ -z "${CACHE:-}" ] || [ -z "${T:-}" ]; then
+     echo "set CACHE (step 1) and T (step 3) in this shell first"
+   elif pgrep -x koganyd >/dev/null; then
+     echo "koganyd is running: stop it first"
+   elif [ "$(jq -r .state_format manifest.json)" != 30.2.0 ]; then
+     echo "the bundle is for state format $(jq -r .state_format manifest.json), not 30.2.0"
+   else
+     OLD=old.$(date +%s)
+     [ -e "${CACHE:?}/state/v30/mainnet" ] && mv "${CACHE:?}/state/v30/mainnet" "${CACHE:?}/state/v30/mainnet.$OLD"
+     [ -e "${CACHE:?}/non_finalized_state/mainnet" ] && mv "${CACHE:?}/non_finalized_state/mainnet" "${CACHE:?}/non_finalized_state/mainnet.$OLD"
+     mkdir -p "${CACHE:?}" && tar -xzf "$T" -C "${CACHE:?}" && cat "${CACHE:?}/state/v30/mainnet/version"
+   fi
    ```
+
+   The last line prints the restored `version`; it must equal the manifest's `state_format`,
+   30.2.0. Once the node is up and the checks in step 6 pass, delete the moved-aside
+   `state/v30/mainnet.old.*` and `non_finalized_state/mainnet.old.*` directories to free the
+   space.
 
    The tarball holds `state/v30/mainnet/` (the RocksDB files) and `non_finalized_state/mainnet/`
    (one file per block above the finalized tip; `non_finalized_blocks` in the manifest), and no
    peer cache, identity, cookie or config.
 
 6. Start koganyd and check the restored tip, with the RPC server on (`[rpc] listen_addr`, README
-   "Running").
+   "Running"). `koganyd start` runs in the foreground and holds its terminal, so start it in a
+   second terminal:
 
    ```sh
    koganyd start
-   curl -s -H 'content-type: application/json' \
+   ```
+
+   Then, back in the first terminal (the download directory), query it. RPC cookie
+   authentication is on by default: koganyd writes `user:password` to `.cookie` in its cache
+   directory on mainnet (`$CACHE/.cookie`, README "Directories and files"; another directory
+   if the config sets `[rpc] cookie_dir`), and `curl -u` sends it.
+
+   ```sh
+   curl -s -u "$(cat "$CACHE/.cookie")" -H 'content-type: application/json' \
      -d '{"jsonrpc":"2.0","id":1,"method":"getblockchaininfo","params":[]}' http://127.0.0.1:8832 \
      | jq '.result | {blocks, bestblockhash, pruned, pruneheight}'
    jq '{height, blockhash, lowest_retained_height}' manifest.json
@@ -152,7 +181,8 @@ four times the size. A sync from genesis is about seven hours.
 - koganyd refuses to start with "cannot be opened in archive storage mode": a pruned bundle in an
   archive node. Configure pruned storage (step 2), or restore an archive bundle.
 - `blocks` or `bestblockhash` differ from the manifest before the node has synced on: stop it,
-  remove `state` and `non_finalized_state`, and restore again from a checked tarball.
+  move aside `state/v30/mainnet` and `non_finalized_state/mainnet` (step 5 does both; nothing
+  else under `state/` or `non_finalized_state/`), and restore again from a checked tarball.
 
 ## Tested
 
@@ -162,4 +192,7 @@ v1.8.0-ycash.beta1 `koganyd` (macOS), offline (no peers): signature and checksum
 `bestblockhash` `0000027b407a9884c13c55e5aeaf47d035ac6c96794db5ade78c8b20a87f31a3`, `pruned`
 true, `pruneheight` 3,055,249, as the manifest states; `getblock` below 3,055,249 answered
 `Block not available (pruned data)`. The failure messages above were reproduced with a changed
-checksum and a changed `SHA256SUMS`. The archive bundle, and steps 1 and 2 on Linux, were not run.
+checksum and a changed `SHA256SUMS`. The guards of step 5 (unset `CACHE` or `T`, a running
+koganyd, another `state_format`) and its move-aside were then checked on a stand-in cache
+directory, in bash and zsh: other networks' and other formats' state was left in place. The
+archive bundle, and steps 1 and 2 on Linux, were not run.
