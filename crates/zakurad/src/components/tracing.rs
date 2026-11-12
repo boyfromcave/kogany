@@ -12,6 +12,9 @@ mod component;
 mod non_blocking;
 
 pub use component::Tracing;
+// kogany: the getinfo `errors` layer, for tests of what reaches it.
+#[cfg(all(test, feature = "ycash"))]
+pub(crate) use component::LastWarnErrorLayer;
 
 /// Tracing configuration section: outer config after cross-field defaults are applied.
 ///

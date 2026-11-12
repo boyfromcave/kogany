@@ -139,13 +139,10 @@ pub async fn show_block_chain_progress(
             }
 
             if !is_chain_metrics_chan_closed {
-                if let Err(err) = chain_tip_metrics_sender.send(ChainTipMetrics::new(
-                    last_state_change_instant,
-                    Some(remaining_sync_blocks),
-                )) {
-                    tracing::warn!(?err, "chain tip metrics channel closed");
-                    is_chain_metrics_chan_closed = true
-                };
+                is_chain_metrics_chan_closed = !send_chain_tip_metrics(
+                    &chain_tip_metrics_sender,
+                    ChainTipMetrics::new(last_state_change_instant, Some(remaining_sync_blocks)),
+                );
             }
 
             // Skip logging and status updates if it isn't time for them yet.
@@ -334,6 +331,31 @@ fn min_minutes_after_checkpoint_update(network: &Network, height: Height) -> u64
     (u64::from(MIN_BLOCKS_MINED_AFTER_CHECKPOINT_UPDATE) * target_spacing).div_ceil(60)
 }
 
+/// Sends `metrics` to the health endpoint, and returns `false` when its channel is closed.
+///
+/// kogany: the receiver lives in the health server, which is only started when
+/// `health.listen_addr` is set; without it (the default) the channel is closed from the start.
+/// That is an internal state, not something the operator has to act on, so the Ycash build logs
+/// it at debug: a warning is recorded as the last error and shown by `getinfo` as `errors`.
+fn send_chain_tip_metrics(
+    chain_tip_metrics_sender: &watch::Sender<ChainTipMetrics>,
+    metrics: ChainTipMetrics,
+) -> bool {
+    match chain_tip_metrics_sender.send(metrics) {
+        Ok(()) => true,
+        Err(err) => {
+            #[cfg(feature = "ycash")]
+            tracing::debug!(
+                ?err,
+                "chain tip metrics channel closed: the health endpoint is not running"
+            );
+            #[cfg(not(feature = "ycash"))]
+            tracing::warn!(?err, "chain tip metrics channel closed");
+            false
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use zakura_chain::parameters::testnet::ConfiguredActivationHeights;
@@ -381,5 +403,42 @@ mod tests {
 
         assert_eq!(stall_interval_seconds(&regtest, post_nu7), 200);
         assert_eq!(min_minutes_after_checkpoint_update(&regtest, post_nu7), 5);
+    }
+
+    /// kogany: with the health endpoint off, the closed metrics channel must not become the
+    /// last warning, which `getinfo` reports as `errors`.
+    #[cfg(feature = "ycash")]
+    #[test]
+    fn closed_metrics_channel_is_not_a_getinfo_error() {
+        use tracing_subscriber::layer::SubscriberExt;
+
+        let (last_warn_error_sender, last_warn_error_receiver) = watch::channel(None);
+        let subscriber = tracing_subscriber::registry().with(
+            crate::components::tracing::LastWarnErrorLayer {
+                last_warn_error_sender,
+            },
+        );
+
+        let (sender, receiver) = ChainTipMetrics::channel();
+        tracing::subscriber::with_default(subscriber, || {
+            assert!(send_chain_tip_metrics(
+                &sender,
+                ChainTipMetrics::new(Instant::now(), Some(0))
+            ));
+            drop(receiver);
+            assert!(!send_chain_tip_metrics(
+                &sender,
+                ChainTipMetrics::new(Instant::now(), Some(0))
+            ));
+            // The layer itself works: a warning is recorded.
+            assert!(last_warn_error_receiver.borrow().is_none());
+            tracing::warn!("a real warning");
+        });
+
+        let recorded = last_warn_error_receiver.borrow().clone();
+        assert_eq!(
+            recorded.map(|(message, level, _)| (message, level)),
+            Some(("a real warning".to_string(), tracing::Level::WARN))
+        );
     }
 }

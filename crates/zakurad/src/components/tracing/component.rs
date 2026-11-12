@@ -269,8 +269,8 @@ impl Visit for MessageVisitor {
 
 // Layer to store the last WARN or ERROR log event.
 #[derive(Debug, Clone)]
-struct LastWarnErrorLayer {
-    last_warn_error_sender: watch::Sender<Option<(String, Level, chrono::DateTime<chrono::Utc>)>>,
+pub(crate) struct LastWarnErrorLayer {
+    pub(crate) last_warn_error_sender: watch::Sender<Option<(String, Level, chrono::DateTime<chrono::Utc>)>>,
 }
 
 impl<S> Layer<S> for LastWarnErrorLayer
