@@ -495,6 +495,102 @@ fn peer_ports_of_zcash_and_other_ycash_networks_are_refused() {
     assert_eq!(valid(addr(46_000), regtest), Ok(()));
 }
 
+/// A loopback or private peer (only the operator can name one) is dialled on any port, so a
+/// ycashd on the same host on a non-default port can be a peer; a routable peer on a Zcash or
+/// other-network port is still refused, and so is the same port for a listener.
+#[test]
+fn operator_local_peer_is_accepted_on_any_port() {
+    use crate::peer::{
+        address_is_valid_for_inbound_listeners as listener_valid,
+        address_is_valid_for_outbound_connections as outbound_valid, PeerPreference,
+    };
+
+    let mainnet = Network::Mainnet;
+    for local in ["127.0.0.1", "10.1.2.3", "192.168.1.20", "::1", "fd12::1"] {
+        for port in ZCASH_PORTS
+            .into_iter()
+            .chain(P2P_PORTS)
+            .chain([8033, 46_000])
+        {
+            let addr: std::net::SocketAddr =
+                (local.parse::<std::net::IpAddr>().expect("ip"), port).into();
+            assert_eq!(
+                outbound_valid(addr.into(), mainnet.clone()),
+                Ok(()),
+                "{addr}"
+            );
+            assert!(PeerPreference::new(addr, mainnet.clone()).is_ok(), "{addr}");
+        }
+    }
+    // The finding: a ycashd at 127.0.0.1:18233 named in `initial_mainnet_peers`.
+    let local_ycashd: std::net::SocketAddr = "127.0.0.1:18233".parse().expect("parses");
+    assert_eq!(outbound_valid(local_ycashd.into(), mainnet.clone()), Ok(()));
+    // A listener on that port is still refused: the exemption is for dialling only.
+    assert!(listener_valid(local_ycashd, mainnet.clone()).is_err());
+
+    for port in ZCASH_PORTS.into_iter().chain([18833, 8033]) {
+        let public: std::net::SocketAddr = ([1, 2, 3, 4], port).into();
+        assert!(
+            outbound_valid(public.into(), mainnet.clone()).is_err(),
+            "{public}"
+        );
+    }
+    let unspecified: std::net::SocketAddr = "0.0.0.0:18233".parse().expect("parses");
+    assert!(outbound_valid(unspecified.into(), mainnet.clone()).is_err());
+    let port_zero: std::net::SocketAddr = "127.0.0.1:0".parse().expect("parses");
+    assert!(outbound_valid(port_zero.into(), mainnet).is_err());
+}
+
+/// The address book keeps an operator's loopback peer on a Zcash port, and still drops a gossiped
+/// address on that port, loopback or public.
+#[test]
+fn operator_local_peer_on_zcash_port_is_kept_gossip_is_not() {
+    use crate::{
+        address_book_peers::AddressBookPeers, meta_addr::MetaAddr, protocol::types::PeerServices,
+        AddressBook,
+    };
+    use zakura_chain::serialization::DateTime32;
+
+    let mut book = AddressBook::new(
+        "0.0.0.0:8833".parse().expect("listener parses"),
+        &Network::Mainnet,
+        16,
+        tracing::Span::none(),
+    );
+    let gossip = |addr: crate::PeerSocketAddr| {
+        MetaAddr::new_gossiped_meta_addr(addr, PeerServices::NODE_NETWORK, DateTime32::now())
+            .new_gossiped_change()
+            .expect("a gossiped address makes a change")
+    };
+
+    let local: crate::PeerSocketAddr = "127.0.0.1:18233".parse().expect("parses");
+    assert!(book.update(gossip(local)).is_none());
+    assert!(book.get(local).is_none());
+
+    let public: crate::PeerSocketAddr = "1.2.3.4:18233".parse().expect("parses");
+    assert!(book.update(gossip(public)).is_none());
+    assert!(book.get(public).is_none());
+
+    assert!(book.update(MetaAddr::new_initial_peer(local)).is_some());
+    assert!(
+        book.get(local).is_some(),
+        "a configured initial peer is kept"
+    );
+
+    let other_local: crate::PeerSocketAddr = "192.168.1.20:8233".parse().expect("parses");
+    assert!(
+        book.add_peer(other_local),
+        "addnode keeps a private address on any port"
+    );
+    assert!(book.get(other_local).is_some());
+
+    assert!(book.update(MetaAddr::new_initial_peer(public)).is_none());
+    assert!(
+        book.get(public).is_none(),
+        "a public address keeps the port rule"
+    );
+}
+
 /// ycashd's `CNetAddr::IsRoutable` (`ycash6 src/netbase.cpp:854-857`): loopback, `0/8` and the
 /// private and reserved ranges are not routable; a public address is.
 #[test]

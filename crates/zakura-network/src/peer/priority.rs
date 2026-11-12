@@ -106,6 +106,18 @@ pub fn address_is_valid_for_outbound_connections(
         );
     }
 
+    // kogany: the port rule exists to keep gossiped Zcash (and other-network) addresses out of
+    // the outbound slots. A loopback or private address can only come from the operator: the
+    // configured initial peers, `addnode`, or the disk cache those filled, because a gossiped
+    // one never enters the address book (`crate::ycash::is_routable`, F-S5-6). So it is dialled
+    // on any port, as ycashd dials an `-addnode`/`-connect` peer on any port: a ycashd on the
+    // same host on a non-default port can be a peer. A Zcash node there is still refused at the
+    // handshake by its protocol version (`crate::ycash::MIN_PEER_PROTO_VERSION`).
+    #[cfg(feature = "ycash")]
+    if !crate::ycash::is_routable(peer_addr.ip()) {
+        return Ok(());
+    }
+
     address_is_valid_for_inbound_listeners(*peer_addr, network)
 }
 
