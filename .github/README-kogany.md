@@ -115,7 +115,7 @@ re-runs its consumers.
 | | `vault fuzz verdicts` | the 3,735 ycash6 verdicts (W3-e) | yes | yes | 15 / 5 min |
 | | `kogany-regtest (report-only)` | nextest profile `kogany-regtest` (W4-e) | no, until the W4 gate | yes | 40 / 15 min |
 | `kogany-bin` | `koganyd-bin (ycash, dev)` | the `koganyd-bin` artifact (cross-line contract) | — | yes | 35 / 10 min |
-| `kogany-release` | `guard`, `koganyd (<platform>)`, `publish pre-release` | on a pushed `v*-ycash.*` tag or dispatch only: the pre-release binaries ("Cutting a pre-release") | — | each | 60 / — min |
+| `kogany-release` | `guard`, `koganyd (<platform>)`, `publish pre-release` (`publish-dry-run` in a dry run) | on a pushed `v*-ycash.*` tag or dispatch only: the pre-release binaries; a dispatch is a dry run unless `dry_run=false` ("Cutting a pre-release") | — | each | 60 / — min |
 | `kogany-client-legs` | `koganyd / koganyd-bin` (called `kogany-bin`) | this run's `koganyd-bin` | — | yes | 35 / 10 min |
 | | `lightwalletd-dd`, `chain-viz`, `yolo` (each report-only) | the client unmodified at its pin against this run's koganyd (`crates/kogany-rpc/qa/kogany_client_legs.py`; yolo's `tests/regtest.rs` kogany mode with ycash6's node-bin) | no, until the lead architect flips one | each | 10–40 min |
 | `kogany-mixed` | `koganyd / koganyd-bin`, `ycash6 node-bin` | the two binaries | — | each | 35 / 1 min |
@@ -194,7 +194,7 @@ requires X.Y.Z to equal the `kogany` crate version in `crates/zakurad/Cargo.toml
 suffix ignored). Three native jobs build `koganyd` (`--release --features "default-release-binaries
 ycash"`, no Rust cache, so a release never restores a cache; no system RocksDB, so the bundled one is
 linked statically) on ubuntu-24.04, ubuntu-24.04-arm and
-macos-14, and pack `koganyd_<tag>_<platform>.tar.gz` (`koganyd`, `README.txt`, the licences,
+macos-15, and pack `koganyd_<tag>_<platform>.tar.gz` (`koganyd`, `README.txt`, the licences,
 `default_config_ycash.toml`; `.github/workflows/scripts/kogany-release-package.sh`) with an SPDX
 SBOM each. On Linux the DWARF the release profile keeps (`debug = "line-tables-only"`, as upstream)
 is split off first (`objcopy --only-keep-debug`, then `--strip-debug --add-gnu-debuglink`) into
@@ -205,6 +205,17 @@ the notes when it exists. The build sets `KOGANY_RELEASE_TAG` to the tag the gua
 five digits per number; `build.rs` fails the build on any other value), so the released
 `koganyd` advertises the BIP 14 user agent `/koganyd:<X.Y.Z>-ycash.<beta|rc><n>/` (a local build
 does too when its clean checkout is exactly at such a tag; otherwise `/koganyd:<crate version>/`).
+
+Prove it before tagging with a dry run, a dispatch on `upgrade/vault` naming the tag the head
+would get: `env -u GH_TOKEN gh workflow run kogany-release.yml -R boyfromcave/kogany --ref
+upgrade/vault -f tag=v1.8.0-ycash.beta2` (`dry_run` defaults to true). It runs the guard, the
+three builds with that release name, the Linux debug split, the packages, SBOMs and `SHA256SUMS`,
+then `publish-dry-run` checks the set and the notes file and prints the release it would create.
+A dry run has no token that can write a release and never signs; `publish` runs only on a pushed
+tag, or on a dispatch with `dry_run=false` naming an existing tag (a rebuild), which is refused
+unless it is dispatched from `upgrade/vault`. A dispatch and a tag push never share a concurrency
+group, so a dry run cannot cancel a pending tag run; still, push the tag only once no dry run of
+the same name is in progress.
 
 ```sh
 git checkout upgrade/vault && git pull --ff-only

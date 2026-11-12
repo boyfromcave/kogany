@@ -10,20 +10,33 @@ name: kogany-release
 # GitHub pre-release with SBOMs, SHA256SUMS, a cosign keyless signature and build provenance.
 # kogany is not a qualified line (kogany plan K-19): final `vX.Y.Z-ycash.N` tags are refused.
 # Runs on no branch push and no pull request (.github/README-kogany.md "Cutting a pre-release").
+#
+# A dispatch is a DRY RUN unless dry_run is set to false: on a branch, with `tag` naming the tag the
+# dispatched commit would get (it need not exist), the guard, the three builds (with that release
+# name in the user agent), the debug split, the packages and SBOMs and the SHA256SUMS run as a tag's
+# would, then `publish-dry-run` checks the set and the notes file and prints the release it would
+# create. It has no write token: `publish` runs only on a pushed tag, or on a dispatch with
+# dry_run=false naming an existing tag (a rebuild), and never in a dry run.
 on:
   push:
     tags: ['v*-ycash.*']
   workflow_dispatch:
     inputs:
       tag:
-        description: 'an existing tag to (re)build and publish, e.g. v1.8.0-ycash.beta1'
+        description: 'the tag: in a dry run the tag this commit would get (e.g. v1.8.0-ycash.beta2); with dry_run=false an existing tag to rebuild and publish'
         type: string
         required: true
+      dry_run:
+        description: 'build and check on the dispatched branch, publish nothing (false: rebuild and publish an existing tag)'
+        type: boolean
+        default: true
 
 permissions: {}
 
 concurrency:
-  group: ${{ github.workflow }}-${{ inputs.tag || github.ref_name }}
+  # The event in the key: a dry run (a dispatch) never shares a group with the tag push of the same
+  # name, so it can never replace, and so cancel, a pending tag run.
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ inputs.tag || github.ref_name }}
   cancel-in-progress: false
 
 env:
@@ -39,10 +52,16 @@ jobs:
       contents: read
     outputs:
       tag: ${{ steps.check.outputs.tag }}
+      ref: ${{ steps.check.outputs.ref }}
+      dry_run: ${{ steps.check.outputs.dry_run }}
+    env:
+      # A dispatch is a dry run unless its input says false; a pushed tag never is.
+      DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run != false }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          ref: refs/tags/${{ inputs.tag || github.ref_name }}
+          # A dry run builds the dispatched commit; anything else the tag.
+          ref: ${{ (github.event_name == 'workflow_dispatch' && inputs.dry_run != false) && github.sha || format('refs/tags/{0}', inputs.tag || github.ref_name) }}
           persist-credentials: false
       - id: check
         name: Check the tag
@@ -50,6 +69,7 @@ jobs:
           TAG: ${{ inputs.tag || github.ref_name }}
         run: |
           set -euo pipefail
+          # The tag's shape first: nothing below echoes it before it has matched.
           if [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-ycash\.[0-9]+$ ]]; then
             echo "::error::$TAG is a final release tag; kogany is not a qualified line yet (kogany plan K-19), so only -ycash.betaN and -ycash.rcN pre-releases are cut"
             exit 1
@@ -57,8 +77,24 @@ jobs:
           # At most five digits per number: the bound the user agent and build.rs apply
           # (zakura_network::ycash::MAX_RELEASE_DIGITS).
           if [[ ! "$TAG" =~ ^v[0-9]{1,5}\.[0-9]{1,5}\.[0-9]{1,5}-ycash\.(beta|rc)[0-9]{1,5}$ ]]; then
-            echo "::error::$TAG does not match v<X.Y.Z>-ycash.<beta|rc><n> (at most five digits per number)"
+            echo "::error::the tag does not match v<X.Y.Z>-ycash.<beta|rc><n> (at most five digits per number)"
             exit 1
+          fi
+          if [[ "$DRY_RUN" == true ]]; then
+            if [[ "${GITHUB_REF_TYPE}" != branch ]]; then
+              echo "::error::a dry run is dispatched on a branch, not ${GITHUB_REF}"
+              exit 1
+            fi
+            echo "dry run: $(git rev-parse HEAD) on ${GITHUB_REF_NAME} built as $TAG; nothing is published"
+            ref=$(git rev-parse HEAD)
+          else
+            # A publishing dispatch (dry_run=false, a rebuild of an existing tag) only from the
+            # release line (the Yellowback lead architect, 2026-11-12); a pushed tag as before.
+            if [[ "$GITHUB_EVENT_NAME" == workflow_dispatch && "$GITHUB_REF" != refs/heads/upgrade/vault ]]; then
+              echo "::error::a publishing dispatch (dry_run=false) is dispatched from upgrade/vault, not ${GITHUB_REF}"
+              exit 1
+            fi
+            ref="refs/tags/$TAG"
           fi
           crate=$(sed -n 's/^version = "\(.*\)"$/\1/p' crates/zakurad/Cargo.toml | head -n1)
           tagnum=${TAG#v}; tagnum=${tagnum%%-*}
@@ -69,7 +105,11 @@ jobs:
             echo "::error::tag version $tagnum differs from the kogany crate version $cratenum"
             exit 1
           fi
-          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          {
+            echo "tag=$TAG"
+            echo "ref=$ref"
+            echo "dry_run=$DRY_RUN"
+          } >> "$GITHUB_OUTPUT"
 
   build:
     name: koganyd (${{ matrix.platform }})
@@ -87,11 +127,12 @@ jobs:
           - platform: linux-aarch64
             runner: ubuntu-24.04-arm
           - platform: macos-aarch64
-            runner: macos-14
+            runner: macos-15
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          ref: refs/tags/${{ needs.guard.outputs.tag }}
+          # The dispatched commit in a dry run, the checked tag otherwise (the same rule the guard applied).
+          ref: ${{ (github.event_name == 'workflow_dispatch' && inputs.dry_run != false) && github.sha || format('refs/tags/{0}', needs.guard.outputs.tag) }}
           persist-credentials: false
       - uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f #v2.0.0
         with:
@@ -160,9 +201,65 @@ jobs:
           retention-days: 30
           if-no-files-found: error
 
+  # A dry run's stand-in for publish: the same SHA256SUMS over the same tarballs, the notes file,
+  # and the release it would create, printed. Read-only (no release token, no signing identity).
+  publish-dry-run:
+    name: publish pre-release (dry run, nothing published)
+    needs: [guard, build]
+    if: needs.guard.outputs.dry_run == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          # The dispatched commit in a dry run, the checked tag otherwise (the same rule the guard applied).
+          ref: ${{ (github.event_name == 'workflow_dispatch' && inputs.dry_run != false) && github.sha || format('refs/tags/{0}', needs.guard.outputs.tag) }}
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: koganyd-*
+          path: dist
+          merge-multiple: true
+      - name: SHA256SUMS, the assets and the notes the release would carry
+        env:
+          TAG: ${{ needs.guard.outputs.tag }}
+        run: |
+          set -euo pipefail
+          cd dist
+          sha256sum -- *.tar.gz > SHA256SUMS
+          sha256sum -c SHA256SUMS
+          for p in linux-x86_64 linux-aarch64 macos-aarch64; do
+            [[ -f "koganyd_${TAG}_${p}.tar.gz" && -f "koganyd_${TAG}_${p}.spdx.json" ]] || { echo "::error::missing koganyd_${TAG}_${p} package or SBOM"; exit 1; }
+          done
+          for p in linux-x86_64 linux-aarch64; do
+            [[ -f "koganyd_${TAG}_${p}.debug.tar.gz" ]] || { echo "::error::missing koganyd_${TAG}_${p}.debug.tar.gz"; exit 1; }
+          done
+          ls -l
+          cd ..
+          notes="doc/release-notes/$TAG.md"
+          if [[ -f "$notes" ]]; then
+            echo "notes: $notes"
+          else
+            echo "::warning::$notes is missing: the release would carry the workflow's built-in notes"
+            notes="(built-in notes)"
+          fi
+          {
+            echo "## Dry run: the tag $TAG would publish"
+            echo
+            echo "gh release create $TAG --verify-tag --prerelease --draft=false --title \"koganyd $TAG\" (notes: $notes)"
+            echo "plus SHA256SUMS.cosign.bundle (keyless cosign) and build provenance, not made in a dry run"
+            echo
+            sed 's/^/    /' dist/SHA256SUMS
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "dry run: nothing published"
+
   publish:
     name: publish pre-release
     needs: [guard, build]
+    # Never in a dry run: a pushed tag, or a dispatch with dry_run=false (the guard checked out the tag).
+    if: needs.guard.outputs.dry_run == 'false' && (github.event_name == 'push' || inputs.dry_run == false)
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions:
@@ -207,7 +304,7 @@ jobs:
 
           **Pre-release, not a qualified Ycash node line (kogany plan K-19). For the Ycash testnets only.**
 
-          - Works: following Ycash mainnet and the fast testnet, the vault and Yellowback rules, the stock Ycash, `set_*`/`vault_*` and `yed_*` RPCs (rpcversion 9).
+          - Works: following Ycash mainnet and the fast testnet, the vault and Yellowback rules, the stock Ycash, `set_*`/`vault_*` and `yed_*` RPCs (the rpcversion `yed_getinfo` reports).
           - Does not yet: the slow testnet profile has no config selector; no wallet; no Windows or Intel macOS build.
           - Get started: unpack, read `README.txt`, run `./koganyd -c testnet.toml start`. Verify with `sha256sum -c SHA256SUMS` and `cosign verify-blob`.
           - Docs: https://github.com/boyfromcave/kogany#readme
