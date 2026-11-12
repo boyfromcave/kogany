@@ -191,10 +191,18 @@ fn emit_git_rerun_triggers() -> Result<(), String> {
     // (above); `git add`, `commit`, `checkout`, `stash` and `reset` rewrite the index, and so does
     // `git status` when it refreshes stat data, so an edit is seen once the index is touched. An
     // unstaged edit nobody has run git on since is not; the release workflow sets
-    // `KOGANY_RELEASE_TAG` and does not depend on this.
-    for path in ["refs/tags", "index"] {
-        if let Ok(resolved) = git(&["rev-parse", "--git-path", path]) {
-            emit_rerun_if_exists(Path::new(&resolved));
+    // `KOGANY_RELEASE_TAG` and does not depend on this. Only the `ycash` build without that
+    // variable derives its version this way, so only it watches these: a feature-off build keeps
+    // upstream's triggers, and a `git status` does not relink it.
+    let tag_from_git = env::var_os("CARGO_FEATURE_YCASH").is_some()
+        && env::var("KOGANY_RELEASE_TAG")
+            .unwrap_or_default()
+            .is_empty();
+    if tag_from_git {
+        for path in ["refs/tags", "index"] {
+            if let Ok(resolved) = git(&["rev-parse", "--git-path", path]) {
+                emit_rerun_if_exists(Path::new(&resolved));
+            }
         }
     }
 
