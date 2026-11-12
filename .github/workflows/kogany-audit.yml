@@ -147,6 +147,8 @@ jobs:
             qa
             src/chainparams.cpp
             src/consensus/params.h
+            src/consensus/upgrades.cpp
+            src/consensus/upgrades.h
             src/version.h
             src/yellowback/params.cpp
           sparse-checkout-cone-mode: false
