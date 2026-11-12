@@ -9,10 +9,13 @@
 //! Each shape was mined alone in the recording, so kogany's blocks grow the same Sapling tree and
 //! the later shapes' anchors stay valid on kogany's chain.
 //!
-//! For each TX_PQPKH output it also reads what the node's RPCs say about its address
-//! (`getrawtransaction`, `decoderawtransaction`, `getaddressutxos`) next to what ycash-dd said
-//! in the recording (plan W4.3), and prints both; the address answers are reported, not
-//! asserted, until the decode and index lane lands.
+//! For each TX_PQPKH output it also reads what the node's RPCs say about its address (plan W4.3)
+//! and asserts the answers that do not depend on the address encoding: `getrawtransaction`'s
+//! verbose `scriptPubKey` is the recorded script, of type `pqpubkeyhash`, with one address, and
+//! `getaddressutxos` on that address finds the coin (txid, output index, value, kogany's height).
+//! The address text itself, next to ycash-dd's recorded one, and `decoderawtransaction` (which
+//! koganyd does not have) are printed, not asserted: the D-9 prefixes change every recorded
+//! address.
 //!
 //! Copyright (c) 2026 The Ycash developers. Distributed under the MIT software license.
 
@@ -238,6 +241,33 @@ async fn kogany_relays_and_mines_the_mixed_shapes() -> Result<()> {
                 Ok(v) => v["vout"][n]["scriptPubKey"].clone(),
                 Err(e) => e.clone(),
             };
+
+            // W4.3, asserted: the verbose script, its type and its one address, and the index.
+            let recorded = &out["addressUtxos"][0];
+            let spk = addresses(&verbose);
+            assert_eq!(spk["type"], "pqpubkeyhash", "{name} vout {n}: {spk}");
+            assert_eq!(spk["hex"], recorded["script"], "{name} vout {n}: {spk}");
+            let kogany_address = match spk["addresses"].as_array().map(Vec::as_slice) {
+                Some([one]) => str_of(one)?,
+                _ => return Err(eyre!("{name} vout {n}: one address expected in {spk}")),
+            };
+            let height = block["height"].clone();
+            let found = node
+                .ok(
+                    "getaddressutxos",
+                    &format!(r#"[{{"addresses": ["{kogany_address}"]}}]"#),
+                )
+                .await?;
+            assert!(
+                found.as_array().is_some_and(|rows| rows.iter().any(|row| {
+                    row["txid"].as_str() == Some(&txid)
+                        && row["outputIndex"] == out["n"]
+                        && row["satoshis"] == recorded["satoshis"]
+                        && row["height"] == height
+                        && row["script"] == recorded["script"]
+                })),
+                "{name} vout {n}: getaddressutxos {kogany_address} finds the coin: {found}"
+            );
             eprintln!(
                 "W4.3 {name} vout {n}: ycash-dd type {} address {address}\n  \
                  kogany getrawtransaction: {}\n  kogany decoderawtransaction: {}\n  \
