@@ -3660,7 +3660,9 @@ where
             let named: Vec<(Address, &String)> = utxos_request
                 .addresses()
                 .iter()
-                .filter_map(|text| types::ycash::insight_address(text).map(|a| (a, text)))
+                .filter_map(|text| {
+                    types::ycash::insight_address_on(&self.network, text).map(|a| (a, text))
+                })
                 .collect();
             let request_addresses: Vec<Address> = named.iter().map(|(a, _)| *a).collect();
             types::ycash::order_address_utxos_as_ycashd(&mut response_utxos, &request_addresses);
