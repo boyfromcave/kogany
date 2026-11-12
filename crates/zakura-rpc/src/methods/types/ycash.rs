@@ -429,6 +429,34 @@ pub fn insight_address(text: &str) -> Option<transparent::Address> {
     })
 }
 
+/// [`insight_address`] on `network` only, as the address-index RPCs read it: ycashd's
+/// `getAddressesFromParams` decodes with its own chain's prefixes and answers another network's
+/// transparent, post-quantum or YED address with `-5 "Invalid address"` (`ycash6
+/// src/rpc/misc.cpp`). Transparent and YED P2PKH forms share the testnet prefixes on Regtest
+/// (`Network::t_addr_kind`); post-quantum and YED forms have their own per network.
+pub fn insight_address_on(network: &Network, text: &str) -> Option<transparent::Address> {
+    use kogany_yellowback::codecs::{address::decode_any_address, script::Holder};
+    if let Ok(address) = text.parse::<transparent::Address>() {
+        let expected = if matches!(address, transparent::Address::PayToPqKeyHash { .. }) {
+            network.kind()
+        } else {
+            network.t_addr_kind()
+        };
+        return (address.network_kind() == expected).then_some(address);
+    }
+    let params = kogany_yellowback::params::params_for_network(&chain_name(network))?;
+    Some(match decode_any_address(text, &params)? {
+        Holder::KeyId(key_id) => {
+            transparent::Address::from_pub_key_hash(network.t_addr_kind(), key_id)
+        }
+        Holder::Pq(owner) => transparent::Address::PayToPqKeyHash {
+            network_kind: network.kind(),
+            scheme: owner.scheme,
+            key_hash: owner.hash.0,
+        },
+    })
+}
+
 /// `getblock`'s `chainhistoryroot` (ycash6 `blockToJSON`, `CBlockIndex::hashChainHistoryRoot`,
 /// display order; S5 `vault_upgrade.py`): from after the Heartwood activation block until NU5 the
 /// header's `blockcommitments` is that root (ZIP 221; `block_commitments` is already in display

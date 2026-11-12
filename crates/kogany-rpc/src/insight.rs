@@ -158,7 +158,8 @@ pub fn height_range(params: &Value, tip: i64) -> RpcResult<(i64, i64)> {
 
 /// `getAddressesFromParams`: one address string, or `{"addresses": [string, ...]}`; each named
 /// address with the text the caller gave (ycashd's `AddressNames`, the form the delta answers).
-pub fn parse_addresses(params: &Value) -> RpcResult<Vec<(Address, String)>> {
+/// Only `network`'s addresses: another network's is "Invalid address", as on ycashd.
+pub fn parse_addresses(network: &Network, params: &Value) -> RpcResult<Vec<(Address, String)>> {
     let texts: Vec<&str> = match params {
         Value::String(text) => vec![text.as_str()],
         Value::Object(object) => match object.get("addresses") {
@@ -175,7 +176,7 @@ pub fn parse_addresses(params: &Value) -> RpcResult<Vec<(Address, String)>> {
         .map(|text| {
             // ycashd answers a P2PKH delta with its canonical address and a post-quantum one
             // with the form the caller named (`AddressNames` holds only P2PQPKH keys).
-            zakura_rpc::ycash_insight_address(text)
+            zakura_rpc::ycash_insight_address_on(network, text)
                 .map(|address| {
                     let name = if matches!(address, Address::PayToPqKeyHash { .. }) {
                         text.to_owned()
@@ -262,7 +263,7 @@ pub fn address_deltas(
 #[async_trait::async_trait]
 impl InsightRpc for InsightRpcImpl {
     async fn getaddressmempool(&self, addresses: Value) -> RpcResult<Vec<Value>> {
-        let addresses = parse_addresses(&addresses)?;
+        let addresses = parse_addresses(&self.network, &addresses)?;
         Ok(address_deltas(
             &self.network,
             &crate::mempool::transactions().await,
@@ -273,7 +274,7 @@ impl InsightRpc for InsightRpcImpl {
     async fn getaddressdeltas(&self, request: Value) -> RpcResult<Value> {
         let tip = self.tip_height().await?;
         let (start, end) = height_range(&request, tip)?;
-        let addresses = parse_addresses(&request)?;
+        let addresses = parse_addresses(&self.network, &request)?;
         let include_chain_info = match request.get("chainInfo") {
             None | Some(Value::Null) => false,
             Some(v) => v
@@ -450,8 +451,11 @@ mod tests {
         assert_eq!(crate::mempool::output_in(&pool, &own(2)), None);
         assert_eq!(crate::mempool::output_in(&pool, &prev), None);
 
-        let names = parse_addresses(&json!({ "addresses": [b.to_string(), a.to_string()] }))
-            .expect("addresses");
+        let names = parse_addresses(
+            &network,
+            &json!({ "addresses": [b.to_string(), a.to_string()] }),
+        )
+        .expect("addresses");
         let deltas = address_deltas(&network, &pool, &names);
         let a_text = a.to_string();
         let b_text = b.to_string();
@@ -493,13 +497,24 @@ mod tests {
 
         // One string is one address; anything else is ycashd's "Invalid address".
         assert_eq!(
-            parse_addresses(&json!(a_text)).expect("one address").len(),
+            parse_addresses(&network, &json!(a_text))
+                .expect("one address")
+                .len(),
             1
         );
         for bad in [json!(1), json!({ "addresses": ["nope"] }), json!({})] {
-            let e = parse_addresses(&bad).expect_err("invalid");
+            let e = parse_addresses(&network, &bad).expect_err("invalid");
             assert_eq!((e.code(), e.message()), (-5, "Invalid address"));
         }
+        // Another network's address is "Invalid address" too (`getaddressmempool`,
+        // `getaddressdeltas`), as on ycashd.
+        let other = if network == Network::Mainnet {
+            Network::new_default_testnet()
+        } else {
+            Network::Mainnet
+        };
+        let e = parse_addresses(&other, &json!(a_text)).expect_err("another network's");
+        assert_eq!((e.code(), e.message()), (-5, "Invalid address"));
         // Nothing named, nothing answered.
         assert!(address_deltas(&network, &pool, &[]).is_empty());
     }
