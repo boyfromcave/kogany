@@ -230,7 +230,9 @@ fn commit_deferral(
     let insertion_clock = FixedClock(insertion_time);
     let mut child_header = *anchor.header;
     child_header.previous_block_hash = anchor.hash;
-    child_header.time = insertion_clock.0 + chrono::Duration::hours(3);
+    child_header.time = insertion_clock.0
+        + (chrono::Duration::seconds(zakura_chain::block::BLOCK_MAX_TIME_SINCE_LOCAL_CLOCK.into())
+            + chrono::Duration::hours(1));
     child_header.nonce.0[0] = 0x51;
     let child_header = Arc::new(child_header);
     let child = Frontier::new(
