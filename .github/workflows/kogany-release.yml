@@ -125,11 +125,13 @@ jobs:
           objcopy --only-keep-debug koganyd koganyd.debug
           objcopy --strip-debug --add-gnu-debuglink=koganyd.debug koganyd
           ls -l koganyd koganyd.debug
-          if readelf -S --wide koganyd | grep -q ' \.debug_info '; then
+          readelf -S --wide koganyd > "$RUNNER_TEMP/sections"
+          if grep -q ' \.debug_info ' "$RUNNER_TEMP/sections"; then
             echo "::error::koganyd still carries .debug_info"
             exit 1
           fi
-          readelf --string-dump=.gnu_debuglink koganyd | grep -q 'koganyd\.debug'
+          readelf --string-dump=.gnu_debuglink koganyd > "$RUNNER_TEMP/debuglink"
+          grep -q 'koganyd\.debug' "$RUNNER_TEMP/debuglink"
           mkdir -p "$RUNNER_TEMP/out"
           tar -czf "$RUNNER_TEMP/out/koganyd_${TAG}_${PLATFORM}.debug.tar.gz" koganyd.debug
       - name: koganyd --version
