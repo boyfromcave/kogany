@@ -101,11 +101,8 @@ fn sigma1_flat_series_and_worked_example() {
         live.sigma_mult_max_bps,
     );
     assert_eq!(lm, 10000);
-    for c in 0..NUM_CLASSES {
-        assert_eq!(
-            min_ratio_bps(live.base_ratio_bps[c], lm),
-            live.base_ratio_bps[c]
-        );
+    for &base in live.base_ratio_bps.iter() {
+        assert_eq!(min_ratio_bps(base, lm), base);
     }
 }
 
