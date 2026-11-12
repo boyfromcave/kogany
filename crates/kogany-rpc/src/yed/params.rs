@@ -1,11 +1,11 @@
-//! `yed_getinfo.params` (ycash6 `src/rpc/yellowback.cpp` `yed_getinfo`, rpcversion 8): every
+//! `yed_getinfo.params` (ycash6 `src/rpc/yellowback.cpp` `yed_getinfo`, rpcversion 9): every
 //! value the Mint page derives from, in ycashd's order. The parameters come from
 //! `kogany_yellowback::params::Params`; the four values a block can move (`supplyCap`'s base
 //! and price, `fees.network`'s price, `attest.bondMinZat`) from the snapshot.
 
 use kogany_yellowback::{
     math::{max_vault_cents, supply_cap_cents},
-    params::{FeeBand, MINT_PAYLOAD_VERSION, NUM_CLASSES, PAYLOAD_VERSION},
+    params::{FeeBand, PqAddressVersions, MINT_PAYLOAD_VERSION, NUM_CLASSES, PAYLOAD_VERSION},
 };
 use serde_json::{json, Value};
 
@@ -15,6 +15,20 @@ use super::{
     format::class_letter,
     state::{AttestInfo, SnapshotView, YedSnapshot},
 };
+
+/// A post-quantum address's versions as `{"<scheme>": "<hex>"}` (ycash6 `PQAddressVersionsJSON`,
+/// D-9: one 3-byte version per scheme, keyed by the scheme number), in ascending scheme order as
+/// the C++ `std::map` iterates.
+fn pq_versions_json(versions: &PqAddressVersions) -> Value {
+    let mut sorted = *versions;
+    sorted.sort_unstable_by_key(|(scheme, _)| *scheme);
+    Value::Object(
+        sorted
+            .iter()
+            .map(|(scheme, version)| (scheme.to_string(), Value::from(hex::encode(version))))
+            .collect(),
+    )
+}
 
 /// `yed_getinfo.params` at `tip` (the tip snapshot, `None` for ycashd's virtual snapshot).
 pub fn params_json(
@@ -91,7 +105,7 @@ pub fn params_json(
         "falconActive": node.falcon_active_next,
         "falconHeight": p.pq_falcon_height,
         "feeRateZatPerKB": nf.plain_zat_per_kb,
-        "plainAddressVersion": hex::encode(node.plain_pq_address_version),
+        "plainAddressVersion": pq_versions_json(&node.plain_pq_address_versions),
     });
     let policy = json!({
         "penaltyBlocks": pp.penalty_blocks,
@@ -158,7 +172,7 @@ pub fn params_json(
         "maxMintCents": p.max_mint,
         "fees": fees,
         "addressVersion": p.address_version.map(hex::encode).unwrap_or_default(),
-        "pqAddressVersion": p.pq_address_version.map(hex::encode).unwrap_or_default(),
+        "pqAddressVersion": p.pq_address_versions.as_ref().map_or_else(|| json!({}), pq_versions_json),
         "windows": {"fast": p.p_fast_window, "mid": p.p_mid_window, "slow": p.p_slow_window},
         "minFill": {"fast": p.p_fast_min_fill, "mid": p.p_mid_min_fill, "slow": p.p_slow_min_fill},
         "classes": classes,

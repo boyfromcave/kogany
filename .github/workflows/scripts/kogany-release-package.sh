@@ -69,7 +69,7 @@ Environment overrides use the ZAKURA_ prefix, e.g. ZAKURA_NETWORK__NETWORK=Testn
 The RPC cookie is at <cache>/kogany/<network>/.cookie on the testnets.
 
 RPCs: the stock Ycash RPCs, the vault primitive's set_* and vault_* RPCs and the Yellowback
-yed_* RPCs, at rpcversion 8 (doc/ in the source tree has the contracts).
+yed_* RPCs, at rpcversion 9 (doc/ in the source tree has the contracts).
 
 Licence: MIT or Apache-2.0, at your option (LICENSE-MIT, LICENSE-APACHE).
 TXT

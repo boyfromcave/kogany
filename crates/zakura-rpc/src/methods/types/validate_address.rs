@@ -53,7 +53,8 @@ pub struct ValidateAddressResponse {
     #[getset(get_copy = "pub")]
     pub(crate) is_script: Option<bool>,
 
-    /// Ycash (W7-c): the scheme of a post-quantum address (`sq…`/`tq…`/`rq…`), 1 =
+    /// Ycash (W7-c): the scheme of a post-quantum address (`sqs…`/`tqs…`/`rqs…` = 1,
+    /// `sqf…`/`tqf…`/`rqf…` = 2, D-9), 1 =
     /// SLH-DSA-SHA2-128s, 2 = FN-DSA-512 (`ycash6 src/rpc/misc.cpp`, `DescribeAddressVisitor`).
     #[cfg(feature = "ycash")]
     #[serde(rename = "pqscheme", skip_serializing_if = "Option::is_none", default)]

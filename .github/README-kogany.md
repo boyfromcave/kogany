@@ -194,7 +194,7 @@ requires X.Y.Z to equal the `kogany` crate version in `crates/zakurad/Cargo.toml
 suffix ignored). Three native jobs build `koganyd` (`--release --features "default-release-binaries
 ycash"`, no Rust cache, so a release never restores a cache; no system RocksDB, so the bundled one is
 linked statically) on ubuntu-24.04, ubuntu-24.04-arm and
-macos-14, and pack `koganyd_<tag>_<platform>.tar.gz` (`koganyd`, `README.txt`, the licences,
+macos-15, and pack `koganyd_<tag>_<platform>.tar.gz` (`koganyd`, `README.txt`, the licences,
 `default_config_ycash.toml`; `.github/workflows/scripts/kogany-release-package.sh`) with an SPDX
 SBOM each. On Linux the DWARF the release profile keeps (`debug = "line-tables-only"`, as upstream)
 is split off first (`objcopy --only-keep-debug`, then `--strip-debug --add-gnu-debuglink`) into

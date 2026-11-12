@@ -290,7 +290,7 @@ fn parse_tag(s: &str) -> RpcResult<Tag> {
     Ok(Tag(tag))
 }
 
-/// ycash6 `ParsePQKeyId`, its pqkeyid form only: the PQ address forms (`yb…`, `sq…`) need the
+/// ycash6 `ParsePQKeyId`, its pqkeyid form only: the PQ address forms (`ybf…`/`ybs…`, `sqf…`/`sqs…`) need the
 /// Ycash address codecs, which kogany does not have yet (plan W1-Y6, W7-b).
 fn parse_pqkeyid(s: &str) -> RpcResult<PqOwner> {
     let bytes = match hex::decode(s) {

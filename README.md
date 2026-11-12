@@ -143,8 +143,9 @@ with a Zcash network's on one host.
   overlay, which identifies a chain by its genesis hash, is off (decision K-11).
 - User agent: `/koganyd:<package version>/`, e.g. `/koganyd:1.8.0-rc1/` ([Versioning](#versioning)).
 - Addresses: transparent `s1…`/`s3…` on mainnet, `sm…` on the testnets and regtest; Sapling
-  `ys…`, `ytestsapling…`, `yregtestsapling…`; post-quantum `sq…`, `tq…`, `rq…`; Yellowback (YED)
-  `yb…`, `yt…`, `yr…`. Coin type 347 on mainnet.
+  `ys…`, `ytestsapling…`, `yregtestsapling…`; post-quantum `sqf…`/`sqs…`, `tqf…`/`tqs…`,
+  `rqf…`/`rqs…` (the scheme in the prefix: FN-DSA-512 / SLH-DSA, D-9); Yellowback (YED) `yb…`,
+  `yt…`, `yr…`, post-quantum `ybf…`/`ybs…`, `ytf…`/`yts…`, `yrf…`/`yrs…`. Coin type 347 on mainnet.
 - DNS seed: `seed.ycash.xyz` on mainnet; the testnet has fixed seeds only.
 - ycashd 4.5.0's testnet3 is not one of kogany's networks.
 - `network = "Testnet"` is testnet-yb-fast. `network = "TestnetSlow"` and
@@ -193,7 +194,7 @@ kogany's state: [`doc/mainnet-restore.md`](doc/mainnet-restore.md).
 ## Yellowback and vault RPCs
 
 `koganyd` answers the stock Ycash RPCs as ycashd does, plus the vault primitive's `set_*` and
-`vault_*` RPCs and the Yellowback `yed_*` RPCs, at `rpcversion` 8:
+`vault_*` RPCs and the Yellowback `yed_*` RPCs, at `rpcversion` 9:
 
 - [`doc/yellowback-spec.md`](doc/yellowback-spec.md): the vault upgrade and Yellowback
   specification, generated from the workspace plans;

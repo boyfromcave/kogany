@@ -21,7 +21,7 @@ its public interface only:
             "Yellowback is not active".
 
 lightwalletd-dd (`--yellowback`): its startup probe (`common/yellowback.go` ProbeYellowback) must
-start the YellowbackStreamer service on `live` (rpcversion 8) and not on `not-live`; its own probe
+start the YellowbackStreamer service on `live` (rpcversion 9) and not on `not-live`; its own probe
 tool `testtools/lwdinfo -yellowback` must answer GetLightdInfo at the node's height and, on
 `live`, every Yellowback method "ok" except the seven whose harmless inputs the node refuses
 (GetTxInfo, GetVault, GetNotice: an unknown txid; ValidateRawTransaction: not a transaction;
@@ -70,7 +70,7 @@ REFUSED_INPUTS = {
     'GetFeePayee': 'refHeight out of range',
     'GetSelection': 'refHeight must be between',
 }
-LWD_STARTED = 'Yellowback service started (node rpcversion 8'
+LWD_STARTED = 'Yellowback service started (node rpcversion 9'
 LWD_NOT_STARTED = 'Yellowback service not started: the node has no yed_* commands'
 
 
@@ -212,7 +212,7 @@ def lightwalletd_leg(args, scenario, work, ports, height, procs, report):
         return (LWD_STARTED in text or 'Yellowback service not started' in text) and text
     text = wait_for(probe_logged, 30) or ''
     line = next((ln for ln in text.splitlines() if 'Yellowback service' in ln), 'no Yellowback line in the log')
-    report.check(scenario, 'lightwalletd-dd', 'startup probe: ' + ('service started, rpcversion 8' if scenario == 'live' else 'service not started (-32601)'),
+    report.check(scenario, 'lightwalletd-dd', 'startup probe: ' + ('service started, rpcversion 9' if scenario == 'live' else 'service not started (-32601)'),
                  want in text, json.loads(line).get('msg', line) if line.startswith('{') else line)
 
     out = subprocess.run([args.lwdinfo, '-server', '127.0.0.1:%d' % ports['lwd'], '-timeout', '10s', '-yellowback'],

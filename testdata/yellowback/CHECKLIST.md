@@ -223,8 +223,9 @@ Consumer: `crates/kogany-yellowback` (W5-b: the owners' addresses). C++: none on
 
 Also from ycash6, not a schema key: the payload, script, address and tag cases of
 `src/test/yellowback_{payload,script,address,tag}_tests.cpp` (`tests/{payload,script,address,tag}_tests.rs`,
-the C++ test names kept), and PQ-address known answers computed with ycash6's
-`qa/rpc-tests/test_framework/yellowback_model.py` (`pq_addresses_53_characters_known_answers`).
+the C++ test names kept), and key-hash address known answers computed with ycash6's
+`qa/rpc-tests/test_framework/yellowback_model.py` (`key_hash_known_answers_on_every_network`); the
+post-quantum address known answers are `pq_address_vectors.json` below (D-9).
 
 ## yellowback_attest_vectors.json
 
@@ -379,3 +380,24 @@ Ported by W5-c on a registry-only fixture (`tests/yellowback_attest_state_tests.
 `selected_matches_python`, `seat_eviction_victim_rule`, `weight_clamped_before_trigger`, `founding_cohort_origin`,
 `seating_ties_by_seq`, `selected_excludes_pinned`, `default_attest_payee_in_A`,
 `attestor_set_adopted_only_with_threshold_one`, `p4b_slashed_key_barred_remove_winddown_refused`.
+
+## pq_address_vectors.json
+
+Consumer: `crates/kogany-yellowback` (the plain-YEC and YED post-quantum codecs), `crates/zakura-chain`
+(`transparent::Address`, the index and `validateaddress` form) and `crates/zakura-rpc` (`validateaddress`,
+the verbose `scriptPubKey` of `getrawtransaction 1`). C++: ycash6 and ycash-dd `src/test/pq_address_tests.cpp`
+(D-9, quantum spec §4). The `kogany-yellowback` and `zakura-chain` tests check the file's SHA-256 against
+`PIN` first (`zakura-rpc` reads the same file without; the cross-line leg and `qa/yellowback-cross-line.py` guard its bytes).
+
+| key | Rust test |
+|---|---|
+| `format`, `schemes` | `kogany-yellowback/tests/pq_address_vectors.rs` (equal `ycash-pq-address-vectors-1` and the scheme names) |
+| `valid[].network`, `.coin`, `.scheme`, `.version` | `valid_vectors_encode_decode_and_stay_on_their_network_and_coin` (the version is the codec table's for that network, coin and scheme; all 12 combinations covered) |
+| `valid[].keyhash`, `.address` | the same test (encode gives the address, decode gives the key, no other network or coin decodes it); `zakura-chain` `plain_pq_address_shared_vectors` (yec rows parse and print as `transparent::Address`, yed rows are no transparent address); `zakura-rpc` `verbose_script_pub_key_and_validateaddress_use_the_shared_vectors` (the TX_PQPKH script's verbose `addresses`, `validateaddress` valid on its network) |
+| `valid[].scheme_name` | not consumed (prose; `schemes` is checked) |
+| `invalid[].network`, `.coin`, `.address` | `invalid_vectors_are_refused_everywhere` (every network and coin); `plain_pq_address_shared_vectors` (no transparent address); `verbose_script_pub_key_and_validateaddress_use_the_shared_vectors` (`validateaddress` invalid on every network) |
+| `invalid[].reason` | `invalid_vectors_are_refused_everywhere` (the five reasons: old-form, truncated, extended, bad-checksum, unknown-version) |
+| `_comment` | not consumed (prose) |
+
+Also, not a schema key: `round_trips_on_every_table` (every scheme byte, edge key hashes, and the pre-D-9
+payload of each key refused).

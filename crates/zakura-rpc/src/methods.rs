@@ -6357,7 +6357,7 @@ pub struct Utxo {
     address: transparent::Address,
 
     /// Ycash (S5 parity): the address as ycashd answers it, the form the caller named for a
-    /// post-quantum key (`AddressNames`: `rq…` or its `yr…` YED form); `None` is the canonical
+    /// post-quantum key (`AddressNames`: `rqf…`/`rqs…` or its `yrf…`/`yrs…` YED form); `None` is the canonical
     /// form.
     #[cfg(feature = "ycash")]
     #[serde(skip)]

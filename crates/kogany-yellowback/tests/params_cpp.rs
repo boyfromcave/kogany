@@ -200,6 +200,9 @@ fn eval_int_term(t: &str, ctx: &Ctx) -> Result<i128, String> {
         "BundleCarrier::SCRIPTSIG" => return Ok(0),
         "BundleCarrier::OP_RETURN" => return Ok(1),
         "BundleCarrier::EITHER" => return Ok(2),
+        // crypto/pq/scheme.h
+        "pq::SCHEME_SLH_DSA_SHA2_128S" => return Ok(1),
+        "pq::SCHEME_FN_DSA_512" => return Ok(2),
         _ => {}
     }
     match ctx.consts.get(t).or_else(|| ctx.args.get(t)) {
@@ -269,6 +272,10 @@ fn run(
                 .split_once('.')
                 .expect("split_assignment returns a member path");
             let field = field.to_string();
+            if model.contains_key(&format!("{field}[{}]", PQ_SCHEMES[0])) {
+                assign_pq_map(model, &field, rhs, ctx);
+                continue;
+            }
             assert!(
                 model.contains_key(&field),
                 "params.cpp assigns `{field}`, which the field model lacks"
@@ -295,6 +302,50 @@ fn run(
             continue;
         }
         panic!("params.cpp statement not understood: `{st}`");
+    }
+}
+
+/// The registered post-quantum schemes (`crypto/pq/scheme.h`), the keys of a version map.
+const PQ_SCHEMES: [u8; 2] = [1, 2];
+
+/// `x.pqAddressVersions = { { pq::SCHEME_…, { 0x.., 0x.., 0x.. } }, … }`: every key of the map
+/// is set (a key the list lacks is empty, as in a fresh `std::map`); a key outside the registry
+/// or named twice fails.
+fn assign_pq_map(model: &mut Model, field: &str, rhs: &str, ctx: &Ctx) {
+    let body = rhs
+        .trim()
+        .strip_prefix('{')
+        .and_then(|b| b.strip_suffix('}'))
+        .unwrap_or_else(|| panic!("{field}: not a brace list: `{rhs}`"));
+    let mut set = BTreeMap::new();
+    let mut rest = body.trim();
+    while !rest.is_empty() {
+        let open = rest
+            .find('{')
+            .unwrap_or_else(|| panic!("{field}: entry expected in `{rest}`"));
+        let close = matching(rest, open, b'{', b'}');
+        let entry = &rest[open + 1..close];
+        let (key, value) = entry
+            .split_once(',')
+            .unwrap_or_else(|| panic!("{field}: entry `{entry}`"));
+        let key = eval_int_term(key, ctx).unwrap_or_else(|e| panic!("{field}: {e}"));
+        let key = u8::try_from(key).unwrap_or_else(|_| panic!("{field}: key {key}"));
+        assert!(
+            PQ_SCHEMES.contains(&key),
+            "{field}: unregistered scheme {key}"
+        );
+        let value = eval(value, ctx);
+        assert!(
+            set.insert(key, value).is_none(),
+            "{field}: scheme {key} twice"
+        );
+        rest = rest[close + 1..].trim().trim_start_matches(',').trim();
+    }
+    for scheme in PQ_SCHEMES {
+        model.insert(
+            format!("{field}[{scheme}]"),
+            set.remove(&scheme).unwrap_or(Val::Bytes(Vec::new())),
+        );
     }
 }
 
@@ -387,6 +438,8 @@ fn struct_fields(h: &str) -> Vec<(String, &'static str)> {
             continue; // methods and the constructor
         }
         let (ty, kind) = [
+            // D-9: one 3-byte version per post-quantum scheme, a field per registered scheme.
+            ("std::map<uint8_t, std::vector<unsigned char>> ", "pqmap"),
             ("std::vector<unsigned char> ", "bytes"),
             ("std::string ", "text"),
             ("uint256 ", "bytes"),
@@ -415,6 +468,10 @@ fn struct_fields(h: &str) -> Vec<(String, &'static str)> {
                     } else {
                         out.push((format!("{base}[{i}]"), kind));
                     }
+                }
+            } else if kind == "pqmap" {
+                for scheme in PQ_SCHEMES {
+                    out.push((format!("{name}[{scheme}]"), "bytes"));
                 }
             } else {
                 assert_ne!(kind, "band", "a scalar FeeBand");

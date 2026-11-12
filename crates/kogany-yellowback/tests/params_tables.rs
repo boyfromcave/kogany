@@ -396,15 +396,19 @@ fn arm1_v3_params_tables() {
     assert_eq!(Params::default().bundle_carrier, BundleCarrier::ScriptSig);
     assert_eq!(Params::default().pq_falcon_height, -1);
     assert_eq!(Params::default().address_version, None);
+    assert_eq!(Params::default().pq_address_versions, None);
     assert_eq!(main_params().address_version, Some([0x1F, 0xDD]));
-    assert_eq!(main_params().pq_address_version, Some([0x56, 0xAB]));
+    assert_eq!(
+        main_params().pq_address_versions,
+        Some([(2, [0x56, 0xAE, 0xDE]), (1, [0x56, 0xB0, 0x44])])
+    );
     assert_eq!(
         regtest_params(1, 0, 0, test_set()).address_version,
         Some([0x20, 0x02])
     );
     assert_eq!(
-        regtest_params(1, 0, 0, test_set()).pq_address_version,
-        Some([0x57, 0x10])
+        regtest_params(1, 0, 0, test_set()).pq_address_versions,
+        Some([(2, [0x57, 0x14, 0x44]), (1, [0x57, 0x15, 0xAA])])
     );
     assert!(!Params::default().is_pq_falcon_active(0));
 }
@@ -451,7 +455,10 @@ fn testnet_yed_columns() {
     for p in [&slow, &fast] {
         assert_eq!(p.network, "test");
         assert_eq!(p.address_version, Some([0x20, 0x07]));
-        assert_eq!(p.pq_address_version, Some([0x57, 0x1E]));
+        assert_eq!(
+            p.pq_address_versions,
+            Some([(2, [0x57, 0x21, 0xC9]), (1, [0x57, 0x23, 0x30])])
+        );
         assert_eq!(p.start_height, 0);
         assert_eq!(p.attestor_set_id, [0u8; 32]);
     }
@@ -459,7 +466,7 @@ fn testnet_yed_columns() {
     let mut slow_as_main = slow;
     slow_as_main.network = main.network;
     slow_as_main.address_version = main.address_version;
-    slow_as_main.pq_address_version = main.pq_address_version;
+    slow_as_main.pq_address_versions = main.pq_address_versions;
     assert_eq!(slow_as_main, main);
 
     assert_eq!(
