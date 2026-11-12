@@ -104,6 +104,31 @@ jobs:
         run: |
           set -euo pipefail
           cargo build --release --locked -p kogany --bin koganyd --features "default-release-binaries ycash"
+      # Upstream keeps `debug = "line-tables-only"` in the release profile for file:line in panic
+      # backtraces, and ships the binary unstripped. On Linux that DWARF stays in the binary (beta1
+      # linux-x86_64: 168 MB, 110 MB of it .debug_*), while the macOS linker leaves it in the object
+      # files, so the Linux tarballs were twice the macOS one. Split it off: koganyd keeps its symbol
+      # table (function names in backtraces) and a .gnu_debuglink to koganyd.debug, published as its
+      # own tarball; put koganyd.debug beside koganyd and backtraces show file:line again.
+      - name: Split the debug info off (Linux)
+        if: runner.os == 'Linux'
+        env:
+          TAG: ${{ needs.guard.outputs.tag }}
+          PLATFORM: ${{ matrix.platform }}
+        run: |
+          set -euo pipefail
+          cd target/release
+          ls -l koganyd
+          objcopy --only-keep-debug koganyd koganyd.debug
+          objcopy --strip-debug --add-gnu-debuglink=koganyd.debug koganyd
+          ls -l koganyd koganyd.debug
+          if readelf -S --wide koganyd | grep -q ' \.debug_info '; then
+            echo "::error::koganyd still carries .debug_info"
+            exit 1
+          fi
+          readelf --string-dump=.gnu_debuglink koganyd | grep -q 'koganyd\.debug'
+          mkdir -p "$RUNNER_TEMP/out"
+          tar -czf "$RUNNER_TEMP/out/koganyd_${TAG}_${PLATFORM}.debug.tar.gz" koganyd.debug
       - name: koganyd --version
         run: |
           set -euo pipefail
