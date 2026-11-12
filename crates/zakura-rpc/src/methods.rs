@@ -2387,6 +2387,10 @@ where
         &self,
         address_strings: GetAddressBalanceRequest,
     ) -> Result<GetAddressBalanceResponse> {
+        // kogany: only this network's addresses, as ycashd (`getAddressesFromParams`).
+        #[cfg(feature = "ycash")]
+        let valid_addresses = address_strings.valid_addresses_on(&self.network)?;
+        #[cfg(not(feature = "ycash"))]
         let valid_addresses = address_strings.valid_addresses()?;
 
         let request = zakura_state::ReadRequest::AddressBalance(valid_addresses);
@@ -3555,6 +3559,10 @@ where
             best_chain_tip_height(&latest_chain_tip)?,
         )?;
 
+        // kogany: only this network's addresses, as ycashd (`getAddressesFromParams`).
+        #[cfg(feature = "ycash")]
+        let valid_addresses = request.valid_addresses_on(&self.network)?;
+        #[cfg(not(feature = "ycash"))]
         let valid_addresses = request.valid_addresses()?;
 
         let request = zakura_state::ReadRequest::TransactionIdsByAddresses {
@@ -3597,6 +3605,10 @@ where
         let read_state = self.read_state.clone();
         let mut response_utxos = vec![];
 
+        // kogany: only this network's addresses, as ycashd (`getAddressesFromParams`).
+        #[cfg(feature = "ycash")]
+        let valid_addresses = utxos_request.valid_addresses_on(&self.network)?;
+        #[cfg(not(feature = "ycash"))]
         let valid_addresses = utxos_request.valid_addresses()?;
 
         // get utxos data for addresses
@@ -3648,7 +3660,9 @@ where
             let named: Vec<(Address, &String)> = utxos_request
                 .addresses()
                 .iter()
-                .filter_map(|text| types::ycash::insight_address(text).map(|a| (a, text)))
+                .filter_map(|text| {
+                    types::ycash::insight_address_on(&self.network, text).map(|a| (a, text))
+                })
                 .collect();
             let request_addresses: Vec<Address> = named.iter().map(|(a, _)| *a).collect();
             types::ycash::order_address_utxos_as_ycashd(&mut response_utxos, &request_addresses);
@@ -5664,6 +5678,23 @@ pub trait ValidateAddresses {
             .collect::<Result<_>>()?;
 
         Ok(valid_addresses)
+    }
+
+    /// kogany: [`Self::valid_addresses`] for the address-index RPCs (`getaddressbalance`,
+    /// `getaddresstxids`, `getaddressutxos`): a transparent, post-quantum or YED address of
+    /// `network` only (`types::ycash::insight_address_on`). Anything else, another network's
+    /// address included, is ycashd's `-5 "Invalid address"` (`getAddressesFromParams`).
+    #[cfg(feature = "ycash")]
+    fn valid_addresses_on(&self, network: &Network) -> Result<HashSet<Address>> {
+        self.addresses()
+            .iter()
+            .map(|address| {
+                types::ycash::insight_address_on(network, address).ok_or_error(
+                    server::error::LegacyCode::InvalidAddressOrKey,
+                    "Invalid address",
+                )
+            })
+            .collect()
     }
 
     /// Returns string-encoded Zcash addresses in the type implementing this trait.

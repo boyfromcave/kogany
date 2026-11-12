@@ -107,8 +107,8 @@ jobs:
           apt: 'false'
       - name: A C compiler (the Falcon signer of test_framework/pq.py) and librocksdb (koganyd)
         run: |
-          sudo apt-get update -q
-          sudo apt-get install -y -q gcc libc6-dev librocksdb-dev
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20 update -q
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20 install -y -q gcc libc6-dev librocksdb-dev
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: ycash6-node-bin

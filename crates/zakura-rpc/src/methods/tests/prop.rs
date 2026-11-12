@@ -746,6 +746,17 @@ proptest! {
         addresses in any::<HashSet<transparent::Address>>(),
         balance in any::<Amount<NonNegative>>(),
     ) {
+        // kogany: the address-index RPCs read only `network`'s addresses, as ycashd
+        // (`getAddressesFromParams`); another network's is refused before any state query.
+        #[cfg(feature = "ycash")]
+        let addresses: HashSet<transparent::Address> = addresses
+            .into_iter()
+            .filter(|address| {
+                crate::methods::types::ycash::insight_address_on(&network, &address.to_string())
+                    == Some(*address)
+            })
+            .collect();
+
         let (runtime, _init_guard) = zakura_test::init_async();
         let _guard = runtime.enter();
         let (chain_tip, _mock_chain_tip_sender) = MockChainTip::new();

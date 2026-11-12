@@ -18,7 +18,9 @@ install -m 0755 "$bin" "$work/$name/koganyd"
 cp "$root/LICENSE-APACHE" "$root/LICENSE-MIT" "$work/$name/"
 cp "$root/crates/zakurad/src/commands/default_config_ycash.toml" "$work/$name/"
 case "$platform" in
-  linux-*) runtime="Linux with glibc 2.39 or newer (Ubuntu 24.04 or newer); RocksDB is linked in statically" ;;
+  linux-*) runtime="Linux with glibc 2.39 or newer (Ubuntu 24.04 or newer); RocksDB is linked in statically.
+The debug info is in koganyd_${tag}_${platform}.debug.tar.gz: unpack koganyd.debug beside koganyd
+for file and line numbers in a backtrace" ;;
   macos-*) runtime="macOS 14 or newer on Apple silicon; RocksDB is linked in statically" ;;
   *) runtime="see kogany's README.md" ;;
 esac

@@ -421,6 +421,82 @@ fn ycash_insight_address_takes_the_yed_forms() {
     assert_eq!(insight_address("nope"), None);
 }
 
+/// The address-index RPCs read only their own network's addresses, as ycashd's
+/// `getAddressesFromParams` (`-5 "Invalid address"` for any other): a plain transparent address
+/// is shared by the testnets and Regtest, every post-quantum and YED form is one network's.
+#[test]
+fn ycash_insight_address_on_refuses_other_networks() {
+    use crate::methods::{GetAddressBalanceRequest, ValidateAddresses};
+    use kogany_vault::{Hash32, PqOwner};
+    use kogany_yellowback::codecs::address::{encode_address, encode_pq_address};
+    use zakura_chain::parameters::NetworkKind;
+
+    let networks = [
+        ("main", Network::Mainnet, NetworkKind::Mainnet),
+        ("test", Network::new_default_testnet(), NetworkKind::Testnet),
+        (
+            "regtest",
+            Network::new_regtest(Default::default()),
+            NetworkKind::Regtest,
+        ),
+    ];
+    let owner = PqOwner {
+        scheme: 1,
+        hash: Hash32([3; 32]),
+    };
+    for (id, network, kind) in &networks {
+        let p = kogany_yellowback::params::params_for_network(id).expect("params");
+        let pq = transparent::Address::PayToPqKeyHash {
+            network_kind: *kind,
+            scheme: 1,
+            key_hash: [3; 32],
+        };
+        let t = transparent::Address::from_pub_key_hash(network.t_addr_kind(), [4; 20]);
+        let forms = [
+            (pq.to_string(), pq, false),
+            (encode_pq_address(&owner, &p).expect("YED pq"), pq, false),
+            (t.to_string(), t, true),
+            (encode_address(&[4; 20], &p), t, false),
+        ];
+        for (text, address, plain_transparent) in &forms {
+            assert_eq!(
+                insight_address_on(network, text),
+                Some(*address),
+                "{id}: {text}"
+            );
+            for (other_id, other, _) in &networks {
+                let shared = *plain_transparent && *id != "main" && *other_id != "main";
+                let expected = (other_id == id || shared).then_some(*address);
+                assert_eq!(
+                    insight_address_on(other, text),
+                    expected,
+                    "{text} of {id} on {other_id}"
+                );
+            }
+        }
+        assert_eq!(insight_address_on(network, "nope"), None);
+    }
+
+    // `getaddressbalance` (and `getaddresstxids`, `getaddressutxos`): ycashd's code and text.
+    let testnet_t =
+        transparent::Address::from_pub_key_hash(NetworkKind::Testnet, [4; 20]).to_string();
+    let mainnet_t =
+        transparent::Address::from_pub_key_hash(NetworkKind::Mainnet, [4; 20]).to_string();
+    let request = GetAddressBalanceRequest::new(vec![mainnet_t.clone(), testnet_t]);
+    let error = request
+        .valid_addresses_on(&Network::Mainnet)
+        .expect_err("a testnet address on Mainnet");
+    assert_eq!((error.code(), error.message()), (-5, "Invalid address"));
+    let request = GetAddressBalanceRequest::new(vec![mainnet_t]);
+    assert_eq!(
+        request
+            .valid_addresses_on(&Network::Mainnet)
+            .expect("Mainnet's own")
+            .len(),
+        1
+    );
+}
+
 /// S5 parity (`wallet_pq_address`): a `getaddressutxos` row names a post-quantum key with the
 /// caller's form, and any other address canonically, in zcashd's field set.
 #[test]

@@ -560,6 +560,24 @@ impl AddressBook {
 
         let mut peers = self.peers.clone();
 
+        // Ycash: never advertise a loopback or private peer. Only the operator can put one in the
+        // book (a gossiped one is dropped in `update_inner`), and it is dialled on any port
+        // (`address_is_valid_for_outbound_connections`), so without this a `getaddr` answer
+        // would disclose the operator's internal addresses. ycashd never gossips a non-routable
+        // address. Done before the local listener is added, which is always advertised.
+        #[cfg(feature = "ycash")]
+        {
+            let unroutable: Vec<IpAddr> = peers
+                .by_ip
+                .keys()
+                .copied()
+                .filter(|ip| !crate::ycash::is_routable(*ip))
+                .collect();
+            for ip in unroutable {
+                peers.remove_ip(ip);
+            }
+        }
+
         // Unconditionally add our local listener address to the advertised peers,
         // to replace any self-connection failures. The address book and change
         // constructors make sure that the SocketAddr is canonical.
