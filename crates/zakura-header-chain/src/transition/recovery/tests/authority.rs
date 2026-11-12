@@ -75,6 +75,51 @@ fn recovery_preserves_elapsed_deferrals_for_normal_reevaluation() {
     );
 }
 
+/// kogany: a header store written by a kogany binary from before Ycash's four-hour local-clock
+/// bound holds deferrals to `time - 2 h`. The audit accepts exactly that instant (it releases later
+/// than the current rule's `time - 4 h`) and still rejects any other one, an earlier one above all.
+#[cfg(feature = "ycash")]
+#[test]
+fn recovery_accepts_a_deferral_written_under_the_two_hour_bound() {
+    let (base, config) = fixture();
+    let child_hash = base.nodes[1].hash;
+    let time = base.nodes[1].header.time;
+    let with_deferral = |until| {
+        let mut store = base.clone();
+        let anchor = store.metadata.frontiers.finalized;
+        store.nodes[1].validation = crate::HeaderValidationState::DeferredUntil(until);
+        store.metadata.frontiers.header_best = anchor;
+        store.metadata.header_best_score = ChainScore::new(SuffixWork::zero(), anchor.hash);
+        store.snapshot = store.metadata.snapshot();
+        store.selected = vec![anchor];
+        store.deferred = vec![(until, child_hash)];
+        store
+    };
+    let now = time - Duration::hours(3);
+
+    for until in [time - Duration::hours(4), time - Duration::hours(2)] {
+        let store = with_deferral(until);
+        let plan = audit_store_at(&store, &config, now)
+            .expect("the current and the pre-upgrade deferral instants both audit");
+        assert!(plan.is_clean());
+        assert_eq!(plan.deferred_entries, store.deferred);
+    }
+    for until in [
+        time - Duration::hours(4) - Duration::seconds(1),
+        time - Duration::hours(3),
+        time - Duration::hours(2) + Duration::seconds(1),
+    ] {
+        assert!(
+            matches!(
+                audit_store_at(&with_deferral(until), &config, now),
+                Err(RecoveryFailure::Source { violations })
+                    if violations.contains(&AuditViolation::HeaderValidation(child_hash))
+            ),
+            "deferral to {until:?} for a header at {time:?} is a violation"
+        );
+    }
+}
+
 #[test]
 fn headers_only_recovery_rejects_an_unsettled_selected_suffix() {
     let (mut store, mut config) = fixture();

@@ -58,12 +58,30 @@ pub(super) fn check_nodes(
             crate::HeaderValidationState::Valid => {
                 future_limit.is_some_and(|limit| node.header.time <= limit)
             }
-            crate::HeaderValidationState::DeferredUntil(until) => expected_deferred == Some(until),
+            crate::HeaderValidationState::DeferredUntil(until) => {
+                expected_deferred == Some(until) || is_pre_ycash_bound_deferral(node, until)
+            }
         };
         if !valid_time_state {
             violations.push(AuditViolation::HeaderValidation(node.hash));
         }
     }
+}
+
+/// kogany: a deferral persisted by a kogany binary from before Ycash's four-hour local-clock bound,
+/// which deferred a header to `time - 2 h` (zcashd's `MAX_FUTURE_BLOCK_TIME_LOCAL`). That release
+/// instant is later than the current rule's `time - 4 h`, so the header is only held back longer,
+/// never released early; accepting exactly that one value lets an upgraded node reopen its header
+/// store. Any other deferral instant, an earlier one in particular, is still a violation.
+#[cfg(feature = "ycash")]
+fn is_pre_ycash_bound_deferral(node: &HeaderNode, until: DateTime<Utc>) -> bool {
+    node.header.time.checked_sub_signed(Duration::hours(2)) == Some(until)
+}
+
+/// Without the `ycash` feature only the current rule's deferral instant is accepted.
+#[cfg(not(feature = "ycash"))]
+fn is_pre_ycash_bound_deferral(_node: &HeaderNode, _until: DateTime<Utc>) -> bool {
+    false
 }
 
 fn header_consensus_is_valid(
