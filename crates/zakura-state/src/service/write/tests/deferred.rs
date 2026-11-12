@@ -206,8 +206,8 @@ fn idle_writer_promotes_a_due_persisted_deferred_header() {
     let mut future_header = *anchor.header;
     future_header.previous_block_hash = anchor.hash();
     future_header.time +=
-        (chrono::Duration::seconds(zakura_chain::block::BLOCK_MAX_TIME_SINCE_LOCAL_CLOCK.into())
-            + chrono::Duration::hours(1));
+        chrono::Duration::seconds(zakura_chain::block::BLOCK_MAX_TIME_SINCE_LOCAL_CLOCK.into())
+            + chrono::Duration::hours(1);
     future_header.nonce.0[0] = 0xd0;
     let future_header = Arc::new(future_header);
     let batch = zakura_header_chain::prepare_headers(
