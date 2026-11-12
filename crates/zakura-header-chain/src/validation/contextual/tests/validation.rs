@@ -1310,3 +1310,77 @@ fn ycash_median_time_past_bound_is_three_hours_on_every_profile() {
         }
     }
 }
+
+/// kogany: the real fast-testnet block 510,256 (`00a7fc9e…84acd`), the first height of the rule
+/// on that profile, is 6,075 s past its median-time-past: ycashd accepts it, Zcash's 90-minute
+/// bound rejected it. Times and compact targets of 510,255 down to 510,228 and of 510,256, from
+/// ycashd's `getblockheader` on the testnet-yb-fast chain.
+#[cfg(feature = "ycash")]
+#[test]
+fn ycash_fast_block_510256_header_vector() {
+    let time = |seconds: i64| DateTime::from_timestamp(seconds, 0).expect("chain time is in range");
+    let bits = |bits: u32| {
+        CompactDifficulty::from_bytes_in_display_order(&bits.to_be_bytes())
+            .expect("chain compact targets are valid")
+    };
+    let context: Vec<_> = [
+        (1794296777, 0x2007ffff), // 510255
+        (1794294374, 0x2007ffff), // 510254
+        (1794292499, 0x2007ffff), // 510253
+        (1794292350, 0x2007ffff), // 510252
+        (1794291637, 0x2007ffff), // 510251
+        (1794291292, 0x2007ffff), // 510250
+        (1794291232, 0x2007ffff), // 510249
+        (1794290823, 0x2007ffff), // 510248
+        (1559796960, 0x1f0eebf3), // 510247
+        (1559796954, 0x1f0efc5a), // 510246
+        (1559796919, 0x1f0f0372), // 510245
+        (1559796816, 0x1f0f49d9), // 510244
+        (1559796788, 0x1f0f174d), // 510243
+        (1559796733, 0x1f0f4199), // 510242
+        (1559796728, 0x1f0f9175), // 510241
+        (1559796659, 0x1f0f9741), // 510240
+        (1559796594, 0x1f0f9092), // 510239
+        (1559796519, 0x1f0f9e0a), // 510238
+        (1559796294, 0x1f0fd566), // 510237
+        (1559796085, 0x1f0ff198), // 510236
+        (1559796082, 0x1f100e5c), // 510235
+        (1559795937, 0x1f103bd6), // 510234
+        (1559795568, 0x1f106512), // 510233
+        (1559795365, 0x1f10a686), // 510232
+        (1559795342, 0x1f10af29), // 510231
+        (1559795313, 0x1f10a1c6), // 510230
+        (1559795261, 0x1f10ec62), // 510229
+        (1559795006, 0x1f115429), // 510228
+    ]
+    .into_iter()
+    .map(|(seconds, compact)| (bits(compact), time(seconds)))
+    .collect();
+    let network = Network::new_default_testnet();
+    let previous_height = block::Height(510_255);
+    let adjustment = |candidate_time| {
+        AdjustedDifficulty::new_from_header_time(
+            candidate_time,
+            previous_height,
+            &network,
+            context.iter().copied(),
+        )
+        .expect("the real chain supplies the full difficulty context")
+    };
+
+    let block_time = time(1_794_297_367);
+    let real = adjustment(block_time);
+    assert_eq!(real.median_time_past(), time(1_794_291_292));
+    assert_eq!(
+        block_time - real.median_time_past(),
+        Duration::seconds(6_075)
+    );
+    validate_contextual_difficulty_and_time(bits(0x2007ffff), real)
+        .expect("ycashd accepts fast-testnet block 510,256 with its own nBits");
+
+    let late = time(1_794_291_292 + 10_801);
+    assert!(matches!(
+        validate_contextual_difficulty_and_time(bits(0x2007ffff), adjustment(late)),
+        Err(ContextualValidationError::TimeTooLate { .. })
+    ));
+}
