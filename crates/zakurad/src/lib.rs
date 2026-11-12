@@ -116,6 +116,12 @@
 #[macro_use]
 extern crate tracing;
 
+// `zakura-utils` is a dependency only so cargo builds its `zakura-checkpoints` binary (the
+// feature, and the dev-dependency workaround in Cargo.toml); no Rust code imports it. This marks
+// it used for cargo's `unused_dependencies` lint (Rust 1.100). No code change.
+#[cfg(any(test, feature = "zakura-checkpoints"))]
+use zakura_utils as _;
+
 /// Error type alias to make working with tower traits easier.
 ///
 /// Note: the 'static lifetime bound means that the *type* cannot have any
