@@ -65,12 +65,16 @@ pub(super) fn admit_prepared_headers(
         retained_header_context(projected.graph(), parent_frontier, facts, context)?;
     let mut parent = parent_frontier;
     let admission_now = context.clock.now();
-    let future_limit = admission_now.checked_add_signed(Duration::hours(2)).ok_or(
-        InvalidTransitionEvidence::Header(HeaderViolation::Validation {
-            source: crate::HeaderValidationSource::Prepared,
-            check: HeaderValidationCheck::IdentityOrLocalTime,
-        }),
-    )?;
+    let future_limit = admission_now
+        .checked_add_signed(Duration::seconds(
+            zakura_chain::block::BLOCK_MAX_TIME_SINCE_LOCAL_CLOCK.into(),
+        ))
+        .ok_or(InvalidTransitionEvidence::Header(
+            HeaderViolation::Validation {
+                source: crate::HeaderValidationSource::Prepared,
+                check: HeaderValidationCheck::IdentityOrLocalTime,
+            },
+        ))?;
     for prepared in event.batch.headers() {
         if prepared.header.previous_block_hash != parent.hash
             || prepared.hash != prepared.header.hash()
@@ -109,7 +113,9 @@ pub(super) fn admit_prepared_headers(
                     prepared
                         .header
                         .time
-                        .checked_sub_signed(Duration::hours(2))
+                        .checked_sub_signed(Duration::seconds(
+                            zakura_chain::block::BLOCK_MAX_TIME_SINCE_LOCAL_CLOCK.into(),
+                        ))
                         .ok_or(InvalidTransitionEvidence::Header(
                             HeaderViolation::Validation {
                                 source: crate::HeaderValidationSource::Prepared,

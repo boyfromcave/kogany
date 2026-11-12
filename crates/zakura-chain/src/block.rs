@@ -40,7 +40,9 @@ pub use commitment::{
     CHAIN_HISTORY_ACTIVATION_RESERVED,
 };
 pub use hash::Hash;
-pub use header::{BlockTimeError, CountedHeader, Header, ZCASH_BLOCK_VERSION};
+pub use header::{
+    BlockTimeError, CountedHeader, Header, BLOCK_MAX_TIME_SINCE_LOCAL_CLOCK, ZCASH_BLOCK_VERSION,
+};
 pub use height::{Height, HeightDiff, TryIntoHeight};
 pub use serialize::{SerializedBlock, MAX_BLOCK_BYTES};
 

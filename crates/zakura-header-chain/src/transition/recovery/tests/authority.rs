@@ -36,7 +36,9 @@ fn canonical_work_and_recovery_time_are_authoritative() {
         .expect("the forged fixture work remains in range");
     assert!(violations(&forged_work, &config).contains(&AuditViolation::Work(child_hash)));
 
-    let future_now = base.nodes[1].header.time - Duration::hours(3);
+    let future_now = base.nodes[1].header.time
+        - (Duration::seconds(zakura_chain::block::BLOCK_MAX_TIME_SINCE_LOCAL_CLOCK.into())
+            + Duration::hours(1));
     assert!(matches!(
         audit_store_at(&base, &config, future_now),
         Err(RecoveryFailure::Source { violations })
@@ -50,7 +52,8 @@ fn recovery_preserves_elapsed_deferrals_for_normal_reevaluation() {
     let child_hash = base.nodes[1].hash;
     let mut elapsed = base.clone();
     let anchor = elapsed.metadata.frontiers.finalized;
-    let until = elapsed.nodes[1].header.time - Duration::hours(2);
+    let until = elapsed.nodes[1].header.time
+        - Duration::seconds(zakura_chain::block::BLOCK_MAX_TIME_SINCE_LOCAL_CLOCK.into());
     elapsed.nodes[1].validation = crate::HeaderValidationState::DeferredUntil(until);
     elapsed.metadata.frontiers.header_best = anchor;
     elapsed.metadata.header_best_score = ChainScore::new(SuffixWork::zero(), anchor.hash);

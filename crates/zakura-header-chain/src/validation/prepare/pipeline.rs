@@ -136,7 +136,9 @@ pub fn prepare_headers(
     // Local-clock bound for future-timestamp classification.
     let now = clock.now();
     let future_limit = now
-        .checked_add_signed(Duration::hours(2))
+        .checked_add_signed(Duration::seconds(
+            zakura_chain::block::BLOCK_MAX_TIME_SINCE_LOCAL_CLOCK.into(),
+        ))
         .ok_or(HeaderFailure::ClockRange)?;
 
     // Checked height inference from the supplied parent height.
@@ -185,7 +187,9 @@ pub fn prepare_headers(
             let validation = if canonical_header_time > future_limit {
                 HeaderValidationState::DeferredUntil(
                     canonical_header_time
-                        .checked_sub_signed(Duration::hours(2))
+                        .checked_sub_signed(Duration::seconds(
+                            zakura_chain::block::BLOCK_MAX_TIME_SINCE_LOCAL_CLOCK.into(),
+                        ))
                         .ok_or(HeaderFailure::ClockRange)?,
                 )
             } else {

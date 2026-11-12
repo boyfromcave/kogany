@@ -740,9 +740,15 @@ fn time_check_now() {
     // These checks are deterministic, because all the times are offset
     // from the current time.
     let now = Utc::now();
-    let three_hours_in_the_past = now - Duration::hours(3);
-    let two_hours_in_the_future = now + Duration::hours(2);
-    let two_hours_and_one_second_in_the_future = now + Duration::hours(2) + Duration::seconds(1);
+    // kogany: Zcash's two-hour local-clock bound is four hours on Ycash, so the "three hours"
+    // case, one hour past the bound, is five hours there.
+    #[cfg(not(feature = "ycash"))]
+    let (past_the_bound, bound) = (Duration::hours(3), Duration::hours(2));
+    #[cfg(feature = "ycash")]
+    let (past_the_bound, bound) = (Duration::hours(5), Duration::hours(4));
+    let three_hours_in_the_past = now - past_the_bound;
+    let two_hours_in_the_future = now + bound;
+    let two_hours_and_one_second_in_the_future = now + bound + Duration::seconds(1);
 
     node_time_check(now, now).expect("the current time should be valid as a block header time");
     node_time_check(three_hours_in_the_past, now)
@@ -840,4 +846,23 @@ fn time_check_fixed() {
         // Invert the check, leading to a valid time
         node_time_check(now, block_header_time).expect("the inverse comparison should be valid");
     }
+}
+
+/// kogany: ycashd accepts a block whose time is at most four hours ahead of the local clock
+/// (`MAX_FUTURE_BLOCK_TIME_LOCAL = 2 * 60 * 60 * 2`, `ycash6 src/chain.h:38`;
+/// `time > now + limit` rejects, `src/main.cpp:6157-6161`).
+#[cfg(feature = "ycash")]
+#[test]
+fn ycash_time_check_bound_is_four_hours() {
+    let _init_guard = zakura_test::init();
+
+    assert_eq!(crate::block::BLOCK_MAX_TIME_SINCE_LOCAL_CLOCK, 14_400);
+    let now = DateTime::from_timestamp(1_794_297_367, 0).expect("test timestamp is in range");
+    node_time_check(now + Duration::seconds(14_400), now)
+        .expect("exactly four hours ahead of the local clock is valid");
+    let error = node_time_check(now + Duration::seconds(14_401), now)
+        .expect_err("four hours and one second ahead of the local clock is invalid");
+    assert!(error
+        .to_string()
+        .contains("more than 4 hours in the future"));
 }

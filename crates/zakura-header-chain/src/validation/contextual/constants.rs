@@ -60,4 +60,11 @@ pub const POW_MAX_ADJUST_DOWN_PERCENT: i32 = 32;
 /// and the block's `time` field.
 ///
 /// Part of the block header consensus rules in the Zcash specification.
+#[cfg(not(feature = "ycash"))]
 pub const BLOCK_MAX_TIME_SINCE_MEDIAN: u32 = 90 * 60;
+
+/// The maximum number of seconds between the `median-time-past` of a block,
+/// and the block's `time` field: Ycash's three hours (ycashd `MAX_FUTURE_BLOCK_TIME_MTP`).
+#[cfg(feature = "ycash")]
+pub const BLOCK_MAX_TIME_SINCE_MEDIAN: u32 =
+    zakura_chain::parameters::ycash::MAX_FUTURE_BLOCK_TIME_MTP;

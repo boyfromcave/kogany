@@ -267,10 +267,11 @@ fn difficulty_time_and_history_tree(
         .checked_add(Duration32::from_seconds(BLOCK_MAX_TIME_SINCE_MEDIAN))
         .expect("a valid block time plus a small constant is in-range");
 
-    // kogany (S5, yellowback_stratum): ycashd's miner caps the time at median-time-past + 90 min
-    // only where the rule is enforced (`FutureTimestampSoftForkActive`, ycash6 `src/miner.cpp`
-    // `UpdateTime`: from height 2 on regtest and mainnet), so its block 1 takes the clock time.
-    // Below that height the bound is the header rule's two hours past the clock. Template policy
+    // kogany (S5, yellowback_stratum): ycashd's miner caps the time at median-time-past + 3 h
+    // (`MAX_FUTURE_BLOCK_TIME_MTP`) only where the rule is enforced
+    // (`FutureTimestampSoftForkActive`, ycash6 `src/miner.cpp` `UpdateTime`: from height 2 on
+    // regtest and mainnet), so its block 1 takes the clock time. Below that height the bound is
+    // the header rule's four hours past the clock (`MAX_FUTURE_BLOCK_TIME_LOCAL`). Template policy
     // only: the header validation (`zakura-header-chain` contextual `validate`) is unchanged.
     #[cfg(feature = "ycash")]
     let max_time = {
@@ -281,7 +282,9 @@ fn difficulty_time_and_history_tree(
             max_time
         } else {
             cur_time
-                .saturating_add(Duration32::from_seconds(2 * 60 * 60))
+                .saturating_add(Duration32::from_seconds(
+                    zakura_chain::block::BLOCK_MAX_TIME_SINCE_LOCAL_CLOCK,
+                ))
                 .max(min_time)
         }
     };

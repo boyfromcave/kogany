@@ -488,6 +488,11 @@ fn median_and_production_max_time_boundaries_are_exact() {
     let testnet_max_time = 653_606;
     #[cfg(feature = "ycash")]
     let testnet_max_time = zakura_chain::parameters::TESTNET_MAX_TIME_START_HEIGHT.0;
+    // kogany: Zcash's 90-minute median-time-past bound is three hours on Ycash.
+    #[cfg(not(feature = "ycash"))]
+    let max_since_median = Duration::minutes(90);
+    #[cfg(feature = "ycash")]
+    let max_since_median = Duration::minutes(180);
 
     for (network, height, max_is_active) in [
         (Network::Mainnet, block::Height(1), false),
@@ -520,7 +525,7 @@ fn median_and_production_max_time_boundaries_are_exact() {
             Err(ContextualValidationError::TimeTooEarly { .. })
         ));
 
-        let equality = base + Duration::minutes(90);
+        let equality = base + max_since_median;
         validate_with_expected_target(&network, height, equality, &context)
             .expect("the 90-minute equality boundary is inclusive");
 
@@ -556,6 +561,11 @@ fn disabled_pow_never_waives_median_time() {
 fn custom_mtp_and_max_time_use_local_parameters_with_pow_on_or_off() {
     let base = DateTime::from_timestamp(1_700_000_000, 0).expect("test timestamp is in range");
     let activation = block::Height(10);
+    // kogany: Zcash's 90-minute median-time-past bound is three hours on Ycash.
+    #[cfg(not(feature = "ycash"))]
+    let max_since_median = Duration::minutes(90);
+    #[cfg(feature = "ycash")]
+    let max_since_median = Duration::minutes(180);
 
     for disable_pow in [false, true] {
         let network = Parameters::build()
@@ -580,7 +590,7 @@ fn custom_mtp_and_max_time_use_local_parameters_with_pow_on_or_off() {
             validate_with_expected_target(
                 &network,
                 block::Height(9),
-                base + Duration::minutes(90) + Duration::seconds(1),
+                base + max_since_median + Duration::seconds(1),
                 &context_before,
             )
             .is_ok(),
@@ -590,7 +600,7 @@ fn custom_mtp_and_max_time_use_local_parameters_with_pow_on_or_off() {
             validate_with_expected_target(
                 &network,
                 activation,
-                base + Duration::minutes(90) + Duration::seconds(1),
+                base + max_since_median + Duration::seconds(1),
                 &context_at,
             ),
             Err(ContextualValidationError::TimeTooLate { .. })
@@ -1243,6 +1253,60 @@ fn candidate_height_window_preserves_existing_targets() {
             } else {
                 assert_ne!(result, network.target_difficulty_limit().to_compact());
             }
+        }
+    }
+}
+
+/// kogany: ycashd's median-time-past bound, `time <= MTP + MAX_FUTURE_BLOCK_TIME_MTP` with
+/// `MAX_FUTURE_BLOCK_TIME_MTP = 90 * 60 * 2` (`ycash6 src/chain.h:32`, `src/main.cpp:6149-6153`),
+/// on every Ycash network from its `nFutureTimestampSoftForkHeight`: 2 on mainnet, the shadow
+/// profiles and regtest, Blossom + 6 = 510,256 on the `fast` testnet (`src/chainparams.cpp:550`).
+#[cfg(feature = "ycash")]
+#[test]
+fn ycash_median_time_past_bound_is_three_hours_on_every_profile() {
+    assert_eq!(BLOCK_MAX_TIME_SINCE_MEDIAN, 10_800);
+
+    let base = DateTime::from_timestamp(1_700_000_000, 0).expect("test timestamp is in range");
+    let bound = Duration::seconds(10_800);
+    let span = u32::try_from(POW_ADJUSTMENT_BLOCK_SPAN).expect("the span fits in u32");
+    for (network, start) in [
+        (Network::Mainnet, 2),
+        (Network::new_default_testnet(), 510_256),
+        (Network::new_ycash_testnet_slow(), 2),
+        (Network::new_ycash_testnet_legacy(), 2),
+        (Network::new_regtest(RegtestParameters::default()), 2),
+    ] {
+        for height in [start, start + 1, 3_100_000] {
+            let height = block::Height(height);
+            let len = usize::try_from(height.0.min(span)).expect("the span fits in usize");
+            let context = vec![(network.target_difficulty_limit().to_compact(), base); len];
+            validate_with_expected_target(&network, height, base + bound, &context).unwrap_or_else(
+                |error| panic!("MTP + 3 h is accepted on {network:?} at {height:?}: {error}"),
+            );
+            assert!(
+                matches!(
+                    validate_with_expected_target(
+                        &network,
+                        height,
+                        base + bound + Duration::seconds(1),
+                        &context,
+                    ),
+                    Err(ContextualValidationError::TimeTooLate { .. })
+                ),
+                "MTP + 3 h + 1 s is rejected on {network:?} at {height:?}"
+            );
+        }
+        if start > 2 {
+            let height = block::Height(start - 1);
+            let len = usize::try_from(height.0.min(span)).expect("the span fits in usize");
+            let context = vec![(network.target_difficulty_limit().to_compact(), base); len];
+            validate_with_expected_target(
+                &network,
+                height,
+                base + bound + Duration::seconds(1),
+                &context,
+            )
+            .expect("the bound is not enforced below the start height");
         }
     }
 }

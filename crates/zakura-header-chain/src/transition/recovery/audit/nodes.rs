@@ -48,8 +48,12 @@ pub(super) fn check_nodes(
         } else {
             violations.push(AuditViolation::Parent(node.hash));
         }
-        let future_limit = now.checked_add_signed(Duration::hours(2));
-        let expected_deferred = node.header.time.checked_sub_signed(Duration::hours(2));
+        let future_limit = now.checked_add_signed(Duration::seconds(
+            zakura_chain::block::BLOCK_MAX_TIME_SINCE_LOCAL_CLOCK.into(),
+        ));
+        let expected_deferred = node.header.time.checked_sub_signed(Duration::seconds(
+            zakura_chain::block::BLOCK_MAX_TIME_SINCE_LOCAL_CLOCK.into(),
+        ));
         let valid_time_state = match node.validation {
             crate::HeaderValidationState::Valid => {
                 future_limit.is_some_and(|limit| node.header.time <= limit)

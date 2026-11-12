@@ -124,7 +124,9 @@ fn admission_defers_a_prepared_valid_header_after_clock_rollback() {
     let prepared_hash = prepared.hash;
     let prepared_time = prepared.header.time;
 
-    let admission_now = prepared_time - chrono::Duration::hours(3);
+    let admission_now = prepared_time
+        - (chrono::Duration::seconds(zakura_chain::block::BLOCK_MAX_TIME_SINCE_LOCAL_CLOCK.into())
+            + chrono::Duration::hours(1));
     let plan = apply_transition(
         &store,
         request,
@@ -138,7 +140,12 @@ fn admission_defers_a_prepared_valid_header_after_clock_rollback() {
 
     assert_eq!(
         admitted.validation,
-        HeaderValidationState::DeferredUntil(prepared_time - chrono::Duration::hours(2))
+        HeaderValidationState::DeferredUntil(
+            prepared_time
+                - chrono::Duration::seconds(
+                    zakura_chain::block::BLOCK_MAX_TIME_SINCE_LOCAL_CLOCK.into()
+                )
+        )
     );
     assert!(!admitted.is_eligible());
     assert_eq!(
