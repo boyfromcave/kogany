@@ -20,6 +20,10 @@
 //! `ABANDON_BLOCKS` and `ENFORCE_UNTIL_HEIGHT` are retired, upgrade plan §6, U-21): the module is
 //! consensus wherever `UPGRADE_VAULT` is active and [`Params::is_configured`] holds.
 
+use kogany_vault::template::{PQ_SCHEME_FN_DSA_512, PQ_SCHEME_SLH_DSA_SHA2_128S};
+
+pub use crate::codecs::address::PqAddressVersions;
+
 /// Yellowback amounts are integer US cents; 100 == $1.00 (`Cents`).
 pub type Cents = i64;
 /// Prices are integer micro-USD per YEC; 1,000,000 == $1.00 (`MicroUsd`).
@@ -172,8 +176,9 @@ pub struct Params {
     /// Base58Check version bytes of Yellowback addresses (D10); `None` only in
     /// [`Params::default`], where the C++ vector is empty (every column sets it).
     pub address_version: Option<[u8; 2]>,
-    /// The same for a PQ key, `scheme || keyHash` (quantum spec §4).
-    pub pq_address_version: Option<[u8; 2]>,
+    /// A PQ key's, one 3-byte version per scheme, `|| keyHash` (quantum spec §4, D-9); `None`
+    /// only in [`Params::default`] (the C++ empty map).
+    pub pq_address_versions: Option<PqAddressVersions>,
     /// The vault primitive set whose members cancel claims (U-22, U-23); all zero = YED off.
     pub attestor_set_id: [u8; 32],
     /// `CLAIM_DELAY`: the YED vault's and its claim intents' delay, blocks (U-23).
@@ -375,7 +380,7 @@ impl Default for Params {
             network: "",
             start_height: 0,
             address_version: None,
-            pq_address_version: None,
+            pq_address_versions: None,
             attestor_set_id: [0; 32],
             claim_delay: 0,
             p_fast_window: 0,
@@ -644,13 +649,17 @@ impl Params {
             "addressVersion".to_string(),
             Bytes(self.address_version.map_or_else(Vec::new, |v| v.to_vec())),
         ));
-        v.push((
-            "pqAddressVersion".to_string(),
-            Bytes(
-                self.pq_address_version
-                    .map_or_else(Vec::new, |v| v.to_vec()),
-            ),
-        ));
+        // The map `pqAddressVersions` as one entry per registered scheme, `pqAddressVersions[1]`
+        // and `pqAddressVersions[2]` (empty where the C++ map has no such key).
+        for scheme in [PQ_SCHEME_SLH_DSA_SHA2_128S, PQ_SCHEME_FN_DSA_512] {
+            let version = self
+                .pq_address_versions
+                .iter()
+                .flatten()
+                .find(|(s, _)| *s == scheme)
+                .map_or_else(Vec::new, |(_, v)| v.to_vec());
+            v.push((format!("pqAddressVersions[{scheme}]"), Bytes(version)));
+        }
         v.push((
             "attestorSetId".to_string(),
             Bytes(self.attestor_set_id.to_vec()),
@@ -781,7 +790,11 @@ const fn common(mut p: Params) -> Params {
 const fn testnet(mut t: Params) -> Params {
     t.network = "test";
     t.address_version = Some([0x20, 0x07]); // "yt…" (D10)
-    t.pq_address_version = Some([0x57, 0x1E]); // "yt…", 53 characters
+    t.pq_address_versions = Some([
+        // 53 characters, the scheme in the prefix (quantum spec §4, D-9)
+        (PQ_SCHEME_FN_DSA_512, [0x57, 0x21, 0xC9]), // "ytf…"
+        (PQ_SCHEME_SLH_DSA_SHA2_128S, [0x57, 0x23, 0x30]), // "yts…"
+    ]);
     t.start_height = 0;
     t
 }
@@ -793,7 +806,11 @@ pub fn main_params() -> Params {
         ..Params::default()
     });
     m.address_version = Some([0x1F, 0xDD]); // "yb…", 35 characters (D10; D-Q-21)
-    m.pq_address_version = Some([0x56, 0xAB]); // "yb…", 53 characters
+    m.pq_address_versions = Some([
+        // 53 characters, the scheme in the prefix (quantum spec §4; D-Q-21, D-9)
+        (PQ_SCHEME_FN_DSA_512, [0x56, 0xAE, 0xDE]), // "ybf…"
+        (PQ_SCHEME_SLH_DSA_SHA2_128S, [0x56, 0xB0, 0x44]), // "ybs…"
+    ]);
     m.start_height = 0;
     m
 }
@@ -866,7 +883,11 @@ pub fn regtest_params_with(
         ..Params::default()
     });
     r.address_version = Some([0x20, 0x02]); // "yr…" (D10)
-    r.pq_address_version = Some([0x57, 0x10]); // "yr…", 53 characters
+    r.pq_address_versions = Some([
+        // 53 characters, the scheme in the prefix (quantum spec §4, D-9)
+        (PQ_SCHEME_FN_DSA_512, [0x57, 0x14, 0x44]), // "yrf…"
+        (PQ_SCHEME_SLH_DSA_SHA2_128S, [0x57, 0x15, 0xAA]), // "yrs…"
+    ]);
     r.p_fast_window = 8;
     r.p_fast_min_fill = 4;
     r.p_mid_window = 24;

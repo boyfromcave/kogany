@@ -57,9 +57,9 @@ pub enum Address {
     },
 
     /// Ycash (kogany W7-b): a post-quantum TX_PQPKH key (ycash6 `CPQKeyID`), the plain-YEC
-    /// `sq…`/`tq…`/`rq…` address (D-Q-20): `Base58Check(version ‖ scheme ‖ keyHash)`. The
-    /// address index keys it by `Hash160(scheme ‖ keyHash)` ([`Address::hash_bytes`], ycash6
-    /// `CScript::AddressHash`).
+    /// address (D-Q-20, D-9): `Base58Check(version ‖ keyHash)`, one 3-byte version per network
+    /// and scheme (`sqf…`/`sqs…`, `tqf…`/`tqs…`, `rqf…`/`rqs…`). The address index keys it by
+    /// `Hash160(scheme ‖ keyHash)` ([`Address::hash_bytes`], ycash6 `CScript::AddressHash`).
     #[cfg(feature = "ycash")]
     PayToPqKeyHash {
         /// Production, test, or other network
@@ -71,37 +71,50 @@ pub enum Address {
     },
 }
 
-/// Ycash (kogany): `PlainPQAddressVersion` (ycash6 `src/key_io.cpp:25-31`): `sq…` on Mainnet,
-/// `tq…` on the testnets, `rq…` on Regtest.
+/// Ycash (kogany): `PlainPQAddressVersions` (ycash6 `src/key_io.cpp`, D-Q-20, D-9): one 3-byte
+/// version per scheme, `sqf…`/`sqs…` on Mainnet, `tqf…`/`tqs…` on the testnets, `rqf…`/`rqs…` on
+/// Regtest. The one table both directions read (kogany-yellowback `codecs::address`).
 #[cfg(feature = "ycash")]
-pub(crate) fn plain_pq_address_version(network_kind: NetworkKind) -> [u8; 2] {
+pub(crate) fn plain_pq_address_versions(
+    network_kind: NetworkKind,
+) -> &'static kogany_yellowback::codecs::address::PqAddressVersions {
+    use kogany_yellowback::codecs::address::{
+        PLAIN_PQ_VERSIONS_MAIN, PLAIN_PQ_VERSIONS_REGTEST, PLAIN_PQ_VERSIONS_TEST,
+    };
     match network_kind {
-        NetworkKind::Mainnet => [0x4D, 0xD9],
-        NetworkKind::Testnet => [0x4F, 0x61],
-        NetworkKind::Regtest => [0x4C, 0x51],
+        NetworkKind::Mainnet => &PLAIN_PQ_VERSIONS_MAIN,
+        NetworkKind::Testnet => &PLAIN_PQ_VERSIONS_TEST,
+        NetworkKind::Regtest => &PLAIN_PQ_VERSIONS_REGTEST,
     }
 }
 
-/// Ycash (kogany): a plain-YEC post-quantum address's Base58Check payload (`version ‖ scheme ‖
-/// keyHash`, 35 bytes), as ycash6 `DecodeDestination` reads it; `None` for anything else.
+/// Ycash (kogany): a plain-YEC post-quantum address's Base58Check payload (`version ‖ keyHash`,
+/// 35 bytes, D-9), as ycash6 `DecodeDestination` reads it; `None` for anything else, the pre-D-9
+/// form (`2-byte version ‖ scheme ‖ keyHash`) among it.
 #[cfg(feature = "ycash")]
 fn decode_plain_pq(data: &[u8]) -> Option<Address> {
-    let (version, rest) = data.split_first_chunk::<2>()?;
-    let (scheme, key_hash) = rest.split_first()?;
-    let key_hash: [u8; 32] = key_hash.try_into().ok()?;
-    let network_kind = [
+    use kogany_yellowback::codecs::address::decode_pq_data;
+    [
         NetworkKind::Mainnet,
         NetworkKind::Testnet,
         NetworkKind::Regtest,
     ]
     .into_iter()
-    .find(|kind| plain_pq_address_version(*kind) == *version)?;
-    kogany_vault::template::is_known_pq_scheme(*scheme).then_some(Address::PayToPqKeyHash {
-        network_kind,
-        scheme: *scheme,
-        key_hash,
+    .find_map(|network_kind| {
+        let owner = decode_pq_data(data, plain_pq_address_versions(network_kind))?;
+        Some(Address::PayToPqKeyHash {
+            network_kind,
+            scheme: owner.scheme,
+            key_hash: owner.hash.0,
+        })
     })
 }
+
+/// Ycash (kogany): the length of a transparent (P2PKH/P2SH) Base58Check payload, `version:2 ‖
+/// hash:20`. ycashd's `DecodeDestination` refuses any other length, so a payload that is not a
+/// post-quantum address and not this long is no address (it never falls through to another kind).
+#[cfg(feature = "ycash")]
+const TRANSPARENT_PAYLOAD_LEN: usize = 22;
 
 impl serde::Serialize for Address {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
@@ -206,6 +219,26 @@ impl fmt::Debug for Address {
 
 impl fmt::Display for Address {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        // Ycash (D-9): ycash6 `EncodePQAddress`, "" for a scheme without a version.
+        #[cfg(feature = "ycash")]
+        if let Address::PayToPqKeyHash {
+            network_kind,
+            scheme,
+            key_hash,
+        } = self
+        {
+            let owner = kogany_vault::PqOwner {
+                scheme: *scheme,
+                hash: kogany_vault::Hash32(*key_hash),
+            };
+            return f.write_str(
+                &kogany_yellowback::codecs::address::encode_pq(
+                    &owner,
+                    plain_pq_address_versions(*network_kind),
+                )
+                .unwrap_or_default(),
+            );
+        }
         let mut bytes = io::Cursor::new(Vec::new());
         let _ = self.zcash_serialize(&mut bytes);
 
@@ -221,8 +254,13 @@ impl std::str::FromStr for Address {
         if let Ok(data) = bs58::decode(s).with_check(None).into_vec() {
             // Ycash (kogany W7-b): a plain-YEC post-quantum address (D-Q-20).
             #[cfg(feature = "ycash")]
-            if let Some(address) = decode_plain_pq(&data) {
-                return Ok(address);
+            {
+                if let Some(address) = decode_plain_pq(&data) {
+                    return Ok(address);
+                }
+                if data.len() != TRANSPARENT_PAYLOAD_LEN {
+                    return Err(SerializationError::Parse("bad t-addr length"));
+                }
             }
             return Address::zcash_deserialize(&data[..]);
         }
@@ -291,8 +329,14 @@ impl ZcashSerialize for Address {
                 scheme,
                 key_hash,
             } => {
-                writer.write_all(&plain_pq_address_version(*network_kind))?;
-                writer.write_all(&[*scheme])?;
+                // D-9: the version names the scheme; an unregistered scheme has none (ycash6
+                // encodes "" for it) and writes the bare key hash, which decodes as nothing.
+                if let Some((_, version)) = plain_pq_address_versions(*network_kind)
+                    .iter()
+                    .find(|(s, _)| s == scheme)
+                {
+                    writer.write_all(version)?;
+                }
                 writer.write_all(key_hash)?
             }
         }
@@ -556,7 +600,8 @@ mod tests {
             key_hash,
         };
         let text = address.to_string();
-        assert!(text.starts_with("rq"), "{text}");
+        assert!(text.starts_with("rqf"), "{text}");
+        assert_eq!(text.len(), 53);
         assert_eq!(text.parse::<Address>().unwrap(), address);
         let mut id = vec![2u8];
         id.extend_from_slice(&key_hash);
@@ -565,11 +610,27 @@ mod tests {
         script.extend_from_slice(&key_hash);
         script.extend_from_slice(&[0x52, 0xc2]);
         assert_eq!(address.script().as_raw_bytes(), script.as_slice());
-        // an unregistered scheme is not an address
-        let mut data = vec![0x4C, 0x51, 9];
+        // the pre-D-9 form (2-byte version ‖ scheme ‖ keyHash) is not an address, and does not
+        // fall through to a transparent one
+        let mut data = vec![0x4C, 0x51, 2];
         data.extend_from_slice(&key_hash);
-        let unknown = bs58::encode(data).with_check().into_string();
-        assert!(unknown.parse::<Address>().is_err());
+        let old_form = bs58::encode(data).with_check().into_string();
+        assert!(old_form.parse::<Address>().is_err());
+        // nor is a transparent version with a 32-byte body (ycashd checks the length)
+        let mut data = NetworkKind::Mainnet.b58_pubkey_address_prefix().to_vec();
+        data.extend_from_slice(&[0u8; 20]);
+        let taddr = bs58::encode(&data).with_check().into_string();
+        assert!(taddr.parse::<Address>().is_ok());
+        data.extend_from_slice(&[0u8; 13]);
+        let long_taddr = bs58::encode(data).with_check().into_string();
+        assert!(long_taddr.parse::<Address>().is_err());
+        // an address of an unregistered scheme does not exist: it renders as ""
+        let unknown = Address::PayToPqKeyHash {
+            network_kind: NetworkKind::Regtest,
+            scheme: 9,
+            key_hash,
+        };
+        assert_eq!(unknown.to_string(), "");
         // a TX_PQPKH output names it, as the address index reads it
         let output = crate::transparent::Output {
             value: crate::amount::Amount::try_from(1).unwrap(),
@@ -579,6 +640,65 @@ mod tests {
             output.address(&crate::parameters::Network::new_regtest(Default::default())),
             Some(address)
         );
+    }
+
+    /// Ycash (D-9): the shared post-quantum address vectors (`testdata/yellowback/
+    /// pq_address_vectors.json`, byte-identical to ycash6's, its SHA-256 checked against
+    /// `testdata/yellowback/PIN`). Every plain-YEC vector parses to its network and key and
+    /// prints back as itself; every YED vector and every invalid one is no transparent address
+    /// (a failed post-quantum decode never falls through to another kind).
+    #[cfg(feature = "ycash")]
+    #[test]
+    fn plain_pq_address_shared_vectors() {
+        use sha2::Digest;
+        let dir =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../testdata/yellowback");
+        let bytes = std::fs::read(dir.join("pq_address_vectors.json")).unwrap();
+        let pin = std::fs::read_to_string(dir.join("PIN")).unwrap();
+        let pinned = pin
+            .lines()
+            .filter(|l| !l.starts_with('#'))
+            .find_map(|l| {
+                let mut f = l.split_whitespace();
+                let sha = f.next()?;
+                (f.next()? == "testdata/yellowback/pq_address_vectors.json").then_some(sha)
+            })
+            .expect("pq_address_vectors.json is pinned");
+        assert_eq!(hex::encode(sha2::Sha256::digest(&bytes)), pinned);
+        let v: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        let kind = |n: &str| match n {
+            "main" => NetworkKind::Mainnet,
+            "test" => NetworkKind::Testnet,
+            "regtest" => NetworkKind::Regtest,
+            other => panic!("network {other}"),
+        };
+        let mut plain = 0;
+        for row in v["valid"].as_array().unwrap() {
+            let text = row["address"].as_str().unwrap();
+            if row["coin"] != "yec" {
+                assert!(text.parse::<Address>().is_err(), "YED {text}");
+                continue;
+            }
+            plain += 1;
+            let key_hash: [u8; 32] = hex::decode(row["keyhash"].as_str().unwrap())
+                .unwrap()
+                .try_into()
+                .unwrap();
+            let want = Address::PayToPqKeyHash {
+                network_kind: kind(row["network"].as_str().unwrap()),
+                scheme: u8::try_from(row["scheme"].as_u64().unwrap()).unwrap(),
+                key_hash,
+            };
+            assert_eq!(text.parse::<Address>().unwrap(), want, "{text}");
+            assert_eq!(want.to_string(), text);
+            // serde (RPC parameters and answers) uses the same text
+            assert_eq!(serde_json::to_value(want).unwrap(), text);
+        }
+        assert_eq!(plain, 36);
+        for row in v["invalid"].as_array().unwrap() {
+            let text = row["address"].as_str().unwrap();
+            assert!(text.parse::<Address>().is_err(), "{} {text}", row["reason"]);
+        }
     }
 
     #[test]

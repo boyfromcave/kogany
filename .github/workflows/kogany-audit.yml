@@ -39,7 +39,7 @@ env:
   # The ycash6 commit the pinned vectors and the parameter comparison come from: the commit
   # testdata/yellowback/PIN names (the `cross-line` job checks they agree). A PIN bump moves both.
   YCASH6_REPO: boyfromcave/ycash6
-  YCASH6_REV: 65cb4ae0ff19094d9185b00c264c7dc8c1610f63
+  YCASH6_REV: f8beb78e1a8beb5293769373ed758a585cdd2f7c
 
 jobs:
   selftest:
@@ -147,6 +147,8 @@ jobs:
             qa
             src/chainparams.cpp
             src/consensus/params.h
+            src/consensus/upgrades.cpp
+            src/consensus/upgrades.h
             src/version.h
             src/yellowback/params.cpp
           sparse-checkout-cone-mode: false

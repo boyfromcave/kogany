@@ -25,7 +25,7 @@ use async_trait::async_trait;
 use kogany_vault::{Hash32, OutPoint, PqOwner, PubKeyBytes};
 use kogany_yellowback::{
     codecs::{script::Holder, tag::CoinbaseTag},
-    params::Params,
+    params::{Params, PqAddressVersions},
 };
 
 /// The Yellowback state of the node, as the `yed_*` RPCs see it.
@@ -346,8 +346,9 @@ pub struct NodeInfo {
     pub network_fees: NetworkFees,
     /// Whether Falcon (scheme 2) is active at the next block (`params.pq.falconActive`).
     pub falcon_active_next: bool,
-    /// The plain-YEC post-quantum address version of this network (`sq`/`tq`/`rq`, D-Q-20).
-    pub plain_pq_address_version: [u8; 2],
+    /// The plain-YEC post-quantum address versions of this network, one per scheme
+    /// (`sqf`/`sqs`, `tqf`/`tqs`, `rqf`/`rqs`; D-Q-20, D-9).
+    pub plain_pq_address_versions: PqAddressVersions,
 }
 
 /// The L6 payee policy (`PayeePolicy`).
