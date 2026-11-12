@@ -823,3 +823,28 @@ fn already_queued_is_waited_for() {
     let other: Box<dyn std::error::Error> = "transaction already exists in mempool".into();
     assert!(!is_already_queued(other.as_ref()));
 }
+
+/// The three header time rules answer ycashd's reasons: `time-too-old` (not after the
+/// median-time-past, ycash6 `src/main.cpp:6138-6142`), `time-too-far-ahead-of-mtp` (more than
+/// `MAX_FUTURE_BLOCK_TIME_MTP` past it, `:6149-6153`), `time-too-new` (more than
+/// `MAX_FUTURE_BLOCK_TIME_LOCAL` past the local clock, `:6157-6161`).
+#[test]
+fn header_time_rules_answer_ycashd_reasons() {
+    let now = chrono::DateTime::from_timestamp(1_794_297_367, 0).expect("in range");
+    let early = ValidateContextError::TimeTooEarly {
+        candidate_time: now,
+        median_time_past: now,
+    };
+    let late = ValidateContextError::TimeTooLate {
+        candidate_time: now,
+        block_time_max: now - chrono::Duration::seconds(1),
+    };
+    assert_eq!(
+        context_reject(&early, Context::Block).block_reason(),
+        "time-too-old"
+    );
+    assert_eq!(
+        context_reject(&late, Context::Block).block_reason(),
+        "time-too-far-ahead-of-mtp"
+    );
+}

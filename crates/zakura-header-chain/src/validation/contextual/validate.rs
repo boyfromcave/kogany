@@ -19,6 +19,7 @@ pub enum ContextualValidationError {
         median_time_past: DateTime<Utc>,
     },
     /// Candidate time exceeds the active 90-minute median-time-past limit.
+    /// (kogany: three hours under the `ycash` feature, ycashd's `MAX_FUTURE_BLOCK_TIME_MTP`.)
     #[error("block time {candidate_time:?} exceeds maximum {block_time_max:?}")]
     TimeTooLate {
         /// Candidate header time.

@@ -755,7 +755,8 @@ pub enum ValidateContextError {
         median_time_past: DateTime<Utc>,
     },
 
-    #[error("block time {candidate_time:?} is greater than the median-time-past for the block plus 90 minutes {block_time_max:?}")]
+    #[cfg_attr(not(feature = "ycash"), error("block time {candidate_time:?} is greater than the median-time-past for the block plus 90 minutes {block_time_max:?}"))]
+    #[cfg_attr(feature = "ycash", error("block time {candidate_time:?} is greater than the median-time-past for the block plus 3 hours {block_time_max:?}"))]
     #[non_exhaustive]
     TimeTooLate {
         candidate_time: DateTime<Utc>,
@@ -1164,6 +1165,16 @@ impl ValidateContextError {
     // Keep this match exhaustive so new contextual errors must make an explicit
     // peer-attribution decision.
     fn misbehavior_score(&self) -> u32 {
+        // kogany: ycashd rejects a block whose time is not after its median-time-past, or more
+        // than `MAX_FUTURE_BLOCK_TIME_MTP` past it, with `DoS(0)` (ycash6 `src/main.cpp:6138-6153`):
+        // the block is invalid but its peer is not scored.
+        #[cfg(feature = "ycash")]
+        if matches!(
+            self,
+            ValidateContextError::TimeTooEarly { .. } | ValidateContextError::TimeTooLate { .. }
+        ) {
+            return 0;
+        }
         match self {
             // Consensus violations the block itself proves: the supplier sent a
             // block that no honest peer could have produced.
@@ -1691,10 +1702,23 @@ mod tests {
         ];
 
         for error in peer_faults {
+            // kogany: ycashd scores the two median-time-past rules `DoS(0)`.
+            #[cfg(feature = "ycash")]
+            let expected = if matches!(
+                error,
+                ValidateContextError::TimeTooEarly { .. }
+                    | ValidateContextError::TimeTooLate { .. }
+            ) {
+                0
+            } else {
+                100
+            };
+            #[cfg(not(feature = "ycash"))]
+            let expected = 100;
             let commit_error = CommitBlockError::ValidateContextError(Box::new(error));
             assert_eq!(
                 commit_error.misbehavior_score(),
-                100,
+                expected,
                 "direct contextual consensus failure must be scored: {commit_error:?}"
             );
         }

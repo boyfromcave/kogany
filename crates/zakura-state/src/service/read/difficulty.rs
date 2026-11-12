@@ -769,7 +769,7 @@ mod tests {
     }
 
     /// kogany (S5, yellowback_stratum): on the Ycash build a regtest template for block 1 takes
-    /// the clock time, as ycashd's `UpdateTime` caps at median-time-past + 90 min only from
+    /// the clock time, as ycashd's `UpdateTime` caps at median-time-past + 3 h only from
     /// height 2; block 2 is capped.
     #[cfg(feature = "ycash")]
     #[test]
