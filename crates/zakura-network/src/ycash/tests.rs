@@ -591,6 +591,38 @@ fn operator_local_peer_on_zcash_port_is_kept_gossip_is_not() {
     );
 }
 
+/// An operator's loopback or private peer that has responded is never handed out in a `getaddr`
+/// answer, on a Ycash port or any other; a routable peer that has responded still is.
+#[test]
+fn operator_local_peer_is_not_gossiped() {
+    use crate::{meta_addr::MetaAddr, AddressBook};
+
+    let mut book = AddressBook::new(
+        "0.0.0.0:8833".parse().expect("listener parses"),
+        &Network::Mainnet,
+        16,
+        tracing::Span::none(),
+    );
+    let local: crate::PeerSocketAddr = "127.0.0.1:18233".parse().expect("parses");
+    let private: crate::PeerSocketAddr = "10.1.2.3:8833".parse().expect("parses");
+    let public: crate::PeerSocketAddr = "1.2.3.4:8833".parse().expect("parses");
+    for addr in [local, private, public] {
+        assert!(book.update(MetaAddr::new_initial_peer(addr)).is_some());
+        book.update(MetaAddr::new_reconnect(addr));
+        book.update(MetaAddr::new_responded(addr, None));
+        assert!(book.get(addr).is_some(), "{addr} is in the book");
+    }
+
+    let advertised: Vec<_> = book
+        .sanitized(chrono::Utc::now())
+        .into_iter()
+        .map(|meta_addr| meta_addr.addr)
+        .collect();
+    assert!(advertised.contains(&public), "{advertised:?}");
+    assert!(!advertised.contains(&local), "{advertised:?}");
+    assert!(!advertised.contains(&private), "{advertised:?}");
+}
+
 /// ycashd's `CNetAddr::IsRoutable` (`ycash6 src/netbase.cpp:854-857`): loopback, `0/8` and the
 /// private and reserved ranges are not routable; a public address is.
 #[test]
