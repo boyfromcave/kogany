@@ -174,7 +174,7 @@ four times the size. A sync from genesis is about seven hours.
   that file and fetch it again (step 3). Do not extract it.
 - `minisign` prints `Signature verification failed`: `SHA256SUMS` or its signature is not what
   the release key signed. Fetch both again; if it still fails, do not use the bundle and report
-  it at https://github.com/boyfromcave/kogany/issues.
+  it at <https://github.com/boyfromcave/kogany/issues>.
 - The `version` file is not the manifest's `state_format`, or koganyd starts from genesis: the
   bundle is for another state format. Use the bundle whose `latest-<state_format>` matches your
   koganyd, or sync from genesis.
