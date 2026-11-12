@@ -85,8 +85,22 @@ These differences are kept: the RPC server is upstream Zakura's, and the wallet 
 
 For post-quantum addresses (`sqf…`/`sqs…`, the YED `ybf…`/`ybs…`), the answers match ycashd's
 field for field (2026-11-12, regtest, `koganyd` against ycash6 6.22.0-beta2):
-`validateaddress` (with `pqscheme`, `pqschemename`, `pqkeyhash`), `z_validateaddress`,
+`validateaddress` (with `pqscheme`, `pqschemename`, `pqkeyhash`), `z_validateaddress`
+(see below),
 `getaddressutxos` (with and without `chainInfo`), `getaddresstxids`, `getaddressdeltas`,
 `getaddressmempool` (apart from `timestamp`, each node's own arrival time), `getaddressbalance`
 (apart from `txcount`, above), `yed_listtokens`, `yed_getvault`, `yed_gettxinfo`, `yed_listvaults`,
 `vault_decodescript`, `vault_list`, `set_getinfo` and `vault_getinfo`.
+
+`z_validateaddress` of a post-quantum address answers `isvalid` true, `address`, `address_type`
+and `type` `"pq"`, `pqscheme`, `pqschemename` and `pqkeyhash`, as ycashd does since the beta2
+audit's L-4 fix (ycash6 #107, ycash-dd #176; before it, both nodes answered `isvalid` false).
+What was measured, 2026-11-12: live on regtest, `crates/kogany-rpc/qa/rpc_ycash_parity.py`
+asked `koganyd` (kogany #26) and ycash6 6.22.0-beta2 (`up/b2-wallet-followups-stack` @
+82f90b2f9) `validateaddress` and `z_validateaddress` for 32 D-9 rows of
+`testdata/yellowback/pq_address_vectors.json` (each network's `sqf…`/`sqs…`-style form of both
+schemes, the YED forms, regtest's invalid rows); every field agreed except `z_validateaddress`'s
+`ismine` for the two regtest addresses (see "Wallet fields"). The unit test in
+`crates/zakura-rpc/src/methods/types/z_validate_address.rs` checks the answer for every vector
+on all three networks. ycash-dd was not compared live; its answer has `type` but no
+`address_type`.

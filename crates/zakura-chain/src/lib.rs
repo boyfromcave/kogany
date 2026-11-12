@@ -25,6 +25,10 @@ extern crate serde;
 #[macro_use]
 extern crate tracing;
 
+// `futures` is used only by test, `proptest-impl` and `async-error` code; this marks it used in
+// every build for cargo's `unused_dependencies` lint (Rust 1.100). No code change.
+use futures as _;
+
 pub mod amount;
 pub mod block;
 pub mod block_info;

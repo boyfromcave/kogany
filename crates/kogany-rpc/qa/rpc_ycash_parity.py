@@ -207,6 +207,21 @@ WALLET_ONLY = {
 B58 = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz'
 
 
+PQ_VECTORS = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', '..', 'testdata',
+                          'yellowback', 'pq_address_vectors.json')
+
+
+def pq_parity_addresses():
+    """The D-9 post-quantum rows asked of both nodes: per (network, coin, scheme) the valid vector
+    with key hash 00 01 … 1f, and every regtest invalid vector."""
+    with open(PQ_VECTORS, encoding='utf8') as f:
+        v = json.load(f)
+    key_hash = bytes(range(32)).hex()
+    out = [row['address'] for row in v['valid'] if row['keyhash'] == key_hash]
+    out += [row['address'] for row in v['invalid'] if row['network'] == 'regtest']
+    return out
+
+
 def base58check(payload):
     """ycashd's EncodeBase58Check of version || body."""
     data = payload + hashlib.sha256(hashlib.sha256(payload).digest()).digest()[:4]
@@ -709,19 +724,17 @@ def run(args):
                      'not-an-address'):
             r.both('validateaddress', addr)
             r.both('z_validateaddress', addr)
-        # Post-quantum addresses (W7-c): rq… for both schemes, an unregistered scheme, another
-        # network's tq…/sq…, and the Yellowback yr… forms, which the stock validateaddress does
-        # not know (N9). ycashd decodes a PQ address chain-wide; its wallet makes one only once
-        # Vault is active (getnewaddress "" "pq"), which this chain never activates.
-        key_hash = bytes(range(32))
-        for addr in (base58check(b'\x4c\x51\x01' + key_hash),     # rq…, SLH-DSA-SHA2-128s
-                     base58check(b'\x4c\x51\x02' + key_hash),     # rq…, FN-DSA-512
-                     base58check(b'\x4c\x51\x03' + key_hash),     # unregistered scheme
-                     base58check(b'\x4f\x61\x01' + key_hash),     # tq…, the testnets'
-                     base58check(b'\x4d\xd9\x02' + key_hash),     # sq…, mainnet's
-                     base58check(b'\x57\x10\x01' + key_hash),     # yr…, a YED PQ address
-                     base58check(b'\x20\x02' + key_hash[:20])):   # yr…, a YED key-hash address
+        # Post-quantum addresses (W7-c; D-9 since beta2): from the shared vectors
+        # (testdata/yellowback/pq_address_vectors.json, byte-identical to ycash6's), regtest's
+        # rqf…/rqs… for both schemes, the testnets' and mainnet's forms, the YED yrf…/yrs… forms
+        # (not a destination, N9), and regtest's invalid rows (the pre-D-9 form, truncated,
+        # extended, bad checksum, unknown version). Both calls: ycashd's z_validateaddress
+        # describes a PQ address since the beta2 audit's L-4 fix (ycash6 6f770db7f), so the
+        # ycashd under test must be at least that (6.22.0-beta2). ycashd decodes a PQ address
+        # chain-wide; its wallet makes one only once Vault is active.
+        for addr in pq_parity_addresses():
             r.both('validateaddress', addr)
+            r.both('z_validateaddress', addr)
         tip_raw = y.ok('getblock', y.ok('getbestblockhash'), 0)
         r.both('submitblock', tip_raw)
         r.both('submitblock', '00')
