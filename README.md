@@ -188,6 +188,17 @@ On regtest every Ycash upgrade height, and the Vault height, come from
 `[network.network.params.activation_heights]`, as ycashd's `-nuparams` set them; the regtest
 harness in ycash6 (`qa/rpc-tests/test_framework/kogany.py`) writes that file for each node.
 
+### Mining: quote the price
+
+Where Yellowback is live, a miner must quote the YEC price as a ycashd pool does: send
+`yed_setquote <priceMicroUsd> <sourceMask>` to `koganyd` (directly or through the wallet in front
+of it) and renew it as the price moves. The quote goes into the coinbase tag of each block the node
+mines (the tag names the payout key, `mining.miner_address`; see
+[`docs/kogany.md`](docs/kogany.md#where-a-koganyd-behaves-as-ycashd-does)). The YED price comes
+from these quotes: blocks mined without one leave the price window empty, and every mint then fails
+with `mintpol-no-price: no defined price at the reference height`. `yed_getprice` shows whether a
+price is defined.
+
 To start a mainnet node at a recent height instead of from genesis, restore a signed snapshot of
 kogany's state: [`doc/mainnet-restore.md`](doc/mainnet-restore.md).
 
