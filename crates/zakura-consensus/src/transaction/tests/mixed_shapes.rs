@@ -1,13 +1,14 @@
 //! Beta2 address-interop plan W4.1, W4.2: kogany's transaction verifier on the C++-recorded
-//! transactions that mix Sapling spends and outputs with TX_PQPKH inputs and outputs and a
-//! vault-lock output (`testdata/mixed-shapes/chain.json`, `record.py` there), and the negative
-//! controls: the same transactions before the Vault height, a wrong post-quantum signature, a
-//! changed Sapling output, and the digest a verifier that left the Sapling parts out of the v4
-//! (ZIP-243) sighash would compute.
+//! transactions that mix Sapling spends and outputs with TX_PQPKH inputs and outputs, vault-lock
+//! outputs and a vault unlock (`testdata/mixed-shapes/chain.json`, `record.py` there, and
+//! `chain2.json`, `record2.py`), and the negative controls: the same transactions before the
+//! Vault height, a wrong post-quantum signature, a changed Sapling output, the digest a verifier
+//! that left the Sapling parts out of the v4 (ZIP-243) sighash would compute, and the malformed
+//! variants `chain2.json` records with both C++ lines' verdicts (beta2 list item 20 (a)).
 //!
-//! The PQ input signatures were made by ycash-dd's wallet (`signrawtransaction`) over the C++
-//! digest, so each one verifying under kogany's digest (and under no other) is the shared sighash
-//! vector: a transaction with Sapling spends or outputs beside an `OP_CHECKPQSIG` input.
+//! The PQ input signatures were made by the C++ wallets (`signrawtransaction`, `z_sendmany`) over
+//! the C++ digest, so each one verifying under kogany's digest (and under no other) is the shared
+//! sighash vector: a transaction with Sapling spends or outputs beside an `OP_CHECKPQSIG` input.
 //!
 //! Copyright (c) 2026 The Ycash developers. Distributed under the MIT software license.
 
@@ -32,17 +33,39 @@ use zakura_chain::{
 
 use crate::transaction::{Request, Verifier};
 
+/// The recorded chains: the file, its number of shapes and of PQ inputs among them.
+const FIXTURES: [(&str, usize, usize); 2] = [("chain.json", 6, 3), ("chain2.json", 8, 4)];
+
 struct Fixture {
+    file: &'static str,
     network: Network,
     vault: Height,
     /// Every transaction of the recorded chain by txid, with its block height.
     txs: HashMap<transaction::Hash, (Arc<Transaction>, Height)>,
     /// (name, txid, height, the PQ inputs' `(nIn, scheme)`)
     shapes: Vec<(String, transaction::Hash, Height, Vec<(usize, u8)>)>,
+    /// The recorded malformed variants: (name, the shape it was offered before, the
+    /// transaction, ycash6's `sendrawtransaction` message, ycash-dd's).
+    rejects: Vec<(String, String, Transaction, String, String)>,
+    /// The shapes that spend a vault: their `OP_CHECKSETSIG` reads the set state, which a lone
+    /// transaction verifier (`vault_snapshot: None`) has not, so the verifier tests here leave
+    /// them out. The block pipeline (`tests/mixed_shapes_chain.rs`) and koganyd's mempool and
+    /// miner (`zakurad/tests/kogany_mixed_shapes.rs`) verify them with the set state.
+    spends_a_vault: HashSet<String>,
 }
 
-fn fixture() -> Fixture {
-    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../testdata/mixed-shapes/chain.json");
+/// Every recorded chain.
+fn fixtures() -> Vec<Fixture> {
+    FIXTURES
+        .iter()
+        .map(|(file, shapes, _)| fixture(file, *shapes))
+        .collect()
+}
+
+fn fixture(file: &'static str, expected_shapes: usize) -> Fixture {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../testdata/mixed-shapes")
+        .join(file);
     let doc: serde_json::Value =
         serde_json::from_slice(&std::fs::read(path).expect("the fixture is committed"))
             .expect("the fixture is JSON");
@@ -95,12 +118,40 @@ fn fixture() -> Fixture {
         })
         .collect();
     shapes.sort_by_key(|s| s.2);
-    assert_eq!(shapes.len(), 6, "six mixed shapes");
+    assert_eq!(shapes.len(), expected_shapes, "{file}: the mixed shapes");
+    let text = |v: &serde_json::Value| v.as_str().expect("a string").to_owned();
+    let spends_a_vault = doc["shapes"]
+        .as_object()
+        .expect("shapes")
+        .iter()
+        .filter(|(_, s)| s["vaultInputs"].as_array().is_some_and(|v| !v.is_empty()))
+        .map(|(name, _)| name.clone())
+        .collect();
+    let rejects = doc["rejects"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .map(|r| {
+            (
+                text(&r["name"]),
+                text(&r["of"]),
+                hex::decode(text(&r["hex"]))
+                    .expect("hex decodes")
+                    .zcash_deserialize_into()
+                    .expect("the variant parses"),
+                text(&r["cxx"]["ycash6"]["message"]),
+                text(&r["cxx"]["ycash-dd"]["message"]),
+            )
+        })
+        .collect();
     Fixture {
+        file,
         network,
         vault,
         txs,
         shapes,
+        rejects,
+        spends_a_vault,
     }
 }
 
@@ -253,23 +304,36 @@ fn with_bad_pq_signature(tx: &Transaction, n: usize) -> Transaction {
 #[tokio::test]
 async fn mixed_shapes_verify_at_their_height_and_not_before_vault() {
     let _init_guard = zakura_test::init();
-    let f = fixture();
+    for f in fixtures() {
+        verify_at_height_and_not_before_vault(&f).await;
+    }
+}
+
+async fn verify_at_height_and_not_before_vault(f: &Fixture) {
+    let file = f.file;
     let before = f.vault.previous().expect("Vault is above genesis");
     assert_eq!(
         NetworkUpgrade::current(&f.network, before),
         NetworkUpgrade::Canopy
     );
-    for (name, txid, height, pq) in &f.shapes {
+    for (name, txid, height, _) in &f.shapes {
+        if f.spends_a_vault.contains(name) {
+            continue;
+        }
         let tx = f.txs[txid].0.as_ref().clone();
-        assert!(tx.has_sapling_shielded_data(), "{name} has Sapling parts");
+        assert!(
+            tx.has_sapling_shielded_data(),
+            "{file} {name} has Sapling parts"
+        );
         assert_eq!(
             f.verify(tx.clone(), *height).await,
             Ok(()),
-            "{name} verifies at its height"
+            "{file} {name} verifies at its height"
         );
-        // With a PQ input the script check fails first (0xc2 is no opcode before Vault);
-        // without one, the Sapling signatures (they bind the Vault branch ID).
-        let want = if pq.is_empty() {
+        // With a transparent input (every one in the shapes spends a TX_PQPKH or a vault) the
+        // script check fails first (0xc2 and 0xc0 are no opcodes before Vault); without one,
+        // the Sapling signatures (they bind the Vault branch ID).
+        let want = if tx.inputs().is_empty() {
             "SaplingVerificationFailed"
         } else {
             "BadOpcode"
@@ -280,7 +344,7 @@ async fn mixed_shapes_verify_at_their_height_and_not_before_vault() {
             .expect_err("invalid before the Vault height");
         assert!(
             refused_with(&error, want),
-            "{name} before the Vault height: {want} expected, got {error}"
+            "{file} {name} before the Vault height: {want} expected, got {error}"
         );
     }
 }
@@ -288,8 +352,17 @@ async fn mixed_shapes_verify_at_their_height_and_not_before_vault() {
 #[tokio::test]
 async fn a_wrong_pq_signature_or_a_changed_sapling_output_is_invalid() {
     let _init_guard = zakura_test::init();
-    let f = fixture();
+    for f in fixtures() {
+        wrong_pq_signature_or_changed_sapling_output_is_invalid(&f).await;
+    }
+}
+
+async fn wrong_pq_signature_or_changed_sapling_output_is_invalid(f: &Fixture) {
+    let file = f.file;
     for (name, txid, height, pq) in &f.shapes {
+        if f.spends_a_vault.contains(name) {
+            continue;
+        }
         let tx = f.txs[txid].0.as_ref().clone();
         for (n, _) in pq {
             let error = f
@@ -298,8 +371,8 @@ async fn a_wrong_pq_signature_or_a_changed_sapling_output_is_invalid() {
                 .expect_err("a changed PQ signature fails");
             assert!(
                 refused_with(&error, "ScriptInvalid"),
-                "{name}: the PQ input fails its script (the Sapling signatures do not cover \
-                 scriptSigs): {error}"
+                "{file} {name}: the PQ input fails its script (the Sapling signatures do not \
+             cover scriptSigs): {error}"
             );
         }
         // The last Sapling output's outCiphertext (before its 192-byte proof, the JoinSplit
@@ -307,9 +380,10 @@ async fn a_wrong_pq_signature_or_a_changed_sapling_output_is_invalid() {
         // a PQ input, by the PQ signature too.
         let changed = flipped_from_end(&tx, 64 + 1 + 192 + 40);
         assert_ne!(changed.hash(), tx.hash());
-        // With a PQ input its script fails first (the PQ signature covers the output);
-        // without one, the binding signature.
-        let want = if pq.is_empty() {
+        // With a transparent input its script fails first (the PQ signature, and a vault's
+        // SIGHASH_ALL|ANYONECANPAY set signature, cover the Sapling outputs); without one, the
+        // binding signature.
+        let want = if tx.inputs().is_empty() {
             "SaplingVerificationFailed"
         } else {
             "ScriptInvalid"
@@ -320,7 +394,7 @@ async fn a_wrong_pq_signature_or_a_changed_sapling_output_is_invalid() {
             .expect_err("a changed Sapling output is invalid");
         assert!(
             refused_with(&error, want),
-            "{name}: a changed Sapling output: {want} expected, got {error}"
+            "{file} {name}: a changed Sapling output: {want} expected, got {error}"
         );
     }
 }
@@ -331,7 +405,14 @@ async fn a_wrong_pq_signature_or_a_changed_sapling_output_is_invalid() {
 #[test]
 fn pq_signatures_bind_the_sapling_parts() {
     let _init_guard = zakura_test::init();
-    let f = fixture();
+    for (f, (_, _, pq_inputs)) in fixtures().iter().zip(FIXTURES) {
+        assert_eq!(check_pq_signatures(f), pq_inputs, "{}", f.file);
+    }
+}
+
+/// The number of PQ inputs `f` has, each checked.
+fn check_pq_signatures(f: &Fixture) -> usize {
+    let file = f.file;
     let mut checked = 0;
     for (name, txid, _, pq) in &f.shapes {
         let tx = f.txs[txid].0.as_ref();
@@ -343,7 +424,7 @@ fn pq_signatures_bind_the_sapling_parts() {
             };
             let (sig, pk) = pq_sig_and_key(unlock_script.as_raw_bytes());
             let (hash_type, sig) = sig.split_last().expect("a signature");
-            assert_eq!(*hash_type, 0x01, "{name}: SIGHASH_ALL");
+            assert_eq!(*hash_type, 0x01, "{file} {name}: SIGHASH_ALL");
             let script_code = spent[*n].lock_script.as_raw_bytes().to_vec();
             let digest = |tx: &Transaction, nu: NetworkUpgrade| -> [u8; 32] {
                 tx.sighash(
@@ -358,21 +439,65 @@ fn pq_signatures_bind_the_sapling_parts() {
             let verify = |msg: [u8; 32]| kogany_pq::verify(*scheme, &pk, &msg, sig);
             assert!(
                 verify(digest(tx, NetworkUpgrade::Vault)),
-                "{name}: ycash-dd's signature verifies under kogany's Vault digest"
+                "{file} {name}: the C++ signature verifies under kogany's Vault digest"
             );
             assert!(
                 !verify(digest(&without_sapling(tx), NetworkUpgrade::Vault)),
-                "{name}: a digest that leaves out the Sapling parts does not verify"
+                "{file} {name}: a digest that leaves out the Sapling parts does not verify"
             );
             assert!(
                 !verify(digest(tx, NetworkUpgrade::Canopy)),
-                "{name}: the Canopy digest does not verify"
+                "{file} {name}: the Canopy digest does not verify"
             );
             checked += 1;
         }
     }
-    assert_eq!(
-        checked, 3,
-        "the SLH-DSA and FN-DSA-512 inputs to Sapling, and the PQ input beside a Sapling spend"
-    );
+    checked
+}
+
+/// Beta2 list item 20 (a): every malformed variant `chain2.json` recorded (each refused by both
+/// C++ mempools) gets the same verdict class from kogany's block verifier at the shape's height:
+/// a consensus reject (`16: …`) is invalid in a block, a policy reject (`64: …`, the
+/// standardness rules: the C++ nodes ran with `-acceptnonstdtxn=0`) is valid in a block and is
+/// the mempool's to refuse (`kogany_mixed_shapes.rs` offers each one to koganyd's mempool).
+#[tokio::test]
+async fn recorded_rejects_get_the_cxx_verdict_in_a_block() {
+    let _init_guard = zakura_test::init();
+    let mut offered = 0;
+    for f in fixtures() {
+        for (name, of, tx, ycash6, ycash_dd) in &f.rejects {
+            if f.spends_a_vault.contains(of) {
+                // A vault spend's script needs the set state (see `spends_a_vault`): koganyd's
+                // mempool test offers this one.
+                continue;
+            }
+            let height = f
+                .shapes
+                .iter()
+                .find(|s| &s.0 == of)
+                .expect("the variant's shape is recorded")
+                .2;
+            let code = |m: &str| m.split(':').next().unwrap_or_default().to_owned();
+            assert_eq!(
+                code(ycash6),
+                code(ycash_dd),
+                "{name}: the C++ lines refuse at one stage ({ycash6} / {ycash_dd})"
+            );
+            let verdict = f.verify(tx.clone(), height).await;
+            match code(ycash6).as_str() {
+                "16" => assert!(
+                    verdict.is_err(),
+                    "{name}: consensus-invalid on the C++ lines ({ycash6}), so in a kogany block"
+                ),
+                "64" => assert_eq!(
+                    verdict,
+                    Ok(()),
+                    "{name}: a policy reject on the C++ lines ({ycash6}) is valid in a block"
+                ),
+                other => panic!("{name}: an unexpected C++ reject code {other} ({ycash6})"),
+            }
+            offered += 1;
+        }
+    }
+    assert_eq!(offered, 5, "the recorded variants");
 }
