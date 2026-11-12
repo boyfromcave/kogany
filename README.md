@@ -187,6 +187,9 @@ On regtest every Ycash upgrade height, and the Vault height, come from
 `[network.network.params.activation_heights]`, as ycashd's `-nuparams` set them; the regtest
 harness in ycash6 (`qa/rpc-tests/test_framework/kogany.py`) writes that file for each node.
 
+To start a mainnet node at a recent height instead of from genesis, restore a signed snapshot of
+kogany's state: [`doc/mainnet-restore.md`](doc/mainnet-restore.md).
+
 ## Yellowback and vault RPCs
 
 `koganyd` answers the stock Ycash RPCs as ycashd does, plus the vault primitive's `set_*` and
