@@ -85,13 +85,25 @@ pub struct Header {
     pub solution: Solution,
 }
 
+/// The maximum number of seconds a block's `time` may be ahead of the local clock
+/// (zcashd `MAX_FUTURE_BLOCK_TIME_LOCAL`, two hours).
+#[cfg(not(feature = "ycash"))]
+pub const BLOCK_MAX_TIME_SINCE_LOCAL_CLOCK: u32 = 2 * 60 * 60;
+
+/// The maximum number of seconds a block's `time` may be ahead of the local clock: Ycash's
+/// four hours (ycashd `MAX_FUTURE_BLOCK_TIME_LOCAL`).
+#[cfg(feature = "ycash")]
+pub const BLOCK_MAX_TIME_SINCE_LOCAL_CLOCK: u32 =
+    crate::parameters::ycash::MAX_FUTURE_BLOCK_TIME_LOCAL;
+
 /// TODO: Use this error as the source for zakura_consensus::error::BlockError::Time,
 /// and make `BlockError::Time` add additional context.
 /// See <https://github.com/ZcashFoundation/zebra/issues/1021> for more details.
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
 pub enum BlockTimeError {
-    #[error("invalid time {0:?} in block header {1:?} {2:?}: block time is more than 2 hours in the future ({3:?}). Hint: check your machine's date, time, and time zone.")]
+    #[cfg_attr(not(feature = "ycash"), error("invalid time {0:?} in block header {1:?} {2:?}: block time is more than 2 hours in the future ({3:?}). Hint: check your machine's date, time, and time zone."))]
+    #[cfg_attr(feature = "ycash", error("invalid time {0:?} in block header {1:?} {2:?}: block time is more than 4 hours in the future ({3:?}). Hint: check your machine's date, time, and time zone."))]
     InvalidBlockTime(
         DateTime<Utc>,
         crate::block::Height,
@@ -110,7 +122,7 @@ impl Header {
         hash: &Hash,
     ) -> Result<(), BlockTimeError> {
         let two_hours_in_the_future = now
-            .checked_add_signed(Duration::hours(2))
+            .checked_add_signed(Duration::seconds(BLOCK_MAX_TIME_SINCE_LOCAL_CLOCK.into()))
             .expect("calculating 2 hours in the future does not overflow");
         if self.time <= two_hours_in_the_future {
             Ok(())

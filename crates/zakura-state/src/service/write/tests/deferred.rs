@@ -205,7 +205,9 @@ fn idle_writer_promotes_a_due_persisted_deferred_header() {
     let preparation_clock = FixedClock(anchor.header.time);
     let mut future_header = *anchor.header;
     future_header.previous_block_hash = anchor.hash();
-    future_header.time += chrono::Duration::hours(3);
+    future_header.time +=
+        chrono::Duration::seconds(zakura_chain::block::BLOCK_MAX_TIME_SINCE_LOCAL_CLOCK.into())
+            + chrono::Duration::hours(1);
     future_header.nonce.0[0] = 0xd0;
     let future_header = Arc::new(future_header);
     let batch = zakura_header_chain::prepare_headers(
@@ -215,7 +217,8 @@ fn idle_writer_promotes_a_due_persisted_deferred_header() {
         &preparation_clock,
     )
     .expect("the locally future header is prepared as deferred");
-    let deferred_until = future_header.time - chrono::Duration::hours(2);
+    let deferred_until = future_header.time
+        - chrono::Duration::seconds(zakura_chain::block::BLOCK_MAX_TIME_SINCE_LOCAL_CLOCK.into());
     assert!(deferred_until < chrono::Utc::now());
     let future = Frontier::new(
         anchor_height

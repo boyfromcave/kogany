@@ -1361,7 +1361,9 @@ fn assert_block_spec_mutations(parameters: &[u8]) -> [u8; 32] {
     )
     .expect("a high-bit-clear historical version above four is canonical");
 
-    let future_offset = (2 * 60 * 60) + 1 + i64::from(parameter(0, 0));
+    let future_offset = i64::from(zakura_chain::block::BLOCK_MAX_TIME_SINCE_LOCAL_CLOCK)
+        + 1
+        + i64::from(parameter(0, 0));
     let future = child(future_offset);
     let prepared = crate::prepare_headers(
         HeaderBatchInput::new(std::slice::from_ref(&future)),
@@ -1372,7 +1374,10 @@ fn assert_block_spec_mutations(parameters: &[u8]) -> [u8; 32] {
     .expect("a locally future child is admitted only as deferred");
     assert_eq!(
         prepared.headers()[0].validation,
-        HeaderValidationState::DeferredUntil(future.time - Duration::hours(2))
+        HeaderValidationState::DeferredUntil(
+            future.time
+                - Duration::seconds(zakura_chain::block::BLOCK_MAX_TIME_SINCE_LOCAL_CLOCK.into())
+        )
     );
 
     let mut cases = Vec::new();

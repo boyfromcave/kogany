@@ -755,7 +755,8 @@ pub enum ValidateContextError {
         median_time_past: DateTime<Utc>,
     },
 
-    #[error("block time {candidate_time:?} is greater than the median-time-past for the block plus 90 minutes {block_time_max:?}")]
+    #[cfg_attr(not(feature = "ycash"), error("block time {candidate_time:?} is greater than the median-time-past for the block plus 90 minutes {block_time_max:?}"))]
+    #[cfg_attr(feature = "ycash", error("block time {candidate_time:?} is greater than the median-time-past for the block plus 3 hours {block_time_max:?}"))]
     #[non_exhaustive]
     TimeTooLate {
         candidate_time: DateTime<Utc>,

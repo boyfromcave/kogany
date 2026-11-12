@@ -184,6 +184,23 @@ pub mod names {
     pub const TESTNET_LEGACY: &str = "TestnetLegacy";
 }
 
+/// The maximum number of seconds a block's `time` may be ahead of the median-time-past of its
+/// predecessors, on every Ycash network: three hours, twice zcashd's 90 minutes.
+///
+/// ycashd `MAX_FUTURE_BLOCK_TIME_MTP = 90 * 60 * 2` (`ycash6 src/chain.h:32`, v4.5.0
+/// `src/chain.h:26`), enforced from `nFutureTimestampSoftForkHeight` on
+/// (`ycash6 src/main.cpp:6149-6153`, `time > MTP + limit` rejects) and clamping the miner's
+/// template time (`ycash6 src/miner.cpp:76-77`).
+pub const MAX_FUTURE_BLOCK_TIME_MTP: u32 = 90 * 60 * 2;
+
+/// The maximum number of seconds a block's `time` may be ahead of the local clock, on every
+/// Ycash network: four hours, twice zcashd's two hours.
+///
+/// ycashd `MAX_FUTURE_BLOCK_TIME_LOCAL = 2 * 60 * 60 * 2` (`ycash6 src/chain.h:38`, v4.5.0
+/// `src/chain.h:32`), enforced at every height (`ycash6 src/main.cpp:6157-6161`,
+/// `time > now + limit` rejects).
+pub const MAX_FUTURE_BLOCK_TIME_LOCAL: u32 = 2 * 60 * 60 * 2;
+
 /// Last Ycash mainnet block copied into testnet-yb-slow and testnet-legacy
 /// (`ycash6` `TESTNET_SHADOW_SPLIT_HEIGHT`).
 pub const SHADOW_SPLIT_HEIGHT: u32 = 3_079_999;

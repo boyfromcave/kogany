@@ -47,7 +47,10 @@ pub(super) fn crash_fixture_deferred_header_reevaluation_reopens_complete_before
         );
         let mut future_header = *anchor.header;
         future_header.previous_block_hash = anchor.hash;
-        future_header.time = preparation_clock.0 + chrono::Duration::hours(3);
+        future_header.time = preparation_clock.0
+            + (chrono::Duration::seconds(
+                zakura_chain::block::BLOCK_MAX_TIME_SINCE_LOCAL_CLOCK.into(),
+            ) + chrono::Duration::hours(1));
         future_header.nonce.0[0] = marker;
         let future_header = Arc::new(future_header);
         let headers = [future_header.clone()];
@@ -58,7 +61,10 @@ pub(super) fn crash_fixture_deferred_header_reevaluation_reopens_complete_before
             &preparation_clock,
         )
         .expect("the locally future header is admitted as deferred");
-        let deferred_until = future_header.time - chrono::Duration::hours(2);
+        let deferred_until = future_header.time
+            - chrono::Duration::seconds(
+                zakura_chain::block::BLOCK_MAX_TIME_SINCE_LOCAL_CLOCK.into(),
+            );
         assert_eq!(
             batch.headers()[0].validation,
             HeaderValidationState::DeferredUntil(deferred_until)

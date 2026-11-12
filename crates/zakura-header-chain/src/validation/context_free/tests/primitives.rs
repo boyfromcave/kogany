@@ -96,7 +96,8 @@ fn future_time_accepts_two_hour_equality_and_rejects_one_second_above() {
     let now = header.time;
     let height = block::Height(1);
     let hash = header.hash();
-    header.time = now + chrono::Duration::hours(2);
+    header.time = now
+        + chrono::Duration::seconds(zakura_chain::block::BLOCK_MAX_TIME_SINCE_LOCAL_CLOCK.into());
     assert!(validate_future_time(&header, now, height, hash).is_ok());
     header.time += chrono::Duration::seconds(1);
     assert!(validate_future_time(&header, now, height, hash).is_err());

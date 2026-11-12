@@ -28,7 +28,7 @@ them. A prepared batch is validation evidence, not a commit.
 | Valid compact target within the network proof-of-work limit | [Zcash §§7.7.3–7.7.4](https://zips.z.cash/protocol/protocol.pdf#diffadjustment) |
 | Little-endian header hash at or below its target | [Zcash §7.7.2](https://zips.z.cash/protocol/protocol.pdf#difficulty) |
 | Equihash solution shape and proof | [Zcash §7.7.1](https://zips.z.cash/protocol/protocol.pdf#equihash) |
-| Accept now or assign `DeferredUntil(nTime - 2 hours)` | [Zcash §7.6 full-validator rule](https://zips.z.cash/protocol/protocol.pdf#blockheader); explicitly nondeterministic, not consensus |
+| Accept now or assign `DeferredUntil(nTime - 2 hours)` (kogany: 4 hours under `ycash`, ycashd's `MAX_FUTURE_BLOCK_TIME_LOCAL`) | [Zcash §7.6 full-validator rule](https://zips.z.cash/protocol/protocol.pdf#blockheader); explicitly nondeterministic, not consensus |
 | Exact per-block work | [Zcash §7.7.5](https://zips.z.cash/protocol/protocol.pdf#workdef) |
 | Receipt binding the parent, network, and trust-anchor digest | Zakura stale-work protection |
 

@@ -439,9 +439,9 @@ pub fn context_reject(error: &ValidateContextError, context: Context) -> CxxReje
         }
         // main.cpp:4251-4274.
         E::InvalidBlockCommitment { .. } => CxxReject::invalid("bad-heartwood-root-in-block"),
-        // main.cpp:6140, 6161, 6132, 6326.
+        // main.cpp:6140, 6153, 6132, 6326 (`time-too-new` is the local-clock rule, 6161).
         E::TimeTooEarly { .. } => CxxReject::invalid("time-too-old"),
-        E::TimeTooLate { .. } => CxxReject::invalid("time-too-new"),
+        E::TimeTooLate { .. } => CxxReject::invalid("time-too-far-ahead-of-mtp"),
         E::InvalidDifficultyThreshold { .. } => CxxReject::invalid("bad-diffbits"),
         E::OrphanedBlock { .. } | E::NonSequentialBlock { .. } => CxxReject::invalid("bad-prevblk"),
         // BIP 22 "duplicate-invalid": a block already known to be invalid.

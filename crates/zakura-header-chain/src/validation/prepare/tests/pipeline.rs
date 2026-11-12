@@ -127,7 +127,11 @@ fn rebased_suffix_evidence_matches_fresh_preparation() {
 #[test]
 fn future_time_is_deferred_but_deterministic_failures_are_rejected() {
     let (rules, lease, anchor) = fixture();
-    let future = child(lease.parent, &anchor, 3 * 60 * 60);
+    let future = child(
+        lease.parent,
+        &anchor,
+        i64::from(zakura_chain::block::BLOCK_MAX_TIME_SINCE_LOCAL_CLOCK) + 60 * 60,
+    );
     let now = anchor.time;
     let batch = prepare_headers(
         HeaderBatchInput::new(std::slice::from_ref(&future)),
@@ -138,7 +142,10 @@ fn future_time_is_deferred_but_deterministic_failures_are_rejected() {
     .expect("local future time is admitted only as deferred");
     assert_eq!(
         batch.headers()[0].validation,
-        HeaderValidationState::DeferredUntil(future.time - Duration::hours(2))
+        HeaderValidationState::DeferredUntil(
+            future.time
+                - Duration::seconds(zakura_chain::block::BLOCK_MAX_TIME_SINCE_LOCAL_CLOCK.into())
+        )
     );
 
     let mut disconnected = *future;
@@ -257,4 +264,34 @@ fn empty_batch_is_rejected_before_header_validation() {
         ),
         Err(HeaderFailure::Empty)
     ));
+}
+
+/// kogany: ycashd's local-clock bound, `time <= now + MAX_FUTURE_BLOCK_TIME_LOCAL` with
+/// `MAX_FUTURE_BLOCK_TIME_LOCAL = 2 * 60 * 60 * 2` (`ycash6 src/chain.h:38`,
+/// `src/main.cpp:6157-6161`): a header exactly four hours ahead is valid now, one second more is
+/// deferred until four hours before its time.
+#[cfg(feature = "ycash")]
+#[test]
+fn ycash_local_clock_bound_is_four_hours() {
+    assert_eq!(block::BLOCK_MAX_TIME_SINCE_LOCAL_CLOCK, 14_400);
+
+    for (offset, expected) in [(14_400, None), (14_401, Some(Duration::seconds(14_400)))] {
+        let (rules, lease, anchor) = fixture();
+        let header = child(lease.parent, &anchor, offset);
+        let batch = prepare_headers(
+            HeaderBatchInput::new(std::slice::from_ref(&header)),
+            lease.parent(),
+            &rules,
+            &FixedClock(anchor.time),
+        )
+        .expect("a locally future header is admitted, deferred if past the bound");
+        assert_eq!(
+            batch.headers()[0].validation,
+            match expected {
+                None => HeaderValidationState::Valid,
+                Some(bound) => HeaderValidationState::DeferredUntil(header.time - bound),
+            },
+            "header {offset} s ahead of the local clock"
+        );
+    }
 }
