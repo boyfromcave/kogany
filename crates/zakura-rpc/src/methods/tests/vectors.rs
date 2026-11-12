@@ -6341,5 +6341,53 @@ async fn ycash_address_index_rpcs_take_the_d9_forms() {
         .await
         .unwrap_err();
     assert_eq!(err.code(), ErrorCode::ServerError(-5).code());
+
+    // Another network's D-9 forms of the same key (`sqf…`, `tqf…`, `ybf…`, `ytf…`) are refused
+    // on Regtest too (`insight_address_on`), never indexed under the Regtest key.
+    let mut foreign = Vec::new();
+    for (id, kind) in [
+        ("main", NetworkKind::Mainnet),
+        ("test", NetworkKind::Testnet),
+    ] {
+        foreign.push(
+            transparent::Address::PayToPqKeyHash {
+                network_kind: kind,
+                scheme: 2,
+                key_hash,
+            }
+            .to_string(),
+        );
+        foreign.push(
+            kogany_yellowback::codecs::address::encode_pq_address(
+                &kogany_vault::PqOwner {
+                    scheme: 2,
+                    hash: kogany_vault::Hash32(key_hash),
+                },
+                &kogany_yellowback::params::params_for_network(id).expect(id),
+            )
+            .expect("a registered scheme"),
+        );
+    }
+    for text in foreign {
+        let err = rpc
+            .get_address_balance(GetAddressBalanceRequest::new(vec![text.clone()]))
+            .await
+            .unwrap_err();
+        assert_eq!(err.code(), ErrorCode::ServerError(-5).code(), "{text}");
+        let err = rpc
+            .get_address_tx_ids(GetAddressTxIdsRequest {
+                addresses: vec![text.clone()],
+                start: Some(1),
+                end: Some(10),
+            })
+            .await
+            .unwrap_err();
+        assert_eq!(err.code(), ErrorCode::ServerError(-5).code(), "{text}");
+        let err = rpc
+            .get_address_utxos(GetAddressUtxosRequest::new(vec![text.clone()], false))
+            .await
+            .unwrap_err();
+        assert_eq!(err.code(), ErrorCode::ServerError(-5).code(), "{text}");
+    }
     read_state.expect_no_requests().await;
 }

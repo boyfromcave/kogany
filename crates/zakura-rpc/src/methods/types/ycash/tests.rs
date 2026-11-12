@@ -490,6 +490,31 @@ fn ycash_insight_address_on_refuses_other_networks() {
         assert_eq!(insight_address_on(network, "nope"), None);
     }
 
+    // A pre-D-9 post-quantum text (2-byte version || scheme || keyHash), plain YEC (`sq…`/`tq…`/
+    // `rq…`) or YED (`yb…`/`yt…`/`yr…`), of either scheme, is no address on any network: it is
+    // refused, never indexed under the key it once named.
+    let old_versions: [[u8; 2]; 6] = [
+        [0x4D, 0xD9],
+        [0x4F, 0x61],
+        [0x4C, 0x51],
+        [0x56, 0xAB],
+        [0x57, 0x1E],
+        [0x57, 0x10],
+    ];
+    for version in old_versions {
+        for scheme in [1u8, 2] {
+            let mut data = version.to_vec();
+            data.push(scheme);
+            data.extend_from_slice(&[3; 32]);
+            let old = kogany_yellowback::codecs::base58::encode_base58_check(&data);
+            assert_eq!(old.len(), 53, "{old}");
+            assert_eq!(insight_address(&old), None, "{old}");
+            for (id, network, _) in &networks {
+                assert_eq!(insight_address_on(network, &old), None, "{old} on {id}");
+            }
+        }
+    }
+
     // `getaddressbalance` (and `getaddresstxids`, `getaddressutxos`): ycashd's code and text.
     let testnet_t =
         transparent::Address::from_pub_key_hash(NetworkKind::Testnet, [4; 20]).to_string();
