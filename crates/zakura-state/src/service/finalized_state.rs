@@ -1623,6 +1623,8 @@ impl FinalizedState {
 
     /// Stop the process if `block_height` is greater than or equal to the
     /// configured stop height.
+    // Upstream code in a consensus-critical crate: kept as written (workspace rule 7).
+    #[allow(clippy::needless_bool)]
     fn is_at_stop_height(&self, block_height: block::Height) -> bool {
         let debug_stop_at_height = match self.debug_stop_at_height {
             Some(debug_stop_at_height) => debug_stop_at_height,

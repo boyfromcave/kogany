@@ -1,5 +1,8 @@
 //! Check CPU compatibility once, before starting the node or its worker threads.
 
+// lint.yml compiles this file alone with `rustc --test`, where the node's callers are absent.
+#![cfg_attr(test, allow(dead_code))]
+
 const BMI2_BIT: u32 = 8;
 const ADX_BIT: u32 = 19;
 
