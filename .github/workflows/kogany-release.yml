@@ -34,7 +34,9 @@ on:
 permissions: {}
 
 concurrency:
-  group: ${{ github.workflow }}-${{ inputs.tag || github.ref_name }}
+  # The event in the key: a dry run (a dispatch) never shares a group with the tag push of the same
+  # name, so it can never replace, and so cancel, a pending tag run.
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ inputs.tag || github.ref_name }}
   cancel-in-progress: false
 
 env:
@@ -67,6 +69,17 @@ jobs:
           TAG: ${{ inputs.tag || github.ref_name }}
         run: |
           set -euo pipefail
+          # The tag's shape first: nothing below echoes it before it has matched.
+          if [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-ycash\.[0-9]+$ ]]; then
+            echo "::error::$TAG is a final release tag; kogany is not a qualified line yet (kogany plan K-19), so only -ycash.betaN and -ycash.rcN pre-releases are cut"
+            exit 1
+          fi
+          # At most five digits per number: the bound the user agent and build.rs apply
+          # (zakura_network::ycash::MAX_RELEASE_DIGITS).
+          if [[ ! "$TAG" =~ ^v[0-9]{1,5}\.[0-9]{1,5}\.[0-9]{1,5}-ycash\.(beta|rc)[0-9]{1,5}$ ]]; then
+            echo "::error::the tag does not match v<X.Y.Z>-ycash.<beta|rc><n> (at most five digits per number)"
+            exit 1
+          fi
           if [[ "$DRY_RUN" == true ]]; then
             if [[ "${GITHUB_REF_TYPE}" != branch ]]; then
               echo "::error::a dry run is dispatched on a branch, not ${GITHUB_REF}"
@@ -75,17 +88,13 @@ jobs:
             echo "dry run: $(git rev-parse HEAD) on ${GITHUB_REF_NAME} built as $TAG; nothing is published"
             ref=$(git rev-parse HEAD)
           else
+            # A publishing dispatch (dry_run=false, a rebuild of an existing tag) only from the
+            # release line (the Yellowback lead architect, 2026-11-12); a pushed tag as before.
+            if [[ "$GITHUB_EVENT_NAME" == workflow_dispatch && "$GITHUB_REF" != refs/heads/upgrade/vault ]]; then
+              echo "::error::a publishing dispatch (dry_run=false) is dispatched from upgrade/vault, not ${GITHUB_REF}"
+              exit 1
+            fi
             ref="refs/tags/$TAG"
-          fi
-          if [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-ycash\.[0-9]+$ ]]; then
-            echo "::error::$TAG is a final release tag; kogany is not a qualified line yet (kogany plan K-19), so only -ycash.betaN and -ycash.rcN pre-releases are cut"
-            exit 1
-          fi
-          # At most five digits per number: the bound the user agent and build.rs apply
-          # (zakura_network::ycash::MAX_RELEASE_DIGITS).
-          if [[ ! "$TAG" =~ ^v[0-9]{1,5}\.[0-9]{1,5}\.[0-9]{1,5}-ycash\.(beta|rc)[0-9]{1,5}$ ]]; then
-            echo "::error::$TAG does not match v<X.Y.Z>-ycash.<beta|rc><n> (at most five digits per number)"
-            exit 1
           fi
           crate=$(sed -n 's/^version = "\(.*\)"$/\1/p' crates/zakurad/Cargo.toml | head -n1)
           tagnum=${TAG#v}; tagnum=${tagnum%%-*}

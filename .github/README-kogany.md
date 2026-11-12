@@ -212,7 +212,10 @@ upgrade/vault -f tag=v1.8.0-ycash.beta2` (`dry_run` defaults to true). It runs t
 three builds with that release name, the Linux debug split, the packages, SBOMs and `SHA256SUMS`,
 then `publish-dry-run` checks the set and the notes file and prints the release it would create.
 A dry run has no token that can write a release and never signs; `publish` runs only on a pushed
-tag, or on a dispatch with `dry_run=false` naming an existing tag (a rebuild).
+tag, or on a dispatch with `dry_run=false` naming an existing tag (a rebuild), which is refused
+unless it is dispatched from `upgrade/vault`. A dispatch and a tag push never share a concurrency
+group, so a dry run cannot cancel a pending tag run; still, push the tag only once no dry run of
+the same name is in progress.
 
 ```sh
 git checkout upgrade/vault && git pull --ff-only
