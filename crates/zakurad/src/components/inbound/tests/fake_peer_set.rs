@@ -1237,8 +1237,14 @@ async fn caches_getaddr_response() {
 
     let _init_guard = zakura_test::init();
 
+    // kogany: the `ycash` build never hands out a loopback or private peer
+    // (`AddressBook::sanitized`), so there the book holds public addresses.
+    #[cfg(not(feature = "ycash"))]
+    let prefix = "127.0.0";
+    #[cfg(feature = "ycash")]
+    let prefix = "1.2.3";
     let addrs = (0..NUM_ADDRESSES)
-        .map(|idx| format!("127.0.0.{idx}:{idx}"))
+        .map(|idx| format!("{prefix}.{idx}:{idx}"))
         .map(|addr| {
             MetaAddr::new_gossiped_meta_addr(
                 addr.parse().unwrap(),
