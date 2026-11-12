@@ -70,6 +70,30 @@ pub struct ZValidateAddressResponse {
     )]
     #[new(default)]
     pub(crate) diversified_transmission_key: Option<String>,
+
+    /// Ycash (beta2 audit L-4): a post-quantum address's scheme, 1 = SLH-DSA-SHA2-128s
+    /// (`sqs…`/`tqs…`/`rqs…`), 2 = FN-DSA-512 (`sqf…`/`tqf…`/`rqf…`), D-9 (ycash6
+    /// `src/rpc/misc.cpp` `z_validateaddress`, as `validateaddress` answers it).
+    #[cfg(feature = "ycash")]
+    #[serde(rename = "pqscheme", skip_serializing_if = "Option::is_none", default)]
+    #[new(default)]
+    pub(crate) pq_scheme: Option<u8>,
+
+    /// Ycash (beta2 audit L-4): the scheme's name, `"SLH-DSA-SHA2-128s"` or `"FN-DSA-512"`.
+    #[cfg(feature = "ycash")]
+    #[serde(
+        rename = "pqschemename",
+        skip_serializing_if = "Option::is_none",
+        default
+    )]
+    #[new(default)]
+    pub(crate) pq_scheme_name: Option<String>,
+
+    /// Ycash (beta2 audit L-4): the key hash pushed in the address's TX_PQPKH script, hex.
+    #[cfg(feature = "ycash")]
+    #[serde(rename = "pqkeyhash", skip_serializing_if = "Option::is_none", default)]
+    #[new(default)]
+    pub(crate) pq_key_hash: Option<String>,
 }
 
 impl ZValidateAddressResponse {
@@ -92,6 +116,10 @@ pub enum ZValidateAddressType {
     Sapling,
     /// The `unified` address type.
     Unified,
+    /// Ycash (beta2 audit L-4): a post-quantum address (`sqf…`/`sqs…` and the testnet and
+    /// regtest forms, D-9), `"pq"` as ycashd names it.
+    #[cfg(feature = "ycash")]
+    Pq,
 }
 
 impl From<&Address> for ZValidateAddressType {
@@ -117,6 +145,25 @@ pub fn z_validate_address(
     raw_address: String,
 ) -> RpcResult<ZValidateAddressResponse> {
     let Ok(address) = raw_address.parse::<zcash_address::ZcashAddress>() else {
+        // Ycash (beta2 audit L-4): a post-quantum address of this network, which ycashd's
+        // `z_validateaddress` describes (since ycash6 6f770db7f / ycash-dd 7d6451251) with the
+        // type "pq" and `validateaddress`'s post-quantum fields. `ismine` is a wallet field
+        // (docs/kogany.md "Wallet fields"). A YED `yb…` address stays invalid, as on ycashd.
+        #[cfg(feature = "ycash")]
+        if let Some(pq) = super::ycash::decode_pq_address(&network, &raw_address) {
+            return Ok(ZValidateAddressResponse {
+                is_valid: true,
+                address: Some(pq.address),
+                address_type: Some(ZValidateAddressType::Pq),
+                is_mine: None,
+                deprecated_type: Some(ZValidateAddressType::Pq),
+                diversifier: None,
+                diversified_transmission_key: None,
+                pq_scheme: Some(pq.scheme),
+                pq_scheme_name: Some(pq.scheme_name.to_string()),
+                pq_key_hash: Some(pq.key_hash),
+            });
+        }
         return Ok(ZValidateAddressResponse::invalid());
     };
 
@@ -160,6 +207,9 @@ pub fn z_validate_address(
                 deprecated_type: Some(address_type),
                 diversifier: sapling.as_ref().map(|(d, _)| d.clone()),
                 diversified_transmission_key: sapling.map(|(_, pk_d)| pk_d),
+                pq_scheme: None,
+                pq_scheme_name: None,
+                pq_key_hash: None,
             })
         }
         #[cfg(not(feature = "ycash"))]
@@ -219,5 +269,77 @@ mod ycash_tests {
             json("not-an-address"),
             serde_json::json!({ "isvalid": false })
         );
+    }
+
+    /// Beta2 audit L-4 (ycash6 6f770db7f, ycash-dd 7d6451251): every plain-YEC post-quantum
+    /// vector of the shared D-9 set (`testdata/yellowback/pq_address_vectors.json`, byte-identical
+    /// to ycash6's) gets ycashd's answer on its own network, field for field minus the wallet's
+    /// `ismine`, and `isvalid` false on the other two; the YED forms and every invalid vector are
+    /// refused everywhere, as ycashd's `DecodeDestination` refuses them.
+    #[test]
+    fn ycash_answers_for_post_quantum_addresses_with_the_shared_vectors() {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../testdata/yellowback/pq_address_vectors.json");
+        let v: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(path).expect("the pinned vectors"))
+                .expect("json");
+        let network = |n: &str| match n {
+            "main" => Network::Mainnet,
+            "test" => Network::new_default_testnet(),
+            "regtest" => Network::new_regtest(Default::default()),
+            other => panic!("network {other}"),
+        };
+        let json = |n: &str, a: &str| {
+            serde_json::to_value(z_validate_address(network(n), a.to_owned()).expect("ok"))
+                .expect("json")
+        };
+        let invalid = serde_json::json!({ "isvalid": false });
+        let networks = ["main", "test", "regtest"];
+        let mut plain = 0;
+        for row in v["valid"].as_array().expect("valid") {
+            let address = row["address"].as_str().expect("address");
+            let own = row["network"].as_str().expect("network");
+            if row["coin"] == "yed" {
+                for n in networks {
+                    assert_eq!(json(n, address), invalid, "YED {address} on {n}");
+                }
+                continue;
+            }
+            plain += 1;
+            let scheme = row["scheme"].as_u64().expect("scheme");
+            let name = match scheme {
+                1 => "SLH-DSA-SHA2-128s",
+                2 => "FN-DSA-512",
+                other => panic!("scheme {other}"),
+            };
+            assert_eq!(
+                json(own, address),
+                serde_json::json!({
+                    "isvalid": true,
+                    "address": address,
+                    "address_type": "pq",
+                    "type": "pq",
+                    "pqscheme": scheme,
+                    "pqschemename": name,
+                    "pqkeyhash": row["keyhash"],
+                }),
+                "{address} on {own}"
+            );
+            for n in networks.into_iter().filter(|n| *n != own) {
+                assert_eq!(json(n, address), invalid, "{address} on {n}");
+            }
+        }
+        assert_eq!(plain, 36);
+        for row in v["invalid"].as_array().expect("invalid") {
+            let address = row["address"].as_str().expect("address");
+            for n in networks {
+                assert_eq!(
+                    json(n, address),
+                    invalid,
+                    "{} {address} on {n}",
+                    row["reason"]
+                );
+            }
+        }
     }
 }

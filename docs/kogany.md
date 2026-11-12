@@ -85,7 +85,11 @@ These differences are kept: the RPC server is upstream Zakura's, and the wallet 
 
 For post-quantum addresses (`sqf…`/`sqs…`, the YED `ybf…`/`ybs…`), the answers match ycashd's
 field for field (2026-11-12, regtest, `koganyd` against ycash6 6.22.0-beta2):
-`validateaddress` (with `pqscheme`, `pqschemename`, `pqkeyhash`), `z_validateaddress`,
+`validateaddress` (with `pqscheme`, `pqschemename`, `pqkeyhash`), `z_validateaddress`
+(`isvalid` true, `address_type` and `type` `"pq"`, `pqscheme`, `pqschemename`, `pqkeyhash`, as
+ycashd answers since the beta2 audit's L-4 fix, ycash6 #107 and ycash-dd #176; earlier both
+nodes answered `isvalid` false, and so did `koganyd` before kogany's own fix; no `ismine`, see
+"Wallet fields"; a YED `ybf…`/`ybs…` address is `isvalid` false on both),
 `getaddressutxos` (with and without `chainInfo`), `getaddresstxids`, `getaddressdeltas`,
 `getaddressmempool` (apart from `timestamp`, each node's own arrival time), `getaddressbalance`
 (apart from `txcount`, above), `yed_listtokens`, `yed_getvault`, `yed_gettxinfo`, `yed_listvaults`,
