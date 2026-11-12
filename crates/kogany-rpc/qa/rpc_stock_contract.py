@@ -17,7 +17,7 @@ blockchain}.cpp` at ycash6 65cb4ae0f that a wallet-less node serves (plan K-3):
                       The `yed-burn-refused` check is the wallet's: yewd's, never kogany's.
   validateaddress     a plain-YEC post-quantum address (`rq…` on regtest, `tq…` on the testnets,
                       `sq…` on mainnet; D-Q-20) of a registered scheme: `isvalid`, `address`,
-                      `scriptPubKey` (TX_PQPKH), `isscript` false, `pqscheme`, `pqkeyhash`; an
+                      `scriptPubKey` (TX_PQPKH), `isscript` false, `pqscheme`, `pqschemename`, `pqkeyhash`; an
                       unregistered scheme, another network's version and the Yellowback `yb…`/
                       `yt…`/`yr…` forms answer `{"isvalid": false}` (N9).
   getblockchaininfo   `chain` is ycashd's network name (`regtest`, `test`); `testnetprofile` is
@@ -310,7 +310,8 @@ def regtest_cases(args, cases, procs):
         if scheme:
             want = {'isvalid': True, 'address': addr,
                     'scriptPubKey': '20%s%02xc2' % (key_hash.hex(), 0x50 + scheme),
-                    'isscript': False, 'pqscheme': scheme, 'pqkeyhash': key_hash.hex()}
+                    'isscript': False, 'pqscheme': scheme,
+                    'pqschemename': {1: 'SLH-DSA-SHA2-128s', 2: 'FN-DSA-512'}[scheme], 'pqkeyhash': key_hash.hex()}
         else:
             want = {'isvalid': False}
         cases.check('validateaddress %s' % label, answer == want, '%r, want %r' % (answer, want))

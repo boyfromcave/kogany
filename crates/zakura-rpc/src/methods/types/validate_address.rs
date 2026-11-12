@@ -61,6 +61,17 @@ pub struct ValidateAddressResponse {
     #[new(default)]
     pub(crate) pq_scheme: Option<u8>,
 
+    /// Ycash (beta2 item 15): the scheme's name beside its number, `"SLH-DSA-SHA2-128s"` or
+    /// `"FN-DSA-512"` (`ycash6 src/rpc/misc.cpp`, `DescribeAddressVisitor`, `PQSchemeName`).
+    #[cfg(feature = "ycash")]
+    #[serde(
+        rename = "pqschemename",
+        skip_serializing_if = "Option::is_none",
+        default
+    )]
+    #[new(default)]
+    pub(crate) pq_scheme_name: Option<String>,
+
     /// Ycash (W7-c): the key hash of a post-quantum address, as pushed in its TX_PQPKH script.
     #[cfg(feature = "ycash")]
     #[serde(rename = "pqkeyhash", skip_serializing_if = "Option::is_none", default)]
@@ -92,6 +103,7 @@ pub fn validate_address(
                 script_pub_key: Some(pq.script_pub_key),
                 is_script: Some(false),
                 pq_scheme: Some(pq.scheme),
+                pq_scheme_name: Some(pq.scheme_name.to_string()),
                 pq_key_hash: Some(pq.key_hash),
             });
         }
@@ -137,6 +149,8 @@ pub fn validate_address(
         is_script: Some(address.is_script_hash()),
         #[cfg(feature = "ycash")]
         pq_scheme: None,
+        #[cfg(feature = "ycash")]
+        pq_scheme_name: None,
         #[cfg(feature = "ycash")]
         pq_key_hash: None,
     })
