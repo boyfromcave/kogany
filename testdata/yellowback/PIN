@@ -1,5 +1,5 @@
 # Byte-identical copies of the C++ lines' cross-line vector files (plan §4.2 rule 4 (i)).
-# Source: boyfromcave/ycash6 @ 5826f94620 (up/b2-pq-prefix, PR #95). Never edit; a change is a PIN bump.
+# Source: boyfromcave/ycash6 @ f8beb78e1a (upgrade/vault, the merge of #95). Never edit; a change is a PIN bump.
 # sha256  kogany-path  ycash6-path
 2f7a3ab2fc909bca4772957f15696e8ed5f6feec6914f957e016adf5d0fd7dc8  testdata/yellowback/vault_vectors.json  src/test/data/vault_vectors.json
 1a146175d7815b825a3c961bb41d85a5a3b59ae7f62b468a8550ec5bd1f23be5  testdata/yellowback/pq_vectors.json  src/test/data/pq_vectors.json
