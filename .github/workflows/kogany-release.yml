@@ -309,7 +309,7 @@ jobs:
 
           - Works: following Ycash mainnet and the fast testnet, the vault and Yellowback rules, the stock Ycash, `set_*`/`vault_*` and `yed_*` RPCs (the rpcversion `yed_getinfo` reports).
           - Does not yet: a wallet (run yewd in front); no testnet peer is built in (name a seed in `initial_testnet_peers`); no Windows or Intel macOS build.
-          - Get started: unpack, read `README.txt`, run `./koganyd -c testnet.toml start`. Verify with `sha256sum -c SHA256SUMS --ignore-missing` and `cosign verify-blob --certificate-identity https://github.com/boyfromcave/kogany/.github/workflows/kogany-release.yml@refs/tags/<tag>`.
+          - Get started: unpack, read `README.txt`, run `./koganyd -c testnet.toml start`. Verify with `sha256sum -c SHA256SUMS --ignore-missing` `cosign verify-blob --certificate-identity https://github.com/boyfromcave/kogany/.github/workflows/kogany-release.yml@refs/tags/<tag>` (the identity of the tag-push run that built this release; a rebuild means a new tag) and `gh attestation verify <tarball> -R boyfromcave/kogany`.
           - Docs: https://github.com/boyfromcave/kogany#readme
           MD
           fi

@@ -56,8 +56,8 @@ macOS: the binaries are not notarized. Before the first run of a browser downloa
 quarantine flag: xattr -dr com.apple.quarantine <this directory>
 
 Getting started
-  ./koganyd --version                      # the crate version, 1.8.0-rc1+kogany.<n>.g<sha>; the
-                                           # P2P user agent carries the release name (/koganyd:${tag#v}/)
+  ./koganyd --version                      # the crate version and commit, 1.8.0-rc1+kogany.g<12-hex commit>;
+                                           # the P2P user agent carries the release name (/koganyd:${tag#v}/)
   ./koganyd generate -o kogany.toml        # the default (mainnet) config; default_config_ycash.toml is the same skeleton
   ./koganyd start                          # Ycash mainnet
 
@@ -76,9 +76,10 @@ For the slow or legacy profile set network = "TestnetSlow" or "TestnetLegacy", i
 RPC port (kogany README.md "Networks, ports and identifiers").
 
 Environment overrides use the ZAKURA_ prefix, e.g. ZAKURA_NETWORK__NETWORK=Testnet.
-State and the RPC cookie live in the cache directory: ~/.cache/kogany on Linux,
-~/Library/Caches/kogany on macOS. The cookie is <cache>/kogany/.cookie on mainnet and
-<cache>/kogany/<network>/.cookie on the testnets (e.g. ~/.cache/kogany/testnet/.cookie).
+State lives in ~/.cache/kogany on Linux and ~/Library/Caches/kogany on macOS. The RPC cookie:
+  mainnet            ~/.cache/kogany/.cookie             (macOS ~/Library/Caches/kogany/.cookie)
+  test networks      ~/.cache/kogany/<network>/.cookie   (macOS ~/Library/Caches/kogany/<network>/.cookie)
+                     <network> is the lowercase network name, e.g. ~/.cache/kogany/testnet/.cookie
 
 RPCs: the stock Ycash RPCs, the vault primitive's set_* and vault_* RPCs and the Yellowback
 yed_* RPCs, at rpcversion 9 (doc/ in the source tree has the contracts).
