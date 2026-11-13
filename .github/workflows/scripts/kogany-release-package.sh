@@ -31,7 +31,7 @@ koganyd ${tag} (${platform})
 
 koganyd is Kogany, a Ycash full node in Rust: the Ycash developers' fork of Zakura (a Zcash
 full node, Zebra lineage), built with the \`ycash\` feature. It follows Ycash mainnet, the
-re-forked Ycash testnet and Ycash regtest, and enforces the vault network upgrade and the
+Ycash testnets (fast, slow and legacy profiles) and Ycash regtest, and enforces the vault network upgrade and the
 Ycash Yellowback (YED) rule module. Source: https://github.com/boyfromcave/kogany at ${commit}.
 
 PRE-RELEASE. This is a beta for the Ycash testnets. kogany is not yet a qualified Ycash node
@@ -41,32 +41,45 @@ resyncs between pre-releases. Report problems at https://github.com/boyfromcave/
 Runtime: ${runtime}.
 
 Ports (crates/zakura-chain/src/parameters/ycash.rs)
-  network                         P2P     RPC
-  Ycash mainnet                   8833    8832
-  Ycash testnet, fast profile     18833   18832
-  Ycash testnet, slow profile     18933   18932
+  network                                       config network =   P2P     RPC
+  Ycash mainnet                                 "Mainnet"          8833    8832
+  Ycash testnet, fast profile (testnet-yb-fast) "Testnet"          18833   18832
+  Ycash testnet, slow profile                   "TestnetSlow"      18933   18932
+  Ycash testnet, legacy profile                 "TestnetLegacy"    19033   19032
 kogany never uses Zcash's ports. The RPC server is off until [rpc] listen_addr is set.
+No testnet peer is built in: name one in initial_testnet_peers. The seeds (ycashd 6.22.0-beta2):
+  fast   fastnet-seed.ycash.team:18833
+  slow   slownet-seed.ycash.team:18933
+  legacy legacy-seed.ycash.team:19033
+
+macOS: the binaries are not notarized. Before the first run of a browser download, clear the
+quarantine flag: xattr -dr com.apple.quarantine <this directory>
 
 Getting started
-  ./koganyd --version
+  ./koganyd --version                      # the crate version and commit, 1.8.0-rc1+kogany.g<12-hex commit>;
+                                           # the P2P user agent carries the release name (/koganyd:${tag#v}/)
   ./koganyd generate -o kogany.toml        # the default (mainnet) config; default_config_ycash.toml is the same skeleton
-  ./koganyd start                          # Ycash mainnet, state in ~/.cache/kogany
+  ./koganyd start                          # Ycash mainnet
 
 Testnet (fast profile): write testnet.toml with
 
   [network]
   network = "Testnet"
   listen_addr = "[::]"
+  initial_testnet_peers = ["fastnet-seed.ycash.team:18833"]
 
   [rpc]
   listen_addr = "127.0.0.1:18832"
 
 and run: ./koganyd -c testnet.toml start
-The slow testnet profile (P2P 18933, RPC 18932) is built in but has no config selector yet
-(kogany README.md "Networks, ports and identifiers").
+For the slow or legacy profile set network = "TestnetSlow" or "TestnetLegacy", its seed and its
+RPC port (kogany README.md "Networks, ports and identifiers").
 
 Environment overrides use the ZAKURA_ prefix, e.g. ZAKURA_NETWORK__NETWORK=Testnet.
-The RPC cookie is at <cache>/kogany/<network>/.cookie on the testnets.
+State lives in ~/.cache/kogany on Linux and ~/Library/Caches/kogany on macOS. The RPC cookie:
+  mainnet            ~/.cache/kogany/.cookie             (macOS ~/Library/Caches/kogany/.cookie)
+  test networks      ~/.cache/kogany/<network>/.cookie   (macOS ~/Library/Caches/kogany/<network>/.cookie)
+                     <network> is the lowercase network name, e.g. ~/.cache/kogany/testnet/.cookie
 
 RPCs: the stock Ycash RPCs, the vault primitive's set_* and vault_* RPCs and the Yellowback
 yed_* RPCs, at rpcversion 9 (doc/ in the source tree has the contracts).
