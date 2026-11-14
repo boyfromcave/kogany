@@ -1,0 +1,14 @@
+{
+ "bucket": "medium",
+ "sla_days": 90,
+ "findings": [
+  {
+   "fingerprint": "02fb4c9bbbd0d80e",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-chain/src/block/header.rs",
+   "line": 124,
+   "first_seen": "2026-11-12",
+   "due": "2027-02-10"
+  }
+ ]
+}
