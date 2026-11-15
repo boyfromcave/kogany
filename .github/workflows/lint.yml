@@ -103,7 +103,7 @@ jobs:
       - uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f #v1.17.0 # zizmor: ignore[cache-poisoning] -- CI lint job; runs clippy and a locked build check, nothing published/released
         with:
           components: clippy
-          toolchain: stable
+          toolchain: "1.100.0" # kogany (2026-11-15): the rust-toolchain.toml pin (.github/README-kogany.md)
           cache-on-failure: true
           cache-save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: Test startup CPU requirements
@@ -195,7 +195,7 @@ jobs:
           persist-credentials: false
       - uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f #v2.0.0
         with:
-          toolchain: stable
+          toolchain: "1.100.0" # kogany (2026-11-15): the rust-toolchain.toml pin (.github/README-kogany.md)
           # These checks do not compile workspace crates.
           cache: false
       - uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f #v2.0.0
@@ -304,7 +304,8 @@ jobs:
 
       - name: Ensure no arbitrary or proptest dependency on default build
         if: ${{ !cancelled() }}
-        run: cargo +stable tree --package kogany -e=features,no-dev | grep -Eq "arbitrary|proptest" && exit 1 || exit 0
+        # kogany (2026-11-15): the rust-toolchain.toml pin, not `+stable`, which the job no longer installs
+        run: cargo tree --package kogany -e=features,no-dev | grep -Eq "arbitrary|proptest" && exit 1 || exit 0
 
   header-conformance:
     name: header conformance
@@ -319,7 +320,7 @@ jobs:
           persist-credentials: false
       - uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f #v2.0.0
         with:
-          toolchain: stable
+          toolchain: "1.100.0" # kogany (2026-11-15): the rust-toolchain.toml pin (.github/README-kogany.md)
           cache: false
       - name: Validate header-chain conformance manifest
         run: cargo xtask header-conformance

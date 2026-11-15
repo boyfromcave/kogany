@@ -11,7 +11,7 @@ name: kogany-build
 #   check (matrix)   `cargo check -p kogany`, ycash feature off and on
 #   clippy (matrix)  `-D warnings` with the ycash feature, one crate group per job; the pure
 #                    kogany crates carry their own clippy.toml (plan §4.2 rule 6)
-#   fmt              stable rustfmt over the kogany-* crates
+#   fmt              rustfmt (the rust-toolchain.toml pin) over the kogany-* crates
 on:
   push:
     branches: [upgrade/vault, "vaults/**"]
@@ -46,7 +46,7 @@ jobs:
           persist-credentials: false
       - uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f #v2.0.0 # zizmor: ignore[cache-poisoning] -- check-only build, nothing published or released
         with:
-          toolchain: stable
+          toolchain: "1.100.0" # the rust-toolchain.toml pin; bump both together (.github/README-kogany.md)
           cache-key: kogany-build-check-${{ matrix.ycash && 'ycash' || 'default' }}
           cache-on-failure: true
           cache-save-if: ${{ github.ref == 'refs/heads/upgrade/vault' || startsWith(github.ref, 'refs/heads/vaults/') }}
@@ -89,7 +89,7 @@ jobs:
           persist-credentials: false
       - uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f #v2.0.0 # zizmor: ignore[cache-poisoning] -- lint-only build, nothing published or released
         with:
-          toolchain: stable
+          toolchain: "1.100.0" # the rust-toolchain.toml pin; bump both together (.github/README-kogany.md)
           components: clippy
           cache-key: kogany-build-clippy-${{ matrix.group }}
           cache-on-failure: true
@@ -114,7 +114,7 @@ jobs:
           persist-credentials: false
       - uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f #v2.0.0
         with:
-          toolchain: stable
+          toolchain: "1.100.0" # the rust-toolchain.toml pin; bump both together (.github/README-kogany.md)
           components: rustfmt
           cache: false
       - name: cargo fmt --check (kogany-*)

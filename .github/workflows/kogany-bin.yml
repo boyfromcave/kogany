@@ -51,7 +51,7 @@ jobs:
           persist-credentials: false
       - uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f #v2.0.0 # zizmor: ignore[cache-poisoning] -- a test binary for regtest jobs; never released
         with:
-          toolchain: stable
+          toolchain: "1.100.0" # the rust-toolchain.toml pin; bump both together (.github/README-kogany.md)
           cache-key: kogany-bin-koganyd
           cache-on-failure: true
           cache-save-if: ${{ github.repository == 'boyfromcave/kogany' && (github.ref == 'refs/heads/upgrade/vault' || startsWith(github.ref, 'refs/heads/vaults/')) }}

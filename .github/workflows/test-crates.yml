@@ -91,7 +91,7 @@ jobs:
 
       - uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f #v1.17.0 # zizmor: ignore[cache-poisoning] -- CI crate-check job; feature-matrix build check only, nothing published/released
         with:
-          toolchain: stable
+          toolchain: "1.100.0" # kogany (2026-11-15): the rust-toolchain.toml pin (.github/README-kogany.md)
           cache-key: crate-checks
           cache-on-failure: true
           cache-save-if: ${{ github.ref == 'refs/heads/main' }}

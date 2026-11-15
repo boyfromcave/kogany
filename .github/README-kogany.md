@@ -185,6 +185,32 @@ What kogany publishes and consumes (the workspace's `docs/plans/kogany/ci-design
 - The sidecar (W9) and parity (S5) nightlies follow the `kogany-mixed.yml` pattern with ycash6's
   test rig and yew's `yewd-bin`; they are added, scheduled, once the default branch carries them.
 
+## The Rust toolchain
+
+kogany builds with one exact Rust version (beta3 item 15, 2026-11-15): `rust-toolchain.toml`
+pins `channel` (with the `clippy` and `rustfmt` components the gates use), and every enabled
+workflow that installs a toolchain names the same version in its `toolchain:` input (and
+`tests-unit.yml` in its `rust-version` matrix). The `stable` channel drifted during beta2, so two
+builds of one tag could differ and a compiler release could change a build in the middle of
+qualification. The exceptions are deliberate: `lint.yml`'s MSRV job (`1.97`), the nightly jobs
+(`lint.yml`'s fmt and unused-deps, and the fuzz workflows' dated nightlies), and the off
+workflows and `docker/` images, which kogany does not run.
+
+To bump it, in one PR to `upgrade/vault`:
+
+1. Pick a released stable version and install it: `rustup toolchain install <ver> -c clippy,rustfmt`.
+2. Change `channel` in `rust-toolchain.toml` and every `toolchain: "<old>"` and
+   `rust-version: ["<old>"]` under `.github/workflows/`
+   (`git grep -n '"<old>"' -- rust-toolchain.toml .github/workflows`) to the new version.
+3. Run the gate with the new compiler: `cargo fmt --check`, the feature-off check with
+   `RUSTFLAGS="-D warnings"`, clippy with `--features "default-release-binaries ycash"`, and the
+   nextest profile `kogany-ycash`. Fix new lints in the same PR, without tidying consensus code.
+4. Make the same change in `zakura-common-ycash` (its own `rust-toolchain.toml` and workflows).
+   A change to toolchain files alone there needs no new rev in kogany's `[patch.crates-io]`.
+5. Say in the PR body which version CI used before and after.
+
+Never bump it while a release is in qualification.
+
 ## Cutting a pre-release
 
 `kogany-release.yml` (the Yellowback lead architect, 2026-11-04) runs only on a pushed tag

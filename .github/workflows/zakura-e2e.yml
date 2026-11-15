@@ -136,7 +136,7 @@ jobs:
           persist-credentials: false
       - uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f #v1.17.0 # zizmor: ignore[cache-poisoning] -- CI e2e job; uploads only diagnostic traces and builds a throwaway debug binary, nothing published/released
         with:
-          toolchain: stable
+          toolchain: "1.100.0" # kogany (2026-11-15): the rust-toolchain.toml pin (.github/README-kogany.md)
           # The two regtest-e2e jobs share one debug `cargo test --no-run` build
           # (default features, distinct from the `default-release-binaries` group
           # above), so they share a cache with each other but not with that group.
@@ -221,7 +221,7 @@ jobs:
           persist-credentials: false
       - uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f #v1.17.0 # zizmor: ignore[cache-poisoning] -- CI fuzz-scenario job; uploads only diagnostic test traces
         with:
-          toolchain: stable
+          toolchain: "1.100.0" # kogany (2026-11-15): the rust-toolchain.toml pin (.github/README-kogany.md)
           cache-shared-key: zakura-drb-debug
           cache-on-failure: true
           cache-save-if: false
@@ -266,7 +266,7 @@ jobs:
           persist-credentials: false
       - uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f #v1.17.0 # zizmor: ignore[cache-poisoning] -- CI e2e job; uploads only diagnostic traces and builds a throwaway debug binary, nothing published/released
         with:
-          toolchain: stable
+          toolchain: "1.100.0" # kogany (2026-11-15): the rust-toolchain.toml pin (.github/README-kogany.md)
           cache-shared-key: zakura-e2e-debug
           cache-on-failure: true
           cache-save-if: false
