@@ -28,6 +28,12 @@ with the non-finalized backup off and must stop again, never answering with B's 
 and depth 100 run on one chain (99 first); every further refused depth needs new nodes, and
 gets them.
 
+Then, where K keeps the non-finalized backup, the operator's step: K's record of the refusal
+(`ycash-reorg-refused`) is removed and K is started again. Its backup holds both branches, the
+stored part of B's with exactly the work of K's own chain (regtest: every block has the same
+work), and restored blocks have no receipt order. K must come back on its old tip, never on
+B's branch, and stop again, with a new record, when it is given the switching block again.
+
 Exit status 0 when every expectation holds, 1 otherwise, 2 on a harness error. Stdlib only.
 """
 
@@ -46,6 +52,7 @@ from rpc_ycash_parity import (  # noqa: E402
 SHARED_BLOCKS = 200
 MAX_REORG_LENGTH = 99        # ycash6 src/main.h:69
 SENTENCE = 'A block chain reorganization has been detected that would roll back %d blocks!'
+RECORD = 'ycash-reorg-refused'
 BACKUP_OFF = 'ephemeral = false\nshould_backup_non_finalized_state = false\n'
 
 
@@ -191,6 +198,42 @@ class Scene:
                   'K restarted (%s): never answered with another tip than its old one (%s)'
                   % (label, sorted(answers) or 'no answer'))
 
+    def records(self):
+        """K's records of a refused reorganisation (one state database, so at most one)."""
+        return [os.path.join(root, RECORD) for root, _, files in os.walk(self.dirs['K'])
+                if RECORD in files]
+
+    def record_removed(self, depth, old_tip, new_tip, switching):
+        """The operator removes K's record and starts it with its backup: K is on its old tip."""
+        records = self.records()
+        check(len(records) == 1, 'K has one record of the refusal (%s)' % records)
+        check((SENTENCE % depth) in read(records[0]), 'the record holds the sentence')
+        os.remove(records[0])
+        seen = self.out('K').count(SENTENCE % depth)
+        self.start_k(True)
+        proc = self.procs['K']
+        wait_up(self.k, proc, 'koganyd K (record removed)')
+        answers = set()
+        deadline = time.time() + 10
+        while proc.poll() is None and time.time() < deadline:
+            try:
+                tip, error = self.k.call('getbestblockhash')
+                if not error:
+                    answers.add(tip)
+            except RpcError:
+                pass
+            time.sleep(0.2)
+        check(new_tip not in answers and answers == {old_tip},
+              'K restarted without the record: on its old tip, never on B\'s branch (%s)'
+              % sorted(answers))
+        check(proc.poll() is None and not self.records(),
+              'K restarted without the record: running, and no new record')
+        self.offer(self.k, proc, switching)
+        code = wait_exit(proc, 'koganyd K (record removed, given the switching block)')
+        check(self.out('K').count(SENTENCE % depth) > seen and code == 1,
+              'K given the switching block again: stops again with the sentence (exit %s)' % code)
+        check(len(self.records()) == 1, 'K recorded the refusal again')
+
     def round(self, depth):
         a, b, k = self.a, self.b, self.k
         base_tip = a.ok('getbestblockhash')
@@ -221,6 +264,9 @@ class Scene:
         self.offer(a, self.procs['A'], branch)
         self.refused('A', self.procs['A'], depth, 'at depth %d' % depth)
         self.restart_refused(depth, old_tip)
+        if self.backup:
+            self.record_removed(depth, old_tip, b.ok('getblockhash', b.ok('getblockcount') - 1),
+                                branch[-1:])
 
 
 def run_scene(args, workdir, base, depths, backup):

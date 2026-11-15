@@ -47,19 +47,72 @@ behaviours follow ycashd's there, each against Zakura's own:
   `src/main.cpp:5004-5022`): `koganyd` logs ycashd's message, "A block chain reorganization has
   been detected that would roll back <n> blocks! This is larger than the maximum of 99 blocks,
   and so the node is shutting down for your safety.", with the two tips and the fork point, and
-  shuts down on its old tip. No block is marked invalid. Zakura's own window stays 1,000 blocks
+  shuts down on its old tip. No block is marked invalid. The guard is asked when a block is
+  committed and on `reconsiderblock`, as on ycashd. Zakura's own window stays 1,000 blocks
   (`MAX_BLOCK_REORG_HEIGHT`), and a `koganyd` built without the `ycash` feature follows any
-  branch inside it. The refusal is written to the file `ycash-reorg-refused` in the state
-  database's directory (`<state.cache_dir>/state/v<n>/<network>/`), and **the node stops at
+  branch inside it.
+
+  *The exit status.* `koganyd` exits with status 1 where ycashd exits with 0 (its
+  `StartShutdown()` is an ordinary shutdown). This is kept: the refusal stops the state writer,
+  and a writer failure ends the node with an error, as every other one does. A supervisor that
+  restarts on failure shows a crash loop, each start ending with the message, where it would
+  show a ycashd that stopped once.
+
+  *The record.* The refusal is written to the file `ycash-reorg-refused` in the state
+  database's directory, `<state.cache_dir>/state/v<major>/<network>/`, and **the node stops at
   every start while that file exists**, whether or not the non-finalized backup is on, as a
-  ycashd meets the branch in its block index at every start. Removing the file lets the node
-  start: with the backup on (the default) it reloads its non-finalized blocks and stops again if
-  it is sent the branch again; with the backup off it starts from its finalized tip and follows
-  the chain with the most work. To stay on the old chain, `invalidateblock` the first block of
-  the other branch once the node is up; to take the other branch, `invalidateblock` the first
-  block of the old one. An ephemeral state (`state.ephemeral = true`) is deleted when the node
-  stops, the record with it: its next start is a new node at genesis. Proved against ycashd by
-  `crates/kogany-rpc/qa/reorg_parity.py` (depths 99, 100, 101, and the restarts).
+  ycashd meets the branch in its block index at every start. The file holds the message; if it
+  is empty or cannot be read the node still stops, and says where the file is. The directory is
+  the one of the database's major format version: a `koganyd` release with a new major version
+  opens a new directory and builds its state again from genesis, so it has neither the record
+  nor the tip the record was about, like a ycashd on an empty data directory. Decide and remove
+  the record before such an upgrade. An ephemeral state (`state.ephemeral = true`) cannot keep
+  the record: it is deleted when the node stops, the record with it, and its next start is a new
+  node at genesis.
+
+  *After a restart.* The non-finalized backup (`state.should_backup_non_finalized_state`, on by
+  default) holds every block the node stored, on both branches, and beside it, while there is
+  more than one chain, the tip the node was on
+  (`<state.cache_dir>/non_finalized_state/<network>.ycash-best-tip`). A node started without the
+  record comes back **on the tip it was on**, also when the stored part of the other branch has
+  exactly the same work, and it stops again, with a new record, when it is given the block that
+  would switch it. If the backup itself would roll the node back more than 99 blocks from that
+  tip (a backup changed outside the node), the start is refused and recorded in the same way;
+  the way out is to remove the record and the backup directory, which leaves the case of the
+  backup being off, below.
+
+  *To stay on the old chain* (the answer to a hash-rate attack, and what a ycashd operator does
+  with `invalidateblock`), with the backup on:
+
+  1. Read the record: note "Current tip" and "Fork point".
+  2. Give the node no peers: an empty `network.initial_mainnet_peers` (or
+     `initial_testnet_peers`), `network.cache_dir = false` so the peer cache on disk is not
+     read, and `network.listen_addr` on loopback so that no peer dials in.
+  3. Remove the record and start the node.
+  4. Check that `getbestblockhash` is the record's "Current tip".
+  5. `invalidateblock` the first block of the other branch, the one above the fork point:
+     `getchaintips` lists the branch, and `getblock` walks it back by `previousblockhash` to the
+     block whose parent is the fork point. The node then refuses that branch from every peer.
+  6. Restore the network settings and start the node again.
+
+  *To accept the new chain:* steps 1 to 4, then `invalidateblock` the first block of the old
+  chain above the fork point (`getblockhash <fork height + 1>`), which is not asked the depth
+  either on ycashd (`InvalidateBlock` disconnects before `ActivateBestChain` runs). The stored
+  part of the other branch becomes the best chain, and the node takes the rest from its peers
+  after step 6. `preciousblock`, which ycashd does not have, is an operator's override between
+  tips of equal work only and is not asked the depth: it cannot move the node to a branch with
+  less work, and a branch with more work is the guard's.
+
+  *With the backup off* a node that is started without the record has only its finalized
+  blocks: it has no tip to keep, and follows the chain with the most work its peers give it,
+  which is the new one. That node cannot be kept on the old chain by removing the record; turn
+  the backup on before it is needed on any node that must be able to make this choice.
+
+  Proved by `crates/kogany-rpc/qa/reorg_parity.py` against ycashd (depths 99, 100, 101, the
+  restarts, and the restart without the record), and in `zakura-state` by
+  `running_writer_refuses_a_commit_that_rolls_back_100_blocks`,
+  `running_writer_refuses_a_reconsideration_that_rolls_back_100_blocks` and
+  `restored_best_chain_is_the_one_the_node_was_on`.
 - **Templates.** `getblocktemplate` has no limit on unpaid ZIP-317 actions by default, as ycashd's
   `-blockunpaidactionlimit` default (`SIZE_MAX`): a transaction that pays the relay fee but less
   than the conventional fee, such as a post-quantum owner spend, is mined.

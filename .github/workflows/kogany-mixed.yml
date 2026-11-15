@@ -134,6 +134,22 @@ jobs:
         run: |
           mkdir -p "$TMPDIR"
           python3 qa/kogany_mixed_shards.py run "$GROUP" --state gate --jobs 2
+      # kogany's own cross-line script for the reorganisation guard (beta3 item 12, R1): the two
+      # binaries of this job, kogany's script from this commit. Blocking, once, in the node group:
+      # an upstream sync that drops the guard from the state writer fails here.
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        if: ${{ !cancelled() && matrix.group == 'node' }}
+        with:
+          path: kogany
+          persist-credentials: false
+          sparse-checkout: crates/kogany-rpc/qa
+      - name: reorg_parity.py (koganyd's reorganisation guard against ycashd's; blocking)
+        id: reorg
+        if: ${{ !cancelled() && matrix.group == 'node' }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/mixed-tests"
+          python3 kogany/crates/kogany-rpc/qa/reorg_parity.py --koganyd "$KOGANY_BIN" \
+            --ycash6-bin "$GITHUB_WORKSPACE/src" --workdir "$RUNNER_TEMP/mixed-tests/reorg-parity"
       - name: the group's report scripts (a failure is reported, the job stays green)
         id: report
         if: ${{ !cancelled() }}
@@ -145,12 +161,13 @@ jobs:
           mkdir -p "$TMPDIR"
           python3 qa/kogany_mixed_shards.py run "$GROUP" --state report --jobs 2
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        if: ${{ !cancelled() && (steps.gate.outcome == 'failure' || steps.report.outcome == 'failure') }}
+        if: ${{ !cancelled() && (steps.gate.outcome == 'failure' || steps.report.outcome == 'failure' || steps.reorg.outcome == 'failure') }}
         with:
           name: kogany-mixed-logs-${{ matrix.group }}
           path: |
             ${{ runner.temp }}/mixed-tests/**/node*/regtest/debug.log
             ${{ runner.temp }}/mixed-tests/**/kogany*/zakurad.log
             ${{ runner.temp }}/mixed-tests/**/kogany*/zakurad.toml
+            ${{ runner.temp }}/mixed-tests/reorg-parity/**/*.out
           retention-days: 14
           if-no-files-found: warn

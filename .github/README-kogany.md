@@ -119,7 +119,7 @@ re-runs its consumers.
 | `kogany-client-legs` | `koganyd / koganyd-bin` (called `kogany-bin`) | this run's `koganyd-bin` | — | yes | 35 / 10 min |
 | | `lightwalletd-dd`, `chain-viz`, `yolo` (each report-only) | the client unmodified at its pin against this run's koganyd (`crates/kogany-rpc/qa/kogany_client_legs.py`; yolo's `tests/regtest.rs` kogany mode with ycash6's node-bin) | no, until the lead architect flips one | each | 10–40 min |
 | `kogany-mixed` | `koganyd / koganyd-bin`, `ycash6 node-bin` | the two binaries | — | each | 35 / 1 min |
-| | `mixed node`, `vault`, `yed`, `fees`, `attest` | ycash6's `qa/kogany_mixed_shards.py run <group>`: `gate` scripts block, `report` scripts never fail the job (all `report` today) | its `gate` scripts | each | 30–120 min |
+| | `mixed node`, `vault`, `yed`, `fees`, `attest` | ycash6's `qa/kogany_mixed_shards.py run <group>`: `gate` scripts block, `report` scripts never fail the job (all `report` today); the `node` group also runs kogany's own `crates/kogany-rpc/qa/reorg_parity.py` with the two binaries (the reorganisation guard, beta3 item 12; blocking) | its `gate` scripts, `reorg_parity.py` | each | 30–120 min |
 
 Blocking means a candidate for a required status check (see "Turning Actions on"); a
 `continue-on-error` job never turns its run red. The durations are estimates for a
