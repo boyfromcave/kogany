@@ -42,6 +42,24 @@ behaviours follow ycashd's there, each against Zakura's own:
   `DisconnectTip` resurrects them; the mempool keeps the last 100 best-chain blocks' transactions
   for this. The non-finalized blocks are written to the backup directory before each tip update,
   so a stopped node restarts at the tip it reported.
+- **Deep reorganisations.** A change of best chain that would roll back more than 99 blocks is
+  refused, as ycashd refuses it (`MAX_REORG_LENGTH`, ycash6 `src/main.h:69`,
+  `src/main.cpp:5004-5022`): `koganyd` logs ycashd's message, "A block chain reorganization has
+  been detected that would roll back <n> blocks! This is larger than the maximum of 99 blocks,
+  and so the node is shutting down for your safety.", with the two tips and the fork point, and
+  shuts down on its old tip. No block is marked invalid. Zakura's own window stays 1,000 blocks
+  (`MAX_BLOCK_REORG_HEIGHT`), and a `koganyd` built without the `ycash` feature follows any
+  branch inside it. The refusal is written to the file `ycash-reorg-refused` in the state
+  database's directory (`<state.cache_dir>/state/v<n>/<network>/`), and **the node stops at
+  every start while that file exists**, whether or not the non-finalized backup is on, as a
+  ycashd meets the branch in its block index at every start. Removing the file lets the node
+  start: with the backup on (the default) it reloads its non-finalized blocks and stops again if
+  it is sent the branch again; with the backup off it starts from its finalized tip and follows
+  the chain with the most work. To stay on the old chain, `invalidateblock` the first block of
+  the other branch once the node is up; to take the other branch, `invalidateblock` the first
+  block of the old one. An ephemeral state (`state.ephemeral = true`) is deleted when the node
+  stops, the record with it: its next start is a new node at genesis. Proved against ycashd by
+  `crates/kogany-rpc/qa/reorg_parity.py` (depths 99, 100, 101, and the restarts).
 - **Templates.** `getblocktemplate` has no limit on unpaid ZIP-317 actions by default, as ycashd's
   `-blockunpaidactionlimit` default (`SIZE_MAX`): a transaction that pays the relay fee but less
   than the conventional fee, such as a post-quantum owner spend, is mined.
@@ -82,6 +100,17 @@ These differences are kept: the RPC server is upstream Zakura's, and the wallet 
   `nsmValueBalanceZat`. `getnetworkinfo` has no `warningstimestamp`. `getmininginfo` has no
   `difficulty`, `errors`, `errorstimestamp`, `generate`, `genproclimit`, `localsolps` or
   `pooledtx`.
+
+- **Peer scores and the reason for a block wrong in two ways.** Every block either node line
+  refuses, the other refuses too; three penalties and one reason differ, and are kept (beta3
+  item 12, workspace `docs/plans/beta3/reorg-parity.md`, R4 to R6). A block whose time breaks a
+  median-time-past rule (`time-too-old`, `time-too-far-ahead-of-mtp`) scores 100 on `koganyd`'s
+  commit path and disconnects the peer on its header path, where ycashd scores 0: an honest
+  ycashd peer checks both rules before it relays, so the score only bites if the two lines'
+  parameters disagree. A block hash above the block's own target (`high-hash`) scores 100,
+  where ycashd scores 50. And `koganyd` checks that hash before the Equihash solution (Zakura's
+  cheap check first), so a block wrong in both answers `high-hash` where ycashd answers
+  `invalid-solution`; both score it 100.
 
 For post-quantum addresses (`sqf…`/`sqs…`, the YED `ybf…`/`ybs…`), the answers match ycashd's
 field for field (2026-11-12, regtest, `koganyd` against ycash6 6.22.0-beta2):

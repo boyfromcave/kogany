@@ -1817,3 +1817,157 @@ fn off_chain_blocks_are_found_by_hash() -> Result<()> {
 
     Ok(())
 }
+
+/// kogany (beta3 R1, decision note `reorg-parity.md` T1): the reorganisation guard counts the
+/// blocks a change of best chain disconnects as ycashd does, the old tip's height minus the fork
+/// point's (ycash6 `src/main.cpp:5004`): 99 pass, 100 and more are refused (`MAX_REORG_LENGTH`,
+/// `src/main.h:69`). The non-finalized state itself follows the heavier branch at any depth, with
+/// the feature on and off, and its window stays 1,000 blocks: the guard is the writer's, and the
+/// writer exists only in the Ycash build.
+#[test]
+fn reorg_guard_counts_rolled_back_blocks_as_ycashd() -> Result<()> {
+    let _init_guard = zakura_test::init();
+
+    assert_eq!(crate::constants::MAX_BLOCK_REORG_HEIGHT, 1_000);
+
+    let network = Network::Mainnet;
+    let root: Arc<Block> = Arc::new(network.test_block(653599, 583999).unwrap());
+    let finalized_state = FinalizedState::new(&Config::ephemeral(), &network)
+        .expect("opening an ephemeral database should succeed");
+    finalized_state.set_finalized_value_pool(ValueBalance::<NonNegative>::fake_populated_pool());
+
+    // `(depth, fork_is_finalized_tip)`: the blocks of the old best chain above the fork point,
+    // and whether the two branches share the non-finalized root or fork below it.
+    for (depth, fork_is_finalized_tip) in [
+        (1_u32, false),
+        (99, false),
+        (100, false),
+        (101, false),
+        (99, true),
+        (100, true),
+    ] {
+        let mut state = NonFinalizedState::new(&network);
+        let (mut old_tip, mut new_tip) = if fork_is_finalized_tip {
+            // Two roots: the fork point is the finalized tip, and the old root is rolled back.
+            let old_root = root.clone().set_block_commitment([1; 32]);
+            let new_root = root.clone().set_block_commitment([2; 32]);
+            state.commit_new_chain(old_root.clone().prepare(), &finalized_state)?;
+            state.commit_new_chain(new_root.clone().prepare(), &finalized_state)?;
+            (old_root, new_root)
+        } else {
+            state.commit_new_chain(root.clone().prepare(), &finalized_state)?;
+            let old_child = root
+                .make_fake_child()
+                .set_work(10)
+                .set_block_commitment([1; 32]);
+            let new_child = root
+                .make_fake_child()
+                .set_work(9)
+                .set_block_commitment([2; 32]);
+            state.commit_block(old_child.clone().prepare(), &finalized_state)?;
+            state.commit_block(new_child.clone().prepare(), &finalized_state)?;
+            (old_child, new_child)
+        };
+        // The two roots tie on work: the old best chain is the one the tie-break prefers.
+        if state.best_tip().unwrap().1 != old_tip.hash() {
+            std::mem::swap(&mut old_tip, &mut new_tip);
+        }
+
+        // Each block of the old best chain has more work than its rival, so the chain stays best
+        // while the other branch is stored beside it.
+        for _ in 1..depth {
+            old_tip = old_tip.make_fake_child().set_work(10);
+            state.commit_block(old_tip.clone().prepare(), &finalized_state)?;
+            #[cfg(feature = "ycash")]
+            let before = state.clone();
+            new_tip = new_tip.make_fake_child().set_work(9);
+            state.commit_block(new_tip.clone().prepare(), &finalized_state)?;
+            assert_eq!(state.best_tip().unwrap().1, old_tip.hash());
+            // A block stored off the best chain rolls nothing back.
+            #[cfg(feature = "ycash")]
+            assert_eq!(before.refused_reorg(&state), None);
+        }
+        let old_height = old_tip.coinbase_height().unwrap();
+        let fork = if fork_is_finalized_tip {
+            (
+                (root.coinbase_height().unwrap() - 1).unwrap(),
+                root.header.previous_block_hash,
+            )
+        } else {
+            (root.coinbase_height().unwrap(), root.hash())
+        };
+        assert_eq!(old_height.0 - fork.0 .0, depth);
+
+        // The block that gives the other branch more work.
+        let before = state.clone();
+        new_tip = new_tip
+            .make_fake_child()
+            .set_work(10 * u128::from(depth) + 100);
+        state.commit_block(new_tip.clone().prepare(), &finalized_state)?;
+        assert_eq!(
+            state.best_tip().unwrap().1,
+            new_tip.hash(),
+            "the non-finalized state follows the heavier branch {depth} blocks back"
+        );
+        assert_eq!(before.best_tip().unwrap().1, old_tip.hash());
+
+        #[cfg(feature = "ycash")]
+        {
+            use crate::service::non_finalized_state::reorg_guard::{
+                RefusedReorg, MAX_REORG_LENGTH,
+            };
+
+            assert_eq!(MAX_REORG_LENGTH, 99);
+            let refused = before.refused_reorg(&state);
+            if depth <= 99 {
+                assert_eq!(refused, None, "{depth} blocks are rolled back");
+            } else {
+                let expected = RefusedReorg {
+                    rollback: depth,
+                    old_tip: (old_height, old_tip.hash()),
+                    new_tip: (new_tip.coinbase_height().unwrap(), new_tip.hash()),
+                    fork,
+                };
+                assert_eq!(refused, Some(expected), "{depth} blocks are refused");
+                let message = expected.to_string();
+                // ycash6 `src/main.cpp:5008-5009`, the sentence `reorg_limit.py` matches.
+                assert!(message.starts_with(&format!(
+                    "A block chain reorganization has been detected that would roll back {depth} \
+                     blocks! This is larger than the maximum of 99 blocks, and so the node is \
+                     shutting down for your safety.\n\nReorganization details:\n"
+                )));
+                assert!(message.ends_with("\n\nPlease help, human!"));
+            }
+
+            // The new best chain, extended: nothing is rolled back.
+            let before = state.clone();
+            let extended = new_tip.make_fake_child().set_work(10);
+            state.commit_block(extended.prepare(), &finalized_state)?;
+            assert_eq!(before.refused_reorg(&state), None);
+            // And an unchanged state.
+            assert_eq!(state.refused_reorg(&state), None);
+        }
+    }
+
+    Ok(())
+}
+
+/// kogany (beta3 R1): the record of a refused reorganisation is a file beside the state
+/// database, so it does not depend on the non-finalized backup.
+#[cfg(feature = "ycash")]
+#[test]
+fn reorg_refusal_is_recorded_beside_the_state_database() {
+    use crate::service::non_finalized_state::reorg_guard::{record, recorded, refusal_path};
+
+    let _init_guard = zakura_test::init();
+    let db_dir = tempfile::tempdir().expect("a temporary directory");
+
+    assert_eq!(recorded(db_dir.path()), None);
+    let path = record(db_dir.path(), "refused").expect("the record is written");
+    assert_eq!(path, refusal_path(db_dir.path()));
+    assert_eq!(path, db_dir.path().join("ycash-reorg-refused"));
+    assert_eq!(recorded(db_dir.path()).as_deref(), Some("refused"));
+
+    std::fs::remove_file(&path).expect("the operator removes the record");
+    assert_eq!(recorded(db_dir.path()), None);
+}

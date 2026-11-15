@@ -126,6 +126,9 @@ pub use service::finalized_state::{
 };
 #[cfg(feature = "internal-bench")]
 pub use service::non_finalized_state::{benchmark_height_map, HeightMapBenchmarkSample};
+// kogany (beta3 R1): the record of a refused reorganisation, checked before the node starts.
+#[cfg(feature = "ycash")]
+pub use service::non_finalized_state::reorg_guard::recorded_for as recorded_reorg_refusal;
 pub use service::read::{
     derive_historical_frontiers, ChainTipInfo, ChainTipStatus, DerivedFrontiers,
     HistoricalTreeCache, MAX_CACHED_FRONTIERS,

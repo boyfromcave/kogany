@@ -98,3 +98,102 @@ fn legacy_finalization_invariant_failures_remain_explicit_panics() {
     let error = CommitCheckpointVerifiedError::from(CommitBlockError::WriteTaskExited);
     let _ = header_chain_finalization_failure(error);
 }
+
+/// kogany (beta3 R1, decision note `reorg-parity.md` requirement 2): a refused reorganisation
+/// survives a restart with the non-finalized backup on and off. The record beside the state
+/// database stops the writer at once on the next start, the failure is ycashd's message, and
+/// it reaches the daemon's supervision, which shuts the node down. The record stays until an
+/// operator removes it; without one the writer runs. (`reorg_parity.py` restarts a real node.)
+#[cfg(feature = "ycash")]
+#[tokio::test(flavor = "multi_thread")]
+async fn recorded_reorg_refusal_stops_the_writer_at_startup() {
+    use crate::service::non_finalized_state::reorg_guard;
+
+    let _init_guard = zakura_test::init();
+    let network = Network::new_regtest(Default::default());
+    let cache_dir = tempfile::tempdir().expect("a temporary directory");
+    let refused = reorg_guard::RefusedReorg {
+        rollback: 100,
+        old_tip: (block::Height(300), block::Hash([1; 32])),
+        new_tip: (block::Height(301), block::Hash([2; 32])),
+        fork: (block::Height(200), block::Hash([3; 32])),
+    };
+    let sentence =
+        "A block chain reorganization has been detected that would roll back 100 blocks!";
+
+    for should_backup_non_finalized_state in [true, false] {
+        // A state database is opened once per process, so each start has its own directory.
+        let config_of = |name: &str| {
+            let config = Config {
+                cache_dir: cache_dir
+                    .path()
+                    .join(format!("{name}-{should_backup_non_finalized_state}")),
+                ephemeral: false,
+                should_backup_non_finalized_state,
+                ..Config::default()
+            };
+            let recorded = reorg_guard::recorded_for(&config, &network);
+            (config, recorded)
+        };
+        let start = |name: &str, refuse: bool| {
+            let config = config_of(name).0;
+            let db_path = config.db_path(
+                crate::constants::STATE_DATABASE_KIND,
+                crate::constants::state_database_format_version_in_code().major,
+                &network,
+            );
+            if refuse {
+                // What the writer does when it refuses a reorganisation.
+                std::fs::create_dir_all(&db_path).expect("the database directory is created");
+                let exit = refuse_reorg(&db_path, refused);
+                let failure = exit.failure().expect("a refusal is a writer failure");
+                assert!(failure.to_string().contains(sentence), "{failure}");
+                assert_eq!(
+                    reorg_guard::recorded(&db_path).as_deref(),
+                    Some(refused.to_string().as_str())
+                );
+            }
+            let network = network.clone();
+            async move {
+                let (state, read, _tip, _tip_change) =
+                    crate::service::StateService::new(config, &network, block::Height::MAX, 0)
+                        .await
+                        .expect("the state opens");
+                (state, read, db_path)
+            }
+        };
+
+        // No record: the writer runs.
+        let (_running, read, db_path) = start("running", false).await;
+        assert!(
+            tokio::time::timeout(Duration::from_millis(500), read.wait_for_writer_failure())
+                .await
+                .is_err(),
+            "the writer runs without a record"
+        );
+        assert_eq!(reorg_guard::recorded(&db_path), None);
+        assert_eq!(config_of("running").1, None);
+
+        // A record: the writer stops at once with the recorded message, and leaves the record.
+        let (_refused, read, db_path) = start("refused", true).await;
+        let failure = tokio::time::timeout(Duration::from_secs(30), read.wait_for_writer_failure())
+            .await
+            .expect("the writer stops while a refusal is on record");
+        assert!(failure.to_string().contains(sentence), "{failure}");
+        assert_eq!(
+            reorg_guard::recorded(&db_path).as_deref(),
+            Some(refused.to_string().as_str())
+        );
+        // What the node checks before it starts: the same record, at the same path.
+        assert_eq!(
+            config_of("refused").1,
+            Some((reorg_guard::refusal_path(&db_path), refused.to_string()))
+        );
+    }
+
+    // An ephemeral state starts empty: it has no record.
+    assert_eq!(
+        reorg_guard::recorded_for(&Config::ephemeral(), &network),
+        None
+    );
+}

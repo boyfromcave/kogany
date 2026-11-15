@@ -421,6 +421,11 @@ pub(crate) enum BlockWriteTaskExit {
     Completed,
     HeaderChainAttachmentFailed(HeaderChainAttachmentError),
     HeaderChainRuntimeFailed(BlockWriteTaskFailure),
+    /// kogany (beta3 R1): the writer refused a reorganisation deeper than ycashd's
+    /// `MAX_REORG_LENGTH`, or found the record of one at startup. The failure is ycashd's
+    /// message, and stops the node as every writer failure does.
+    #[cfg(feature = "ycash")]
+    ReorgRefused(BlockWriteTaskFailure),
 }
 
 impl From<&HeaderChainAttachmentError> for BlockWriteTaskFailure {
@@ -451,8 +456,61 @@ impl BlockWriteTaskExit {
             Self::Completed => None,
             Self::HeaderChainAttachmentFailed(error) => Some(error.into()),
             Self::HeaderChainRuntimeFailed(error) => Some(error.clone()),
+            #[cfg(feature = "ycash")]
+            Self::ReorgRefused(error) => Some(error.clone()),
         }
     }
+}
+
+/// kogany (beta3 R1): the writer's exit for a reorganisation ycashd would refuse, ycash6
+/// `src/main.cpp:5006-5022`: log the message, record it beside the state database so the
+/// refusal survives a restart with or without the non-finalized backup, and stop the node on
+/// its old tip. The staged commit is dropped: nothing was published or marked invalid.
+#[cfg(feature = "ycash")]
+fn refuse_reorg(
+    db_path: &Path,
+    refused: crate::service::non_finalized_state::reorg_guard::RefusedReorg,
+) -> BlockWriteTaskExit {
+    use crate::service::non_finalized_state::reorg_guard;
+
+    let message = refused.to_string();
+    tracing::error!("*** {message}");
+    match reorg_guard::record(db_path, &message) {
+        Ok(path) => tracing::error!(
+            ?path,
+            "the refused reorganization is recorded: the node stops at every start while \
+             this file exists. Remove it to start the node again; it stops again if it \
+             meets the same branch"
+        ),
+        Err(error) => tracing::error!(
+            ?error,
+            ?db_path,
+            "could not record the refused reorganization beside the state database"
+        ),
+    }
+    BlockWriteTaskExit::ReorgRefused(BlockWriteTaskFailure {
+        message: message.into(),
+    })
+}
+
+/// kogany (beta3 R1): the writer's exit at startup while a refused reorganisation is on
+/// record. ycashd meets the heavier branch in its block index at every start and shuts
+/// down again; a node without its non-finalized blocks has no old tip to compare, so the
+/// record stands in for it.
+#[cfg(feature = "ycash")]
+fn recorded_reorg_refusal(db_path: &Path) -> Option<BlockWriteTaskExit> {
+    use crate::service::non_finalized_state::reorg_guard;
+
+    let message = reorg_guard::recorded(db_path)?;
+    tracing::error!("*** {message}");
+    tracing::error!(
+        path = ?reorg_guard::refusal_path(db_path),
+        "a refused reorganization is on record: the node stops at every start while this \
+         file exists. Remove it to start the node again"
+    );
+    Some(BlockWriteTaskExit::ReorgRefused(BlockWriteTaskFailure {
+        message: message.into(),
+    }))
 }
 
 fn header_chain_finalization_failure(error: CommitCheckpointVerifiedError) -> BlockWriteTaskExit {
@@ -2469,6 +2527,12 @@ impl WriteBlockWorkerTask {
             header_chain_observers,
         } = &mut self;
 
+        // kogany (beta3 R1): a refused reorganisation on record keeps the node down.
+        #[cfg(feature = "ycash")]
+        if let Some(exit) = recorded_reorg_refusal(finalized_state.db.path()) {
+            return exit;
+        }
+
         let mut prev_finalized_note_commitment_trees: Option<NoteCommitmentTrees> = None;
         let mut deferred_non_finalized_messages = VecDeque::new();
         let deadline_runtime = tokio::runtime::Builder::new_current_thread()
@@ -3241,6 +3305,13 @@ impl WriteBlockWorkerTask {
             let child_height = queued_child.height;
             let rejected_ancestor_hash = rejected_ancestor_map.get(&parent_hash).copied();
 
+            // kogany (beta3 R1): ycashd's reorganisation guard, checked on the staged commit
+            // before anything is published (ycash6 `src/main.cpp:5004-5022`).
+            #[cfg(feature = "ycash")]
+            let mut refused_reorg = None;
+            #[cfg(feature = "ycash")]
+            let mut state_before_commit = None;
+
             // If the parent block was marked as rejected, also reject all its children.
             //
             // At this point, we know that all the block's descendants
@@ -3267,6 +3338,11 @@ impl WriteBlockWorkerTask {
                         )
                         .map_err(|error| CommitBlockError::from(Box::new(error)))
                         .and_then(|()| {
+                            #[cfg(feature = "ycash")]
+                            if let Some(refused) = non_finalized_state.refused_reorg(&staged) {
+                                refused_reorg = Some(refused);
+                                return Err(CommitBlockError::WriteTaskExited);
+                            }
                             let accepted = Frontier::new(child_height, child_hash);
                             let transition_prepare_start = Instant::now();
                             let transition =
@@ -3316,6 +3392,10 @@ impl WriteBlockWorkerTask {
                             result
                         })
                     } else {
+                        #[cfg(feature = "ycash")]
+                        {
+                            state_before_commit = Some(non_finalized_state.clone());
+                        }
                         validate_and_commit_non_finalized_with_metrics(
                             &finalized_state.db,
                             non_finalized_state,
@@ -3325,6 +3405,20 @@ impl WriteBlockWorkerTask {
                         .map_err(|error| CommitBlockError::from(Box::new(error)))
                     }
                 };
+
+            // kogany (beta3 R1): without a header-chain writer the commit above was made in
+            // place, so it is compared with the state before it and taken back.
+            #[cfg(feature = "ycash")]
+            if let (Ok(()), Some(before)) = (&result, state_before_commit) {
+                if let Some(refused) = before.refused_reorg(non_finalized_state) {
+                    *non_finalized_state = before;
+                    refused_reorg = Some(refused);
+                }
+            }
+            #[cfg(feature = "ycash")]
+            if let Some(refused) = refused_reorg {
+                return refuse_reorg(finalized_state.db.path(), refused);
+            }
 
             // TODO: fix the test timing bugs that require the result to be sent
             //       after `update_latest_chain_channels()`,

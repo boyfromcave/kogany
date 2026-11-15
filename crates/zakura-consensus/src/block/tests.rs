@@ -2266,6 +2266,29 @@ fn block_error_misbehavior_scores() {
     );
 }
 
+/// kogany (beta3 R5, decision note `reorg-parity.md` T3): a block hash above the block's own
+/// target (`high-hash`) scores 100, with the feature on and off. ycashd scores it 50 (ycash6
+/// `src/main.cpp:5956-5959`); the difference is kept and documented (R5): an honest block
+/// always meets its target.
+#[test]
+fn high_hash_keeps_its_misbehavior_score() {
+    use zakura_chain::{parameters::Network, work::difficulty::ParameterDifficulty as _};
+
+    use crate::error::BlockError;
+
+    let error = BlockError::DifficultyFilter(
+        zakura_chain::block::Height(1),
+        zakura_chain::block::Hash([0xff; 32]),
+        Network::Mainnet.target_difficulty_limit(),
+        Network::Mainnet,
+    );
+    assert_eq!(error.misbehavior_score(), 100);
+    assert_eq!(
+        VerifyBlockError::Block { source: error }.misbehavior_score(),
+        100
+    );
+}
+
 #[test]
 fn verify_block_error_misbehavior_scores() {
     let dup_err = zakura_state::CommitBlockError::Duplicate {
