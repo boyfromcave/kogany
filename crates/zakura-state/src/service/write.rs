@@ -3239,6 +3239,19 @@ impl WriteBlockWorkerTask {
                     write_slot: _write_slot,
                 } => {
                     tracing::info!(?hash, "reconsidering a block in the non-finalized state");
+                    // kogany (beta3 R1): `reconsiderblock` is guarded as on ycashd, whose
+                    // `reconsiderblock` ends in `ActivateBestChain` (ycash6
+                    // `src/rpc/blockchain.cpp:2200-2204`). The change is tried on a copy first; a
+                    // refused one is never made, and the caller's answer is the closed channel.
+                    #[cfg(feature = "ycash")]
+                    {
+                        let mut staged = non_finalized_state.clone();
+                        if staged.reconsider_block(hash, &finalized_state.db).is_ok() {
+                            if let Some(refused) = non_finalized_state.refused_reorg(&staged) {
+                                return refuse_reorg(finalized_state.db.path(), refused);
+                            }
+                        }
+                    }
                     let result = if let Some(writer) = header_chain.as_ref() {
                         let mut staged = non_finalized_state.clone();
                         staged

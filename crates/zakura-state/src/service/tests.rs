@@ -3459,6 +3459,279 @@ fn nu5_child(
     child.set_block_commitment(commitment)
 }
 
+/// kogany (beta3 R1): a Regtest state on a persistent directory under `cache_dir`, with the
+/// non-finalized backup on and genesis committed, as [`nu5_state_with_genesis`] opens an
+/// ephemeral one. Returns the state, its read service, the network, genesis, the state
+/// database's directory and the backup's.
+#[cfg(feature = "ycash")]
+async fn persistent_nu5_state_with_genesis(
+    cache_dir: &std::path::Path,
+) -> (
+    StateService,
+    crate::ReadStateService,
+    Network,
+    Arc<Block>,
+    std::path::PathBuf,
+    std::path::PathBuf,
+) {
+    use zakura_chain::parameters::testnet::{ConfiguredActivationHeights, RegtestParameters};
+
+    let network = Network::new_regtest(RegtestParameters {
+        activation_heights: ConfiguredActivationHeights {
+            nu5: Some(1),
+            ..Default::default()
+        },
+        ..Default::default()
+    });
+    let config = Config {
+        cache_dir: cache_dir.to_owned(),
+        ephemeral: false,
+        should_backup_non_finalized_state: true,
+        ..Config::default()
+    };
+    let db_path = config.db_path(
+        crate::constants::STATE_DATABASE_KIND,
+        crate::constants::state_database_format_version_in_code().major,
+        &network,
+    );
+    let backup_dir = config
+        .non_finalized_state_backup_dir(&network)
+        .expect("the backup is on");
+    let (mut state, read, _, _) = StateService::new(config, &network, Height(0), 0)
+        .await
+        .expect("the state opens");
+    let genesis = block::genesis::regtest_genesis_block();
+    timeout(
+        Duration::from_secs(10),
+        (&mut state).oneshot(Request::CommitCheckpointVerifiedBlock(
+            genesis.clone().into(),
+        )),
+    )
+    .await
+    .expect("the genesis commit completes")
+    .expect("genesis commits");
+    (state, read, network, genesis, db_path, backup_dir)
+}
+
+/// kogany (beta3 R1): commits a branch of `length` blocks on `genesis` through the running
+/// writer, each with a valid NU5 header commitment, and returns the blocks and the answer to
+/// the last commit. `seconds` moves the first block's time, so two branches differ.
+#[cfg(feature = "ycash")]
+async fn commit_nu5_branch(
+    state: &mut StateService,
+    network: &Network,
+    genesis: &Arc<Block>,
+    length: u32,
+    seconds: i64,
+) -> (Vec<Arc<Block>>, Result<Response, BoxError>) {
+    let mut blocks: Vec<Arc<Block>> = Vec::new();
+    let mut answer: Option<Result<Response, BoxError>> = None;
+    for height in 1..=length {
+        if let Some(previous) = answer.take() {
+            previous.expect("every block before the last commits");
+        }
+        let block = match blocks.last() {
+            None => {
+                let mut first = nu5_child_of_genesis(network, genesis, Vec::new());
+                Arc::make_mut(&mut Arc::make_mut(&mut first).header).time +=
+                    chrono::Duration::seconds(seconds);
+                first
+            }
+            Some(parent) => nu5_child_of_tip(state, network, parent, Height(height)),
+        };
+        answer = Some(
+            timeout(
+                Duration::from_secs(30),
+                (&mut *state).oneshot(Request::CommitSemanticallyVerifiedBlock(
+                    block.clone().prepare(),
+                )),
+            )
+            .await
+            .expect("the commit completes"),
+        );
+        blocks.push(block);
+    }
+    (blocks, answer.expect("the branch has a block"))
+}
+
+/// kogany (beta3 R1): builds the child at `height` of `parent`, a chain tip in `state`, as
+/// [`nu5_child`] does, with a coinbase that expires at its own height (the NU5 rule), so that
+/// every block of a branch has its own transaction ID: a v5 ID does not commit to the height in
+/// the coinbase script.
+#[cfg(feature = "ycash")]
+fn nu5_child_of_tip(
+    state: &StateService,
+    network: &Network,
+    parent: &Arc<Block>,
+    height: Height,
+) -> Arc<Block> {
+    use zakura_chain::{
+        block::ChainHistoryBlockTxAuthCommitmentHash,
+        transaction::{arbitrary::transaction_to_fake_v5, Transaction},
+    };
+
+    let history_root = state
+        .read_service
+        .latest_non_finalized_state()
+        .chain_iter()
+        .find(|chain| chain.non_finalized_tip_hash() == parent.hash())
+        .expect("the parent is a chain tip")
+        .history_block_commitment_tree()
+        .hash()
+        .expect("the parent's history tree is not empty");
+
+    let mut child = parent.make_fake_child();
+    let block = Arc::make_mut(&mut child);
+    let mut coinbase = transaction_to_fake_v5(&block.transactions[0], network, height);
+    match &mut coinbase {
+        Transaction::V5 { expiry_height, .. } => *expiry_height = height,
+        transaction => panic!("the fake coinbase is a v5 transaction: {transaction:?}"),
+    }
+    block.transactions = vec![Arc::new(coinbase)];
+    let header = Arc::make_mut(&mut block.header);
+    header.merkle_root = block.transactions.iter().collect();
+    header.time += chrono::Duration::seconds(1);
+    let commitment: [u8; 32] = ChainHistoryBlockTxAuthCommitmentHash::from_commitments(
+        &history_root,
+        &child.auth_data_root(),
+    )
+    .into();
+    child.set_block_commitment(commitment)
+}
+
+/// kogany (beta3 R1): what a refusal by the running writer leaves: the writer's failure is
+/// ycashd's sentence for `rollback` blocks and reaches the daemon's supervision, the best tip
+/// readers see is still `old_tip`, and the refusal is recorded beside the state database.
+#[cfg(feature = "ycash")]
+async fn assert_reorg_refused_by_the_writer(
+    read: &crate::ReadStateService,
+    db_path: &std::path::Path,
+    old_tip: &Arc<Block>,
+    rollback: u32,
+) {
+    use crate::service::non_finalized_state::reorg_guard;
+
+    let failure = timeout(Duration::from_secs(30), read.wait_for_writer_failure())
+        .await
+        .expect("the writer stops on the refusal")
+        .to_string();
+    let sentence = format!(
+        "A block chain reorganization has been detected that would roll back {rollback} blocks! \
+         This is larger than the maximum of 99 blocks"
+    );
+    assert!(failure.contains(&sentence), "{failure}");
+    assert_eq!(
+        read.best_tip(),
+        Some((old_tip.coinbase_height().unwrap(), old_tip.hash())),
+        "the best tip is unchanged"
+    );
+    let record = reorg_guard::recorded(db_path).expect("the refusal is recorded");
+    assert!(record.starts_with(&sentence), "{record}");
+    assert!(
+        record.contains(&format!("- Current tip: {}, height", old_tip.hash())),
+        "{record}"
+    );
+}
+
+/// kogany (beta3 R1): the guard's call site on the commit path, driven through the running
+/// state writer. Two branches of 100 valid Regtest blocks from genesis tie; the first received
+/// stays best while the second is only stored. The block that gives the second branch more
+/// work would roll back 100 blocks: the writer refuses it, publishes nothing, records the
+/// refusal and exits. If an upstream sync drops the call in the writer, this test fails.
+#[cfg(feature = "ycash")]
+#[tokio::test(flavor = "multi_thread")]
+async fn running_writer_refuses_a_commit_that_rolls_back_100_blocks() {
+    use crate::service::non_finalized_state::reorg_guard;
+
+    let _init_guard = zakura_test::init();
+    let cache_dir = tempfile::tempdir().expect("a temporary directory");
+    let (mut state, read, network, genesis, db_path, backup_dir) =
+        persistent_nu5_state_with_genesis(cache_dir.path()).await;
+
+    let (old, answer) = commit_nu5_branch(&mut state, &network, &genesis, 100, 0).await;
+    answer.expect("the 100th block of the first branch commits");
+    let old_tip = old.last().expect("the branch has blocks");
+    // One chain: no tip is kept with the backup.
+    assert_eq!(reorg_guard::persisted_best_tip(&backup_dir), None);
+
+    let (other, answer) = commit_nu5_branch(&mut state, &network, &genesis, 100, 1).await;
+    answer.expect("the 100th block of the second branch is stored");
+    assert_ne!(old[0].hash(), other[0].hash());
+    let old_tip_id = (Height(100), old_tip.hash());
+    assert_eq!(
+        read.best_tip(),
+        Some(old_tip_id),
+        "a tie keeps the first tip"
+    );
+    assert_eq!(reorg_guard::recorded(&db_path), None);
+    // Two chains: the backup keeps the tip the node is on.
+    assert_eq!(
+        reorg_guard::persisted_best_tip(&backup_dir),
+        Some(old_tip_id)
+    );
+
+    // The 101st block of the second branch.
+    let other_tip = other.last().expect("the branch has blocks");
+    let switching = nu5_child_of_tip(&state, &network, other_tip, Height(101));
+    let answer = timeout(
+        Duration::from_secs(30),
+        (&mut state).oneshot(Request::CommitSemanticallyVerifiedBlock(
+            switching.clone().prepare(),
+        )),
+    )
+    .await
+    .expect("the commit is answered");
+    assert!(answer.is_err(), "the switching block is not committed");
+
+    assert_reorg_refused_by_the_writer(&read, &db_path, old_tip, 100).await;
+    let published = state.read_service.latest_non_finalized_state();
+    assert!(!published.any_chain_contains(&switching.hash()));
+    assert_eq!(
+        reorg_guard::persisted_best_tip(&backup_dir),
+        Some(old_tip_id)
+    );
+}
+
+/// kogany (beta3 R1): `reconsiderblock` is guarded in the running writer as ycashd guards it.
+/// A branch of 101 blocks is invalidated at its first block, 100 blocks are committed in its
+/// place, and reconsidering the first block would bring the heavier branch back and roll back
+/// 100 blocks: the writer refuses, leaves the state as it was, records the refusal and exits.
+#[cfg(feature = "ycash")]
+#[tokio::test(flavor = "multi_thread")]
+async fn running_writer_refuses_a_reconsideration_that_rolls_back_100_blocks() {
+    let _init_guard = zakura_test::init();
+    let cache_dir = tempfile::tempdir().expect("a temporary directory");
+    let (mut state, read, network, genesis, db_path, _backup_dir) =
+        persistent_nu5_state_with_genesis(cache_dir.path()).await;
+
+    let (other, answer) = commit_nu5_branch(&mut state, &network, &genesis, 101, 1).await;
+    answer.expect("the 101st block commits");
+    timeout(
+        Duration::from_secs(30),
+        (&mut state).oneshot(Request::InvalidateBlock(other[0].hash())),
+    )
+    .await
+    .expect("the invalidation completes")
+    .expect("the first block of the branch is invalidated");
+    assert_eq!(read.best_tip(), Some((Height(0), genesis.hash())));
+
+    let (old, answer) = commit_nu5_branch(&mut state, &network, &genesis, 100, 0).await;
+    answer.expect("the 100th block commits");
+    let old_tip = old.last().expect("the branch has blocks");
+    assert_eq!(read.best_tip(), Some((Height(100), old_tip.hash())));
+
+    let _ = timeout(
+        Duration::from_secs(30),
+        (&mut state).oneshot(Request::ReconsiderBlock(other[0].hash())),
+    )
+    .await
+    .expect("the reconsideration is answered");
+
+    assert_reorg_refused_by_the_writer(&read, &db_path, old_tip, 100).await;
+    let published = state.read_service.latest_non_finalized_state();
+    assert!(!published.any_chain_contains(&other[0].hash()));
+}
+
 /// Returns `block` with different coinbase authorizing data under the same header.
 ///
 /// A v5 transaction ID does not commit to `scriptSig` (ZIP 244), so the Merkle root and block
