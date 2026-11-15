@@ -441,3 +441,40 @@ async fn ycash_one_point_zero_batch_limits_hold() {
         "a batch above the body size limit is refused"
     );
 }
+
+/// Ycash (beta3 item 7, review L1 and L2): a 1.0 member whose id the server does not take
+/// (negative, fractional, above `u64`, a boolean, an object) is not turned into a 2.0
+/// notification, which would get no answer: it is forwarded unchanged and answered with the
+/// server's invalid request error, and no method runs. A 1.0 member with `"id": null` or no id
+/// gets the same error, as a single request of that kind does (ycashd answers both with
+/// `"id": null`; recorded in the parity table).
+#[cfg(feature = "ycash")]
+#[tokio::test]
+async fn ycash_one_point_zero_batch_members_with_ids_the_server_does_not_take() {
+    use serde_json::{json, Value};
+
+    let members = [
+        r#"{"id":-1,"method":"getblockcount","params":[]}"#,
+        r#"{"id":1.5,"method":"getblockcount","params":[]}"#,
+        r#"{"id":18446744073709551616,"method":"getblockcount","params":[]}"#,
+        r#"{"id":true,"method":"sendrawtransaction","params":["00"]}"#,
+        r#"{"jsonrpc":"1.0","id":{},"method":"getblockcount","params":[]}"#,
+        r#"{"id":null,"method":"getblockcount","params":[]}"#,
+        r#"{"jsonrpc":"1.0","method":"getblockcount","params":[]}"#,
+        r#"{"id":8,"method":"getblockcount","params":[]}"#,
+    ];
+    let body = format!("[{}]", members.join(","));
+    let answer = batch_answer(&body, None, None).await.expect("an answer");
+    let invalid = json!({
+        "jsonrpc": "2.0",
+        "id": null,
+        "error": {"code": -32600, "message": "Invalid request"},
+    });
+    let mut expected = vec![invalid; members.len() - 1];
+    expected.push(ycashd_entry(
+        json!(8),
+        echoed("getblockcount", json!([])),
+        Value::Null,
+    ));
+    assert_eq!(answer, Value::Array(expected), "{answer}");
+}

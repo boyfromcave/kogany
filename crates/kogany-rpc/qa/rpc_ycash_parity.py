@@ -175,6 +175,13 @@ ACCEPTED = [
     ('batch', r'^\[\d+,1\.0\]\.jsonrpc$', 'zakura',
      'a member that says "jsonrpc":"1.0" gets it echoed, as a single lightwalletd request does; '
      'ycashd never writes the key'),
+    ('batch', r'^\[\d+,badid\](\.(jsonrpc|result|id)|!error)$', 'zakura',
+     'a 1.0 member whose id is not a JSON-RPC 2.0 id (negative, fractional, above u64, a boolean, '
+     'an object) gets -32600 Invalid request with id null and does not run; ycashd runs it and '
+     'answers with that id (review L1 of kogany #35)'),
+    ('batch', r'^\[\d+,nullid\](\.(jsonrpc|result)|!error)$', 'zakura',
+     'a 1.0 member with "id": null or no id gets -32600 Invalid request, as a single request of '
+     'that kind does; ycashd runs it and answers with id null (review L2/L4 of kogany #35)'),
 ]
 
 # The fields the clients read (survey B row 19; lightwalletd-dd common/common.go:74-140, yolo
@@ -268,18 +275,19 @@ class Node:
         return answer.get('result'), answer.get('error')
 
     def raw(self, body):
-        """Posts `body` as it is (a batch, say) and returns the parsed answer."""
+        """Posts `body` as it is (a batch, say) and returns (HTTP status, the parsed answer)."""
         req = urllib.request.Request('http://127.0.0.1:%d/' % self.port, body.encode(),
                                      {'Content-Type': 'application/json'})
         if self.auth:
             req.add_header('Authorization', 'Basic ' + base64.b64encode(self.auth.encode()).decode())
         try:
-            raw = urllib.request.urlopen(req, timeout=300).read()
+            answer = urllib.request.urlopen(req, timeout=300)
+            status, raw = answer.status, answer.read()
         except urllib.error.HTTPError as e:
-            raw = e.read()
+            status, raw = e.code, e.read()
         except (urllib.error.URLError, ConnectionError) as e:
             raise RpcError('%s: batch: %s' % (self.name, e))
-        return json.loads(raw)
+        return status, json.loads(raw)
 
     def ok(self, method, *params):
         result, error = self.call(method, *params)
@@ -470,6 +478,10 @@ def compare_batch(report, call, members, ya, za):
     the same keys and ids; then each answer's result or error as a single call's is.
     """
     report.calls += 1
+    (ystatus, ya), (zstatus, za) = ya, za
+    # ycashd answers every batch with HTTP 200, a failing member included (review L3).
+    if ystatus != 200 or zstatus != 200:
+        report.add('batch', call, '=status', 'value', ystatus, zstatus)
     if not (isinstance(ya, list) and isinstance(za, list)) or len(ya) != len(za) \
             or len(ya) != len(members):
         report.add('batch', call, '=answer', 'shape', ya, za)
@@ -484,7 +496,11 @@ def compare_batch(report, call, members, ya, za):
         if a.get('id') != b.get('id'):
             report.add('batch', call, '%s.id' % where, 'value', a.get('id'), b.get('id'))
         ra, rb = (a.get('result'), a.get('error')), (b.get('result'), b.get('error'))
-        if results:
+        if version in ('badid', 'nullid'):
+            # ycashd runs the member; kogany refuses it. Recorded, never compared further.
+            if bool(ra[1]) != bool(rb[1]) or (ra[1] or {}).get('code') != (rb[1] or {}).get('code'):
+                report.add('batch', call, '%s!error' % where, 'error', ra[1], rb[1])
+        elif results:
             report.compare(method, '%s %s' % (call, where), ra, rb)
         elif bool(ra[1]) != bool(rb[1]) or (ra[1] or {}).get('code') != (rb[1] or {}).get('code'):
             report.add(method, '%s %s' % (call, where), '!error', 'error', ra[1], rb[1])
@@ -524,6 +540,17 @@ def batch_parity(r, tip):
         ('getblockhash', '1.0', True)], r.y.raw(mixed), r.z.raw(mixed))
 
     compare_batch(r.report, 'empty', [], r.y.raw('[]'), r.z.raw('[]'))
+
+    # 1.0 members whose id is not a 2.0 id, and with a null or no id (review L1, L2/L4).
+    odd = ('[{"id":-1,"method":"getblockcount","params":[]},'
+           '{"id":true,"method":"getblockcount","params":[]},'
+           '{"id":null,"method":"getblockcount","params":[]},'
+           '{"jsonrpc":"1.0","method":"getblockcount","params":[]},'
+           '{"id":9,"method":"getblockcount","params":[]}]')
+    compare_batch(r.report, 'odd ids', [
+        ('getblockcount', 'badid', False), ('getblockcount', 'badid', False),
+        ('getblockcount', 'nullid', False), ('getblockcount', 'nullid', False),
+        ('getblockcount', 'bitcoind', True)], r.y.raw(odd), r.z.raw(odd))
 
 
 def start_ycashd(bindir, workdir, port, rpcport, mineraddress=None, pruned=False):
