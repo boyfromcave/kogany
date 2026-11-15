@@ -101,7 +101,9 @@ behaviours follow ycashd's there, each against Zakura's own:
   part of the other branch becomes the best chain, and the node takes the rest from its peers
   after step 6. `preciousblock`, which ycashd does not have, is an operator's override between
   tips of equal work only and is not asked the depth: it cannot move the node to a branch with
-  less work, and a branch with more work is the guard's.
+  less work, and a branch with more work is the guard's. The tip it moves the node to is the
+  tip the node is on, so with the backup on it is kept across a restart, where upstream Zakura
+  forgets the preference and comes back on the tip its hash order picks.
 
   *With the backup off* a node that is started without the record has only its finalized
   blocks: it has no tip to keep, and follows the chain with the most work its peers give it,
@@ -111,8 +113,9 @@ behaviours follow ycashd's there, each against Zakura's own:
   Proved by `crates/kogany-rpc/qa/reorg_parity.py` against ycashd (depths 99, 100, 101, the
   restarts, and the restart without the record), and in `zakura-state` by
   `running_writer_refuses_a_commit_that_rolls_back_100_blocks`,
-  `running_writer_refuses_a_reconsideration_that_rolls_back_100_blocks` and
-  `restored_best_chain_is_the_one_the_node_was_on`.
+  `running_writer_refuses_a_reconsideration_that_rolls_back_100_blocks`,
+  `restored_best_chain_is_the_one_the_node_was_on` and
+  `ycash_restart_keeps_the_tip_the_node_was_on`.
 - **Templates.** `getblocktemplate` has no limit on unpaid ZIP-317 actions by default, as ycashd's
   `-blockunpaidactionlimit` default (`SIZE_MAX`): a transaction that pays the relay fee but less
   than the conventional fee, such as a post-quantum owner spend, is mined.

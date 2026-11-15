@@ -4145,6 +4145,87 @@ async fn wait_for_verified_best(
     .expect("the waited-for snapshot is present")
 }
 
+/// kogany (beta3 R1): a restarted node is on the tip it stopped on, through a real restart of
+/// the state service. Two siblings tie on work; the node is moved to the one the tip hash does
+/// not pick, and stopped. The backup holds both and the tip the node was on, so the reopened
+/// state, its chain tip and the header chain's verified tip are all that tip. (Upstream, built
+/// without `ycash`, comes back on the other: `precious_block_preference_is_cleared_by_a_restart`.)
+#[cfg(feature = "ycash")]
+#[test]
+fn ycash_restart_keeps_the_tip_the_node_was_on() {
+    use crate::service::non_finalized_state::reorg_guard;
+
+    let _init_guard = zakura_test::init();
+    let limit = Duration::from_secs(10);
+    let network = Network::new_regtest(Default::default());
+    let cache_dir = tempfile::tempdir().expect("the state cache directory is created");
+    let config = Config {
+        cache_dir: cache_dir.path().to_owned(),
+        ephemeral: false,
+        enable_zakura_header_seed_from_committed_blocks: true,
+        ..Config::default()
+    };
+    let backup_dir = config
+        .non_finalized_state_backup_dir(&network)
+        .expect("the backup is on by default");
+    // The finalized tip is at the last checkpoint, so the restart restores the backup.
+    let max_checkpoint_height = Height(1);
+    // Each node run has its own runtime, as in the upstream test.
+    let node_run = || {
+        tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .expect("the node runtime starts")
+    };
+
+    let (by_hash, old_tip) = node_run().block_on(async {
+        let (mut state, read, _, _) =
+            StateService::new(config.clone(), &network, max_checkpoint_height, 0)
+                .await
+                .unwrap();
+        let siblings = commit_precious_siblings(&mut state, limit).await;
+        let (by_hash, old_tip) = (siblings[0].hash(), siblings[1].hash());
+        let mut snapshots = read.subscribe_header_chain_snapshots();
+        wait_for_verified_best(&mut snapshots, by_hash, limit).await;
+
+        timeout(limit, state.send_precious_block(old_tip))
+            .await
+            .unwrap()
+            .unwrap()
+            .unwrap();
+        assert_eq!(read.best_tip().unwrap().1, old_tip);
+        wait_for_verified_best(&mut snapshots, old_tip, limit).await;
+        wait_for_idle_writer(&state, limit).await;
+        assert_eq!(
+            reorg_guard::persisted_best_tip(&backup_dir),
+            read.best_tip(),
+            "the backup keeps the tip the node is on"
+        );
+        (by_hash, old_tip)
+    });
+    assert_ne!(by_hash, old_tip);
+
+    node_run().block_on(async {
+        let (_state, read, latest_chain_tip, _) =
+            StateService::new(config, &network, max_checkpoint_height, 0)
+                .await
+                .unwrap();
+        let restored = read.latest_non_finalized_state();
+        assert_eq!(
+            restored.chain_count(),
+            2,
+            "the backup restores both siblings"
+        );
+        assert_eq!(restored.best_tip().unwrap().1, old_tip);
+        assert_eq!(latest_chain_tip.best_tip_hash(), Some(old_tip));
+        let mut snapshots = read.subscribe_header_chain_snapshots();
+        wait_for_verified_best(&mut snapshots, old_tip, limit).await;
+    });
+}
+
+// kogany (beta3 R1): the Ycash build keeps the tip the node was on across a restart, so the
+// preferred tip is not cleared there (`ycash_restart_keeps_the_tip_the_node_was_on`).
+#[cfg(not(feature = "ycash"))]
 /// The preference is local. A restart from the same database and non-finalized backup clears
 /// it, so full state and the header chain both select the normal equal-work winner again.
 #[test]
