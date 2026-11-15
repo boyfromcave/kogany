@@ -922,9 +922,9 @@ POST content-type=Some("application/json")
 HTTP/1.1 200 OK
 content-type: application/json; charset=utf-8
 connection: close
-content-length: 463
+content-length: 466
 
-[{"jsonrpc":"2.0","id":1,"result":{"standard_fee":400,"version":0}},{"jsonrpc":"2.0","id":null,"error":{"code":-32600,"message":"Invalid request"}},{"jsonrpc":"2.0","id":5,"error":{"code":-32600,"message":"Invalid request"}},{"jsonrpc":"2.0","id":6,"error":{"code":-32600,"message":"Invalid request"}},{"jsonrpc":"2.0","id":null,"error":{"code":-32600,"message":"Invalid request"}},{"jsonrpc":"2.0","id":"last","error":{"code":-1,"message":"No blocks in state"}}]
+[{"jsonrpc":"2.0","id":1,"result":{"standard_fee":400,"version":0}},{"jsonrpc":"2.0","id":null,"error":{"code":-32600,"message":"Invalid request"}},{"jsonrpc":"2.0","id":5,"error":{"code":-32600,"message":"Invalid request"}},{"jsonrpc":"1.0","id":6,"result":{"standard_fee":400,"version":0},"error":null},{"jsonrpc":"2.0","id":null,"error":{"code":-32600,"message":"Invalid request"}},{"jsonrpc":"2.0","id":"last","error":{"code":-1,"message":"No blocks in state"}}]
 
 === empty batch
 POST content-type=Some("application/json")
@@ -933,9 +933,9 @@ POST content-type=Some("application/json")
 HTTP/1.1 200 OK
 content-type: application/json; charset=utf-8
 connection: close
-content-length: 79
+content-length: 2
 
-{"jsonrpc":"2.0","id":null,"error":{"code":-32600,"message":"Invalid request"}}
+[]
 
 === batch of notifications
 POST content-type=Some("application/json")
@@ -955,9 +955,9 @@ POST content-type=Some("application/json")
 HTTP/1.1 200 OK
 content-type: application/json; charset=utf-8
 connection: close
-content-length: 78
+content-length: 65
 
-[{"jsonrpc":"2.0","id":1,"error":{"code":-32600,"message":"Invalid request"}}]
+[{"id":1,"result":{"standard_fee":400,"version":0},"error":null}]
 
 === batch of a number
 POST content-type=Some("application/json")

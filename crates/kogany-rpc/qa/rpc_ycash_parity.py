@@ -18,7 +18,9 @@ calls of the two clients that read kogany through stock RPC (plan W1-Y6, survey 
   `z_gettreestate`, `getaddresstxids`, `getaddressbalance`, `getaddressutxos`;
 - yolo: `getblocktemplate`, `submitblock`, `validateaddress`, `getblockchaininfo`;
 
-and `getblocksubsidy`, and `z_validateaddress` for the Ycash address kinds.
+and `getblocksubsidy`, and `z_validateaddress` for the Ycash address kinds; then JSON-RPC batches
+(beta3 item 7): the two Inzyght sends, byte for byte, one with a failing member, a mixed 1.0/2.0
+batch and an empty batch, compared member by member.
 
 `--pruned` (workspace pruning assessment KP-1) runs the pruned pair instead: ycashd with `-prune=550`
 (allowed where Vault has no height; it refuses `-txindex`) and zakurad in Pruned storage mode at the
@@ -165,6 +167,14 @@ ACCEPTED = [
      r'sigsrequired|isscript)$', 'wallet', 'wallet fields, as in validateaddress'),
     ('validateaddress', r'\.isscript$', 'wallet',
      'ycashd sends isscript from its wallet only; Zakura always sends it'),
+    # Batches (beta3 item 7). A path is `[i,<version of member i>].<key>`. A bitcoind-style
+    # member (no "jsonrpc", Inzyght's) must be answered with ycashd's keys exactly.
+    ('batch', r'^\[\d+,2\.0\]\.(jsonrpc|result|error)$', 'zakura',
+     'a 2.0 member is answered in 2.0 ("jsonrpc":"2.0", result or error), as a single 2.0 '
+     'request is; ycashd answers every member with result, error and id'),
+    ('batch', r'^\[\d+,1\.0\]\.jsonrpc$', 'zakura',
+     'a member that says "jsonrpc":"1.0" gets it echoed, as a single lightwalletd request does; '
+     'ycashd never writes the key'),
 ]
 
 # The fields the clients read (survey B row 19; lightwalletd-dd common/common.go:74-140, yolo
@@ -256,6 +266,20 @@ class Node:
             raise RpcError('%s: %s: %s' % (self.name, method, e))
         answer = json.loads(raw)
         return answer.get('result'), answer.get('error')
+
+    def raw(self, body):
+        """Posts `body` as it is (a batch, say) and returns the parsed answer."""
+        req = urllib.request.Request('http://127.0.0.1:%d/' % self.port, body.encode(),
+                                     {'Content-Type': 'application/json'})
+        if self.auth:
+            req.add_header('Authorization', 'Basic ' + base64.b64encode(self.auth.encode()).decode())
+        try:
+            raw = urllib.request.urlopen(req, timeout=300).read()
+        except urllib.error.HTTPError as e:
+            raw = e.read()
+        except (urllib.error.URLError, ConnectionError) as e:
+            raise RpcError('%s: batch: %s' % (self.name, e))
+        return json.loads(raw)
 
     def ok(self, method, *params):
         result, error = self.call(method, *params)
@@ -437,6 +461,70 @@ class Report:
 
 
 # The run.
+
+def compare_batch(report, call, members, ya, za):
+    """Compares two answers to one batch, member by member (beta3 item 7).
+
+    `members` lists, for each member that gets an answer, (method, version, whether to compare
+    its result). The envelope is compared strictly: the same number of answers, in order, with
+    the same keys and ids; then each answer's result or error as a single call's is.
+    """
+    report.calls += 1
+    if not (isinstance(ya, list) and isinstance(za, list)) or len(ya) != len(za) \
+            or len(ya) != len(members):
+        report.add('batch', call, '=answer', 'shape', ya, za)
+        return
+    for i, (a, b, (method, version, results)) in enumerate(zip(ya, za, members)):
+        where = '[%d,%s]' % (i, version)
+        for key in list(a) + [k for k in b if k not in a]:
+            if key not in b:
+                report.add('batch', call, '%s.%s' % (where, key), 'ycash6 only', a[key], None)
+            elif key not in a:
+                report.add('batch', call, '%s.%s' % (where, key), 'kogany only', None, b[key])
+        if a.get('id') != b.get('id'):
+            report.add('batch', call, '%s.id' % where, 'value', a.get('id'), b.get('id'))
+        ra, rb = (a.get('result'), a.get('error')), (b.get('result'), b.get('error'))
+        if results:
+            report.compare(method, '%s %s' % (call, where), ra, rb)
+        elif bool(ra[1]) != bool(rb[1]) or (ra[1] or {}).get('code') != (rb[1] or {}).get('code'):
+            report.add(method, '%s %s' % (call, where), '!error', 'error', ra[1], rb[1])
+
+
+def batch_parity(r, tip):
+    """JSON-RPC batches against both nodes (beta3 item 7): Inzyght's, byte for byte, a batch
+    with a failing member, a mixed 1.0/2.0 batch and an empty batch."""
+    # Inzyght's chain-state refresh (BlockchainState.cc update_state_on_block_event).
+    state = ('[{"id":1,"method":"getblockchaininfo","params":[]},'
+             '{"id":2,"method":"getnetworkinfo","params":[]},'
+             '{"id":3,"method":"getpeerinfo","params":[]},'
+             '{"id":4,"method":"getmininginfo","params":[]},'
+             '{"id":5,"method":"getrawmempool","params":[true]}]')
+    compare_batch(r.report, 'inzyght state', [
+        ('getblockchaininfo', 'bitcoind', True), ('getnetworkinfo', 'bitcoind', False),
+        ('getpeerinfo', 'bitcoind', False), ('getmininginfo', 'bitcoind', False),
+        ('getrawmempool', 'bitcoind', False)], r.y.raw(state), r.z.raw(state))
+
+    # Inzyght's block reads (ycash_rpc_client.cc batch_get_block_headers: the id is the height),
+    # with one height past the tip: the failing member.
+    heights = [1, 2, tip, tip + 1000]
+    blocks = '[%s]' % ','.join('{"id":%d,"method":"getblock","params":["%d",1]}' % (h, h)
+                               for h in heights)
+    compare_batch(r.report, 'inzyght getblock', [('getblock', 'bitcoind', True)] * len(heights),
+                  r.y.raw(blocks), r.z.raw(blocks))
+
+    # Mixed: bitcoind-style, lightwalletd-style and 2.0 members, and a method neither node has.
+    mixed = ('[{"method":"getblockcount","params":[],"id":1},'
+             '{"jsonrpc":"1.0","method":"getbestblockhash","params":[],"id":"lwd"},'
+             '{"jsonrpc":"2.0","method":"getblockcount","params":[],"id":3},'
+             '{"method":"nosuchmethod","params":[],"id":4},'
+             '{"jsonrpc":"1.0","method":"getblockhash","params":[2],"id":5}]')
+    compare_batch(r.report, 'mixed', [
+        ('getblockcount', 'bitcoind', True), ('getbestblockhash', '1.0', True),
+        ('getblockcount', '2.0', True), ('nosuchmethod', 'bitcoind', True),
+        ('getblockhash', '1.0', True)], r.y.raw(mixed), r.z.raw(mixed))
+
+    compare_batch(r.report, 'empty', [], r.y.raw('[]'), r.z.raw('[]'))
+
 
 def start_ycashd(bindir, workdir, port, rpcport, mineraddress=None, pruned=False):
     datadir = os.path.join(workdir, 'ycashd')
@@ -740,6 +828,7 @@ def run(args):
         r.both('submitblock', '00')
         r.template()
         r.both('getblockchaininfo')
+        batch_parity(r, tip)
     finally:
         for p in reversed(procs):
             stop(p)
