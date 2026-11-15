@@ -1034,6 +1034,31 @@ impl ValidateContextError {
         }
     }
 
+    /// kogany (beta3 R3): the three contextual header verdicts, target first as the Ycash build
+    /// checks them, for tests outside this crate (the variants are `#[non_exhaustive]`;
+    /// `service::check` builds them in this crate).
+    #[cfg(all(feature = "ycash", any(test, feature = "proptest-impl")))]
+    pub fn contextual_header_errors_for_test() -> [Self; 3] {
+        use zakura_chain::{parameters::Network, work::difficulty::ParameterDifficulty as _};
+
+        let time = DateTime::<Utc>::UNIX_EPOCH;
+        let target = Network::Mainnet.target_difficulty_limit().to_compact();
+        [
+            Self::InvalidDifficultyThreshold {
+                difficulty_threshold: target,
+                expected_difficulty: target,
+            },
+            Self::TimeTooEarly {
+                candidate_time: time,
+                median_time_past: time,
+            },
+            Self::TimeTooLate {
+                candidate_time: time,
+                block_time_max: time,
+            },
+        ]
+    }
+
     /// Classify contextual validation without conflating peer data and local availability.
     pub fn body_verification_class(&self) -> zakura_header_chain::BodyVerificationClass {
         use zakura_chain::block::CommitmentError;

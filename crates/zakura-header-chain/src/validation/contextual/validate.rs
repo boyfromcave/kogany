@@ -54,6 +54,14 @@ pub fn validate_contextual_difficulty_and_time(
         .activation_height(&network)
         .expect("Zakura always has a genesis height available");
 
+    // kogany (beta3 R3): ycashd checks `nBits` (`bad-diffbits`) before the two median-time-past
+    // rules (`time-too-old`, `time-too-far-ahead-of-mtp`), ycash6 `src/main.cpp:6129-6153`, so a
+    // header wrong in both is refused for its target. The rules are independent: the set of
+    // accepted headers is unchanged, only the reason reported. The check after the time rules
+    // below is upstream's and then never fails.
+    #[cfg(feature = "ycash")]
+    validate_difficulty_threshold(difficulty_threshold, &difficulty_adjustment, &network)?;
+
     if candidate_time <= median_time_past && candidate_height != genesis_height {
         return Err(ContextualValidationError::TimeTooEarly {
             candidate_time,
@@ -75,6 +83,34 @@ pub fn validate_contextual_difficulty_and_time(
         });
     }
 
+    if network.disable_pow() {
+        if difficulty_threshold.to_work().is_none() {
+            return Err(ContextualValidationError::InvalidDifficultyThreshold {
+                difficulty_threshold,
+                expected_difficulty: network.target_difficulty_limit().to_compact(),
+            });
+        }
+    } else {
+        let expected_difficulty = difficulty_adjustment.expected_difficulty_threshold();
+        if difficulty_threshold != expected_difficulty {
+            return Err(ContextualValidationError::InvalidDifficultyThreshold {
+                difficulty_threshold,
+                expected_difficulty,
+            });
+        }
+    }
+
+    Ok(())
+}
+
+/// kogany (beta3 R3): the compact-target rule of [`validate_contextual_difficulty_and_time`],
+/// as that function states it, for the Ycash order (target before the median-time-past rules).
+#[cfg(feature = "ycash")]
+fn validate_difficulty_threshold(
+    difficulty_threshold: CompactDifficulty,
+    difficulty_adjustment: &AdjustedDifficulty,
+    network: &Network,
+) -> Result<(), ContextualValidationError> {
     if network.disable_pow() {
         if difficulty_threshold.to_work().is_none() {
             return Err(ContextualValidationError::InvalidDifficultyThreshold {

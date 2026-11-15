@@ -327,6 +327,58 @@ fn header_daa_rejects_bad_threshold_with_full_context() {
     .expect_err("unexpected DAA threshold is rejected");
 }
 
+/// kogany (beta3 R3, decision note `reorg-parity.md` T2): the commit path reports a header wrong
+/// in both its compact target and its time as ycashd does, target first (`bad-diffbits`, ycash6
+/// `src/main.cpp:6129-6133`, before `time-too-old`, `:6136-6140`); upstream reports the time.
+#[test]
+fn header_wrong_in_target_and_time_reports_the_ycashd_reason() {
+    let _init_guard = zakura_test::init();
+
+    let network = Network::Mainnet;
+    let previous_block_height = block::Height(99);
+    let context_time = DateTime::from_timestamp(15_000, 0).expect("test timestamp is in-range");
+    let relevant_headers = daa_context(&network, previous_block_height, context_time);
+    // The median-time-past is the median of the eleven latest times: the eleventh is below it.
+    let below_median_time_past = relevant_headers[10].1;
+    let mut candidate = *zakura_test::vectors::BLOCK_MAINNET_1_BYTES
+        .zcash_deserialize_into::<Arc<Block>>()
+        .expect("block 1 deserializes")
+        .header
+        .as_ref();
+    candidate.difficulty_threshold = network.target_difficulty_limit().to_compact();
+
+    // Wrong in the target only: the same reason in both orders.
+    candidate.time = context_time;
+    assert!(matches!(
+        header_is_valid_for_recent_chain(
+            &candidate,
+            previous_block_height,
+            &network,
+            relevant_headers.clone(),
+        ),
+        Err(ValidateContextError::InvalidDifficultyThreshold { .. })
+    ));
+
+    // Wrong in both.
+    candidate.time = below_median_time_past;
+    let result = header_is_valid_for_recent_chain(
+        &candidate,
+        previous_block_height,
+        &network,
+        relevant_headers,
+    );
+    #[cfg(feature = "ycash")]
+    assert!(matches!(
+        result,
+        Err(ValidateContextError::InvalidDifficultyThreshold { .. })
+    ));
+    #[cfg(not(feature = "ycash"))]
+    assert!(matches!(
+        result,
+        Err(ValidateContextError::TimeTooEarly { .. })
+    ));
+}
+
 #[test]
 fn height_one_header_skips_max_time_limit_but_later_mainnet_headers_do_not() {
     let _init_guard = zakura_test::init();
