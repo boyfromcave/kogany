@@ -240,13 +240,15 @@ impl CoinbasePlan {
             })
             .collect::<Vec<_>>();
 
-        // Ycash (W1-Y6): the YDF output ycashd's miner adds; Ycash has no funding streams or
+        // Ycash (W1-Y6): the YDF output ycashd's miner adds (required until the mandate ends,
+        // then the node's `mining.ydf` share, none by default); Ycash has no funding streams or
         // lockbox, so it is the only one.
         #[cfg(feature = "ycash")]
         funding_stream_outputs.extend(
-            super::ycash::ydf_output(net, height, block_subsidy).and_then(|(amount, addr)| {
-                Some((Zatoshis::try_from(amount).ok()?, addr.try_into().ok()?))
-            }),
+            super::ycash::ydf_output(net, height, block_subsidy, miner_params.ydf_percentage())
+                .and_then(|(amount, addr)| {
+                    Some((Zatoshis::try_from(amount).ok()?, addr.try_into().ok()?))
+                }),
         );
 
         funding_stream_outputs.sort_unstable();
@@ -400,8 +402,13 @@ impl TransactionTemplate<NegativeOrZero> {
         let miner_reward = miner_subsidy(height, net, block_subsidy)? + miner_fees;
         // Ycash (W1-Y6): the optional post-mandate YDF output also comes out of the miner's share.
         #[cfg(feature = "ycash")]
-        let miner_reward =
-            miner_reward? - super::ycash::optional_ydf_share(net, height, block_subsidy);
+        let miner_reward = miner_reward?
+            - super::ycash::optional_ydf_share(
+                net,
+                height,
+                block_subsidy,
+                miner_params.ydf_percentage(),
+            );
         let miner_reward = Zatoshis::try_from(miner_reward?)?;
 
         let mut builder = Builder::new(

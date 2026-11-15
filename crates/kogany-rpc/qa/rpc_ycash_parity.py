@@ -22,6 +22,13 @@ and `getblocksubsidy`, and `z_validateaddress` for the Ycash address kinds; then
 (beta3 item 7): the two Inzyght sends, byte for byte, one with a failing member, a mixed 1.0/2.0
 batch and an empty batch, compared member by member.
 
+`--ydf N` starts both nodes with that development-fund share (ycashd `-ydf=N`, koganyd
+`mining.ydf = N`; beta3 item 4). Without it both run at their default, 0: past the regtest mandate
+(height 5) a template pays the miner the whole subsidy and every fee and `getblocksubsidy` reports
+`founders` 0. With `--ydf 5` both add the 5 % output; with a value outside 0..100 both reset to 0.
+Each kogany template past the mandate is also checked directly against the effective share. The
+ycashd under test must carry the 0 default (ycash6 #125, 88b696287, or later).
+
 `--pruned` (workspace pruning assessment KP-1) runs the pruned pair instead: ycashd with `-prune=550`
 (allowed where Vault has no height; it refuses `-txindex`) and zakurad in Pruned storage mode at the
 regtest floor (`tx_retention = 1001`), a few blocks, and `getblockchaininfo` compared with `pruned`
@@ -526,7 +533,13 @@ def batch_parity(r, tip):
     compare_batch(r.report, 'empty', [], r.y.raw('[]'), r.z.raw('[]'))
 
 
-def start_ycashd(bindir, workdir, port, rpcport, mineraddress=None, pruned=False):
+def effective_ydf(ydf):
+    """The share both nodes use for a configured one: outside 0..100 it is reset to the default,
+    0 (ycash6 src/init.cpp; kogany `mining::Config::ydf_percentage`)."""
+    return ydf if ydf is not None and 0 <= ydf <= 100 else 0
+
+
+def start_ycashd(bindir, workdir, port, rpcport, mineraddress=None, pruned=False, ydf=None):
     datadir = os.path.join(workdir, 'ycashd')
     os.makedirs(datadir, exist_ok=True)
     with open(os.path.join(datadir, 'ycash.conf'), 'w') as f:
@@ -541,15 +554,18 @@ def start_ycashd(bindir, workdir, port, rpcport, mineraddress=None, pruned=False
     args += ['-nuparams=%s:1' % b for b in NUPARAMS]
     if mineraddress:
         args.append('-mineraddress=' + mineraddress)
+    if ydf is not None:
+        args.append('-ydf=%d' % ydf)
     log = open(os.path.join(workdir, 'ycashd.out'), 'a')
     return subprocess.Popen(args, stdout=log, stderr=subprocess.STDOUT)
 
 
-def zakurad_toml(workdir, p2p, rpc, v2, miner_address, pruned=False):
+def zakurad_toml(workdir, p2p, rpc, v2, miner_address, pruned=False, ydf=None):
     root = os.path.join(workdir, 'zakurad')
     heights = '\n'.join('%s = 1' % k for k in ACTIVATION_KEYS)
     # Zakura's Pruned mode at its regtest floor (MAX_BLOCK_REORG_HEIGHT + 1)
     storage = '\n[state.storage_mode.pruned]\ntx_retention = 1001\n' if pruned else ''
+    ydf_line = '' if ydf is None else 'ydf = %d\n' % ydf
     return '''[network]
 listen_addr = "127.0.0.1:{p2p}"
 initial_testnet_peers = []
@@ -581,11 +597,12 @@ debug_enable_at_height = 0
 [mining]
 internal_miner = false
 miner_address = "{miner}"
-
+{ydf_line}
 [tracing]
 use_color = false
 filter = "info"
-'''.format(p2p=p2p, rpc=rpc, v2=v2, root=root, heights=heights, miner=miner_address, storage=storage)
+'''.format(p2p=p2p, rpc=rpc, v2=v2, root=root, heights=heights, miner=miner_address, storage=storage,
+           ydf_line=ydf_line)
 
 
 def start_zakurad(binary, workdir, toml):
@@ -606,8 +623,9 @@ def stop(proc):
 
 
 class Run:
-    def __init__(self, y, z, report):
+    def __init__(self, y, z, report, ydf=None):
         self.y, self.z, self.report = y, z, report
+        self.ydf = effective_ydf(ydf)
 
     def both(self, method, *params):
         self.report.compare(method, json.dumps(list(params))[:60], self.y.call(method, *params),
@@ -641,6 +659,7 @@ class Run:
         self.report.compare('getblocktemplate', call, (ty, None), (tz, None))
         cy, cz = decode_coinbase(ty['coinbasetxn']['data']), decode_coinbase(tz['coinbasetxn']['data'])
         self.report.compare('getblocktemplate', call, ({'coinbase': cy}, None), ({'coinbase': cz}, None))
+        self.check_fund_share(call, tz, cz)
         block = block_from_template(tz)
         for node in (self.y, self.z):
             verdict, error = node.call('getblocktemplate', {'mode': 'proposal', 'data': block})
@@ -649,6 +668,25 @@ class Run:
                 self.report.add('getblocktemplate', call, '.proposal(%s)' % node.name, 'refused',
                                 None, error or verdict)
         return ty, tz
+
+
+    def check_fund_share(self, call, tz, cz):
+        """Past the mandate kogany's coinbase carries the node's own share and nothing else: at
+        the default 0 one output, the whole subsidy and every fee to the miner; at n > 0 a second
+        output of subsidy * n / 100. Checked from the template alone, not against ycashd."""
+        if tz['height'] < YDF_MANDATE_END:
+            return
+        self.report.calls += 1
+        outputs = cz['outputs']
+        fees = sum(tx['fee'] for tx in tz['transactions'])
+        subsidy = sum(o['value'] for o in outputs) - fees
+        want = [subsidy - subsidy * self.ydf // 100 + fees]
+        if subsidy * self.ydf // 100:
+            want.append(subsidy * self.ydf // 100)
+        got = [o['value'] for o in outputs]
+        if got != want or 'foundersreward' in tz['coinbasetxn']:
+            self.report.add('getblocktemplate', call, '.coinbase.outputs(ydf %d)' % self.ydf,
+                            'not the configured share', want, got)
 
 
 def wait_balance(y, amount, timeout=30):
@@ -726,15 +764,17 @@ def run(args):
         miner = y.ok('getnewaddress')
         y.ok('stop')
         procs[-1].wait(60)
-        procs[-1] = start_ycashd(args.ycash6_bin, workdir, base, base + 1, miner)
+        procs[-1] = start_ycashd(args.ycash6_bin, workdir, base, base + 1, miner, ydf=args.ydf)
         wait_up(y, procs[-1], 'ycashd')
-        procs.append(start_zakurad(args.zakurad, workdir, zakurad_toml(workdir, base + 10, base + 11, base + 12, miner)))
+        procs.append(start_zakurad(args.zakurad, workdir,
+                                   zakurad_toml(workdir, base + 10, base + 11, base + 12, miner, ydf=args.ydf)))
         wait_up(z, procs[-1], 'zakurad')
 
-        r = Run(y, z, report)
+        r = Run(y, z, report, args.ydf)
         r.both('getblockchaininfo')
 
-        # Templates across the mandatory YDF (heights 2-4) and the optional one (5 on). ycashd
+        # Templates across the mandatory YDF (heights 2-4) and the optional one (5 on: none at
+        # the default, the configured share with --ydf). ycashd
         # serves no template at the genesis tip: a 2011 genesis keeps it in initial block
         # download (-10) until the first block.
         r.mine()
@@ -846,6 +886,8 @@ def main(argv=None):
     ap.add_argument('--keep', action='store_true', help='keep the temporary directory')
     ap.add_argument('--port-base', type=int, default=28500)
     ap.add_argument('--json', help='write the difference table here')
+    ap.add_argument('--ydf', type=int,
+                    help='the development-fund share both nodes are started with (default: unset, 0)')
     ap.add_argument('--pruned', action='store_true',
                     help='the pruned pair: ycashd -prune=550, zakurad Pruned mode (KP-1)')
     args = ap.parse_args(argv)

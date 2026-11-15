@@ -4569,12 +4569,18 @@ where
 
         let miner = miner_subsidy(height, &net, subsidy).map_misc_error()?;
         let founders = founders_reward(&net, height);
-        // Ycash (W1-Y6): `founders` is the founders' or YDF share ycashd's miner pays, and
-        // `miner` the rest, including the optional post-mandate YDF.
+        // Ycash (W1-Y6): `founders` is the founders' or YDF share ycashd's miner pays (after the
+        // mandate, the share this node's `mining.ydf` donates, default 0), and `miner` the rest.
         #[cfg(feature = "ycash")]
-        let (miner, founders) =
-            types::ycash::subsidy_fields(&net, height, subsidy, miner, founders)
-                .map_misc_error()?;
+        let (miner, founders) = types::ycash::subsidy_fields(
+            &net,
+            height,
+            subsidy,
+            miner,
+            founders,
+            self.gbt.ydf_percentage(),
+        )
+        .map_misc_error()?;
 
         Ok(GetBlockSubsidyResponse {
             miner: miner.into(),

@@ -95,6 +95,28 @@ pub struct Config {
     #[cfg(feature = "ycash")]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub block_unpaid_action_limit: Option<u32>,
+
+    /// Ycash: the share of the block subsidy, in percent, that a block this node builds donates
+    /// to the Ycash Development Fund (YDF) after the fund's mandate ends, ycashd's `-ydf=<n>`
+    /// (`ycash6 src/init.cpp`, `src/miner.cpp`). The default is 0: the miner is paid the whole
+    /// subsidy and every fee; a miner who donates sets `ydf = 5`. Before the mandate ends the
+    /// 5 % output is a consensus rule and is built whatever this says.
+    ///
+    /// A value outside 0..=100 is reset to the default and logged, as ycashd does
+    /// ([`Self::ydf_percentage`]).
+    #[cfg(feature = "ycash")]
+    #[serde(skip_serializing_if = "is_default_ydf")]
+    pub ydf: i64,
+}
+
+/// The default of [`Config::ydf`]: no donation after the mandate ends
+/// (`DEFAULT_YDF_FEE_PERCENTAGE`, `ycash6 src/consensus/consensus.h`).
+#[cfg(feature = "ycash")]
+pub const DEFAULT_YDF_FEE_PERCENTAGE: u64 = 0;
+
+#[cfg(feature = "ycash")]
+fn is_default_ydf(value: &i64) -> bool {
+    u64::try_from(*value) == Ok(DEFAULT_YDF_FEE_PERCENTAGE)
 }
 
 #[cfg(feature = "ycash")]
@@ -158,11 +180,25 @@ impl Default for Config {
             yellowback_payout_address: None,
             #[cfg(feature = "ycash")]
             block_unpaid_action_limit: None,
+            #[cfg(feature = "ycash")]
+            ydf: 0,
         }
     }
 }
 
 impl Config {
+    /// Ycash: the post-mandate YDF share in percent that this node's coinbases and
+    /// `getblocksubsidy` use: [`Self::ydf`], or the default when it is outside 0..=100, as
+    /// ycashd resets an invalid `-ydf` at startup (`ycash6 src/init.cpp`, "invalid -ydf setting
+    /// detected, forced to default").
+    #[cfg(feature = "ycash")]
+    pub fn ydf_percentage(&self) -> u64 {
+        match u64::try_from(self.ydf) {
+            Ok(percentage) if percentage <= 100 => percentage,
+            _ => DEFAULT_YDF_FEE_PERCENTAGE,
+        }
+    }
+
     /// Is the internal miner enabled using at least one thread?
     #[cfg(feature = "internal-miner")]
     pub fn is_internal_miner_enabled(&self) -> bool {
@@ -360,5 +396,32 @@ mod tests {
             .unwrap()
             .contains("yellowback_payout_address"));
         assert!(toml::from_str::<Config>("yellowback_payout_address = 'invalid'").is_err());
+    }
+
+    /// `ydf` (ycashd `-ydf=<n>`): 0 by default and then not written; 0..=100 is taken as given;
+    /// anything else is reset to the default, as ycashd's init does, and never fails the start.
+    #[cfg(feature = "ycash")]
+    #[test]
+    fn ycash_ydf_defaults_to_zero_and_resets_out_of_range() {
+        assert_eq!(Config::default().ydf, 0);
+        assert_eq!(Config::default().ydf_percentage(), 0);
+        assert!(!toml::to_string(&Config::default()).unwrap().contains("ydf"));
+        for (text, percentage) in [
+            ("ydf = 0", 0),
+            ("ydf = 1", 1),
+            ("ydf = 5", 5),
+            ("ydf = 100", 100),
+            ("ydf = 101", 0),
+            ("ydf = -1", 0),
+            ("ydf = 9223372036854775807", 0),
+        ] {
+            let config: Config = toml::from_str(text).unwrap();
+            assert_eq!(config.ydf_percentage(), percentage, "{text}");
+            assert_eq!(
+                toml::from_str::<Config>(&toml::to_string(&config).unwrap()).unwrap(),
+                config
+            );
+        }
+        assert!(toml::from_str::<Config>("ydf = 'five'").is_err());
     }
 }
