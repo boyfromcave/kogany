@@ -1713,7 +1713,17 @@ fn receipt_fallback_and_backup_restore_ignore_replay_order() {
             backup.path(),
             &finalized.db,
         );
+        // kogany (beta3 R1): the Ycash build keeps the best tip with the backup, so the restored
+        // best chain is the one the state had, not the one the tip hash picks.
+        #[cfg(not(feature = "ycash"))]
         assert_eq!(restored.best_tip().unwrap().1, high.hash());
+        #[cfg(feature = "ycash")]
+        {
+            use crate::service::non_finalized_state::reorg_guard::best_tip_path;
+
+            assert_eq!(restored.best_tip().unwrap().1, expected);
+            std::fs::remove_file(best_tip_path(backup.path())).unwrap();
+        }
         assert!(restored.chain_iter().all(|chain| chain
             .tip_block()
             .unwrap()
@@ -1967,7 +1977,219 @@ fn reorg_refusal_is_recorded_beside_the_state_database() {
     assert_eq!(path, refusal_path(db_dir.path()));
     assert_eq!(path, db_dir.path().join("ycash-reorg-refused"));
     assert_eq!(recorded(db_dir.path()).as_deref(), Some("refused"));
+    // The record is renamed into place from a temporary file: only the record is left.
+    let names: Vec<_> = std::fs::read_dir(db_dir.path())
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name())
+        .collect();
+    assert_eq!(names, ["ycash-reorg-refused"]);
+    // A second refusal replaces the first.
+    record(db_dir.path(), "refused again").expect("the record is replaced");
+    assert_eq!(recorded(db_dir.path()).as_deref(), Some("refused again"));
 
+    // A record with no message still keeps the node down, and says what to do.
+    for contents in [&b""[..], b" \n", &[0xff, 0xfe][..]] {
+        std::fs::write(&path, contents).unwrap();
+        let message = recorded(db_dir.path()).expect("the record still counts");
+        assert!(
+            message.contains(&path.display().to_string())
+                && message.contains("more than 99 blocks")
+                && message.contains("remove the file"),
+            "{message}"
+        );
+    }
+    // A half-written temporary file is not a record.
     std::fs::remove_file(&path).expect("the operator removes the record");
+    std::fs::write(db_dir.path().join("ycash-reorg-refused.tmp"), "refu").unwrap();
     assert_eq!(recorded(db_dir.path()), None);
+}
+
+/// kogany (beta3 R1): a restart does not undo the guard. Restored blocks have no receipt order,
+/// so two restored chains with the same work are ordered by tip hash; the best tip kept with
+/// the backup makes the restored best chain the one the node was on, and a restore that would
+/// roll back more than 99 blocks from that tip is refused and recorded as at run time.
+#[cfg(feature = "ycash")]
+#[test]
+fn restored_best_chain_is_the_one_the_node_was_on() -> Result<()> {
+    use crate::service::non_finalized_state::{
+        backup::restore_backup,
+        reorg_guard::{best_tip_path, persisted_best_tip, recorded, refusal_path},
+    };
+
+    let _init_guard = zakura_test::init();
+    let network = Network::Mainnet;
+    let root: Arc<Block> = Arc::new(network.test_block(653599, 583999).unwrap());
+    let scratch = tempfile::tempdir().expect("a temporary directory");
+
+    // Two branches of `depth` blocks from `root`; every block has the same work, except the
+    // last of the second branch when it is `heavier`. Returns the state and the two tips.
+    let branches = |depth: u32, heavier: bool, finalized_state: &FinalizedState| {
+        let mut state = NonFinalizedState::new(&network);
+        state
+            .commit_new_chain(root.clone().prepare(), finalized_state)
+            .unwrap();
+        let mut tips = [root.clone(), root.clone()];
+        for height in 1..=depth {
+            for (branch, tip) in tips.iter_mut().enumerate() {
+                let work = if heavier && branch == 1 && height == depth {
+                    20
+                } else {
+                    10
+                };
+                *tip = tip
+                    .make_fake_child()
+                    .set_work(work)
+                    .set_block_commitment([u8::try_from(branch).unwrap() + 1; 32]);
+                let mut prepared = tip.clone().prepare();
+                // The first branch is received first.
+                prepared.receipt_order =
+                    Some(u64::from(height) * 2 + u64::try_from(branch).unwrap());
+                state.commit_block(prepared, finalized_state).unwrap();
+            }
+        }
+        (state, tips)
+    };
+    let new_finalized_state = || {
+        let finalized_state = FinalizedState::new(&Config::ephemeral(), &network)
+            .expect("opening an ephemeral database should succeed");
+        finalized_state
+            .set_finalized_value_pool(ValueBalance::<NonNegative>::fake_populated_pool());
+        finalized_state
+    };
+    let backup_dir = |name: &str| {
+        let dir = scratch.path().join(name);
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    };
+    let restore = |dir: &std::path::Path, finalized_state: &FinalizedState| {
+        restore_backup(NonFinalizedState::new(&network), dir, &finalized_state.db)
+    };
+
+    // A tie 100 blocks deep: the node was on the branch it received first.
+    let finalized_state = new_finalized_state();
+    let (state, [first, second]) = branches(100, false, &finalized_state);
+    let old_tip = state.best_tip().unwrap();
+    assert_eq!(old_tip.1, first.hash());
+    let by_hash = if first.hash().0 > second.hash().0 {
+        first.hash()
+    } else {
+        second.hash()
+    };
+    // Each branch in turn is the one the node was on, so one of the two is the branch the tip
+    // hash would not pick.
+    for preferred in [&first, &second] {
+        let mut state = state.clone();
+        state
+            .precious_block(preferred.hash(), &finalized_state.db)
+            .unwrap();
+        let old_tip = state.best_tip().unwrap();
+        assert_eq!(old_tip.1, preferred.hash());
+
+        let dir = backup_dir(&format!("tie-{}", preferred.hash()));
+        state.write_to_backup(&dir);
+        assert_eq!(persisted_best_tip(&dir), Some(old_tip));
+        assert_eq!(
+            std::fs::read_to_string(best_tip_path(&dir)).unwrap(),
+            format!("{} {}\n", old_tip.0 .0, old_tip.1)
+        );
+        let restored = restore(&dir, &finalized_state);
+        assert_eq!(restored.chain_count(), 2);
+        assert_eq!(restored.best_tip(), Some(old_tip), "the node's own tip");
+        assert_eq!(recorded(finalized_state.db.path()), None);
+        // Restored again, as at the next restart: the same tip.
+        assert_eq!(restore(&dir, &finalized_state).best_tip(), Some(old_tip));
+
+        // Without the kept tip (a backup written before this guard) the tip hash decides, and
+        // the tip is kept from then on.
+        std::fs::remove_file(best_tip_path(&dir)).unwrap();
+        let restored = restore(&dir, &finalized_state);
+        assert_eq!(restored.best_tip().unwrap().1, by_hash);
+        assert_eq!(persisted_best_tip(&dir), restored.best_tip());
+
+        // A kept tip that names no restored block: the same, and it is replaced.
+        std::fs::write(
+            best_tip_path(&dir),
+            format!("{} {}\n", old_tip.0 .0, block::Hash([7; 32])),
+        )
+        .unwrap();
+        let restored = restore(&dir, &finalized_state);
+        assert_eq!(restored.best_tip().unwrap().1, by_hash);
+        assert_eq!(persisted_best_tip(&dir), restored.best_tip());
+
+        // A file that is not a height and a hash is no tip.
+        std::fs::write(best_tip_path(&dir), "not a tip").unwrap();
+        assert_eq!(persisted_best_tip(&dir), None);
+        assert_eq!(
+            restore(&dir, &finalized_state).best_tip().unwrap().1,
+            by_hash
+        );
+    }
+
+    // One chain needs no tip: the file goes when the other branch does.
+    let dir = backup_dir("one-chain");
+    state.write_to_backup(&dir);
+    assert!(best_tip_path(&dir).exists());
+    let mut one_chain = NonFinalizedState::new(&network);
+    one_chain
+        .commit_new_chain(root.clone().prepare(), &finalized_state)
+        .unwrap();
+    let child = root.make_fake_child().set_work(10);
+    one_chain
+        .commit_block(child.clone().prepare(), &finalized_state)
+        .unwrap();
+    assert_eq!(one_chain.chain_count(), 1);
+    one_chain.write_to_backup(&dir);
+    assert!(!best_tip_path(&dir).exists());
+    assert_eq!(
+        restore(&dir, &finalized_state).best_tip().unwrap().1,
+        child.hash()
+    );
+    assert!(!best_tip_path(&dir).exists());
+
+    // More work on the other branch, and a kept tip on the first: a reorganisation from the
+    // node's tip. 99 blocks back it is followed; 100 back it is refused and recorded, and the
+    // node starts with no restored block, so the writer stops it before a reader sees one.
+    for depth in [99_u32, 100] {
+        let finalized_state = new_finalized_state();
+        let (state, [first, second]) = branches(depth, true, &finalized_state);
+        assert_eq!(state.best_tip().unwrap().1, second.hash());
+        let dir = backup_dir(&format!("heavier-{depth}"));
+        state.write_to_backup(&dir);
+        let first_height = first.coinbase_height().unwrap();
+        std::fs::write(
+            best_tip_path(&dir),
+            format!("{} {}\n", first_height.0, first.hash()),
+        )
+        .unwrap();
+
+        let restored = restore(&dir, &finalized_state);
+        let record = recorded(finalized_state.db.path());
+        if depth <= 99 {
+            assert_eq!(restored.best_tip().unwrap().1, second.hash());
+            assert_eq!(record, None);
+            assert_eq!(persisted_best_tip(&dir), restored.best_tip());
+        } else {
+            assert_eq!(restored.chain_count(), 0, "no restored block is shown");
+            let record = record.expect("the refusal is recorded");
+            assert!(
+                record.starts_with(
+                    "A block chain reorganization has been detected that would roll back 100 \
+                     blocks! This is larger than the maximum of 99 blocks"
+                ),
+                "{record}"
+            );
+            assert!(record.contains(&format!(
+                "- Current tip: {}, height {}",
+                first.hash(),
+                first_height.0
+            )));
+            assert!(record.contains(&format!("- New tip:     {}", second.hash())));
+            assert!(record.contains(&format!("- Fork point:  {}", root.hash())));
+            // The backup and its tip are left for the operator.
+            assert_eq!(persisted_best_tip(&dir), Some((first_height, first.hash())));
+            std::fs::remove_file(refusal_path(finalized_state.db.path())).unwrap();
+        }
+    }
+
+    Ok(())
 }
