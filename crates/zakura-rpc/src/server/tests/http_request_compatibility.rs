@@ -159,3 +159,285 @@ async fn ycash_one_point_zero_null_absent_and_empty_params_are_no_arguments() {
         assert_eq!(json["error"], serde_json::Value::Null, "{body}: {json}");
     }
 }
+
+/// Ycash (beta3 item 7): an RPC service for batch tests. It answers a call with its method and
+/// parameters, `nosuchmethod` with `Method not found`, and `getblock` past the tip with ycashd's
+/// `Block height out of range`.
+#[cfg(feature = "ycash")]
+#[derive(Clone)]
+struct EchoRpc;
+
+#[cfg(feature = "ycash")]
+impl crate::server::rpc_service::RpcServiceT for EchoRpc {
+    fn call<'a>(
+        &self,
+        request: crate::server::jsonrpc::Request<'a>,
+    ) -> impl Future<Output = crate::server::jsonrpc::MethodResponse> + Send + 'a {
+        use crate::server::jsonrpc::{ErrorCode, ErrorObject, MethodResponse};
+
+        let params: serde_json::Value = request
+            .params
+            .as_deref()
+            .map_or(serde_json::Value::Null, |raw| {
+                serde_json::from_str(raw.get()).expect("params are JSON")
+            });
+        let method = request.method_name().to_owned();
+        let response = match method.as_str() {
+            "nosuchmethod" => MethodResponse::error(request.id, ErrorCode::MethodNotFound.into()),
+            "getblock" if params[0] == "999999999" => MethodResponse::error(
+                request.id,
+                ErrorObject::new(-8, "Block height out of range"),
+            ),
+            method => MethodResponse::response(
+                request.id,
+                &Ok(serde_json::json!({ "method": method, "params": params })),
+                usize::MAX,
+            ),
+        };
+        std::future::ready(response)
+    }
+
+    fn notification<'a>(
+        &self,
+        _notification: crate::server::jsonrpc::Notification<'a>,
+    ) -> impl Future<Output = crate::server::jsonrpc::MethodResponse> + Send + 'a {
+        std::future::ready(crate::server::jsonrpc::MethodResponse::notification())
+    }
+}
+
+/// Ycash: sends `body` through the compatibility middleware and the JSON-RPC server, with
+/// `cookie` if set, returning the response as JSON.
+#[cfg(feature = "ycash")]
+async fn batch_answer(
+    body: &str,
+    cookie: Option<crate::server::cookie::Cookie>,
+    authorization: Option<String>,
+) -> Result<serde_json::Value, BoxError> {
+    use http_body_util::BodyExt;
+
+    let inner = crate::server::http::JsonRpcHttpService::new(
+        EchoRpc,
+        crate::server::MAX_RPC_BATCH_REQUESTS,
+        usize::MAX,
+    );
+    let mut builder = HttpRequest::builder()
+        .method("POST")
+        .header("content-type", "application/json");
+    if let Some(authorization) = authorization {
+        builder = builder.header("authorization", authorization);
+    }
+    let request = builder
+        .body(HttpBody::from(body.to_owned()))
+        .expect("valid request");
+    let mut middleware = HttpRequestMiddleware::new(inner, cookie, 2_097_152);
+    let response = middleware.call(request).await?;
+    assert_eq!(response.status(), 200, "{body}");
+    let bytes = response.into_body().collect().await?.to_bytes();
+    Ok(serde_json::from_slice(&bytes).expect("the response is JSON"))
+}
+
+/// Ycash: the answer ycashd gives to one entry of a batch (`JSONRPCReplyObj`,
+/// `src/rpc/protocol.cpp`): exactly `result`, `error` and `id`, `result` null on an error.
+#[cfg(feature = "ycash")]
+fn ycashd_entry(
+    id: serde_json::Value,
+    result: serde_json::Value,
+    error: serde_json::Value,
+) -> serde_json::Value {
+    serde_json::json!({ "result": result, "error": error, "id": id })
+}
+
+/// Ycash: the result [`EchoRpc`] gives.
+#[cfg(feature = "ycash")]
+fn echoed(method: &str, params: serde_json::Value) -> serde_json::Value {
+    serde_json::json!({ "method": method, "params": params })
+}
+
+/// Ycash (beta3 item 7): the batches Inzyght sends, byte for byte (`BlockchainState.cc`
+/// `update_state_on_block_event`; `ycash_rpc_client.cc` `batch_get_block_headers`, whose ids are
+/// heights): entries without `"jsonrpc"`, answered as ycashd answers them, in order.
+#[cfg(feature = "ycash")]
+#[tokio::test]
+async fn ycash_inzyght_batches_are_answered_as_ycashd_answers_them() {
+    use serde_json::{json, Value};
+
+    let state = r#"[{"id":1,"method":"getblockchaininfo","params":[]},{"id":2,"method":"getnetworkinfo","params":[]},{"id":3,"method":"getpeerinfo","params":[]},{"id":4,"method":"getmininginfo","params":[]},{"id":5,"method":"getrawmempool","params":[true]}]"#;
+    let expected: Vec<Value> = [
+        ("getblockchaininfo", json!([])),
+        ("getnetworkinfo", json!([])),
+        ("getpeerinfo", json!([])),
+        ("getmininginfo", json!([])),
+        ("getrawmempool", json!([true])),
+    ]
+    .into_iter()
+    .enumerate()
+    .map(|(i, (method, params))| ycashd_entry(json!(i + 1), echoed(method, params), Value::Null))
+    .collect();
+    let answer = batch_answer(state, None, None).await.expect("an answer");
+    assert_eq!(answer, Value::Array(expected), "{answer}");
+
+    let blocks = r#"[{"id":510000,"method":"getblock","params":["510000",1]},{"id":510001,"method":"getblock","params":["510001",1]},{"id":510002,"method":"getblock","params":["510002",1]}]"#;
+    let answer = batch_answer(blocks, None, None).await.expect("an answer");
+    let expected: Vec<Value> = (510_000..510_003)
+        .map(|h| {
+            ycashd_entry(
+                json!(h),
+                echoed("getblock", json!([h.to_string(), 1])),
+                Value::Null,
+            )
+        })
+        .collect();
+    assert_eq!(answer, Value::Array(expected), "{answer}");
+}
+
+/// Ycash (beta3 item 7): a batch with one failing entry. The failing entry gets ycashd's error
+/// shape (`result` null, the error, its id) and the others their results, in order.
+#[cfg(feature = "ycash")]
+#[tokio::test]
+async fn ycash_one_point_zero_batch_with_a_failing_entry() {
+    use serde_json::{json, Value};
+
+    let body = r#"[{"id":510000,"method":"getblock","params":["510000",1]},{"id":999999999,"method":"getblock","params":["999999999",1]},{"id":7,"method":"nosuchmethod","params":[]}]"#;
+    let answer = batch_answer(body, None, None).await.expect("an answer");
+    let expected = json!([
+        ycashd_entry(
+            json!(510000),
+            echoed("getblock", json!(["510000", 1])),
+            Value::Null
+        ),
+        ycashd_entry(
+            json!(999999999),
+            Value::Null,
+            json!({"code": -8, "message": "Block height out of range"})
+        ),
+        ycashd_entry(
+            json!(7),
+            Value::Null,
+            json!({"code": -32601, "message": "Method not found"})
+        ),
+    ]);
+    assert_eq!(answer, expected, "{answer}");
+}
+
+/// Ycash (beta3 item 7): a batch that mixes bitcoind-style, lightwalletd-style (`"1.0"`) and 2.0
+/// entries, a 2.0 notification and an invalid entry. Each entry is answered in its own version,
+/// as a single request of that version is: a 2.0 entry in 2.0, a lightwalletd entry with
+/// `"jsonrpc":"1.0"`, a bitcoind entry with ycashd's keys. The notification gets no answer, as
+/// JSON-RPC 2.0 says; an invalid entry keeps the server's 2.0 error.
+#[cfg(feature = "ycash")]
+#[tokio::test]
+async fn ycash_mixed_one_point_zero_and_two_point_zero_batch() {
+    use serde_json::{json, Value};
+
+    let body = r#"[{"jsonrpc":"2.0","method":"getblockcount","params":[],"id":1},{"method":"getblockcount","params":[],"id":2},{"jsonrpc":"1.0","method":"getblockcount","params":[],"id":"lwd"},{"jsonrpc":"2.0","method":"getblockcount"},{"jsonrpc":"1.0","method":"getinfo","id":4},{"method":"nosuchmethod","params":[],"id":5},{"jsonrpc":"2.0","method":"nosuchmethod","params":[],"id":6},7]"#;
+    let answer = batch_answer(body, None, None).await.expect("an answer");
+    let not_found = json!({"code": -32601, "message": "Method not found"});
+    let expected = json!([
+        {"jsonrpc": "2.0", "id": 1, "result": echoed("getblockcount", json!([]))},
+        ycashd_entry(json!(2), echoed("getblockcount", json!([])), Value::Null),
+        {"jsonrpc": "1.0", "id": "lwd", "result": echoed("getblockcount", json!([])), "error": null},
+        {"jsonrpc": "1.0", "id": 4, "result": echoed("getinfo", Value::Null), "error": null},
+        ycashd_entry(json!(5), Value::Null, not_found.clone()),
+        {"jsonrpc": "2.0", "id": 6, "error": not_found},
+        {"jsonrpc": "2.0", "id": null, "error": {"code": -32600, "message": "Invalid request"}},
+    ]);
+    assert_eq!(answer, expected, "{answer}");
+}
+
+/// Ycash (beta3 item 7): ycashd answers an empty batch with `[]` (`JSONRPCExecBatch` of no
+/// entries). A batch of only 2.0 entries is answered exactly as before.
+#[cfg(feature = "ycash")]
+#[tokio::test]
+async fn ycash_empty_batch_and_two_point_zero_batch() {
+    use serde_json::json;
+
+    for empty in ["[]", " [ ] "] {
+        let answer = batch_answer(empty, None, None).await.expect("an answer");
+        assert_eq!(answer, json!([]), "{empty}: {answer}");
+    }
+
+    let body = r#"[{"jsonrpc":"2.0","method":"getblockcount","params":[],"id":1},{"jsonrpc":"2.0","method":"nosuchmethod","params":[],"id":2}]"#;
+    let answer = batch_answer(body, None, None).await.expect("an answer");
+    assert_eq!(
+        answer,
+        json!([
+            {"jsonrpc": "2.0", "id": 1, "result": echoed("getblockcount", json!([]))},
+            {"jsonrpc": "2.0", "id": 2, "error": {"code": -32601, "message": "Method not found"}},
+        ]),
+        "{answer}"
+    );
+}
+
+/// Ycash (beta3 item 7): the limits hold for 1.0 batches. A batch above the server's entry limit
+/// is refused whole, before any entry runs; an unauthenticated batch is refused; a body above the
+/// size limit is refused.
+#[cfg(feature = "ycash")]
+#[tokio::test]
+async fn ycash_one_point_zero_batch_limits_hold() {
+    use serde_json::json;
+
+    let entry = r#"{"id":1,"method":"getblockcount","params":[]}"#;
+    let largest = format!(
+        "[{}]",
+        vec![entry; crate::server::MAX_RPC_BATCH_REQUESTS].join(",")
+    );
+    let answer = batch_answer(&largest, None, None).await.expect("an answer");
+    assert_eq!(
+        answer.as_array().map(Vec::len),
+        Some(crate::server::MAX_RPC_BATCH_REQUESTS)
+    );
+    assert_eq!(
+        answer[0],
+        ycashd_entry(
+            json!(1),
+            echoed("getblockcount", json!([])),
+            serde_json::Value::Null
+        )
+    );
+
+    let too_large = format!(
+        "[{}]",
+        vec![entry; crate::server::MAX_RPC_BATCH_REQUESTS + 1].join(",")
+    );
+    let answer = batch_answer(&too_large, None, None)
+        .await
+        .expect("an answer");
+    assert_eq!(answer["error"]["code"], -32010, "{answer}");
+    assert_eq!(answer["id"], serde_json::Value::Null, "{answer}");
+
+    let cookie = crate::server::cookie::Cookie::default();
+    let batch = format!("[{entry}]");
+    assert!(
+        batch_answer(&batch, Some(cookie.clone()), None)
+            .await
+            .is_err(),
+        "a batch without credentials is refused"
+    );
+    assert!(
+        batch_answer(
+            &batch,
+            Some(cookie),
+            Some(format!(
+                "Basic {}",
+                base64::Engine::encode(
+                    &base64::engine::general_purpose::STANDARD,
+                    "__cookie__:wrong"
+                )
+            ))
+        )
+        .await
+        .is_err(),
+        "a batch with a wrong cookie is refused"
+    );
+
+    let request = HttpRequest::builder()
+        .method("POST")
+        .header("content-type", "application/json")
+        .body(HttpBody::from(format!("[{entry},{entry}]")))
+        .expect("valid request");
+    let mut middleware = HttpRequestMiddleware::new(MockRpcService, None, entry.len());
+    assert!(
+        middleware.call(request).await.is_err(),
+        "a batch above the body size limit is refused"
+    );
+}
