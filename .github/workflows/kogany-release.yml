@@ -136,7 +136,7 @@ jobs:
           persist-credentials: false
       - uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f #v2.0.0
         with:
-          toolchain: stable
+          toolchain: "1.100.0" # the rust-toolchain.toml pin; bump both together (.github/README-kogany.md)
           cache: false
       # No setup-zakura-build here: without a system RocksDB (ROCKSDB_LIB_DIR, librocksdb-dev) the
       # build compiles the bundled RocksDB statically, so the released binary needs no RocksDB package.

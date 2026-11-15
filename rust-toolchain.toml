@@ -1,2 +1,6 @@
+# kogany (2026-11-15): an exact Rust version, so two builds of one tag use one compiler.
+# Bump it on purpose, in one PR that also changes every `toolchain:` pin under
+# .github/workflows/ (.github/README-kogany.md, "The Rust toolchain").
 [toolchain]
-channel = "stable"
+channel = "1.100.0"
+components = ["clippy", "rustfmt"]

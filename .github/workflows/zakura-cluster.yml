@@ -26,7 +26,7 @@ jobs:
           persist-credentials: false
       - uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f #v1.17.0 # zizmor: ignore[cache-poisoning] -- CI integration job; uploads only diagnostic test traces
         with:
-          toolchain: stable
+          toolchain: "1.100.0" # kogany (2026-11-15): the rust-toolchain.toml pin (.github/README-kogany.md)
           # Same debug + default-release-binaries workspace build as the unit
           # acceptance jobs, so it shares their consolidated build cache.
           cache-shared-key: zakura-drb-debug

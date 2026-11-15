@@ -154,7 +154,7 @@ jobs:
           git -C "$RUNNER_TEMP/chain-viz" checkout -q FETCH_HEAD
       - uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f #v2.0.0
         with:
-          toolchain: stable
+          toolchain: "1.100.0" # the rust-toolchain.toml pin; bump both together (.github/README-kogany.md)
           cache: false  # another repository's build; nothing saved in kogany's cache scope
       - name: Build chain-viz
         working-directory: ${{ runner.temp }}/chain-viz
@@ -267,7 +267,7 @@ jobs:
         run: node/zcutil/fetch-params.sh
       - uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f #v2.0.0
         with:
-          toolchain: stable
+          toolchain: "1.100.0" # the rust-toolchain.toml pin; bump both together (.github/README-kogany.md)
           cache: false  # another repository's build; nothing saved in kogany's cache scope
       - name: yolo regtest, kogany mode (report-only)
         run: |

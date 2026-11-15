@@ -49,7 +49,7 @@ jobs:
           persist-credentials: false
       - uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f #v2.0.0 # zizmor: ignore[cache-poisoning] -- test-only build, nothing published or released
         with:
-          toolchain: stable
+          toolchain: "1.100.0" # the rust-toolchain.toml pin; bump both together (.github/README-kogany.md)
           cache-key: kogany-tests-crates-${{ matrix.profile }}
           cache-on-failure: true
           cache-save-if: ${{ github.ref == 'refs/heads/upgrade/vault' || startsWith(github.ref, 'refs/heads/vaults/') }}
@@ -79,7 +79,7 @@ jobs:
           persist-credentials: false
       - uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f #v2.0.0 # zizmor: ignore[cache-poisoning] -- test-only build, nothing published or released
         with:
-          toolchain: stable
+          toolchain: "1.100.0" # the rust-toolchain.toml pin; bump both together (.github/README-kogany.md)
           cache-key: kogany-tests-upstream-${{ matrix.crate }}
           cache-on-failure: true
           cache-save-if: ${{ github.ref == 'refs/heads/upgrade/vault' || startsWith(github.ref, 'refs/heads/vaults/') }}
@@ -108,7 +108,7 @@ jobs:
           persist-credentials: false
       - uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f #v2.0.0 # zizmor: ignore[cache-poisoning] -- test-only build, nothing published or released
         with:
-          toolchain: stable
+          toolchain: "1.100.0" # the rust-toolchain.toml pin; bump both together (.github/README-kogany.md)
           cache-key: kogany-tests-ycash-${{ matrix.crate }}
           cache-on-failure: true
           cache-save-if: ${{ github.ref == 'refs/heads/upgrade/vault' || startsWith(github.ref, 'refs/heads/vaults/') }}
@@ -144,7 +144,7 @@ jobs:
           persist-credentials: false
       - uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f #v2.0.0 # zizmor: ignore[cache-poisoning] -- test-only build, nothing published or released
         with:
-          toolchain: stable
+          toolchain: "1.100.0" # the rust-toolchain.toml pin; bump both together (.github/README-kogany.md)
           cache-key: kogany-tests-vault-fuzz-verdicts
           cache-on-failure: true
           cache-save-if: ${{ github.ref == 'refs/heads/upgrade/vault' || startsWith(github.ref, 'refs/heads/vaults/') }}
@@ -168,7 +168,7 @@ jobs:
           persist-credentials: false
       - uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f #v2.0.0 # zizmor: ignore[cache-poisoning] -- test-only build, nothing published or released
         with:
-          toolchain: stable
+          toolchain: "1.100.0" # the rust-toolchain.toml pin; bump both together (.github/README-kogany.md)
           cache-key: kogany-tests-regtest
           cache-on-failure: true
           cache-save-if: ${{ github.ref == 'refs/heads/upgrade/vault' || startsWith(github.ref, 'refs/heads/vaults/') }}
