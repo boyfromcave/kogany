@@ -484,7 +484,8 @@ fn refuse_reorg(
         ),
         Err(error) => {
             // The node stops on this failure either way; what is lost is the stop at the next
-            // start, and only the operator can supply that, so the failure says it.
+            // start, and only the operator can supply that, so the failure says it. The words
+            // hold for a refused commit, reconsideration and invalidation alike.
             tracing::error!(
                 ?error,
                 ?db_path,
@@ -493,9 +494,12 @@ fn refuse_reorg(
             return BlockWriteTaskExit::ReorgRefused(BlockWriteTaskFailure {
                 message: format!(
                     "{message}\n\nThis refusal could not be recorded in {} ({error}), so \
-                     nothing stops the node at its next start: without the non-finalized \
-                     backup it follows the new chain. Decide which chain is right before \
-                     starting it again (\"Deep reorganisations\" in docs/kogany.md).",
+                     nothing stops the node at its next start. The refused change was not \
+                     made. With the non-finalized backup the node starts on the chain it was \
+                     on, and stops again if it meets the same change; without it the node \
+                     starts from its finalized blocks and follows the chain with the most \
+                     work its peers give it. Decide which chain is right before starting it \
+                     again (\"Deep reorganisations\" in docs/kogany.md).",
                     reorg_guard::refusal_path(db_path).display()
                 )
                 .into(),

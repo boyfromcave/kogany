@@ -225,8 +225,12 @@ fn unrecorded_reorg_refusal_says_that_the_next_start_is_not_stopped() {
     assert!(
         failure.contains("could not be recorded")
             && failure.contains(&reorg_guard::refusal_path(&db_path).display().to_string())
-            && failure.contains("nothing stops the node at its next start"),
+            && failure.contains("nothing stops the node at its next start")
+            && failure.contains("The refused change was not made"),
         "{failure}"
     );
+    // True for a refused invalidation too, after which the old chain is still the best one:
+    // the message does not say which chain the next start follows.
+    assert!(!failure.contains("follows the new chain"), "{failure}");
     assert_eq!(reorg_guard::recorded(&db_path), None);
 }

@@ -2095,6 +2095,25 @@ fn reorg_refusal_is_recorded_when_its_message_cannot_be_written() {
     let missing = db_dir.path().join("missing");
     record(&missing, "refused").expect_err("there is no directory to record in");
     assert_eq!(recorded(&missing), None);
+
+    // The message is written to the temporary file but cannot be renamed into place, and the
+    // record cannot be opened either: a directory has its name. Something is at the record's
+    // path, so the next start stops, and the answer says the refusal is recorded; the
+    // temporary file is not left behind.
+    let db_dir = tempfile::tempdir().expect("a temporary directory");
+    let path = refusal_path(db_dir.path());
+    std::fs::create_dir(&path).unwrap();
+    assert_eq!(
+        record(db_dir.path(), "refused").expect("what is at the path stops the next start"),
+        path
+    );
+    let names: Vec<_> = std::fs::read_dir(db_dir.path())
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name())
+        .collect();
+    assert_eq!(names, ["ycash-reorg-refused"]);
+    let message = recorded(db_dir.path()).expect("the node stays down");
+    assert!(message.contains("cannot be read"), "{message}");
 }
 
 /// kogany (beta3 R1): the record of a refused reorganisation is a file beside the state

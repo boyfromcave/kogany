@@ -192,12 +192,7 @@ pub(crate) fn refusal_path(db_path: &Path) -> PathBuf {
 /// of one: a temporary file beside it is written and synced, renamed over `path`, and the
 /// directory is synced.
 fn write_durably(path: &Path, contents: &[u8]) -> io::Result<()> {
-    let mut temporary_name = path
-        .file_name()
-        .map(OsString::from)
-        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "the path names no file"))?;
-    temporary_name.push(".tmp");
-    let temporary = path.with_file_name(temporary_name);
+    let temporary = temporary_path(path)?;
 
     let mut file = fs::File::create(&temporary)?;
     file.write_all(contents)?;
@@ -205,6 +200,16 @@ fn write_durably(path: &Path, contents: &[u8]) -> io::Result<()> {
     drop(file);
     fs::rename(&temporary, path)?;
     sync_parent_dir(path)
+}
+
+/// The temporary file [`write_durably`] writes before it renames it over `path`.
+fn temporary_path(path: &Path) -> io::Result<PathBuf> {
+    let mut temporary_name = path
+        .file_name()
+        .map(OsString::from)
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "the path names no file"))?;
+    temporary_name.push(".tmp");
+    Ok(path.with_file_name(temporary_name))
 }
 
 /// Syncs the directory that holds `path`, so a rename or a removal in it survives a crash.
@@ -225,26 +230,48 @@ fn sync_parent_dir(path: &Path) -> io::Result<()> {
 /// its directory when the node stops, and the record with it: its next start is a new node at
 /// genesis, which has no tip to roll back.
 ///
-/// If the message cannot be written (a full disk), the file is still made, empty and without
-/// touching a record that is there: [`recorded`] counts a file with no message, so the node
-/// stays down either way. An error means there is no record at all.
+/// If the message cannot be written (a full disk), the temporary file is removed and the record
+/// is still made, empty and without touching a record that is there: [`recorded`] counts a file
+/// with no message, so the node stays down either way.
+///
+/// The answer follows what the next start will find, not which step failed: `Ok` whenever the
+/// record exists, also when it could not be synced, and an error only when there is no record
+/// at all.
 pub(crate) fn record(db_path: &Path, message: &str) -> io::Result<PathBuf> {
     let path = refusal_path(db_path);
-    if let Err(error) = write_durably(&path, message.as_bytes()) {
-        tracing::error!(
-            ?error,
-            ?path,
-            "could not write the refused reorganization's message: recording the refusal \
-             without it"
-        );
-        fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&path)?
-            .sync_all()?;
-        sync_parent_dir(&path)?;
+    let Err(error) = write_durably(&path, message.as_bytes()) else {
+        return Ok(path);
+    };
+    tracing::error!(
+        ?error,
+        ?path,
+        "could not write the refused reorganization's message durably: recording the refusal \
+         with the file as it is, or without a message"
+    );
+    if let Ok(temporary) = temporary_path(&path) {
+        // What is left of the message; a failure to remove it changes nothing the node reads.
+        let _ = fs::remove_file(temporary);
     }
-    Ok(path)
+
+    let made = fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&path)
+        .and_then(|file| file.sync_all())
+        .and_then(|()| sync_parent_dir(&path));
+    match made {
+        Ok(()) => Ok(path),
+        // The record is there (anything at the path counts, [`recorded`]): the next start stops.
+        Err(error) if fs::symlink_metadata(&path).is_ok() => {
+            tracing::error!(
+                ?error,
+                ?path,
+                "the record of the refused reorganization exists, but could not be synced"
+            );
+            Ok(path)
+        }
+        Err(error) => Err(error),
+    }
 }
 
 /// What the node says when the record exists but holds no message it can show.
