@@ -41,7 +41,7 @@ use zakura_script::Sigops;
 
 use super::{
     check_synced_to_tip, fetch_mempool_transactions,
-    ycash::{pq_sigops, unhealthy_error, YcashMining, YellowbackMiner},
+    ycash::{unhealthy_error, YcashMining, YellowbackMiner},
 };
 use crate::{
     methods::types::{
@@ -747,9 +747,10 @@ where
             fees = fees.saturating_add(i64::from(tx.miner_fee));
             // A transaction is far smaller than `u64::MAX`.
             txs_size = txs_size.saturating_add(tx.transaction.size() as u64);
-            txs_sigops = txs_sigops.saturating_add(u64::from(
-                tx.block_sigop_count().saturating_add(pq_sigops(tx)),
-            ));
+            // The count block validity limits (legacy and P2SH), as ycashd's call and
+            // `ConnectBlock` count it; not the policy count of `OP_CHECKPQSIG` the template
+            // selection adds.
+            txs_sigops = txs_sigops.saturating_add(u64::from(tx.block_sigop_count()));
         }
     }
     let fees = Amount::<NonNegative>::try_from(fees).map_err(construction_failed)?;

@@ -45,7 +45,11 @@ Phases (regtest; every upgrade through Canopy at 1, Vault and FN-DSA-512 at 4):
 7. kogany restarted WITHOUT the Sapling output parameters: a Sapling call answers the contract's
    row 17, transparent and post-quantum calls still answer;
 8. kogany restarted with a Sapling `mining.miner_address` (and the parameters): its own
-   getblocktemplate coinbase pays the address, and ycashd accepts the block.
+   getblocktemplate coinbase pays the address, and ycashd accepts the block;
+9. a reference heavy in post-quantum POLICY sigops (six spends of a P2SH redeem script with 199
+   unexecuted `OP_CHECKPQSIG`, 3,980 policy sigops each, none for block validity): the call
+   answers on both lines, because its fit check counts what block validity counts (legacy and
+   P2SH), and the block of all six is accepted by ycashd and by kogany.
 
 Exit 0 when every check passes, 1 on a failed check, 2 on an RPC or startup error. Stdlib only.
 """
@@ -65,8 +69,8 @@ from decimal import Decimal
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 from kogany_mines import (  # noqa: E402
-    COINBASE_MATURITY, VAULT_BRANCH, Failure, check, compact_size, find_up, load_solver, sha256d,
-    solve, wait_for, zip317_spend)
+    COINBASE_MATURITY, VAULT_BRANCH, ZIP317_FEE, Failure, check, compact_size, find_up, load_solver,
+    sha256d, solve, wait_for, zip317_spend)
 from rpc_ycash_parity import (  # noqa: E402
     ACTIVATION_KEYS, NUPARAMS, Node, RpcError, base58check, decode_coinbase, internal, stop,
     wait_up)
@@ -84,6 +88,13 @@ ADDRESSTYPE = {P2PKH: 'p2pkh', P2SH: 'p2sh', SAPLING: 'sapling', PQ_FN: 'pq', PQ
 BAD_TEMPLATE = 'template must be an object with exactly the keys previousblockhash and txids'
 STALE_TIP = 'template-stale: previousblockhash is not the tip'
 NOT_LOADED = 'coinbase construction failed: Sapling output parameters are not loaded'
+
+# Phase 9: OP_0 OP_IF <OP_CHECKPQSIG x 199> OP_ENDIF OP_1, a redeem script that needs no signature
+# and costs 199 * 20 = 3,980 policy sigops (at most MAX_STANDARD_TX_SIGOPS, 4,000), none for
+# block validity; six spends of it exceed MAX_BLOCK_SIGOPS (20,000) by the policy count only.
+PQ_OPS_PER_SPEND, PQ_HEAVY_SPENDS = 199, 6
+PQ_HEAVY_REDEEM = b'\x00\x63' + b'\xc2' * PQ_OPS_PER_SPEND + b'\x68\x51'
+SAPLING_GROUP = 0x892F2085
 
 
 def zat(x):
@@ -112,6 +123,18 @@ def paired_block(t, coinbase_hex, solver, nonce_seed):
     paired = dict(t, defaultroots=dict(t['defaultroots'], merkleroot=merkle_root(txs)[::-1].hex()))
     header, _ = solve(paired, solver, start_nonce=nonce_seed << 20)
     return (header + compact_size(len(txs))).hex() + ''.join(txs), sha256d(header)[::-1].hex()
+
+
+def p2sh_spend(txid, n, redeem, value, script):
+    """A v4 transaction spending the P2SH output (txid, n) with the scriptSig <redeem> (no
+    signature) to one output of `value` zatoshis locked by `script`, no expiry."""
+    script_sig = (bytes([len(redeem)]) if len(redeem) < 0x4c else b'\x4c' + bytes([len(redeem)])) + redeem
+    b = (0x80000004).to_bytes(4, 'little') + SAPLING_GROUP.to_bytes(4, 'little')
+    b += compact_size(1) + bytes.fromhex(txid)[::-1] + n.to_bytes(4, 'little')
+    b += compact_size(len(script_sig)) + script_sig + (0xffffffff).to_bytes(4, 'little')
+    b += compact_size(1) + value.to_bytes(8, 'little') + compact_size(len(script)) + script
+    b += bytes(4) + bytes(4) + bytes(8) + b'\x00\x00\x00'
+    return b.hex()
 
 
 def expect_error(code, message, nodes, method, *params):
@@ -645,6 +668,44 @@ def run(args, solver):
         res = pool.call(z, addr[SAPLING], t)
         pool.assert_paid_exactly(SAPLING, addr[SAPLING], t, res, stock_fund_index=0)
         pool.submit(SAPLING, addr[SAPLING], t, stock, amount, y, z)
+
+        # ===== 9. post-quantum policy sigops are not block sigops =====
+        print('9. a reference heavy in post-quantum policy sigops')
+        p2sh_addr = y.ok('decodescript', PQ_HEAVY_REDEEM.hex())['p2sh']
+        p2sh_script = pool.script_of(p2sh_addr)
+        funding = [y.ok('sendtoaddress', p2sh_addr, 1) for _ in range(PQ_HEAVY_SPENDS)]
+        pool.generate(1)
+        heavy = {}
+        for ftxid in funding:
+            n = next(o['n'] for o in y.ok('getrawtransaction', ftxid, 1)['vout']
+                     if o['scriptPubKey']['hex'] == p2sh_script)
+            raw = p2sh_spend(ftxid, n, PQ_HEAVY_REDEEM, COIN - ZIP317_FEE, bytes.fromhex(pool.script_of(recipient)))
+            heavy[z.ok('sendrawtransaction', raw)] = raw
+            y.call('sendrawtransaction', raw, True)
+        wait_for('the six spends in both mempools',
+                 lambda: set(heavy) <= set(z.ok('getrawmempool')) and set(heavy) <= set(y.ok('getrawmempool')),
+                 timeout=30)
+        t = z.ok('getblocktemplate')
+        check(t['previousblockhash'] == y.ok('getbestblockhash'), 'the template does not build on ycashd\'s tip')
+        selected = len([tx for tx in t['transactions'] if tx['hash'] in heavy])
+        t6 = dict(t, transactions=[{'hash': txid, 'data': raw, 'fee': ZIP317_FEE} for txid, raw in heavy.items()])
+        height = t['height']
+        fees = pool.fees(list(heavy))
+        check(fees == PQ_HEAVY_SPENDS * ZIP317_FEE, 'ycashd\'s mempool fees of the six: %d' % fees)
+        for kind in (P2PKH, SAPLING):
+            res = pool.call(z, addr[kind], t6)      # kogany answers (it refused here before)
+            amount = pool.subsidy(height) - pool.fund(height) + fees
+            check((res['height'], res['fees'], res['amount'], res['txcount'], res['addresstype']) ==
+                  (height, fees, amount, PQ_HEAVY_SPENDS, ADDRESSTYPE[kind]),
+                  '%s with %d post-quantum-heavy spends: %r' % (kind, PQ_HEAVY_SPENDS, res))
+            pool.same_as_ycashd(kind, addr[kind], t6, res, y_has_call)
+        res = pool.call(z, addr[P2PKH], t6)
+        pool.proposal_ok(t6, res)
+        pool.submit(P2PKH, addr[P2PKH], t6, res, res['amount'], y, z)
+        print('  %d spends, %d policy sigops (kogany\'s own template selected %d of them): answered on %s, '
+              'the block accepted by both'
+              % (PQ_HEAVY_SPENDS, PQ_HEAVY_SPENDS * PQ_OPS_PER_SPEND * 20, selected,
+                 'both lines' if y_has_call else 'kogany'))
 
         for kind in KINDS:
             ts = sorted(pool.timings[kind])

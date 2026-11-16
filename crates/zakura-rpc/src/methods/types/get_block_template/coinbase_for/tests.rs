@@ -948,6 +948,88 @@ async fn the_call_refuses_in_the_order_of_the_contract() {
     );
 }
 
+/// A mempool transaction with `legacy_sigops` counted signature operations that spends an output
+/// locked by `spent_script`.
+fn mempool_tx_spending(
+    seed: u8,
+    fee: i64,
+    legacy_sigops: u32,
+    spent_script: Vec<u8>,
+) -> VerifiedUnminedTx {
+    let tx = mempool_tx(seed, fee)
+        .transaction
+        .transaction()
+        .as_ref()
+        .clone();
+    let spent = vec![Output::new(zat(1 + fee), Script::new(&spent_script))];
+    VerifiedUnminedTx::new(
+        UnminedTx::from(tx),
+        zat(fee),
+        legacy_sigops,
+        0,
+        Arc::new(spent),
+    )
+    .expect("the test transaction pays the relay fee")
+}
+
+/// Row 12 counts signature operations as block validity does (legacy and P2SH, ycashd's
+/// `ConnectBlock` and its own call), not with the policy count of 20 per `OP_CHECKPQSIG` the
+/// template selection adds: a template heavy in post-quantum spends is answered as ycashd
+/// answers it, and one over the consensus count is refused.
+#[tokio::test]
+async fn the_fit_check_counts_the_consensus_sigops() {
+    use crate::methods::types::get_block_template::ycash::pq_sigops;
+
+    let tip = block::Hash([7; 32]);
+    // 1,001 `OP_CHECKPQSIG` in the spent script: 20,020 policy sigops, none for consensus.
+    let pq_heavy = mempool_tx_spending(1, 1_000, 0, vec![0xc2; 1_001]);
+    assert!(pq_sigops(&pq_heavy) > MAX_BLOCK_SIGOPS);
+    assert_eq!(pq_heavy.block_sigop_count(), 0);
+    let answer = get_coinbase_template_for(
+        node(
+            tip,
+            tip,
+            tip,
+            vec![pq_heavy.clone()],
+            Arc::new(NotLive),
+            0,
+            None,
+        ),
+        &json!(P2PKH),
+        &reference(tip, &[id(&pq_heavy)]),
+    )
+    .await
+    .expect("a template heavy in post-quantum spends is answered");
+    assert_eq!(answer.fees, 1_000);
+
+    // Consensus sigops: the named transaction's 20,000 and the coinbase's own exceed the limit.
+    let heavy = mempool_tx_spending(2, 1_000, MAX_BLOCK_SIGOPS, vec![0x51]);
+    let (code, message) = error_of(
+        get_coinbase_template_for(
+            node(
+                tip,
+                tip,
+                tip,
+                vec![heavy.clone()],
+                Arc::new(NotLive),
+                0,
+                None,
+            ),
+            &json!(P2PKH),
+            &reference(tip, &[id(&heavy)]),
+        )
+        .await,
+    );
+    assert_eq!(code, -1);
+    assert!(
+        message.starts_with(&format!(
+            "coinbase-does-not-fit: sigops {} exceed {MAX_BLOCK_SIGOPS}",
+            MAX_BLOCK_SIGOPS + 1
+        )),
+        "{message}"
+    );
+}
+
 /// The call for a Sapling address: sixteen at once on a multi-threaded runtime, each answered
 /// with its own coinbase of exactly the derived amount.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
