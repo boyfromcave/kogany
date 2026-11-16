@@ -268,7 +268,7 @@ does too when its clean checkout is exactly at such a tag; otherwise `/koganyd:<
 
 Prove it before tagging with a dry run, a dispatch on `upgrade/vault` naming the tag the head
 would get: `env -u GH_TOKEN gh workflow run kogany-release.yml -R boyfromcave/kogany --ref
-upgrade/vault -f tag=v1.8.0-ycash.beta2` (`dry_run` defaults to true). It runs the guard, the
+upgrade/vault -f tag=v1.8.0-ycash.beta3` (`dry_run` defaults to true). It runs the guard, the
 three builds with that release name, the Linux debug split, the packages, SBOMs and `SHA256SUMS`,
 then `publish-dry-run` checks the set and the notes file and prints the release it would create.
 A dry run has no token that can write a release and never signs; `publish` runs only on a pushed
@@ -279,14 +279,16 @@ the same name is in progress.
 
 ```sh
 git checkout upgrade/vault && git pull --ff-only
-git tag -a v1.8.0-ycash.beta1 -m "koganyd v1.8.0-ycash.beta1 (pre-release)"
-git push origin v1.8.0-ycash.beta1
+git tag -a v1.8.0-ycash.beta3 -m "koganyd v1.8.0-ycash.beta3 (pre-release)"
+git push origin v1.8.0-ycash.beta3
 ```
 
 ## Turning Actions on
 
-GitHub Actions are off on `boyfromcave/kogany` until the Yellowback lead architect turns them on.
-Nothing has to be disabled first: the off set cannot run. When turning them on:
+Actions were turned on for `boyfromcave/kogany` on 2026-11-02, for the kogany workflows above
+(the first run was push 38f785543), and the off set stays off. The steps are kept for a fresh fork
+or a repository where they were turned off again. Nothing has to be disabled first: the off set
+cannot run. When turning them on:
 
 1. Prefer doing it after `vaults/kogany-compat` merges back into `upgrade/vault` (the W0 gate
    merge). Scheduled runs come from the default branch, `upgrade/vault`; until that merge it holds
