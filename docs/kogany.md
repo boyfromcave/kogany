@@ -82,6 +82,20 @@ behaviours follow ycashd's there, each against Zakura's own:
   serves a Sapling `mining.miner_address` (ycashd's `-mineraddress=<Sapling>`): the miner's
   reward is one Sapling output and only the fund output is transparent. Proofs are made off the
   async worker threads, at most four at once; one takes about 0.2 s on a current desktop core.
+- **The insight explorer fields.** `rpc.insight_explorer = true` is kogany's counterpart of
+  ycashd's `-insightexplorer` for the transaction and block answers (off by default). On an
+  archive node it adds `value`, `valueSat` and `address` to every non-coinbase input in
+  `getrawtransaction <txid> 1` and `getblock <hash> 2` (the output it spends: a P2PKH, P2SH, bare
+  P2PK or post-quantum address, and a value without an address for a vault, multisig or
+  nonstandard output), and `blockfee` to `getblock` at verbosity 1 and 2. kogany has no spent
+  index: each distinct parent of a call's inputs is read once from the transaction index, 16 at
+  a time; a call with more than 5,000 distinct parents answers without the input fields and logs
+  it (ycashd has no cap). `blockfee` costs one coinbase read at verbosity 1 and is absent, never
+  0, where the block's or its parent's value pools are not known, and for a block off the best
+  chain. A pruned node names no inputs. Both RPCs are served without authentication, so leave
+  the switch off on a node whose RPC port untrusted clients can reach. With it off the answers
+  carry none of these fields and read nothing extra; `vout[].valueSat` and `authdigest`, which
+  cost nothing, are always served, as on every ycashd.
 - **The YED payout key.** A transparent P2PKH `mining.miner_address` is also the Yellowback payout
   key the coinbase tag names, as ycashd takes `-mineraddress` when no `-yellowbackpayoutaddress`
   is set. `mining.yellowback_payout_default = false` (ycashd `-yellowbackpayoutdefault=0`, default
