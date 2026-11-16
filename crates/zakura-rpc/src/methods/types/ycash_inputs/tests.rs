@@ -205,22 +205,128 @@ fn block_fee_is_the_value_the_pools_lost_to_fees() {
     let spend_delta = -fee;
     let full = coinbase(vec![Output::new(zat(subsidy + fee), script())]);
     let delta = transparent_delta(subsidy + fee + spend_delta);
-    assert_eq!(block_fee(Height(10), Some(delta), &full), fee);
+    assert_eq!(block_fee(Height(10), Some(delta), Some(&full)), Some(fee));
 
     let short = coinbase(vec![Output::new(zat(subsidy), script())]);
     let delta = transparent_delta(subsidy + spend_delta);
-    assert_eq!(block_fee(Height(10), Some(delta), &short), fee);
+    assert_eq!(block_fee(Height(10), Some(delta), Some(&short)), Some(fee));
 
     // the fee also when the spend moves value into the Sapling pool
     let mut shielded =
         ValueBalance::from_sapling_amount(Amount::try_from(40_000_000).expect("valid delta"));
     shielded.set_transparent_value_balance(transparent_delta(subsidy + fee - 40_000_000 - fee));
-    assert_eq!(block_fee(Height(10), Some(shielded), &full), fee);
+    assert_eq!(
+        block_fee(Height(10), Some(shielded), Some(&full)),
+        Some(fee)
+    );
 
     let alone = transparent_delta(subsidy);
     let only = coinbase(vec![Output::new(zat(subsidy), script())]);
-    assert_eq!(block_fee(Height(10), Some(alone), &only), 0);
+    assert_eq!(block_fee(Height(10), Some(alone), Some(&only)), Some(0));
 
-    assert_eq!(block_fee(Height(0), Some(transparent_delta(0)), &only), 0);
-    assert_eq!(block_fee(Height(10), None, &full), 0);
+    assert_eq!(
+        block_fee(Height(0), Some(transparent_delta(0)), Some(&only)),
+        Some(0)
+    );
+}
+
+/// Missing data is a missing field, never a wrong number: unknown pools (this block's or its
+/// parent's) or an unknown coinbase give no `blockfee`; genesis is 0 without either.
+#[test]
+fn block_fee_is_absent_when_its_data_is_missing() {
+    let full = coinbase(vec![Output::new(zat(312_500_000), Script::new(&[0x51]))]);
+    assert_eq!(block_fee(Height(10), None, Some(&full)), None);
+    assert_eq!(
+        block_fee(Height(10), Some(transparent_delta(0)), None),
+        None
+    );
+    assert_eq!(block_fee(Height(10), None, None), None);
+    assert_eq!(block_fee(Height(0), None, None), Some(0));
+}
+
+/// The parent cap: at the cap a call reads, above it it does not.
+#[test]
+fn insight_parent_cap() {
+    let insight = InsightExplorer::new(true).with_max_parents(3);
+    assert!(insight.enabled());
+    assert!(!insight.over_cap(3));
+    assert!(insight.over_cap(4));
+    assert!(!InsightExplorer::default().enabled());
+    assert!(!InsightExplorer::default().over_cap(MAX_INSIGHT_PARENTS));
+    assert!(InsightExplorer::default().over_cap(MAX_INSIGHT_PARENTS + 1));
+}
+
+/// The parent reads of one call keep at most [`PARENT_READ_CONCURRENCY`] reads in flight, so
+/// another caller of the same read state is served while a call with many parents runs (a
+/// `getblock 2` of a large block reads its parents through [`read_parents`]).
+#[tokio::test(flavor = "multi_thread")]
+async fn parent_reads_are_bounded_and_leave_room_for_other_callers() {
+    use std::{
+        sync::atomic::{AtomicUsize, Ordering},
+        time::Duration,
+    };
+
+    use tower::{buffer::Buffer, ServiceExt as _};
+    use zakura_node_services::BoxError;
+    use zakura_state::{ReadRequest, ReadResponse};
+
+    let in_flight = Arc::new(AtomicUsize::new(0));
+    let most = Arc::new(AtomicUsize::new(0));
+    let parent_reads = Arc::new(AtomicUsize::new(0));
+    let service = {
+        let (in_flight, most, parent_reads) =
+            (in_flight.clone(), most.clone(), parent_reads.clone());
+        tower::service_fn(move |request: ReadRequest| {
+            let (in_flight, most, parent_reads) =
+                (in_flight.clone(), most.clone(), parent_reads.clone());
+            async move {
+                match request {
+                    ReadRequest::Transaction(_) => {
+                        let now = in_flight.fetch_add(1, Ordering::SeqCst) + 1;
+                        most.fetch_max(now, Ordering::SeqCst);
+                        tokio::time::sleep(Duration::from_millis(5)).await;
+                        in_flight.fetch_sub(1, Ordering::SeqCst);
+                        parent_reads.fetch_add(1, Ordering::SeqCst);
+                        Ok::<_, BoxError>(ReadResponse::Transaction(None))
+                    }
+                    _ => Ok(ReadResponse::Tip(None)),
+                }
+            }
+        })
+    };
+    // A shared read state with room for the bounded reads and one more caller.
+    let read_state = Buffer::new(service, PARENT_READ_CONCURRENCY + 1);
+
+    let wanted: HashSet<transaction::Hash> = (0..2_000u32)
+        .map(|n| {
+            let mut hash = [0; 32];
+            hash[..4].copy_from_slice(&n.to_le_bytes());
+            transaction::Hash(hash)
+        })
+        .collect();
+    let large = tokio::spawn(read_parents(read_state.clone(), wanted));
+
+    // Another caller, while the large call runs: served at once, not after 2,000 reads.
+    tokio::time::sleep(Duration::from_millis(20)).await;
+    let other = tokio::time::timeout(
+        Duration::from_millis(500),
+        read_state.clone().oneshot(ReadRequest::Tip),
+    )
+    .await
+    .expect("another caller is served while the large call runs")
+    .expect("the read succeeds");
+    assert_eq!(other, ReadResponse::Tip(None));
+    assert!(
+        parent_reads.load(Ordering::SeqCst) < 2_000,
+        "the other caller was served before the large call finished"
+    );
+
+    let parents = large.await.expect("the large call does not panic");
+    assert_eq!(parents.len(), 2_000);
+    assert!(parents.values().all(Option::is_none));
+    assert!(
+        most.load(Ordering::SeqCst) <= PARENT_READ_CONCURRENCY,
+        "at most {PARENT_READ_CONCURRENCY} parent reads in flight, saw {}",
+        most.load(Ordering::SeqCst)
+    );
 }

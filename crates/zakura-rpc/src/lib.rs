@@ -46,5 +46,8 @@ pub use methods::types::ycash_reject::script_error_string as ycash_script_error_
 // kogany S5: the insight reads' address parameter, YED forms included.
 #[cfg(feature = "ycash")]
 pub use methods::types::ycash::insight_address as ycash_insight_address;
+// Beta3 item 6: the `rpc.insight_explorer` switch (`RpcImpl::with_insight_explorer`).
 #[cfg(feature = "ycash")]
 pub use methods::types::ycash::insight_address_on as ycash_insight_address_on;
+#[cfg(feature = "ycash")]
+pub use methods::types::ycash_inputs as ycash_insight_explorer;

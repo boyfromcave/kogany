@@ -138,6 +138,36 @@ pub struct Config {
 
     /// Optional TLS configuration for the primary RPC listener.
     pub tls: Option<TlsConfig>,
+
+    /// Ycash (beta3 item 6): kogany's counterpart of ycashd's `-insightexplorer` for the
+    /// insight fields of the transaction and block answers. Off by default.
+    ///
+    /// When on, an archive node names `value`, `valueSat` and `address` on every non-coinbase
+    /// input in `getrawtransaction <txid> 1` and `getblock <hash> 2` (the output it spends, read
+    /// from the parent transaction in the transaction index; ycashd reads its spent index), and
+    /// adds `blockfee` to `getblock` at verbosity 1 and 2:
+    /// ```toml
+    /// [rpc]
+    /// insight_explorer = true
+    /// ```
+    /// When off, those answers carry none of these fields and no parent is read. A pruned node
+    /// never names inputs, whatever this says.
+    ///
+    /// # Cost
+    ///
+    /// One transaction-index read per distinct parent, at most a few at a time; a call whose
+    /// inputs have more distinct parents than a fixed cap answers without the input fields
+    /// (ycashd has no cap). `getblock <hash> 1`, the light-wallet sync path, reads the coinbase
+    /// once for `blockfee`. Both RPCs are served without authentication: keep this off on a
+    /// node whose RPC port is reachable by untrusted clients.
+    #[cfg(feature = "ycash")]
+    #[serde(skip_serializing_if = "is_false")]
+    pub insight_explorer: bool,
+}
+
+#[cfg(feature = "ycash")]
+fn is_false(value: &bool) -> bool {
+    !*value
 }
 
 /// TLS configuration for an RPC listener.
@@ -196,6 +226,10 @@ impl Default for Config {
 
             // Serve plain HTTP unless a caller wires TLS explicitly.
             tls: None,
+
+            // Ycash: ycashd's insight fields are opt-in, as `-insightexplorer` is.
+            #[cfg(feature = "ycash")]
+            insight_explorer: false,
         }
     }
 }
@@ -259,6 +293,21 @@ mod tests {
             super::default_cookie_file_name(),
             "missing cookie file names should use the default value"
         );
+    }
+
+    /// Ycash (beta3 item 6): the insight switch is off unless set, and a default config does
+    /// not write it.
+    #[cfg(feature = "ycash")]
+    #[test]
+    fn insight_explorer_is_opt_in() {
+        let config: Config = toml::from_str("").expect("an empty rpc config deserializes");
+        assert!(!config.insight_explorer);
+        assert!(!toml::to_string(&Config::default())
+            .expect("the default config serializes")
+            .contains("insight_explorer"));
+        let config: Config =
+            toml::from_str("insight_explorer = true").expect("the switch deserializes");
+        assert!(config.insight_explorer);
     }
 
     #[test]
