@@ -1482,10 +1482,7 @@ where
                     .and_then(|(tip, _)| tip.next().ok())
                     == Some(height);
                 if !at_parent {
-                    return Err(TransactionError::Other(format!(
-                        "the vault set state is not at the parent of height {height:?}: \
-                         the chain tip moved, retry"
-                    )));
+                    return Err(TransactionError::tip_moved("the vault set state", height));
                 }
                 snapshot
             }
