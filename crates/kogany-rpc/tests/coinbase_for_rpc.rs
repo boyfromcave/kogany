@@ -57,13 +57,20 @@ async fn the_method_reads_the_nodes_share_and_takes_no_third_parameter() {
         (120, SUBSIDY, fund, "optional", 0, SUBSIDY - fund, 0)
     );
 
-    // No mempool was given to the extension: no fee can be stated.
+    // No mempool was given to the extension: no fee can be stated, so the named transaction is
+    // not in the mempool (the contract's row 11), never the mempool service's own error.
     let txid = "ab".repeat(32);
     let error = rpc
         .getcoinbasetemplatefor(json!(P2PKH), reference(&[&txid]), None)
         .await
         .expect_err("no mempool");
-    assert_eq!(error.code(), 0, "the mempool's own error: {error:?}");
+    assert_eq!(
+        (error.code(), error.message()),
+        (
+            -1,
+            format!("template-stale: transaction is not in the mempool: {txid}").as_str()
+        )
+    );
 
     // A third parameter cannot carry an amount: the usage line, as ycashd.
     let error = rpc

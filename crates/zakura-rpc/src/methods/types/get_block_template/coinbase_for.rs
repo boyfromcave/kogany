@@ -722,11 +722,13 @@ where
     }
 
     // The fee of every named transaction, from this node's mempool: the number `getblocktemplate`
-    // prints per transaction. A mempool that is not at this tip can state no fee.
+    // prints per transaction. A mempool that is not at this tip, or that cannot answer, can state
+    // no fee: the first named transaction is then not in the mempool (row 11).
     let (mut fees, mut txs_size, mut txs_sigops) = (0i64, 0u64, 0u64);
-    if !reference.txids.is_empty() {
+    if let Some(first) = reference.txids.first() {
         let in_mempool = fetch_mempool_transactions(node.mempool, tip_hash)
-            .await?
+            .await
+            .map_err(|_| stale_transaction(*first))?
             .map(|(transactions, _)| transactions)
             .unwrap_or_default();
         let by_id: std::collections::HashMap<_, _> = in_mempool

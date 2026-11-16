@@ -946,6 +946,22 @@ async fn the_call_refuses_in_the_order_of_the_contract() {
         .await,
         stale
     );
+
+    // A mempool that cannot answer states no fee either: the first named transaction is not in
+    // it (row 11), never the service's own error. An empty template does not ask it.
+    let failing = || CoinbaseForNode {
+        mempool: tower::util::BoxService::new(tower::service_fn(|_: mempool::Request| async {
+            Err::<mempool::Response, zakura_node_services::BoxError>("no mempool".into())
+        })),
+        ..fresh()
+    };
+    assert_eq!(
+        call(failing(), json!(P2PKH), reference(tip, &[b, a])).await,
+        missing(b)
+    );
+    get_coinbase_template_for(failing(), &json!(P2PKH), &reference(tip, &[]))
+        .await
+        .expect("an empty template needs no mempool");
 }
 
 /// A mempool transaction with `legacy_sigops` counted signature operations that spends an output
