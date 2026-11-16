@@ -129,8 +129,6 @@ ACCEPTED = [
     ('z_gettreestate', r'\.(orchard|ironwood)$', 'zakura', 'empty pools Zakura always reports'),
     ('z_gettreestate', r'\.sapling\.commitments\.finalRoot$', 'zakura',
      'zcashd 6.x adds the root beside finalState; lightwalletd-dd reads finalState'),
-    # getaddressbalance
-    ('getaddressbalance', r'\.txcount$', 'zakura', 'a zcashd 6.x field; lightwalletd-dd reads balance'),
     # getblocksubsidy: Zcash-only totals, zero on Ycash.
     ('getblocksubsidy', r'\.(fundingstreamstotal|lockboxtotal)$', 'zakura',
      'Zcash ZIP 207/271 totals, always zero on Ycash'),
@@ -816,9 +814,18 @@ def run(args):
         for addr in (miner, recipient, ydf):
             q = {'addresses': [addr]}
             r.both('getaddressbalance', q)
+            # beta3 item 11: ycashd's insight read, one address string.
+            r.both('getaddressfirstlastheight', addr)
             r.both('getaddressutxos', q)
             r.both('getaddresstxids', q)
             r.both('getaddresstxids', {'addresses': [addr], 'start': 1, 'end': tip})
+        # beta3 item 11: txcount over several addresses (a transaction touching two counts once),
+        # and getaddressfirstlastheight for an address never seen, a string that is not an
+        # address and a value that is not a string.
+        r.both('getaddressbalance', {'addresses': [miner, recipient, ydf]})
+        r.both('getaddressfirstlastheight', y.ok('getnewaddress'))
+        r.both('getaddressfirstlastheight', 'not-an-address')
+        r.both('getaddressfirstlastheight', 7)
         r.both('getrawmempool')
         r.both('sendrawtransaction', raw)
         r.both('yed_getinfo')

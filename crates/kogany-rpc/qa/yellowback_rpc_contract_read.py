@@ -314,7 +314,7 @@ def live_checks(rig, checker, contract, wallet):
     assert named == [[pq_address]], named
     assert k.call('validateaddress', pq_address)['pqscheme'] == vault['ownerScheme']
     kb, yb = k.call('getaddressbalance', {'addresses': [pq_address]}), y.call('getaddressbalance', {'addresses': [pq_address]})
-    assert (kb['balance'], kb['received']) == (yb['balance'], yb['received']), (kb, yb)
+    assert (kb['balance'], kb['received'], kb.get('txcount')) == (yb['balance'], yb['received'], yb['txcount']), (kb, yb)
     print('getaddress* with the plain post-quantum %s: kogany = ycash6 (%d zat)' % (pq_address, kb['balance']))
 
     info = r.both('yed_getinfo', same=False)

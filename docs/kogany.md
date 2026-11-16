@@ -75,8 +75,10 @@ These differences are kept: the RPC server is upstream Zakura's, and the wallet 
   (`validateaddress`, `z_validateaddress`), `wallet` (`vault_list` rows), the wallet half of
   `getinfo` (`balance`, `keypoolsize`, `keypoololdest`, `walletversion`) and
   `protectedByIndex: true` (`yed_getinfo`). yewd adds them from its wallet.
-- **`getaddressbalance` has no `txcount`.** ycash6 added the count of distinct transactions
-  (`src/rpc/misc.cpp`, before beta2); `koganyd` answers `balance` and `received` only.
+- **`getaddressbalance.txcount`, `getaddressfirstlastheight` and `getblockchaininfo.commitments`**
+  answer as ycashd's since beta3 (item 11): the count of distinct transactions touching the
+  addresses and the first and last heights of an address, both from the address transaction
+  index, and the size of the Sprout tree at the tip (it was always 0 before).
 - **Node fields from Zakura.** `getblockchaininfo` has no `upgrades.<id>.info`, `softforks`,
   `transactions`, `fullyNotified` or `initial_block_download_complete`, and adds
   `nsmValueBalanceZat`. `getnetworkinfo` has no `warningstimestamp`. `getmininginfo` has no
@@ -89,7 +91,7 @@ field for field (2026-11-12, regtest, `koganyd` against ycash6 6.22.0-beta2):
 (see below),
 `getaddressutxos` (with and without `chainInfo`), `getaddresstxids`, `getaddressdeltas`,
 `getaddressmempool` (apart from `timestamp`, each node's own arrival time), `getaddressbalance`
-(apart from `txcount`, above), `yed_listtokens`, `yed_getvault`, `yed_gettxinfo`, `yed_listvaults`,
+(`txcount` since beta3), `yed_listtokens`, `yed_getvault`, `yed_gettxinfo`, `yed_listvaults`,
 `vault_decodescript`, `vault_list`, `set_getinfo` and `vault_getinfo`.
 
 `z_validateaddress` of a post-quantum address answers `isvalid` true, `address`, `address_type`

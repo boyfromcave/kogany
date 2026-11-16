@@ -1694,6 +1694,15 @@ pub enum ReadRequest {
     /// with the pool values of the current best chain tip.
     TipPoolValues,
 
+    /// Ycash (beta3 item 11): returns
+    /// [`ReadResponse::SproutTipTreeSize(u64)`](ReadResponse::SproutTipTreeSize), the number of
+    /// note commitments in the Sprout tree of the current best chain tip (0 for an empty state).
+    ///
+    /// ycashd's `getblockchaininfo.commitments` (`src/rpc/blockchain.cpp`: the size of the Sprout
+    /// tree at the best Sprout anchor).
+    #[cfg(feature = "ycash")]
+    SproutTipTreeSize,
+
     /// Looks up the block info after a block by hash in any chain, or by height in the
     /// current best chain.
     ///
@@ -2264,6 +2273,8 @@ impl ReadRequest {
             ReadRequest::Tip => "tip",
             ReadRequest::FinalizedTip => "finalized_tip",
             ReadRequest::TipPoolValues => "tip_pool_values",
+            #[cfg(feature = "ycash")]
+            ReadRequest::SproutTipTreeSize => "sprout_tip_tree_size",
             ReadRequest::BlockInfo(_) => "block_info",
             ReadRequest::VaultSnapshot { .. } => "vault_snapshot",
             ReadRequest::BestChainVaultSnapshot => "best_chain_vault_snapshot",

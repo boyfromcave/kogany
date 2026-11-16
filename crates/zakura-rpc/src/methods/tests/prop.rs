@@ -436,6 +436,11 @@ proptest! {
                     // this mock has none, so the field is omitted.
                     #[cfg(feature = "ycash")]
                     while let Some(request) = state.try_next_request().await {
+                        // Ycash (beta3 item 11): `commitments`, the Sprout tip tree size.
+                        if *request.request() == zakura_state::ReadRequest::SproutTipTreeSize {
+                            request.respond(zakura_state::ReadResponse::SproutTipTreeSize(0));
+                            continue;
+                        }
                         request.respond(Err(BoxError::from("no headers in this mock state")));
                     }
                 }
@@ -564,6 +569,11 @@ proptest! {
                     // this mock has none, so the field is omitted.
                     #[cfg(feature = "ycash")]
                     while let Some(request) = state.try_next_request().await {
+                        // Ycash (beta3 item 11): `commitments`, the Sprout tip tree size.
+                        if *request.request() == zakura_state::ReadRequest::SproutTipTreeSize {
+                            request.respond(zakura_state::ReadResponse::SproutTipTreeSize(0));
+                            continue;
+                        }
                         request.respond(Err(BoxError::from("no headers in this mock state")));
                     }
                 }
@@ -697,6 +707,11 @@ proptest! {
                     // this mock has none, so the field is omitted.
                     #[cfg(feature = "ycash")]
                     while let Some(request) = state.try_next_request().await {
+                        // Ycash (beta3 item 11): `commitments`, the Sprout tip tree size.
+                        if *request.request() == zakura_state::ReadRequest::SproutTipTreeSize {
+                            request.respond(zakura_state::ReadResponse::SproutTipTreeSize(0));
+                            continue;
+                        }
                         request.respond(Err(BoxError::from("no headers in this mock state")));
                     }
                 }
@@ -779,11 +794,26 @@ proptest! {
             let call = rpc.get_address_balance(address_strings);
 
             // The RPC should perform a state query
-            let state_query = state
-                .expect_request(zakura_state::ReadRequest::AddressBalance(addresses))
-                .map_ok(|responder| {
-                    responder.respond(zakura_state::ReadResponse::AddressBalance { balance, received: balance.into() })
-                });
+            #[cfg(feature = "ycash")]
+            let tx_count_addresses = addresses.clone();
+            let state_query = async {
+                state
+                    .expect_request(zakura_state::ReadRequest::AddressBalance(addresses))
+                    .await?
+                    .respond(zakura_state::ReadResponse::AddressBalance { balance, received: balance.into() });
+                // Ycash: then `txcount`'s address index query.
+                #[cfg(feature = "ycash")]
+                state
+                    .expect_request(zakura_state::ReadRequest::TransactionIdsByAddresses {
+                        addresses: tx_count_addresses,
+                        height_range: Height(0)..=Height::MAX,
+                    })
+                    .await?
+                    .respond(zakura_state::ReadResponse::AddressesTransactionIds(
+                        Default::default(),
+                    ));
+                Ok::<(), TestCaseError>(())
+            };
 
             // Await the RPC call and the state query
             let (response, state_query_result) = join!(call, state_query);
@@ -793,7 +823,13 @@ proptest! {
             // Check that response contains the expected balance
             let received_balance = response?;
 
-            prop_assert_eq!(received_balance, GetAddressBalanceResponse { balance: balance.into(), received: balance.into() });
+            #[cfg_attr(not(feature = "ycash"), allow(unused_mut))]
+            let mut expected = GetAddressBalanceResponse::new(balance.into(), balance.into());
+            #[cfg(feature = "ycash")]
+            {
+                expected.txcount = Some(0);
+            }
+            prop_assert_eq!(received_balance, expected);
 
             // Check no further requests were made during this test
             mempool.expect_no_requests().await?;
