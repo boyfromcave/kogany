@@ -3010,13 +3010,9 @@ impl Service<ReadRequest> for ReadStateService {
 
             // Ycash: used by the `getblockchaininfo` RPC method (`commitments`).
             #[cfg(feature = "ycash")]
-            ReadRequest::SproutTipTreeSize => {
-                let tree = match state.latest_best_chain() {
-                    Some(chain) => chain.sprout_note_commitment_tree_for_tip(),
-                    None => state.db.sprout_tree_for_tip().map_err(BoxError::from)?,
-                };
-                Ok(ReadResponse::SproutTipTreeSize(tree.count()))
-            }
+            ReadRequest::SproutTipTreeSize => Ok(ReadResponse::SproutTipTreeSize(
+                read::sprout_tip_tree_size(state.latest_best_chain(), &state.db)?,
+            )),
 
             // Used by getblock
             ReadRequest::BlockInfo(hash_or_height) => Ok(ReadResponse::BlockInfo(

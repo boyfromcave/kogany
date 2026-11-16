@@ -809,8 +809,14 @@ proptest! {
                         height_range: Height(0)..=Height::MAX,
                     })
                     .await?
+                    // One transaction, whatever the number of addresses it touches: the index
+                    // answers each transaction once, by its location.
                     .respond(zakura_state::ReadResponse::AddressesTransactionIds(
-                        Default::default(),
+                        [(
+                            zakura_state::TransactionLocation::from_usize(Height(7), 1),
+                            transaction::Hash([7; 32]),
+                        )]
+                        .into(),
                     ));
                 Ok::<(), TestCaseError>(())
             };
@@ -827,7 +833,7 @@ proptest! {
             let mut expected = GetAddressBalanceResponse::new(balance.into(), balance.into());
             #[cfg(feature = "ycash")]
             {
-                expected.txcount = Some(0);
+                expected.txcount = Some(1);
             }
             prop_assert_eq!(received_balance, expected);
 

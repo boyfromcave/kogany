@@ -78,7 +78,11 @@ These differences are kept: the RPC server is upstream Zakura's, and the wallet 
 - **`getaddressbalance.txcount`, `getaddressfirstlastheight` and `getblockchaininfo.commitments`**
   answer as ycashd's since beta3 (item 11): the count of distinct transactions touching the
   addresses and the first and last heights of an address, both from the address transaction
-  index, and the size of the Sprout tree at the tip (it was always 0 before).
+  index, and the size of the Sprout tree at the tip (it was always 0 before). Cost: `txcount`
+  makes `getaddressbalance` read every address index row of its addresses (Zakura's balance
+  alone is one read of the balance index; ycashd walks every row too), held in memory for the
+  call and re-read if a block finalizes meanwhile. For an address with a very long history,
+  each call costs about what `getaddresstxids` for the whole chain costs.
 - **Node fields from Zakura.** `getblockchaininfo` has no `upgrades.<id>.info`, `softforks`,
   `transactions`, `fullyNotified` or `initial_block_download_complete`, and adds
   `nsmValueBalanceZat`. `getnetworkinfo` has no `warningstimestamp`. `getmininginfo` has no

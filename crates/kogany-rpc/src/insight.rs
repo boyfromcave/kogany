@@ -51,7 +51,11 @@ crate::kogany_rpc_trait! {
         /// `{"firstHeight", "lastHeight"}`: the first and last block heights at which the
         /// address was seen (0 if never).
         #[method(name = "getaddressfirstlastheight", access = Unauthenticated)]
-        async fn getaddressfirstlastheight(&self, address: Value) -> RpcResult<Value>;
+        async fn getaddressfirstlastheight(
+            &self,
+            address: Option<Value>,
+            extra: Option<Value>,
+        ) -> RpcResult<Value>;
     }
     dispatch = InsightRpcDispatch;
 }
@@ -271,6 +275,21 @@ pub fn address_deltas(
     rows.into_iter().map(|row| row.5).collect()
 }
 
+/// ycashd's help text for `getaddressfirstlastheight`, its answer to a call without exactly one
+/// parameter (`src/rpc/misc.cpp`; `-insightexplorer` on, so no "disabled" note).
+const GETADDRESSFIRSTLASTHEIGHT_HELP: &str = "getaddressfirstlastheight \"address\"\n\
+\nReturns the first and last block height at which the given transparent address was seen.\n\
+\nArguments:\n\
+\"address\"  (string) The base58check encoded address\n\
+\nResult:\n\
+{\n\
+\x20 \"firstHeight\"  (numeric) Block height when the address was first seen (0 if never)\n\
+\x20 \"lastHeight\"   (numeric) Block height when the address was last seen (0 if never)\n\
+}\n\
+\nExamples:\n\
+> ycash-cli getaddressfirstlastheight \"smDw2LWkeuJ1NGBDDZvdNbzY8A9D1mkkDZm\"\n\
+> curl --user myusername --data-binary '{\"jsonrpc\": \"1.0\", \"id\":\"curltest\", \"method\": \"getaddressfirstlastheight\", \"params\": [\"smDw2LWkeuJ1NGBDDZvdNbzY8A9D1mkkDZm\"] }' -H 'content-type: text/plain;' http://127.0.0.1:8832/\n";
+
 /// `getaddressfirstlastheight`'s answer for the address index rows `txids` of one address.
 pub fn first_last_height(
     txids: &std::collections::BTreeMap<
@@ -289,7 +308,31 @@ pub fn first_last_height(
 
 #[async_trait::async_trait]
 impl InsightRpc for InsightRpcImpl {
-    async fn getaddressfirstlastheight(&self, address: Value) -> RpcResult<Value> {
+    async fn getaddressfirstlastheight(
+        &self,
+        address: Option<Value>,
+        extra: Option<Value>,
+    ) -> RpcResult<Value> {
+        // ycashd's parameter count check (`CRPCTable::execute`, `src/rpc/server.cpp`): its
+        // message, with the help text. ycashd's code is -32602; kogany's call middleware answers
+        // every invalid-params error with -1 (zcashd's), so this says -1 too.
+        let received = match (&address, &extra) {
+            (Some(_), None) => None,
+            (None, _) => Some(("Not enough parameters", 0)),
+            (Some(_), Some(_)) => Some(("Too many parameters", 2)),
+        };
+        if let Some((what, received)) = received {
+            return Err(ErrorObject::new(
+                -1,
+                format!(
+                    "{what} for method `getaddressfirstlastheight`. Needed exactly 1, but \
+                     received {received}\n\n{GETADDRESSFIRSTLASTHEIGHT_HELP}"
+                ),
+            ));
+        }
+        let Some(address) = address else {
+            unreachable!("a missing address returned above");
+        };
         // ycashd's `params[0].get_str()`.
         let Value::String(text) = &address else {
             return Err(ErrorObject::new(

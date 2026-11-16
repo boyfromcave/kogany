@@ -2195,3 +2195,73 @@ async fn block_sizes_by_hash_report_committed_sizes_and_none_for_unknown_hashes(
     );
     Ok(())
 }
+
+/// Ycash (beta3 item 11): `ReadRequest::SproutTipTreeSize` (`getblockchaininfo.commitments`) is
+/// 0 for an empty state, the finalized tip tree's size without a non-finalized chain, and the
+/// non-finalized chain's tip tree's size when there is one.
+#[cfg(feature = "ycash")]
+#[test]
+fn sprout_tip_tree_size_reads_the_best_tip_tree() {
+    use zakura_chain::sprout;
+
+    use crate::service::{
+        finalized_state::{DiskWriteBatch, WriteDisk},
+        non_finalized_state::Chain,
+        read::sprout_tip_tree_size,
+    };
+
+    let _init_guard = zakura_test::init();
+    let tree_with = |notes: u8| {
+        let mut tree = sprout::tree::NoteCommitmentTree::default();
+        for note in 0..notes {
+            tree.append(sprout::commitment::NoteCommitment::from([note; 32]))
+                .expect("a small Sprout tree is not full");
+        }
+        Arc::new(tree)
+    };
+
+    // An empty state: the empty tree.
+    let db = new_ephemeral_db();
+    assert_eq!(
+        sprout_tip_tree_size(None::<Arc<Chain>>, &db).expect("an empty state has a tree"),
+        0
+    );
+
+    // A finalized tip with a two-note Sprout tree.
+    let mut batch = DiskWriteBatch::new();
+    batch.zs_insert(
+        &db.db()
+            .cf_handle("hash_by_height")
+            .expect("column family exists"),
+        Height(5),
+        zakura_chain::block::Hash([5; 32]),
+    );
+    batch.zs_insert(
+        &db.db()
+            .cf_handle("sprout_note_commitment_tree")
+            .expect("column family exists"),
+        (),
+        tree_with(2),
+    );
+    db.write_batch(batch).expect("writing the fixture succeeds");
+    assert_eq!(
+        sprout_tip_tree_size(None::<Arc<Chain>>, &db).expect("the finalized tip tree"),
+        2
+    );
+
+    // A non-finalized chain whose tip tree has three notes takes precedence.
+    let chain = Chain::new(
+        &Mainnet,
+        Height(5),
+        tree_with(3),
+        Default::default(),
+        Default::default(),
+        Default::default(),
+        Default::default(),
+        ValueBalance::<NonNegative>::zero(),
+    );
+    assert_eq!(
+        sprout_tip_tree_size(Some(Arc::new(chain)), &db).expect("the chain tip tree"),
+        3
+    );
+}

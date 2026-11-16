@@ -2345,7 +2345,10 @@ where
         };
 
         // Ycash (beta3 item 11): ycashd's `commitments` is the size of the Sprout tree at the
-        // tip (`src/rpc/blockchain.cpp`).
+        // tip (`src/rpc/blockchain.cpp`). It is a read of its own, like `chainwork` below, so a
+        // block committed between it and the tip read above can make it one block newer than
+        // `blocks`; the read state has no single snapshot of both. On Ycash the Sprout tree
+        // changes only with a Sprout JoinSplit, so in practice the value is the same.
         #[cfg(feature = "ycash")]
         let commitments = match call_service(
             self.read_state.clone(),
@@ -2423,7 +2426,9 @@ where
 
         // Ycash (beta3 item 11): ycashd's `txcount`, the number of distinct transactions in the
         // chain that pay or spend any of the addresses (`src/rpc/misc.cpp`), read from the same
-        // address index as `getaddresstxids`.
+        // address index as `getaddresstxids`. Cost: this reads every index row of the addresses
+        // (and retries if a block finalizes meanwhile), where the balance alone is one read;
+        // ycashd's `getaddressbalance` also walks every row (`getAddressesInHeightRange`).
         #[cfg(feature = "ycash")]
         {
             let request = zakura_state::ReadRequest::TransactionIdsByAddresses {

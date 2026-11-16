@@ -177,6 +177,12 @@ ACCEPTED = [
      'a 1.0 member whose id is not a JSON-RPC 2.0 id (negative, fractional, above u64, a boolean, '
      'an object) gets -32600 Invalid request with id null and does not run; ycashd runs it and '
      'answers with that id (review L1 of kogany #35)'),
+    ('parameter count', r'^!error\.code$', 'zakura',
+     "ycashd's parameter count check answers -32602; Zakura's call middleware turns every "
+     'invalid-params error into -1 (zcashd), so kogany says -1 with the same message'),
+    # Not compared (upstream Zakura, not this change): a 2.0 member or single 2.0 request whose
+    # id is not a 2.0 id (-1, true) parses as a notification: no answer, and the method is not
+    # run (rpc_service.rs RpcService::notification). ycashd answers it with that id.
     ('batch', r'^\[\d+,nullid\](\.(jsonrpc|result)|!error)$', 'zakura',
      'a 1.0 member with "id": null or no id gets -32600 Invalid request, as a single request of '
      'that kind does; ycashd runs it and answers with id null (review L2/L4 of kogany #35)'),
@@ -210,7 +216,7 @@ CLIENT_FIELDS = {
 }
 
 # The methods whose error messages are compared as well as their codes (W7-e).
-EXACT_ERROR_METHODS = ('sendrawtransaction', 'submitblock')
+EXACT_ERROR_METHODS = ('sendrawtransaction', 'submitblock', 'getaddressfirstlastheight')
 
 WALLET_ONLY = {
     'z_sendmany': 'lightwalletd-dd uses it on the regtest faucet path; kogany has no wallet (K-3)',
@@ -781,12 +787,17 @@ def run(args):
 
         # A spend paying the ZIP 317 fee, which ycashd takes with allowhighfees: in both
         # mempools, in both templates, then mined.
-        txid = spend_with_zip317_fee(y, recipient)
+        # It pays an address seen nowhere else, so while it waits in the mempool both address
+        # reads (chain only, on both nodes) answer nothing for it (beta3 item 11).
+        mempool_only = y.ok('getnewaddress')
+        txid = spend_with_zip317_fee(y, mempool_only)
         raw = y.ok('getrawtransaction', txid, 0)
         # ycashd's third parameter, allowyedburn (H7): without a Yellowback wallet it changes
         # nothing, on either node (W7-c).
         r.both('sendrawtransaction', raw, False, True)
         r.both('getrawmempool')
+        r.both('getaddressbalance', {'addresses': [mempool_only]})
+        r.both('getaddressfirstlastheight', mempool_only)
         r.template()
         r.mine()
         tip = y.ok('getblockcount')
@@ -811,7 +822,7 @@ def run(args):
         r.both('gettxout', txid, 0)
         r.both('gettxout', txid, 1)
         ydf = y.ok('getblock', y.ok('getblockhash', 1), 2)['tx'][0]['vout'][1]['scriptPubKey']['addresses'][0]
-        for addr in (miner, recipient, ydf):
+        for addr in (miner, recipient, ydf, mempool_only):
             q = {'addresses': [addr]}
             r.both('getaddressbalance', q)
             # beta3 item 11: ycashd's insight read, one address string.
@@ -826,6 +837,15 @@ def run(args):
         r.both('getaddressfirstlastheight', y.ok('getnewaddress'))
         r.both('getaddressfirstlastheight', 'not-an-address')
         r.both('getaddressfirstlastheight', 7)
+        # A wrong parameter count: ycashd's message and help text on both; the code differs.
+        for params in ((), (miner, 1)):
+            r.report.calls += 1
+            (_, ea), (_, eb) = y.call('getaddressfirstlastheight', *params), z.call('getaddressfirstlastheight', *params)
+            if not ea or not eb or ea.get('message') != eb.get('message'):
+                r.report.add('getaddressfirstlastheight', 'count %d' % len(params), '!error', 'error', ea, eb)
+            elif ea.get('code') != eb.get('code'):
+                r.report.add('parameter count', 'count %d' % len(params), '!error.code', 'value',
+                             ea.get('code'), eb.get('code'))
         r.both('getrawmempool')
         r.both('sendrawtransaction', raw)
         r.both('yed_getinfo')

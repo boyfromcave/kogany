@@ -49,6 +49,8 @@ pub use find::{
 pub use historical_tree::{
     derive_historical_frontiers, DerivedFrontiers, HistoricalTreeCache, MAX_CACHED_FRONTIERS,
 };
+#[cfg(feature = "ycash")]
+pub use tree::sprout_tip_tree_size;
 pub(crate) use tree::{
     check_historical_ironwood_subtrees_available, check_historical_orchard_subtrees_available,
     check_historical_sapling_subtrees_available, ironwood_subtrees_with_gaps,
