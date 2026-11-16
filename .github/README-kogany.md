@@ -255,7 +255,8 @@ suffix ignored), and refuses an rc tag, and a beta tag from `v1.8.0-ycash.beta3`
 testnet-yb-fast's YDF mandate end (`mandate_end::TESTNET_FAST`) is unset or the provisional 600,000
 (`qa/kogany_vault_params.py release`, ycash6's rule R9 and its `R9_BETA_FROM`; the fast testnet
 runs betas, so a beta with the provisional value would never end the mandate there; beta1 and beta2
-predate the value and still pass): the cut sets the same height on the three lines first, and `audit vault-params (d)` checks kogany's equals ycash6's. Three native jobs build `koganyd` (`--release --features "default-release-binaries
+predate the value and still pass), and, wherever that rule binds, a tag whose notes
+`doc/release-notes/<tag>.md` are missing or still hold a placeholder (R10, ycash6's rule): the cut sets the same height on the three lines first, and `audit vault-params (d)` checks kogany's equals ycash6's. Three native jobs build `koganyd` (`--release --features "default-release-binaries
 ycash"`, no Rust cache, so a release never restores a cache; no system RocksDB, so the bundled one is
 linked statically) on ubuntu-24.04, ubuntu-24.04-arm and
 macos-15, and pack `koganyd_<tag>_<platform>.tar.gz` (`koganyd`, `README.txt`, the licences,

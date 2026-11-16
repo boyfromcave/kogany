@@ -22,7 +22,8 @@ and `r9_applies` in its `qa/yellowback-vault-params.py`): a `-ycash.rcN` or fina
 `-ycash.betaN` tag from v1.8.0-ycash.beta3 on, is refused while testnet-yb-fast's YDF mandate end
 is unset or still the provisional 600,000 the tree carries until the release-candidate cut. The
 fast testnet runs betas, so a beta that kept the provisional value would never end the mandate
-there; v1.8.0-ycash.beta1 and -beta2 predate the value and still pass. The height is read from the source
+there; v1.8.0-ycash.beta1 and -beta2 predate the value and still pass. Wherever R9 binds, `release`
+also applies R10 under `--root`: doc/release-notes/TAG.md exists and holds no placeholder (`NOTES_PLACEHOLDERS`). The height is read from the source
 (`mandate_end::TESTNET_FAST` in `YDF_SOURCE`, under `--root`, default `.`) or, with `--params`,
 from an extractor document.
 
@@ -49,6 +50,13 @@ PROVISIONAL_FAST_YDF_MANDATE_END_HEIGHT = 600000
 # vX.Y.Z-ycash.betaN.
 R9_BETA_FROM = (1, 8, 0, 3)
 BETA_TAG = re.compile(r"^v([0-9]+)\.([0-9]+)\.([0-9]+)-ycash\.beta([1-9][0-9]*)\Z")
+
+# R10 (ycash6's rule of the same name; the beta3 cut): the notes the release publishes
+# (doc/release-notes/<tag>.md, which kogany-release.yml passes to `gh release create`) exist and hold
+# no placeholder. Binds wherever R9 does; read under --root (not with --params).
+NOTES_FILE = "doc/release-notes/%s.md"
+NOTES_PLACEHOLDERS = ("set at the release candidate", "<HEIGHT", "<YEW COMMIT", "<H_END>", "TO CONFIRM",
+                      "placeholder", "TBD")
 
 STAGES = ("beta", "rc", "final")
 # kogany's release tags (.github/README-kogany.md, "Cutting a pre-release").
@@ -133,6 +141,16 @@ def release_problems(fast_ydf_end, stage, tag=None):
     return []
 
 
+def notes_problems(text, where):
+    """R10: the release notes WHERE (TEXT, or None when the file is missing) exist and hold no placeholder."""
+    if text is None:
+        return ["R10: no release notes: %s is missing (the release would carry the workflow's built-in notes)" % where]
+    if not text.strip():
+        return ["R10: the release notes %s are empty" % where]
+    return ["R10: %s line %d still holds the placeholder %r" % (where, n, marker)
+            for n, line in enumerate(text.splitlines(), 1) for marker in NOTES_PLACEHOLDERS if marker in line]
+
+
 def release(args):
     stage = stage_of(args.tag)
     if stage is None:
@@ -150,6 +168,14 @@ def release(args):
         print("kogany_vault_params: %s" % exc, file=sys.stderr)
         return 2
     problems = release_problems(end, stage, args.tag)
+    if not args.params and r9_applies(stage, args.tag):
+        where = NOTES_FILE % args.tag
+        try:
+            with open(os.path.join(args.root, where), encoding="utf-8") as f:
+                text = f.read()
+        except FileNotFoundError:
+            text = None
+        problems += notes_problems(text, where)
     for line in problems:
         print("REFUSED %s: %s" % (args.tag, line))
     if problems:
