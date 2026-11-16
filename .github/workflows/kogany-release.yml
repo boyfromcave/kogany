@@ -110,9 +110,10 @@ jobs:
             echo "ref=$ref"
             echo "dry_run=$DRY_RUN"
           } >> "$GITHUB_OUTPUT"
-      # beta3 item 5 (ycash6's rule R9): an rc or final tag is refused while testnet-yb-fast's YDF
-      # mandate end is unset or the provisional 600,000; the cut sets it on every line. A beta passes.
-      - name: The fast testnet's YDF mandate end is set (rc and final)
+      # beta3 item 5 (ycash6's rule R9): an rc or final tag, and a beta from v1.8.0-ycash.beta3 on
+      # (ycash6's R9_BETA_FROM, 6.22.0-beta3), is refused while testnet-yb-fast's YDF mandate end is
+      # unset or the provisional 600,000; the cut sets it on every line. beta1 and beta2 pass.
+      - name: The fast testnet's YDF mandate end is set (rc, final, and beta from beta3)
         env:
           TAG: ${{ steps.check.outputs.tag }}
         run: |

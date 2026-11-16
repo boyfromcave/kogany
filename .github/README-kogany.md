@@ -251,10 +251,11 @@ Never bump it while a release is in qualification.
 `v<X.Y.Z>-ycash.<beta|rc><n>` (or a dispatch naming one) and on no branch. Its `guard` job refuses
 any other form, refuses a final `vX.Y.Z-ycash.N` (kogany is not a qualified line, plan K-19), and
 requires X.Y.Z to equal the `kogany` crate version in `crates/zakurad/Cargo.toml` (pre-release
-suffix ignored), and refuses an rc tag while testnet-yb-fast's YDF mandate end
-(`mandate_end::TESTNET_FAST`) is the provisional 600,000 (`qa/kogany_vault_params.py release`,
-ycash6's rule R9; a beta tag passes): the release-candidate cut sets the same height on the three
-lines first, and `audit vault-params (d)` checks kogany's equals ycash6's. Three native jobs build `koganyd` (`--release --features "default-release-binaries
+suffix ignored), and refuses an rc tag, and a beta tag from `v1.8.0-ycash.beta3` on, while
+testnet-yb-fast's YDF mandate end (`mandate_end::TESTNET_FAST`) is unset or the provisional 600,000
+(`qa/kogany_vault_params.py release`, ycash6's rule R9 and its `R9_BETA_FROM`; the fast testnet
+runs betas, so a beta with the provisional value would never end the mandate there; beta1 and beta2
+predate the value and still pass): the cut sets the same height on the three lines first, and `audit vault-params (d)` checks kogany's equals ycash6's. Three native jobs build `koganyd` (`--release --features "default-release-binaries
 ycash"`, no Rust cache, so a release never restores a cache; no system RocksDB, so the bundled one is
 linked statically) on ubuntu-24.04, ubuntu-24.04-arm and
 macos-15, and pack `koganyd_<tag>_<platform>.tar.gz` (`koganyd`, `README.txt`, the licences,
