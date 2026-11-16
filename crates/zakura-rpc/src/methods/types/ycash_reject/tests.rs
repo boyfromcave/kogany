@@ -770,6 +770,24 @@ fn block_reasons_are_bip22_strings() {
     );
 }
 
+/// beta3 R3 (decision note `reorg-parity.md` T2): the three contextual header reasons are
+/// ycashd's (ycash6 `src/main.cpp:6132, 6140, 6153`). zakura-header-chain checks the target
+/// before the two time rules under `ycash`, so a block wrong in both answers `bad-diffbits`.
+#[test]
+fn contextual_header_reasons_are_ycashds() {
+    let reasons = ValidateContextError::contextual_header_errors_for_test().map(|error| {
+        block_reject(&RouterError::Block {
+            source: Box::new(VerifyBlockError::Commit(
+                CommitBlockError::ValidateContextError(Box::new(error)),
+            )),
+        })
+    });
+    assert_eq!(
+        reasons,
+        ["bad-diffbits", "time-too-old", "time-too-far-ahead-of-mtp"]
+    );
+}
+
 #[test]
 fn setmocktime_moves_the_template_cur_time() {
     // The pure step: the process clock is not touched, so the other template tests of this

@@ -1384,3 +1384,85 @@ fn ycash_fast_block_510256_header_vector() {
         Err(ContextualValidationError::TimeTooLate { .. })
     ));
 }
+
+/// kogany (beta3 R3, decision note `reorg-parity.md` T2): a header wrong in both its compact
+/// target and a median-time-past rule. ycashd checks `nBits` first (`bad-diffbits`, ycash6
+/// `src/main.cpp:6129-6133`) and the time rules after it (`time-too-old` `:6136-6140`,
+/// `time-too-far-ahead-of-mtp` `:6149-6153`); Zakura checks the time rules first. Mainnet
+/// parameters, a full difficulty window. The accepted set is the same in both orders: each
+/// header wrong in one rule only is refused for that rule with the feature on and off.
+#[test]
+fn difficulty_and_time_both_wrong_report_the_ycashd_reason() {
+    let network = Network::Mainnet;
+    let height = block::Height(3_100_000);
+    let base = DateTime::from_timestamp(1_790_000_000, 0).expect("test timestamp is in range");
+    // Every context time is `base`, so the median-time-past is `base`.
+    let context = vec![(compact_half_limit(&network), base); POW_ADJUSTMENT_BLOCK_SPAN];
+    let adjustment = |candidate_time| {
+        AdjustedDifficulty::new_from_header_time(
+            candidate_time,
+            (height - 1).expect("the candidate is not genesis"),
+            &network,
+            context.iter().copied(),
+        )
+        .expect("the test supplies the complete late-chain context")
+    };
+    let validate = |candidate_time, wrong_target: bool| {
+        let adjustment = adjustment(candidate_time);
+        let expected = adjustment.expected_difficulty_threshold();
+        let target = if wrong_target {
+            let wrong = network.target_difficulty_limit().to_compact();
+            assert_ne!(wrong, expected, "the vector's wrong target differs");
+            wrong
+        } else {
+            expected
+        };
+        validate_contextual_difficulty_and_time(target, adjustment)
+    };
+
+    let good_time = base + Duration::seconds(1);
+    let too_early = base;
+    let too_late = base + Duration::seconds(i64::from(BLOCK_MAX_TIME_SINCE_MEDIAN) + 1);
+
+    validate(good_time, false).expect("the header right in both rules is accepted");
+
+    // Wrong in one rule only: the same reason in both orders.
+    assert!(matches!(
+        validate(good_time, true),
+        Err(ContextualValidationError::InvalidDifficultyThreshold { .. })
+    ));
+    assert!(matches!(
+        validate(too_early, false),
+        Err(ContextualValidationError::TimeTooEarly { .. })
+    ));
+    assert!(matches!(
+        validate(too_late, false),
+        Err(ContextualValidationError::TimeTooLate { .. })
+    ));
+
+    // Wrong in both: ycashd's reason under `ycash`, upstream's with the feature off.
+    let early_and_wrong = validate(too_early, true);
+    let late_and_wrong = validate(too_late, true);
+    #[cfg(feature = "ycash")]
+    {
+        assert!(matches!(
+            early_and_wrong,
+            Err(ContextualValidationError::InvalidDifficultyThreshold { .. })
+        ));
+        assert!(matches!(
+            late_and_wrong,
+            Err(ContextualValidationError::InvalidDifficultyThreshold { .. })
+        ));
+    }
+    #[cfg(not(feature = "ycash"))]
+    {
+        assert!(matches!(
+            early_and_wrong,
+            Err(ContextualValidationError::TimeTooEarly { .. })
+        ));
+        assert!(matches!(
+            late_and_wrong,
+            Err(ContextualValidationError::TimeTooLate { .. })
+        ));
+    }
+}
