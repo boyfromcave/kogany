@@ -46,7 +46,7 @@ jobs:
       contents: read
     env:
       LWD_REPO: https://github.com/boyfromcave/lightwalletd.git
-      LWD_REV: 58022532401368029556d85f6890776027b63dac        # lightwalletd-dd upgrade/vault (#20: rpcversion 9 and 10)
+      LWD_REV: 56660e56838052ab0f9e7555e2e068e4471fc0b3        # lightwalletd-dd upgrade/vault (#21; rpcversion 9 and 10 since #20)
       YCASH6_REPO: boyfromcave/ycash6
       YCASH6_BRANCH: upgrade/vault
     steps:
