@@ -87,7 +87,16 @@ behaviours follow ycashd's there, each against Zakura's own:
   that ycashd's address manager refuses as not routable (loopback, RFC 1918 and the other reserved
   ranges, `CNetAddr::IsRoutable`) is not kept, so a regtest node connects only to the nodes
   `addnode` names; operator addresses (`addnode`, the initial peers, the disk cache) are kept
-  whatever their range.
+  whatever their range. A node whose last peer connection closed dials each known outbound address
+  again 10 seconds after its last attempt, where upstream Zakura waits two minutes; the wait
+  doubles with each failed attempt in a row at an address (10, 20, 40, 80 seconds), up to those two
+  minutes, and a connection that answers starts it again. With any connection open the two-minute
+  wait stands. The other direction is unchanged: an inbound connection from an address that
+  connected within about the last two minutes is still refused by the per-IP limit (a
+  denial-of-service guard), so a ycashd that lost its connection and dials back at once is turned
+  away, and it is the node's own dial that restores the link. Only upstream's zcashd-compat mode
+  lifts that limit, for the addresses in `zcashd_compat.block_gossip_peer_ips` (the loopback
+  addresses unless set; `zcashd_compat.enabled = true`).
 - **Reorgs and restarts.** The transactions of a block that leaves the best chain (a reorg, an
   `invalidateblock`) return to the mempool and are verified at the new tip, as ycashd's
   `DisconnectTip` resurrects them; the mempool keeps the last 100 best-chain blocks' transactions
