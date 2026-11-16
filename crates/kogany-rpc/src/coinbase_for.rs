@@ -15,14 +15,21 @@
 //! the call's fund output is the one the node's own coinbase carries, and installs the Sapling
 //! output prover (`zakura_rpc::ycash_sapling_coinbase`).
 
-use std::sync::{Arc, OnceLock};
+use std::{
+    future::Future,
+    pin::Pin,
+    sync::{Arc, OnceLock},
+};
 
 use serde_json::Value;
 use tower::util::BoxCloneSyncService;
 use zakura_chain::{chain_tip::ChainTip, parameters::Network};
 use zakura_node_services::mempool::{Request, Response};
 use zakura_rpc::{
-    server::jsonrpc::{ErrorObject, RpcResult},
+    server::{
+        jsonrpc::{ErrorObject, Id, MethodResponse, Params, RpcResult},
+        rpc_service::RpcMethods,
+    },
     ycash_coinbase_for::{get_coinbase_template_for, CoinbaseForNode, CoinbaseTemplateFor},
     ycash_mining::YcashMining,
     ycash_sapling_coinbase::installed_output_prover,
@@ -91,9 +98,52 @@ where
         }
     }
 
-    /// This method as a server extension.
+    /// This method as a server extension, refusing more than two positional parameters.
     pub fn into_extension(self) -> zakura_rpc::server::kogany_extension::RpcExtension {
-        CoinbaseForRpcDispatch(self).into_extension()
+        zakura_rpc::server::kogany_extension::RpcExtension::new(
+            TwoParameters(CoinbaseForRpcDispatch(self)),
+            CoinbaseForRpcDispatch::<Self>::METHOD_ACCESS,
+        )
+    }
+}
+
+/// [`CoinbaseForRpcDispatch`] that refuses a call with more than two positional parameters, as
+/// ycashd refuses `params.size() != 2`. The decoder reads a trailing JSON `null` as an omitted
+/// optional parameter, so `[address, template, null]` would otherwise pass: this counts the
+/// parameters as they were sent.
+#[derive(Clone)]
+struct TwoParameters<T>(CoinbaseForRpcDispatch<T>);
+
+/// Whether `params` are positional and more than two.
+fn more_than_two_positional(params: &Params<'_>) -> bool {
+    !params.is_object()
+        && params
+            .parse::<Vec<serde::de::IgnoredAny>>()
+            .is_ok_and(|params| params.len() > 2)
+}
+
+impl<T> RpcMethods for TwoParameters<T>
+where
+    T: CoinbaseForRpc + Clone + Send + Sync + 'static,
+{
+    const METHOD_NAMES: &'static [&'static str] =
+        <CoinbaseForRpcDispatch<T> as RpcMethods>::METHOD_NAMES;
+
+    fn call<'a>(
+        &'a self,
+        method: &str,
+        params: Params<'a>,
+        id: Id<'a>,
+        max_response_size: usize,
+    ) -> Option<Pin<Box<dyn Future<Output = MethodResponse> + Send + 'a>>> {
+        if Self::METHOD_NAMES.contains(&method) && more_than_two_positional(&params) {
+            // ycashd answers a wrong number of parameters with its help text (`RPC_MISC_ERROR`).
+            let refused: RpcResult<()> = Err(ErrorObject::new(-1, USAGE));
+            return Some(Box::pin(async move {
+                MethodResponse::response(id, &refused, max_response_size)
+            }));
+        }
+        self.0.call(method, params, id, max_response_size)
     }
 }
 

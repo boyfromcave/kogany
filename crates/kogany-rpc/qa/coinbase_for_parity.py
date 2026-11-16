@@ -527,9 +527,10 @@ def run(args, solver):
         for extra in ({'amount': 1}, {'fees': 0}, {'coinbasevalue': 1}):
             expect_error(-8, BAD_TEMPLATE, both, f, a, dict(ref, **extra))
         for node in both:
-            result, error = node.call(f, a, ref, 1)
-            check(error is not None and error['code'] == -1 and 'getcoinbasetemplatefor "address"' in error['message'],
-                  '%s: a third parameter: %r' % (node.name, error or result))
+            for third in (1, None):     # JSON null too: ycashd counts the parameters sent
+                result, error = node.call(f, a, ref, third)
+                check(error is not None and error['code'] == -1 and 'getcoinbasetemplatefor "address"' in error['message'],
+                      '%s: a third parameter %r: %r' % (node.name, third, error or result))
         for bad in ({'previousblockhash': ref['previousblockhash']}, {'txids': []}, {}, [], 'x', 1,
                     {'previousblockhash': ref['previousblockhash'], 'amount': 1}):
             expect_error(-8, BAD_TEMPLATE, both, f, a, bad)
