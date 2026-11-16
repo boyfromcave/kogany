@@ -703,6 +703,9 @@ async fn rpc_getblock() {
                         .expect("vector blocks have a height"),
                     expected_block_commitments,
                 )),
+                // coinbase-only vector blocks: no fee (ycashd `blockfee`, beta3 item 6).
+                #[cfg(feature = "ycash")]
+                block_fee: Some(0),
                 nonce: Some(expected_nonce),
                 bits: Some(block.header.difficulty_threshold),
                 difficulty: Some(
@@ -770,6 +773,9 @@ async fn rpc_getblock() {
                         .expect("vector blocks have a height"),
                     expected_block_commitments,
                 )),
+                // coinbase-only vector blocks: no fee (ycashd `blockfee`, beta3 item 6).
+                #[cfg(feature = "ycash")]
+                block_fee: Some(0),
                 nonce: Some(expected_nonce),
                 bits: Some(block.header.difficulty_threshold),
                 difficulty: Some(
@@ -825,6 +831,8 @@ async fn rpc_getblock() {
                 final_orchard_root,
                 #[cfg(feature = "ycash")]
                     chain_history_root: _,
+                #[cfg(feature = "ycash")]
+                    block_fee: _,
                 nonce,
                 bits,
                 difficulty,
@@ -926,6 +934,8 @@ async fn rpc_getblock() {
                 final_orchard_root,
                 #[cfg(feature = "ycash")]
                     chain_history_root: _,
+                #[cfg(feature = "ycash")]
+                    block_fee: _,
                 nonce,
                 bits,
                 difficulty,
@@ -1038,6 +1048,9 @@ async fn rpc_getblock() {
                         .expect("vector blocks have a height"),
                     expected_block_commitments,
                 )),
+                // coinbase-only vector blocks: no fee (ycashd `blockfee`, beta3 item 6).
+                #[cfg(feature = "ycash")]
+                block_fee: Some(0),
                 nonce: Some(expected_nonce),
                 bits: Some(block.header.difficulty_threshold),
                 difficulty: Some(
@@ -1104,6 +1117,9 @@ async fn rpc_getblock() {
                         .expect("vector blocks have a height"),
                     expected_block_commitments,
                 )),
+                // coinbase-only vector blocks: no fee (ycashd `blockfee`, beta3 item 6).
+                #[cfg(feature = "ycash")]
+                block_fee: Some(0),
                 nonce: Some(expected_nonce),
                 bits: Some(block.header.difficulty_threshold),
                 difficulty: Some(
@@ -1160,6 +1176,8 @@ async fn rpc_getblock_includes_empty_ironwood_tree_after_nu6_3_activation() {
         .iter()
         .map(|tx| tx.hash())
         .collect::<Vec<_>>();
+    #[cfg(feature = "ycash")]
+    let coinbase_id = tx_hashes[0];
 
     let mut mempool: MockService<_, _, _, BoxError> = MockService::build().for_unit_tests();
     let state: MockService<_, _, _, BoxError> = MockService::build().for_unit_tests();
@@ -1237,6 +1255,13 @@ async fn rpc_getblock_includes_empty_ironwood_tree_after_nu6_3_activation() {
             Default::default(),
             block.zcash_serialized_size() as u32,
         ))));
+
+    // Ycash (beta3 item 6): `blockfee` at verbosity 1 reads the coinbase (here: not found, 0).
+    #[cfg(feature = "ycash")]
+    read_state
+        .expect_request(ReadRequest::Transaction(coinbase_id))
+        .await
+        .respond(ReadResponse::Transaction(None));
 
     let get_block = block_future
         .await

@@ -1450,6 +1450,131 @@ where
         }
     }
 
+    /// Ycash (beta3 item 6): whether this node names the spent output of each input, as a
+    /// `-insightexplorer` ycashd does: an archive node, whose transaction index holds every
+    /// parent. A pruned node answers as before (no input fields, no parent read).
+    #[cfg(feature = "ycash")]
+    async fn ycash_inputs_named(&self) -> bool {
+        matches!(
+            self.read_state
+                .clone()
+                .oneshot(zakura_state::ReadRequest::PruningInfo)
+                .await,
+            Ok(zakura_state::ReadResponse::PruningInfo { pruned: false, .. })
+        )
+    }
+
+    /// Ycash (beta3 item 6): reads into `parents` every parent of `object`'s inputs that is not
+    /// there yet: one transaction-index read each (`ReadRequest::Transaction`, the best chain),
+    /// concurrently, and for those the chain does not hold one mempool request (an unconfirmed
+    /// parent of a mempool transaction).
+    #[cfg(feature = "ycash")]
+    async fn ycash_read_parents(
+        &self,
+        object: &TransactionObject,
+        parents: &mut types::ycash_inputs::Parents,
+    ) {
+        let wanted: HashSet<transaction::Hash> = object
+            .inputs
+            .iter()
+            .filter_map(|input| match input {
+                types::transaction::Input::NonCoinbase { txid, .. } => {
+                    transaction::Hash::from_hex(txid).ok()
+                }
+                types::transaction::Input::Coinbase { .. } => None,
+            })
+            .filter(|hash| !parents.contains_key(hash))
+            .collect();
+        if wanted.is_empty() {
+            return;
+        }
+        let reads = wanted.iter().map(|hash| {
+            let read_state = self.read_state.clone();
+            async move {
+                let parent = match read_state
+                    .oneshot(zakura_state::ReadRequest::Transaction(*hash))
+                    .await
+                {
+                    Ok(zakura_state::ReadResponse::Transaction(Some(mined))) => Some(mined.tx),
+                    _ => None,
+                };
+                (*hash, parent)
+            }
+        });
+        let mut unconfirmed = HashSet::new();
+        for (hash, parent) in futures::future::join_all(reads).await {
+            if parent.is_none() {
+                unconfirmed.insert(hash);
+            }
+            parents.insert(hash, parent);
+        }
+        if unconfirmed.is_empty() {
+            return;
+        }
+        if let Ok(mempool::Response::Transactions(found)) = self
+            .mempool
+            .clone()
+            .oneshot(mempool::Request::TransactionsByMinedId(unconfirmed))
+            .await
+        {
+            for unmined in found {
+                parents.insert(unmined.id().mined_id(), Some(unmined.transaction().clone()));
+            }
+        }
+    }
+
+    /// Ycash (beta3 item 6): names `value`, `valueSat` and `address` on each input of `object`
+    /// from the output it spends (`types::ycash_inputs`), for a transaction in the best chain or
+    /// the mempool, as ycashd's spent index names them. A transaction off the best chain, or an
+    /// input whose parent is not found, keeps its input as it is.
+    #[cfg(feature = "ycash")]
+    async fn ycash_name_inputs(
+        &self,
+        object: &mut TransactionObject,
+        parents: &mut types::ycash_inputs::Parents,
+    ) {
+        let in_best_chain_or_mempool =
+            object.in_active_chain == Some(true) || object.block_hash.is_none();
+        if !in_best_chain_or_mempool {
+            return;
+        }
+        self.ycash_read_parents(object, parents).await;
+        for input in object.inputs.iter_mut() {
+            let types::transaction::Input::NonCoinbase { txid, vout, .. } = &*input else {
+                continue;
+            };
+            let index = *vout;
+            let parent = transaction::Hash::from_hex(txid)
+                .ok()
+                .and_then(|hash| parents.get(&hash).cloned().flatten());
+            if let Some(spent) = parent
+                .as_deref()
+                .and_then(|parent| types::ycash_inputs::spent_output(parent, index))
+            {
+                types::ycash_inputs::name_input(&self.network, input, spent);
+            }
+        }
+    }
+
+    /// A verbose `getrawtransaction` answer; under `ycash`, with ycashd's insight input fields
+    /// where this node names them ([`Self::ycash_name_inputs`]).
+    async fn raw_transaction_object(&self, object: TransactionObject) -> GetRawTransactionResponse {
+        #[cfg(feature = "ycash")]
+        let object = {
+            let mut object = object;
+            let has_spends = object
+                .inputs
+                .iter()
+                .any(|input| matches!(input, types::transaction::Input::NonCoinbase { .. }));
+            if has_spends && self.ycash_inputs_named().await {
+                self.ycash_name_inputs(&mut object, &mut types::ycash_inputs::Parents::new())
+                    .await;
+            }
+            object
+        };
+        GetRawTransactionResponse::Object(Box::new(object))
+    }
+
     /// Create a new instance of the RPC handler.
     //
     // TODO:
@@ -2689,6 +2814,8 @@ where
                         },
                         chain_supply: None,
                         value_pools: None,
+                        // ycashd's `nBlockFee` of a block it never connected (`value_or(0)`).
+                        block_fee: Some(0),
                         size: Some(size as i64),
                         block_commitments: Some(block_commitments),
                         final_sapling_root: Some(final_sapling_root),
@@ -2759,6 +2886,9 @@ where
             {
                 return Err(types::ycash::PRUNED_BLOCK).map_error(ErrorCode::InternalError);
             }
+            // Ycash (beta3 item 6): the block read at verbosity 2, for its inputs and coinbase.
+            #[cfg(feature = "ycash")]
+            let mut ycash_block: Option<Arc<block::Block>> = None;
             let (tx, size): (Vec<_>, Option<usize>) = match tx_ids_response? {
                 zakura_state::ReadResponse::TransactionIdsForBlock(tx_ids) => (
                     tx_ids
@@ -2770,6 +2900,10 @@ where
                 ),
                 zakura_state::ReadResponse::BlockAndSize(block_and_size) => {
                     let (block, size) = block_and_size.ok_or_misc_error("Block not found")?;
+                    #[cfg(feature = "ycash")]
+                    {
+                        ycash_block = Some(block.clone());
+                    }
                     let block_time = block.header.time;
                     let transactions = block
                         .transactions
@@ -2793,7 +2927,6 @@ where
                 }
                 _ => unreachable!("unmatched response to a transaction_ids_for_block request"),
             };
-
             let orchard_tree_response = futs.next().await.expect("`futs` should not be empty");
             let zakura_state::ReadResponse::OrchardTree(orchard_tree) = orchard_tree_response?
             else {
@@ -2864,6 +2997,50 @@ where
             });
             let size = size.or(block_info.as_ref().map(|d| d.size() as usize));
 
+            // Ycash (beta3 item 6): ycashd's insight `vin` fields, the parents read once per call
+            // (after every read above: those share the read state's buffer).
+            #[cfg(feature = "ycash")]
+            let tx = {
+                let mut tx = tx;
+                if ycash_block.is_some() && self.ycash_inputs_named().await {
+                    let mut parents = types::ycash_inputs::Parents::new();
+                    for object in tx.iter_mut() {
+                        if let GetBlockTransaction::Object(object) = object {
+                            self.ycash_name_inputs(object, &mut parents).await;
+                        }
+                    }
+                }
+                tx
+            };
+
+            // Ycash (beta3 item 6): ycashd's `blockfee`, from the pool change and the coinbase
+            // (verbosity 2: the block read above; verbosity 1: one transaction read).
+            #[cfg(feature = "ycash")]
+            let block_fee = {
+                // Genesis, or pools not known: 0, and nothing to read.
+                let coinbase = match (&ycash_block, tx.first()) {
+                    _ if height == Height(0) || delta.is_none() => None,
+                    (Some(block), _) => block.transactions.first().cloned(),
+                    (None, Some(GetBlockTransaction::Hash(coinbase_id))) => {
+                        match self
+                            .read_state
+                            .clone()
+                            .oneshot(zakura_state::ReadRequest::Transaction(*coinbase_id))
+                            .await
+                        {
+                            Ok(zakura_state::ReadResponse::Transaction(Some(mined))) => {
+                                Some(mined.tx)
+                            }
+                            _ => None,
+                        }
+                    }
+                    _ => None,
+                };
+                Some(coinbase.map_or(0, |coinbase| {
+                    types::ycash_inputs::block_fee(height, delta, &coinbase)
+                }))
+            };
+
             Ok(GetBlockResponse::Object(Box::new(BlockObject {
                 hash,
                 confirmations,
@@ -2883,6 +3060,8 @@ where
                     .map(|d| GetBlockchainInfoBalance::chain_supply(*d.value_pools())),
                 value_pools: block_info
                     .map(|d| GetBlockchainInfoBalance::value_pools(*d.value_pools(), delta)),
+                #[cfg(feature = "ycash")]
+                block_fee,
                 size: size.map(|size| size as i64),
                 block_commitments: Some(block_commitments),
                 final_sapling_root: Some(final_sapling_root),
@@ -3240,18 +3419,17 @@ where
                 mempool::Response::Transactions(txns) => {
                     if let Some(tx) = txns.first() {
                         return Ok(if verbose {
-                            GetRawTransactionResponse::Object(Box::new(
-                                TransactionObject::from_transaction(
-                                    tx.transaction().clone(),
-                                    None,
-                                    None,
-                                    &self.network,
-                                    None,
-                                    None,
-                                    Some(false),
-                                    txid,
-                                ),
+                            self.raw_transaction_object(TransactionObject::from_transaction(
+                                tx.transaction().clone(),
+                                None,
+                                None,
+                                &self.network,
+                                None,
+                                None,
+                                Some(false),
+                                txid,
                             ))
+                            .await
                         } else {
                             let hex = tx.transaction().clone().into();
                             GetRawTransactionResponse::Raw(hex)
@@ -3317,18 +3495,17 @@ where
                         }
                     };
 
-                    GetRawTransactionResponse::Object(Box::new(
-                        TransactionObject::from_transaction(
-                            raw_tx,
-                            height,
-                            confirmations,
-                            &self.network,
-                            block_time,
-                            Some(caller_block_hash),
-                            Some(in_best_chain),
-                            txid,
-                        ),
+                    self.raw_transaction_object(TransactionObject::from_transaction(
+                        raw_tx,
+                        height,
+                        confirmations,
+                        &self.network,
+                        block_time,
+                        Some(caller_block_hash),
+                        Some(in_best_chain),
+                        txid,
                     ))
+                    .await
                 } else {
                     match tx {
                         AnyTx::Mined(tx) => {
@@ -3346,20 +3523,19 @@ where
                                 }
                             };
 
-                            GetRawTransactionResponse::Object(Box::new(
-                                TransactionObject::from_transaction(
-                                    tx.tx.clone(),
-                                    Some(tx.height),
-                                    Some(tx.confirmations.into()),
-                                    &self.network,
-                                    // TODO: Performance gain:
-                                    // https://github.com/ZcashFoundation/zebra/pull/9458#discussion_r2059352752
-                                    Some(tx.block_time),
-                                    block_hash,
-                                    Some(true),
-                                    txid,
-                                ),
+                            self.raw_transaction_object(TransactionObject::from_transaction(
+                                tx.tx.clone(),
+                                Some(tx.height),
+                                Some(tx.confirmations.into()),
+                                &self.network,
+                                // TODO: Performance gain:
+                                // https://github.com/ZcashFoundation/zebra/pull/9458#discussion_r2059352752
+                                Some(tx.block_time),
+                                block_hash,
+                                Some(true),
+                                txid,
                             ))
+                            .await
                         }
                         AnyTx::Side((tx, block_hash)) => GetRawTransactionResponse::Object(
                             Box::new(TransactionObject::from_transaction(
@@ -6003,6 +6179,8 @@ impl Default for GetBlockResponse {
             final_orchard_root: None,
             #[cfg(feature = "ycash")]
             chain_history_root: None,
+            #[cfg(feature = "ycash")]
+            block_fee: None,
             nonce: None,
             bits: None,
             difficulty: None,
@@ -6145,6 +6323,14 @@ pub struct BlockObject {
     )]
     #[getset(get = "pub")]
     value_pools: Option<BlockchainValuePoolBalances>,
+
+    /// Ycash (beta3 item 6): ycashd's `blockfee`, the fees of the block's non-coinbase
+    /// transactions in zats (`types::ycash_inputs::block_fee`).
+    #[cfg(feature = "ycash")]
+    #[serde(rename = "blockfee", skip_serializing_if = "Option::is_none", default)]
+    #[getset(get_copy = "pub")]
+    #[new(default)]
+    block_fee: Option<i64>,
 
     /// Information about the note commitment trees.
     #[getset(get_copy = "pub")]
