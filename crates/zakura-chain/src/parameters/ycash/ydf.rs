@@ -36,13 +36,12 @@ pub mod mandate_end {
     /// testnet-yb-fast block is valid with or without the fund output, as on mainnet past
     /// 2,275,000. Below it the 5 % output stays required.
     ///
-    /// PROVISIONAL: 600,000, deliberately far above the tip, so that a node built from this
-    /// tree and run on the fast testnet before the cut stays strict (it keeps paying and
-    /// requiring the output) instead of mining blocks that released nodes reject. The
-    /// coordinator replaces it at the release-candidate cut with the fast-testnet tip then, plus
-    /// 400 blocks, the same value on ycash-dd, ycash6 and kogany. Every node of the network
-    /// must run a build with the final value before the chain reaches it.
-    pub const TESTNET_FAST: Height = Height(600_000);
+    /// Set at the v1.8.0-ycash.beta3 cut: the fast-testnet tip then (512,017) plus 400 blocks, the
+    /// same value as ycash-dd's and ycash6's. Until the cut the tree carried a provisional
+    /// 600,000; the release guard (`qa/kogany_vault_params.py release`, R9) refuses any tag from
+    /// v1.8.0-ycash.beta3 on that carries it. Every node of the network must run a build with
+    /// this value before the chain reaches it.
+    pub const TESTNET_FAST: Height = Height(512_417);
     /// Ycash regtest (`ycash6 src/chainparams.cpp:904`).
     pub const REGTEST: Height = Height(5);
 }
