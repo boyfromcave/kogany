@@ -121,7 +121,7 @@ jobs:
       - name: The Sapling output parameters (ycash-infra zcash-params-v1, the pinned sum)
         if: matrix.crate == 'zakura-rpc' || matrix.crate == 'kogany'
         run: |
-          curl -fsSL --retry 3 -o "$RUNNER_TEMP/sapling-output.params" \
+          curl -fsSL --retry 3 --max-time 120 --max-filesize 4000000 -o "$RUNNER_TEMP/sapling-output.params" \
             https://github.com/boyfromcave/ycash-infra/releases/download/zcash-params-v1/sapling-output.params
           echo "2f0ebbcbb9bb0bcffe95a397e7eba89c29eb4dde6191c339db88570e3f3fb0e4  $RUNNER_TEMP/sapling-output.params" | sha256sum -c -
           echo "KOGANY_SAPLING_OUTPUT_PARAMS=$RUNNER_TEMP/sapling-output.params" >> "$GITHUB_ENV"
