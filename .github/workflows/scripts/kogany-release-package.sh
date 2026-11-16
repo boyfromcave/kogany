@@ -47,7 +47,7 @@ Ports (crates/zakura-chain/src/parameters/ycash.rs)
   Ycash testnet, slow profile                   "TestnetSlow"      18933   18932
   Ycash testnet, legacy profile                 "TestnetLegacy"    19033   19032
 kogany never uses Zcash's ports. The RPC server is off until [rpc] listen_addr is set.
-No testnet peer is built in: name one in initial_testnet_peers. The seeds (ycashd 6.22.0-beta2):
+No testnet peer is built in: name one in initial_testnet_peers. The seeds:
   fast   fastnet-seed.ycash.team:18833
   slow   slownet-seed.ycash.team:18933
   legacy legacy-seed.ycash.team:19033
@@ -56,8 +56,9 @@ macOS: the binaries are not notarized. Before the first run of a browser downloa
 quarantine flag: xattr -dr com.apple.quarantine <this directory>
 
 Getting started
-  ./koganyd --version                      # the crate version and commit, 1.8.0-rc1+kogany.g<12-hex commit>;
-                                           # the P2P user agent carries the release name (/koganyd:${tag#v}/)
+  ./koganyd --version                      # the package version and commit, <version>+kogany.<n>.g<commit>
+                                           # (kogany README.md "Versioning"); the P2P user agent carries
+                                           # the release name (/koganyd:${tag#v}/)
   ./koganyd generate -o kogany.toml        # the default (mainnet) config; default_config_ycash.toml is the same skeleton
   ./koganyd start                          # Ycash mainnet
 
@@ -73,7 +74,22 @@ Testnet (fast profile): write testnet.toml with
 
 and run: ./koganyd -c testnet.toml start
 For the slow or legacy profile set network = "TestnetSlow" or "TestnetLegacy", its seed and its
-RPC port (kogany README.md "Networks, ports and identifiers").
+RPC port (kogany README.md "Ports" and "Networks and identifiers").
+
+Upgrading from an earlier pre-release: stop the old koganyd, put this one in its place and start
+it with the same configuration. The first start upgrades the state database from format 30.2.0
+to 30.3.0, once, for about a minute or two on mainnet. The node serves no RPC until it is done,
+and an interrupted start continues where it stopped. The step is one-way. kogany README.md
+"Upgrading to beta3" and docs/kogany.md "What an operator must know for beta3" have the rest.
+
+Sapling payouts: a coinbase that pays a Sapling address (getcoinbasetemplatefor with a ys1...
+address, or a Sapling mining.miner_address) needs sapling-output.params (3,592,860 bytes), the
+file ycashd uses. koganyd reads it once at start from mining.sapling_output_params or, when that
+is unset, from ycashd's parameter directory (~/.zcash-params on Linux,
+~/Library/Application Support/ZcashParams on macOS), and checks its SHA-256. The file is in the
+zcash-params-v1 release of https://github.com/boyfromcave/ycash-infra and is what ycashd's
+fetch-params installs. Without it the node runs, pays transparent and post-quantum addresses,
+and refuses a Sapling payout (docs/kogany.md "The Sapling output parameters").
 
 Environment overrides use the ZAKURA_ prefix, e.g. ZAKURA_NETWORK__NETWORK=Testnet.
 State lives in ~/.cache/kogany on Linux and ~/Library/Caches/kogany on macOS. The RPC cookie:
