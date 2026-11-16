@@ -25,6 +25,24 @@ for file and line numbers in a backtrace" ;;
   *) runtime="see kogany's README.md" ;;
 esac
 commit=$(git rev-parse HEAD)
+# What `koganyd --version` prints for a release build. The release jobs check out the tag alone
+# (no history, no kogany-ycash-baseline tag), so the build metadata has no commit count:
+# <package version>+kogany.g<12-hex commit> (crates/zakurad/src/application.rs,
+# kogany_build_metadata).
+pkgver=$(sed -n 's/^version = "\(.*\)"$/\1/p' "$root/crates/zakurad/Cargo.toml" | head -n 1)
+[ -n "$pkgver" ] || { echo "no package version in crates/zakurad/Cargo.toml" >&2; exit 1; }
+# The state database format this build writes: the major and patch versions, and the minor
+# version of the ycash build (crates/zakura-state/src/constants.rs).
+constants="$root/crates/zakura-state/src/constants.rs"
+format=$(awk '
+  /^const DATABASE_FORMAT_VERSION: u64 = [0-9]+;/ { major = $NF }
+  /^const DATABASE_FORMAT_PATCH_VERSION: u64 = [0-9]+;/ { patch = $NF }
+  ycash && /^const DATABASE_FORMAT_MINOR_VERSION: u64 = [0-9]+;/ { minor = $NF }
+  { ycash = ($0 == "#[cfg(feature = \"ycash\")]") }
+  END { gsub(";", "", major); gsub(";", "", minor); gsub(";", "", patch)
+        if (major != "" && minor != "" && patch != "") print major "." minor "." patch }
+' "$constants")
+[ -n "$format" ] || { echo "no state database format version in $constants" >&2; exit 1; }
 cat > "$work/$name/README.txt" <<TXT
 koganyd ${tag} (${platform})
 =================================
@@ -56,9 +74,8 @@ macOS: the binaries are not notarized. Before the first run of a browser downloa
 quarantine flag: xattr -dr com.apple.quarantine <this directory>
 
 Getting started
-  ./koganyd --version                      # the package version and commit, <version>+kogany.<n>.g<commit>
-                                           # (kogany README.md "Versioning"); the P2P user agent carries
-                                           # the release name (/koganyd:${tag#v}/)
+  ./koganyd --version                      # the package version and commit, ${pkgver}+kogany.g${commit:0:12};
+                                           # the P2P user agent carries the release name (/koganyd:${tag#v}/)
   ./koganyd generate -o kogany.toml        # the default (mainnet) config; default_config_ycash.toml is the same skeleton
   ./koganyd start                          # Ycash mainnet
 
@@ -77,10 +94,11 @@ For the slow or legacy profile set network = "TestnetSlow" or "TestnetLegacy", i
 RPC port (kogany README.md "Ports" and "Networks and identifiers").
 
 Upgrading from an earlier pre-release: stop the old koganyd, put this one in its place and start
-it with the same configuration. The first start upgrades the state database from format 30.2.0
-to 30.3.0, once, for about a minute or two on mainnet. The node serves no RPC until it is done,
-and an interrupted start continues where it stopped. The step is one-way. kogany README.md
-"Upgrading to beta3" and docs/kogany.md "What an operator must know for beta3" have the rest.
+it with the same configuration. This koganyd writes state database format ${format}. Its first
+start on a database in an older format upgrades it in place, once (a format step takes about a
+minute or two on mainnet). The node serves no RPC until it is done, and an interrupted start
+continues where it stopped. The upgrade is one-way. The "Upgrading" section of kogany's
+README.md and "What an operator must know" in docs/kogany.md have the rest.
 
 Sapling payouts: a coinbase that pays a Sapling address (getcoinbasetemplatefor with a ys1...
 address, or a Sapling mining.miner_address) needs sapling-output.params (3,592,860 bytes), the
