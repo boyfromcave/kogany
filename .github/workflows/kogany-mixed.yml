@@ -122,6 +122,12 @@ jobs:
       - name: Unpack both lines
         run: |
           tar xzf "$RUNNER_TEMP/node-bin.tgz"
+          # tests_config.ini is configure's output on ycash6's runner, so its SRCDIR/BUILDDIR name
+          # ycash6's workspace path; here the ycash6 tree is this job's workspace. Without this
+          # rpc-tests.py looks for create_cache.py and the scripts under a path that does not exist.
+          sed -i -e "s|^SRCDIR=.*|SRCDIR=$GITHUB_WORKSPACE|" -e "s|^BUILDDIR=.*|BUILDDIR=$GITHUB_WORKSPACE|" \
+            qa/pull-tester/tests_config.ini
+          grep -E '^(SRCDIR|BUILDDIR)=' qa/pull-tester/tests_config.ini
           mkdir -p "$RUNNER_TEMP/zk" && tar xzf "$RUNNER_TEMP/koganyd-bin.tgz" -C "$RUNNER_TEMP/zk"
           cat "$RUNNER_TEMP/zk/koganyd-bin.json"
           "$RUNNER_TEMP/zk/koganyd" --version
