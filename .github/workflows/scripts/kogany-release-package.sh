@@ -25,6 +25,24 @@ for file and line numbers in a backtrace" ;;
   *) runtime="see kogany's README.md" ;;
 esac
 commit=$(git rev-parse HEAD)
+# What `koganyd --version` prints for a release build. The release jobs check out the tag alone
+# (no history, no kogany-ycash-baseline tag), so the build metadata has no commit count:
+# <package version>+kogany.g<12-hex commit> (crates/zakurad/src/application.rs,
+# kogany_build_metadata).
+pkgver=$(sed -n 's/^version = "\(.*\)"$/\1/p' "$root/crates/zakurad/Cargo.toml" | head -n 1)
+[ -n "$pkgver" ] || { echo "no package version in crates/zakurad/Cargo.toml" >&2; exit 1; }
+# The state database format this build writes: the major and patch versions, and the minor
+# version of the ycash build (crates/zakura-state/src/constants.rs).
+constants="$root/crates/zakura-state/src/constants.rs"
+format=$(awk '
+  /^const DATABASE_FORMAT_VERSION: u64 = [0-9]+;/ { major = $NF }
+  /^const DATABASE_FORMAT_PATCH_VERSION: u64 = [0-9]+;/ { patch = $NF }
+  ycash && /^const DATABASE_FORMAT_MINOR_VERSION: u64 = [0-9]+;/ { minor = $NF }
+  { ycash = ($0 == "#[cfg(feature = \"ycash\")]") }
+  END { gsub(";", "", major); gsub(";", "", minor); gsub(";", "", patch)
+        if (major != "" && minor != "" && patch != "") print major "." minor "." patch }
+' "$constants")
+[ -n "$format" ] || { echo "no state database format version in $constants" >&2; exit 1; }
 cat > "$work/$name/README.txt" <<TXT
 koganyd ${tag} (${platform})
 =================================
@@ -47,7 +65,7 @@ Ports (crates/zakura-chain/src/parameters/ycash.rs)
   Ycash testnet, slow profile                   "TestnetSlow"      18933   18932
   Ycash testnet, legacy profile                 "TestnetLegacy"    19033   19032
 kogany never uses Zcash's ports. The RPC server is off until [rpc] listen_addr is set.
-No testnet peer is built in: name one in initial_testnet_peers. The seeds (ycashd 6.22.0-beta2):
+No testnet peer is built in: name one in initial_testnet_peers. The seeds:
   fast   fastnet-seed.ycash.team:18833
   slow   slownet-seed.ycash.team:18933
   legacy legacy-seed.ycash.team:19033
@@ -56,7 +74,7 @@ macOS: the binaries are not notarized. Before the first run of a browser downloa
 quarantine flag: xattr -dr com.apple.quarantine <this directory>
 
 Getting started
-  ./koganyd --version                      # the crate version and commit, 1.8.0-rc1+kogany.g<12-hex commit>;
+  ./koganyd --version                      # the package version and commit, ${pkgver}+kogany.g${commit:0:12};
                                            # the P2P user agent carries the release name (/koganyd:${tag#v}/)
   ./koganyd generate -o kogany.toml        # the default (mainnet) config; default_config_ycash.toml is the same skeleton
   ./koganyd start                          # Ycash mainnet
@@ -73,7 +91,23 @@ Testnet (fast profile): write testnet.toml with
 
 and run: ./koganyd -c testnet.toml start
 For the slow or legacy profile set network = "TestnetSlow" or "TestnetLegacy", its seed and its
-RPC port (kogany README.md "Networks, ports and identifiers").
+RPC port (kogany README.md "Ports" and "Networks and identifiers").
+
+Upgrading from an earlier pre-release: stop the old koganyd, put this one in its place and start
+it with the same configuration. This koganyd writes state database format ${format}. Its first
+start on a database in an older format upgrades it in place, once (a format step takes about a
+minute or two on mainnet). The node serves no RPC until it is done, and an interrupted start
+continues where it stopped. The upgrade is one-way. The "Upgrading" section of kogany's
+README.md and "What an operator must know" in docs/kogany.md have the rest.
+
+Sapling payouts: a coinbase that pays a Sapling address (getcoinbasetemplatefor with a ys1...
+address, or a Sapling mining.miner_address) needs sapling-output.params (3,592,860 bytes), the
+file ycashd uses. koganyd reads it once at start from mining.sapling_output_params or, when that
+is unset, from ycashd's parameter directory (~/.zcash-params on Linux,
+~/Library/Application Support/ZcashParams on macOS), and checks its SHA-256. The file is in the
+zcash-params-v1 release of https://github.com/boyfromcave/ycash-infra and is what ycashd's
+fetch-params installs. Without it the node runs, pays transparent and post-quantum addresses,
+and refuses a Sapling payout (docs/kogany.md "The Sapling output parameters").
 
 Environment overrides use the ZAKURA_ prefix, e.g. ZAKURA_NETWORK__NETWORK=Testnet.
 State lives in ~/.cache/kogany on Linux and ~/Library/Caches/kogany on macOS. The RPC cookie:
@@ -82,7 +116,7 @@ State lives in ~/.cache/kogany on Linux and ~/Library/Caches/kogany on macOS. Th
                      <network> is the lowercase network name, e.g. ~/.cache/kogany/testnet/.cookie
 
 RPCs: the stock Ycash RPCs, the vault primitive's set_* and vault_* RPCs and the Yellowback
-yed_* RPCs, at rpcversion 9 (doc/ in the source tree has the contracts).
+yed_* RPCs, at rpcversion 10 (doc/ in the source tree has the contracts).
 
 Licence: MIT or Apache-2.0, at your option (LICENSE-MIT, LICENSE-APACHE).
 TXT

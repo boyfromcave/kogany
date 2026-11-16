@@ -105,7 +105,7 @@ re-runs its consumers.
 | | `audit dormancy` | no upstream test deleted | yes | yes | 1 min |
 | | `audit workflows` | classification, placement, the trigger policy | yes | yes | 1 min |
 | | `audit cross-line (c)` | `qa/yellowback-cross-line.py --this-line kogany` against ycash6 at `YCASH6_REV` (and `testdata/yellowback/PIN` naming that commit) | yes | yes | 1 min |
-| | `audit vault-params (d)` | `cargo run -p zakura-chain --features ycash --example kogany_vault_params`, ycash6's `qa/yellowback-vault-params.py extract` at `YCASH6_REV`, `qa/kogany_vault_params.py compare` | yes | yes | 15 / 5 min |
+| | `audit vault-params (d)` | `cargo run -p zakura-chain --features ycash --example kogany_vault_params`, ycash6's `qa/yellowback-vault-params.py extract` at `YCASH6_REV`, `qa/kogany_vault_params.py compare` (the Vault heights and every network's `ydf_mandate_end_height`, which kogany must print: the release-candidate cut gate of beta3 item 5) | yes | yes | 15 / 5 min |
 | `kogany-build` | `check (ycash feature off)`, `check (… on)` | `cargo check -p kogany --all-targets` | yes | each | 25 / 8 min |
 | | `clippy kogany-pure`, `kogany-rpc`, `zakura-chain`, `zakura-consensus`, `zakura-state`, `zakura-rpc-network`, `zakurad` | `cargo clippy --all-targets -D warnings`, ycash feature on (feature off is `lint.yml`'s) | yes | each | 5–35 / 3–10 min |
 | | `rustfmt (kogany crates)` | `cargo fmt --check` over `kogany-*` | yes | yes | 1 min |
@@ -119,7 +119,7 @@ re-runs its consumers.
 | `kogany-client-legs` | `koganyd / koganyd-bin` (called `kogany-bin`) | this run's `koganyd-bin` | — | yes | 35 / 10 min |
 | | `lightwalletd-dd`, `chain-viz`, `yolo` (each report-only) | the client unmodified at its pin against this run's koganyd (`crates/kogany-rpc/qa/kogany_client_legs.py`; yolo's `tests/regtest.rs` kogany mode with ycash6's node-bin) | no, until the lead architect flips one | each | 10–40 min |
 | `kogany-mixed` | `koganyd / koganyd-bin`, `ycash6 node-bin` | the two binaries | — | each | 35 / 1 min |
-| | `mixed node`, `vault`, `yed`, `fees`, `attest` | ycash6's `qa/kogany_mixed_shards.py run <group>`: `gate` scripts block, `report` scripts never fail the job (all `report` today); the `node` group also runs kogany's own `crates/kogany-rpc/qa/reorg_parity.py` with the two binaries (the reorganisation guard, beta3 item 12; report-only until it has passed on a runner, then the coordinator makes it blocking) | its `gate` scripts | each | 30–120 min |
+| | `mixed node`, `vault`, `yed`, `fees`, `attest` | ycash6's `qa/kogany_mixed_shards.py run <group>` at the pinned ycash6 commit: `gate` scripts block, `report` scripts never fail the job (the shard list at the pin says which is which); the `node` group also runs kogany's own cross-line scripts from `crates/kogany-rpc/qa` with the two binaries: `reorg_parity.py` (the reorganisation guard, beta3 item 12; blocking since it passed on a runner), and, report-only until each has passed on a runner (then the coordinator removes its `continue-on-error`), `coinbase_for_parity.py` (item 3), `value_pools_parity.py` (items 2 and 11) and `rpc_insight_inputs_parity.py` (item 6), which need a ycashd with `getcoinbasetemplatefor`, `transparentPools` and ycash6 #128: ycash6 `3ed5a96c2` or later | its `gate` scripts and `reorg_parity.py` | each | 30–180 min |
 
 Blocking means a candidate for a required status check (see "Turning Actions on"); a
 `continue-on-error` job never turns its run red. The durations are estimates for a
@@ -209,6 +209,9 @@ What kogany publishes and consumes (the workspace's `docs/plans/kogany/ci-design
   file is `yellowback-tests.yml` of `boyfromcave/ycash6`, its `head_sha` is the pin, its event is
   push, schedule or dispatch, and its `build` job succeeded, and checks the downloaded zip against
   the artifact's recorded sha256 digest (ycash6 publishes no `SHA256SUMS` for node-bin yet).
+  `kogany-mixed.yml` also takes that run's `sidecars` artifact (`sidecars.tgz`: `yolo` and
+  `chain-viz`, built by its `sidecars` job), under the same checks, for `yellowback_stratum` and
+  `yellowback_chainviz` (`FETCH_SIDECARS=1`).
 - **Pins kogany holds** (bumped by a reviewed commit, never a branch tip): `YCASH6_REV` in
   `kogany-audit.yml` (must equal `testdata/yellowback/PIN`'s source commit; the cross-line job
   checks it), `YCASH6_REV` in `kogany-mixed.yml` and `kogany-client-legs.yml`, `LWD_REV`, `CHAINVIZ_REV` and `YOLO_REV` in
@@ -248,7 +251,10 @@ Never bump it while a release is in qualification.
 `v<X.Y.Z>-ycash.<beta|rc><n>` (or a dispatch naming one) and on no branch. Its `guard` job refuses
 any other form, refuses a final `vX.Y.Z-ycash.N` (kogany is not a qualified line, plan K-19), and
 requires X.Y.Z to equal the `kogany` crate version in `crates/zakurad/Cargo.toml` (pre-release
-suffix ignored). Three native jobs build `koganyd` (`--release --features "default-release-binaries
+suffix ignored), and refuses an rc tag while testnet-yb-fast's YDF mandate end
+(`mandate_end::TESTNET_FAST`) is the provisional 600,000 (`qa/kogany_vault_params.py release`,
+ycash6's rule R9; a beta tag passes): the release-candidate cut sets the same height on the three
+lines first, and `audit vault-params (d)` checks kogany's equals ycash6's. Three native jobs build `koganyd` (`--release --features "default-release-binaries
 ycash"`, no Rust cache, so a release never restores a cache; no system RocksDB, so the bundled one is
 linked statically) on ubuntu-24.04, ubuntu-24.04-arm and
 macos-15, and pack `koganyd_<tag>_<platform>.tar.gz` (`koganyd`, `README.txt`, the licences,
@@ -265,7 +271,7 @@ does too when its clean checkout is exactly at such a tag; otherwise `/koganyd:<
 
 Prove it before tagging with a dry run, a dispatch on `upgrade/vault` naming the tag the head
 would get: `env -u GH_TOKEN gh workflow run kogany-release.yml -R boyfromcave/kogany --ref
-upgrade/vault -f tag=v1.8.0-ycash.beta2` (`dry_run` defaults to true). It runs the guard, the
+upgrade/vault -f tag=v1.8.0-ycash.beta3` (`dry_run` defaults to true). It runs the guard, the
 three builds with that release name, the Linux debug split, the packages, SBOMs and `SHA256SUMS`,
 then `publish-dry-run` checks the set and the notes file and prints the release it would create.
 A dry run has no token that can write a release and never signs; `publish` runs only on a pushed
@@ -276,14 +282,16 @@ the same name is in progress.
 
 ```sh
 git checkout upgrade/vault && git pull --ff-only
-git tag -a v1.8.0-ycash.beta1 -m "koganyd v1.8.0-ycash.beta1 (pre-release)"
-git push origin v1.8.0-ycash.beta1
+git tag -a v1.8.0-ycash.beta3 -m "koganyd v1.8.0-ycash.beta3 (pre-release)"
+git push origin v1.8.0-ycash.beta3
 ```
 
 ## Turning Actions on
 
-GitHub Actions are off on `boyfromcave/kogany` until the Yellowback lead architect turns them on.
-Nothing has to be disabled first: the off set cannot run. When turning them on:
+Actions were turned on for `boyfromcave/kogany` on 2026-11-02, for the kogany workflows above
+(the first run was push 38f785543), and the off set stays off. The steps are kept for a fresh fork
+or a repository where they were turned off again. Nothing has to be disabled first: the off set
+cannot run. When turning them on:
 
 1. Prefer doing it after `vaults/kogany-compat` merges back into `upgrade/vault` (the W0 gate
    merge). Scheduled runs come from the default branch, `upgrade/vault`; until that merge it holds

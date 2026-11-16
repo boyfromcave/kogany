@@ -110,6 +110,14 @@ jobs:
             echo "ref=$ref"
             echo "dry_run=$DRY_RUN"
           } >> "$GITHUB_OUTPUT"
+      # beta3 item 5 (ycash6's rule R9): an rc or final tag is refused while testnet-yb-fast's YDF
+      # mandate end is unset or the provisional 600,000; the cut sets it on every line. A beta passes.
+      - name: The fast testnet's YDF mandate end is set (rc and final)
+        env:
+          TAG: ${{ steps.check.outputs.tag }}
+        run: |
+          set -euo pipefail
+          python3 qa/kogany_vault_params.py release "$TAG" | tee -a "$GITHUB_STEP_SUMMARY"
 
   build:
     name: koganyd (${{ matrix.platform }})

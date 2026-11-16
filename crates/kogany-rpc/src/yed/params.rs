@@ -1,4 +1,4 @@
-//! `yed_getinfo.params` (ycash6 `src/rpc/yellowback.cpp` `yed_getinfo`, rpcversion 9): every
+//! `yed_getinfo.params` (ycash6 `src/rpc/yellowback.cpp` `yed_getinfo`, rpcversion 10): every
 //! value the Mint page derives from, in ycashd's order. The parameters come from
 //! `kogany_yellowback::params::Params`; the four values a block can move (`supplyCap`'s base
 //! and price, `fees.network`'s price, `attest.bondMinZat`) from the snapshot.

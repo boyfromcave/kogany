@@ -23,7 +23,9 @@ Zakura's, which kogany follows.
   with ycashd's upgrades and branch IDs, Equihash (192,7) from the Ycash fork, the development
   fund (YDF), checkpoints, address prefixes and HRPs, ports, magics and P2P versions.
 - The vault primitive (`set_*`, `vault_*` RPCs), post-quantum owners and the Yellowback module
-  (`yed_*` RPCs), `rpcversion` 8, as on ycash6 and ycash-dd.
+  (`yed_*` RPCs), `rpcversion` 10 since beta3, as on ycash6 and ycash-dd.
+- What each pre-release changed is in its notes, [`doc/release-notes/`](doc/release-notes/)
+  (`v1.8.0-ycash.<beta|rc><n>.md`).
 
 ### Changed
 

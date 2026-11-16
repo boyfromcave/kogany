@@ -10,7 +10,7 @@
 
 It reuses ycash6's own checker, unmodified: the `Contract` class of
 `qa/rpc-tests/yellowback_rpc_contract.py` with its `OPTIONAL` and `NULLABLE` tables, over
-`doc/yellowback-rpc-contract.json` (rpcversion 9). The 27 node-context methods are kogany's (the
+`doc/yellowback-rpc-contract.json` (rpcversion 10; 9 accepted, see `CXX_RPC_VERSIONS`). The 27 node-context methods are kogany's (the
 25 reads and the node-state `yed_setquote` and `yed_addattestation`); the 25 wallet-context
 methods are yewd's (plan K-3, K-20), and kogany must answer them `-32601`.
 
@@ -50,6 +50,14 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 GOLDEN = os.path.join(HERE, '..', '..', '..', 'testdata', 'yellowback', 'yellowback_golden.json')
 
 NOT_LIVE = 'Method not found (Yellowback is not active'
+# kogany's yed_getinfo.rpcversion (kogany_rpc::yed::YED_RPC_VERSION; beta3 decision B3-D5: one step
+# to 10 for the run's additions).
+KOGANY_RPC_VERSION = 10
+# The rpcversion this script accepts from ycash6 (its doc/yellowback-rpc-contract.json and a live
+# ycashd's yed_getinfo): 10 from ycash6's own beta3 step (R-1, branch up/b3-rpcversion-10); 9, the
+# ycash6 upgrade/vault of today (3ed5a96c2), until that step merges. So neither line's CI waits for
+# the other; drop 9 once ycash6 upgrade/vault reports 10.
+CXX_RPC_VERSIONS = (9, 10)
 
 NODE_METHODS = [
     'yed_getinfo', 'yed_getstatehash', 'yed_verifyindex', 'yed_getstats', 'yed_getprice',
@@ -318,7 +326,9 @@ def live_checks(rig, checker, contract, wallet):
     print('getaddress* with the plain post-quantum %s: kogany = ycash6 (%d zat)' % (pq_address, kb['balance']))
 
     info = r.both('yed_getinfo', same=False)
-    assert info['rpcversion'] == 9 and info['enabled'] is True, info
+    assert info['rpcversion'] == KOGANY_RPC_VERSION and info['enabled'] is True, info
+    cxx_version = y.call('yed_getinfo')['rpcversion']
+    assert cxx_version in CXX_RPC_VERSIONS, cxx_version
     tip, ref = info['height'], info['height'] - info['params']['refLag']
     r.both('yed_getstatehash')
     r.both('yed_getstatehash', tip)
@@ -451,7 +461,7 @@ def main(argv=None):
 
     checker = load_checker(args.ycash6)
     contract = checker.Contract(os.path.join(args.ycash6, 'doc', 'yellowback-rpc-contract.json'))
-    assert contract.doc['rpcversion'] == 9, contract.doc['rpcversion']
+    assert contract.doc['rpcversion'] in CXX_RPC_VERSIONS, contract.doc['rpcversion']
     documented = sorted(k for k in contract.doc if k.startswith('yed_'))
     wallet = sorted(set(documented) - set(NODE_METHODS))
     assert len(NODE_METHODS) == 27 and len(wallet) == 25, (len(NODE_METHODS), len(wallet))
@@ -473,7 +483,7 @@ def main(argv=None):
 
     r = Run(n, checker, contract)
     info = r.check('yed_getinfo')
-    assert info['rpcversion'] == 9 and info['enabled'] is True, info
+    assert info['rpcversion'] == KOGANY_RPC_VERSION and info['enabled'] is True, info
     tip = info['height']
     print('yed_getinfo: rpcversion %d, network %s, height %d, statehash at the tip below' % (info['rpcversion'], info['network'], tip))
     sh = r.check('yed_getstatehash')

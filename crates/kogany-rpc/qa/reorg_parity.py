@@ -7,6 +7,7 @@
 
     python crates/kogany-rpc/qa/reorg_parity.py --koganyd <koganyd, the --features ycash build> \\
         [--ycash6-bin $WS/wt/.bin/ycash6-65cb4ae0f] [--workdir DIR] [--keep] [--depths 99,100,101]
+        [--invalidate-depths 99,100]
 
 ycashd refuses a reorganisation that rolls back more than 99 blocks (`MAX_REORG_LENGTH`, ycash6
 `src/main.h:69`): it logs "A block chain reorganization has been detected that would roll back
@@ -33,6 +34,20 @@ Then, where K keeps the non-finalized backup, the operator's step: K's record of
 stored part of B's with exactly the work of K's own chain (regtest: every block has the same
 work), and restored blocks have no receipt order. K must come back on its old tip, never on
 B's branch, and stop again, with a new record, when it is given the switching block again.
+
+Last, `invalidateblock` (`--invalidate-depths`, new nodes for each depth). ycashd's
+`InvalidateBlock` disconnects down to the parent of the invalidated block without asking the
+depth (`src/main.cpp:5245-5267`), and the `ActivateBestChain` that follows
+(`src/rpc/blockchain.cpp:2175`) asks it from that parent. A mines d + 2 blocks (K gets them), B
+mines d + 1 on the common tip (A and K store them: less work than their chain), and A and K are
+told to invalidate block d + 1 of A's chain, whose parent is d blocks above the fork point. B's
+branch has more work than the d blocks left. Expected:
+
+    d = 99    A and K answer null and follow B: the same best block.
+    d = 100   A answers null and exits with "would roll back 100 blocks!", having marked the
+              block invalid and disconnected to its parent; started again, it stops again. K
+              answers an error and exits (status 1) with the same sentence and a record, having
+              changed nothing; started again without the record, it is on its old tip.
 
 Exit status 0 when every expectation holds, 1 otherwise, 2 on a harness error. Stdlib only.
 """
@@ -269,6 +284,78 @@ class Scene:
                                 branch[-1:])
 
 
+    def invalidate_round(self, depth):
+        a, b, k = self.a, self.b, self.k
+        fork_height = a.ok('getblockcount')
+        self.mine(a, depth + 2, [k])
+        old_tip = a.ok('getbestblockhash')
+        self.same_tip(k, old_tip, 'invalidate %d: K follows A for %d blocks' % (depth, depth + 2))
+        branch = [b.ok('getblock', h, 0) for h in b.ok('generate', depth + 1)]
+        new_tip = b.ok('getbestblockhash')
+        for node, name in ((k, 'K'), (a, 'A')):
+            answers = self.offer(node, self.procs[name], branch)
+            check(len(answers) == len(branch) and node.ok('getbestblockhash') == old_tip,
+                  'invalidate %d: %s stores B\'s %d blocks and keeps its tip'
+                  % (depth, name, len(branch)))
+        target = a.ok('getblockhash', fork_height + depth + 1)
+        parent = a.ok('getblockhash', fork_height + depth)
+
+        if depth <= MAX_REORG_LENGTH:
+            for node in (a, k):
+                result, error = node.call('invalidateblock', target)
+                check(result is None and not error,
+                      'invalidate %d: %s answers null' % (depth, node.name))
+            self.same_tip(a, new_tip, 'invalidate %d: A follows B (%d blocks below the parent)'
+                          % (depth, depth))
+            self.same_tip(k, new_tip, 'invalidate %d: K has the same best block as A' % depth)
+            check(self.procs['A'].poll() is None and self.procs['K'].poll() is None,
+                  'invalidate %d: A and K are still running' % depth)
+            return
+
+        # ycashd: null, the block invalid and the chain cut to its parent, then the shutdown.
+        result, error = a.call('invalidateblock', target)
+        check(result is None and not error, 'invalidate %d: A answers null' % depth)
+        self.refused('A', self.procs['A'], depth, 'after invalidateblock, %d below the parent' % depth)
+        seen = self.out('A').count(SENTENCE % depth)
+        self.start_a()
+        code = wait_exit(self.procs['A'], 'ycashd A (restarted)')
+        out = self.out('A')
+        check(out.count(SENTENCE % depth) > seen,
+              'invalidate %d: A restarted stops again with the sentence (exit %s)' % (depth, code))
+        check('Current tip: %s' % parent in out,
+              'invalidate %d: A measured from the parent of the invalidated block' % depth)
+
+        # koganyd: an error, nothing changed, the record, the exit.
+        try:
+            result, error = k.call('invalidateblock', target)
+        except RpcError as e:
+            result, error = None, str(e)
+        check(error, 'invalidate %d: K answers an error (%s)' % (depth, str(error)[:120]))
+        self.refused('K', self.procs['K'], depth, 'on invalidateblock, %d below the parent' % depth)
+        check(self.procs['K'].returncode == 1, 'invalidate %d: K exits with status 1' % depth)
+        records = self.records()
+        check(len(records) == 1 and 'Current tip: %s' % parent in read(records[0]),
+              'invalidate %d: K recorded the refusal, measured from the same parent' % depth)
+        if self.backup:
+            os.remove(records[0])
+            self.start_k(True)
+            wait_up(self.k, self.procs['K'], 'koganyd K (record removed)')
+            check(k.ok('getbestblockhash') == old_tip and k.ok('getblockhash', fork_height + depth + 1) == target,
+                  'invalidate %d: K restarted without the record is on its old tip, the block not invalidated'
+                  % depth)
+
+
+def run_invalidate_scene(args, workdir, base, depth):
+    print('scene %s: invalidateblock, %d blocks below the parent' % (os.path.basename(workdir), depth))
+    scene = Scene(args, workdir, base, True)
+    try:
+        scene.start()
+        scene.mine(scene.a, SHARED_BLOCKS, [scene.b, scene.k])
+        scene.invalidate_round(depth)
+    finally:
+        scene.stop()
+
+
 def run_scene(args, workdir, base, depths, backup):
     print('scene %s: depths %s, non-finalized backup %s' % (os.path.basename(workdir), depths,
                                                            'on' if backup else 'off'))
@@ -291,22 +378,30 @@ def main(argv=None):
     ap.add_argument('--keep', action='store_true', help='keep the temporary directory')
     ap.add_argument('--port-base', type=int, default=28700)
     ap.add_argument('--depths', default='99,100,101', help='rollback depths, comma separated')
+    ap.add_argument('--invalidate-depths', default='99,100',
+                    help='depths below the parent for the invalidateblock scenes, comma separated '
+                         '(empty: none)')
     args = ap.parse_args(argv)
     if not args.zakurad:
         ap.error('--koganyd (or KOGANY_BIN) is required')
-    depths = sorted(int(d) for d in args.depths.split(','))
+    depths = sorted(int(d) for d in args.depths.split(',') if d)
+    invalidate_depths = sorted(int(d) for d in args.invalidate_depths.split(',') if d)
     followed = [d for d in depths if d <= MAX_REORG_LENGTH]
     refused = [d for d in depths if d > MAX_REORG_LENGTH]
     # A refusal ends its nodes: the followed depths and the first refused one share a chain, each
     # further refused depth gets new nodes. The backup is on in the first scene, off in the next.
-    scenes = [followed + refused[:1]] + [[d] for d in refused[1:]]
+    scenes = [s for s in [followed + refused[:1]] + [[d] for d in refused[1:]] if s]
     workdir = args.workdir or tempfile.mkdtemp(prefix='reorg-parity-')
     status = 0
     try:
-        for i, scene_depths in enumerate(s for s in scenes if s):
+        for i, scene_depths in enumerate(scenes):
             run_scene(args, os.path.join(workdir, 'scene%d' % i), args.port_base + 20 * i,
                       scene_depths, backup=(i % 2 == 0))
-        print('reorg_parity: every expectation holds for depths %s' % depths)
+        for i, depth in enumerate(invalidate_depths, len(scenes)):
+            run_invalidate_scene(args, os.path.join(workdir, 'scene%d' % i),
+                                 args.port_base + 20 * i, depth)
+        print('reorg_parity: every expectation holds for depths %s and invalidateblock at %s'
+              % (depths, invalidate_depths))
     except Failure as e:
         print('reorg_parity: FAILED: %s' % e, file=sys.stderr)
         status = 1

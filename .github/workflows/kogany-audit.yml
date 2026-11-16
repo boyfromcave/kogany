@@ -39,7 +39,7 @@ env:
   # The ycash6 commit the pinned vectors and the parameter comparison come from: the commit
   # testdata/yellowback/PIN names (the `cross-line` job checks they agree). A PIN bump moves both.
   YCASH6_REPO: boyfromcave/ycash6
-  YCASH6_REV: f8beb78e1a8beb5293769373ed758a585cdd2f7c
+  YCASH6_REV: 3ed5a96c233f0ec9d4d8ad08b0aaa24afc22dec3
 
 jobs:
   selftest:
@@ -163,8 +163,12 @@ jobs:
         run: cargo run --locked -q -p zakura-chain --features ycash --example kogany_vault_params > kogany-vault-params.json
       - name: ycash6's parameters (its extractor, at YCASH6_REV)
         run: python3 ycash6/qa/yellowback-vault-params.py extract --root ycash6 > ycash6-vault-params.json
+      # A run step's default shell is `bash -e` without pipefail: without it the pipe into tee
+      # would hide the comparison's exit status and the leg could never fail.
       - name: compare
-        run: python3 qa/kogany_vault_params.py compare kogany-vault-params.json ycash6-vault-params.json | tee -a "$GITHUB_STEP_SUMMARY"
+        run: |
+          set -o pipefail
+          python3 qa/kogany_vault_params.py compare kogany-vault-params.json ycash6-vault-params.json | tee -a "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: ${{ !cancelled() }}
         with:

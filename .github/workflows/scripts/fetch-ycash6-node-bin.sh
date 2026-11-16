@@ -12,6 +12,10 @@
 #   - the downloaded artifact zip matches the sha256 digest GitHub recorded at upload, and the
 #     tarball holds src/ycashd. (ycash6 publishes no SHA256SUMS for node-bin; the digest is the
 #     integrity check until it does.)
+# With FETCH_SIDECARS=1, from the same run it also fetches `sidecars` (sidecars.tgz: the yolo and chain-viz binaries that
+# ycash6's `sidecars` job builds at the pins of that commit's workflow, for yellowback_stratum and
+# yellowback_chainviz), under the same checks: job `sidecars` concluded success, the recorded
+# digest matches, and the tarball holds exactly yolo and chain-viz.
 # Optional $RUN_ID narrows the search to that one run (it must pass the same checks).
 set -euo pipefail
 dst=${1:?usage: fetch-ycash6-node-bin.sh <dir>}
@@ -32,6 +36,27 @@ else
 fi
 echo "ycash6 yellowback-tests.yml runs at $REV (push, schedule or dispatch): ${runs:-none}"
 tmp=$(mktemp -d)
+# $1: the run whose node-bin was taken. Exits 1 when the run has no checked sidecars artifact.
+fetch_sidecars() {
+  local r=$1 ok art id digest got
+  ok=$(gh api "repos/$YCASH6_REPO/actions/runs/$r/jobs?per_page=100" \
+    -q '[.jobs[] | select(.name == "sidecars" and .conclusion == "success")] | length')
+  [ "$ok" = 1 ] || { echo "::error::run $r: job sidecars did not succeed (yolo and chain-viz are needed by yellowback_stratum and yellowback_chainviz)"; exit 1; }
+  art=$(gh api "repos/$YCASH6_REPO/actions/runs/$r/artifacts?name=sidecars" \
+    -q '.artifacts[] | select(.expired == false) | "\(.id) \(.digest)"' | head -n1)
+  [ -n "$art" ] || { echo "::error::run $r: no unexpired sidecars artifact"; exit 1; }
+  id=${art%% *}; digest=${art#* }
+  case "$digest" in sha256:*) ;; *) echo "::error::run $r, sidecars: no recorded digest"; exit 1 ;; esac
+  gh api "repos/$YCASH6_REPO/actions/artifacts/$id/zip" > "$tmp/s.zip"
+  got=sha256:$(sha256sum "$tmp/s.zip" | cut -d' ' -f1)
+  [ "$got" = "$digest" ] || { echo "::error::run $r, sidecars: digest $got != recorded $digest"; exit 1; }
+  rm -rf "$tmp/s" && mkdir "$tmp/s" && unzip -q "$tmp/s.zip" -d "$tmp/s"
+  [ -f "$tmp/s/sidecars.tgz" ] || { echo "::error::run $r, sidecars: no sidecars.tgz"; exit 1; }
+  [ "$(tar -tzf "$tmp/s/sidecars.tgz" | sort | tr '\n' ' ')" = "chain-viz yolo " ] \
+    || { echo "::error::run $r, sidecars: sidecars.tgz does not hold exactly yolo and chain-viz"; exit 1; }
+  mv "$tmp/s/sidecars.tgz" "$dst/sidecars.tgz"
+  echo "yolo, chain-viz: $YCASH6_REPO run $r (sidecars, $digest) at $REV" >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
+}
 for r in $runs; do
   ok=$(gh api "repos/$YCASH6_REPO/actions/runs/$r/jobs?per_page=100" \
     -q '[.jobs[] | select(.name == "build" and .conclusion == "success")] | length')
@@ -51,6 +76,7 @@ for r in $runs; do
     grep -qx 'src/ycashd' "$tmp/list" || { echo "::error::run $r, $name: node-bin.tgz without src/ycashd"; exit 1; }
     mkdir -p "$dst" && mv "$tmp/x/node-bin.tgz" "$dst/node-bin.tgz"
     echo "ycashd: $YCASH6_REPO run $r ($name, $digest) at $REV" >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
+    [ "${FETCH_SIDECARS:-0}" != 1 ] || fetch_sidecars "$r"
     exit 0
   done
 done

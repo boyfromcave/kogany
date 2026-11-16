@@ -18,10 +18,61 @@ Where these documents name a Zcash value, a `koganyd` uses Ycash's instead:
 | Zcash's DNS seeders | `seed.ycash.xyz` (mainnet) |
 | Zakura P2P v2 (`p2p_stack` `dual` or `zakura`) | legacy TCP only (decision K-11) |
 | NU5, NU6, NU6.1, Orchard | not active on Ycash; the Ycash upgrade, then Blossom, Heartwood, Canopy, then Vault |
-| `zs…`, `t1…` addresses | `ys…`, `s1…`, post-quantum `sq…`, Yellowback `yb…` |
+| `zs…`, `t1…` addresses | `ys…`, `s1…`, post-quantum `sqf…`/`sqs…`, Yellowback `yb…` (post-quantum `ybf…`/`ybs…`) |
 
 [README.md](../README.md) has the full table, how to build and run each network, and the pointers
 to the Yellowback and vault RPC documents in [`doc/`](../doc/).
+
+## What an operator must know for beta3
+
+- **The first start upgrades the database, for about a minute or two.** The state moves from
+  format 30.2.0 to 30.3.0 (the transparent pools by type and the chain's transaction count)
+  once, at the first start of a beta3 `koganyd` on an older database. Until it is done the node
+  serves no RPC and commits no block; it logs progress every 100,000 heights, and an interrupted
+  start continues where it stopped. Allow for it in health checks and supervisors. The step is
+  one-way: nothing takes the database back to 30.2.0, though a beta2 `koganyd` still opens it
+  ("The upgrade", below). ycashd fills its own index at its first beta3 start too; on kogany it
+  is a database format step.
+- **`rpcversion` is 10** (`yed_getinfo`), as on ycashd 6.22.0-beta3. It was 9 in beta2.
+- **`mining.ydf`: the development-fund donation is opt-in.** After the fund's mandate ends a
+  block this node builds pays the miner the whole subsidy and every fee by default
+  (`ydf = 0`). A miner who wants to keep donating sets `ydf = 5` under `[mining]` (ycashd's
+  `-ydf=5`); any whole number from 0 to 100 is taken. Before the mandate ends the 5 % output is a
+  consensus rule and is paid whatever this says.
+- **Fast-testnet nodes must upgrade before the fund mandate ends there.** The fast testnet's
+  mandate now ends at a height of its own, set when the release candidate is cut (the release
+  notes name it). From that height a block without the fund output is valid; a node on an older
+  release rejects it and leaves the chain. Mainnet, the slow and legacy profiles and regtest are
+  unchanged.
+- **The transparent pools and `transactions`.** `getblockchaininfo` and `getblock` answer
+  `transparentPools`, and `getblockchaininfo` answers `transactions`. Where the node does not
+  know a figure it says so instead of guessing: an entry with `monitored: false` and no
+  amounts, and no `transactions` key. A pruned node that upgrades an older database has the
+  count but not the pools ("Where a `koganyd` answers differently", below).
+- **Explorer nodes set `[rpc] insight_explorer = true`.** It names `value`, `valueSat` and
+  `address` on transaction inputs and adds `blockfee` to `getblock`, as ycashd's
+  `-insightexplorer` does, on an archive node. It is off by default; keep it off where the RPC
+  port is reachable by untrusted clients.
+- **A reorganisation deeper than 99 blocks stops the node, and keeps it stopped.** `koganyd`
+  logs ycashd's message, exits with status 1 (ycashd exits with 0) and writes the record
+  `ycash-reorg-refused` in the state database's directory; while that file exists every start
+  stops again. Beside the non-finalized backup it keeps the tip it was on
+  (`<network>.ycash-best-tip`), so a restart without the record comes back on that tip. Decide
+  which chain is right, then remove the record ("Deep reorganisations", below).
+- **A shielded coinbase needs the Sapling output parameters.** To pay a Sapling miner
+  (`getcoinbasetemplatefor`, or a Sapling `mining.miner_address`) the node reads
+  `sapling-output.params` (3,592,860 bytes) at start, from ycashd's parameter directory
+  (`~/.zcash-params`) or `mining.sapling_output_params`. Without it a Sapling coinbase is
+  refused with "Sapling output parameters are not loaded"; transparent and post-quantum
+  coinbases are unaffected.
+- **JSON-RPC 1.0 batches are answered.** A batch (a JSON array of requests) whose members are
+  bitcoind-style 1.0 requests, as block explorers such as Inzyght send them, gets one answer per
+  member, as on ycashd. Single requests were already accepted.
+- **The wallet is a separate process.** `koganyd` has no wallet. yewd, in the yew repository
+  (`yewd/`), sits in front of it and answers ycashd's wallet RPCs; point it at `koganyd`'s RPC
+  port and cookie. See "Where a `koganyd` answers differently", below.
+- **Builders: Rust 1.100.0.** `rust-toolchain.toml` pins the compiler; `rustup` installs it on the
+  first `cargo` call in the tree.
 
 ## Where a `koganyd` behaves as ycashd does
 
@@ -48,7 +99,27 @@ behaviours follow ycashd's there, each against Zakura's own:
   been detected that would roll back <n> blocks! This is larger than the maximum of 99 blocks,
   and so the node is shutting down for your safety.", with the two tips and the fork point, and
   shuts down on its old tip. No block is marked invalid. The guard is asked when a block is
-  committed and on `reconsiderblock`, as on ycashd. Zakura's own window stays 1,000 blocks
+  committed and on `reconsiderblock` and `invalidateblock`, as on ycashd.
+
+  _`invalidateblock`._ ycashd disconnects the best chain down to the parent of the invalidated
+  block without asking the depth (`InvalidateBlock`, `src/main.cpp:5245-5267`), and the
+  `ActivateBestChain` that follows (`src/rpc/blockchain.cpp:2175`) asks it from that parent. So
+  does `koganyd`: the blocks at and above the invalidated one are not counted, and the call is
+  refused only when it would leave the node on a branch that forks more than 99 blocks below
+  that parent. What is left differs, and so does what the caller sees:
+
+  | | ycashd | `koganyd` |
+  | --- | --- | --- |
+  | The RPC answer | `null`, as for an invalidation that is made | an error, `-1 invalidate block request was unexpectedly dropped`: the state stopped before it answered |
+  | The block | marked invalid | unchanged |
+  | The best tip | the parent of the invalidated block | the tip the node had |
+  | Then | logs the message and shuts down (exit status 0) | logs the message, records the refusal and exits (status 1) |
+  | At every start | meets the other branch from the parent and shuts down again | stops while the record exists; without it, runs on the tip it had |
+
+  So a refused `invalidateblock` changes nothing on `koganyd`: after the record is removed the
+  node is on the tip it had, and the same call is refused again. To invalidate that block all
+  the same, first `invalidateblock` the first block of the other branch. `reorg_parity.py`
+  checks every row against a ycashd, at 99 blocks (both follow the other branch) and at 100. Zakura's own window stays 1,000 blocks
   (`MAX_BLOCK_REORG_HEIGHT`), and a `koganyd` built without the `ycash` feature follows any
   branch inside it.
 
@@ -62,7 +133,9 @@ behaviours follow ycashd's there, each against Zakura's own:
   database's directory, `<state.cache_dir>/state/v<major>/<network>/`, and **the node stops at
   every start while that file exists**, whether or not the non-finalized backup is on, as a
   ycashd meets the branch in its block index at every start. The file holds the message; if it
-  is empty or cannot be read the node still stops, and says where the file is. The directory is
+  is empty or cannot be read the node still stops, and says where the file is. If the message
+  cannot be written (a full disk) the file is made empty, which counts; only if there is no
+  file at all does the failure the node stops with say that nothing stops its next start. The directory is
   the one of the database's major format version: a `koganyd` release with a new major version
   opens a new directory and builds its state again from genesis, so it has neither the record
   nor the tip the record was about, like a ycashd on an empty data directory. Decide and remove
@@ -99,8 +172,9 @@ behaviours follow ycashd's there, each against Zakura's own:
   6. Restore the network settings and start the node again.
 
   _To accept the new chain:_ steps 1 to 4, then `invalidateblock` the first block of the old
-  chain above the fork point (`getblockhash <fork height + 1>`), which is not asked the depth
-  either on ycashd (`InvalidateBlock` disconnects before `ActivateBestChain` runs). The stored
+  chain above the fork point (`getblockhash <fork height + 1>`). Its parent is the fork point,
+  which the other branch holds, so nothing is rolled back from it and the call is never refused,
+  on ycashd as here. The stored
   part of the other branch becomes the best chain, and the node takes the rest from its peers
   after step 6. `preciousblock`, which ycashd does not have, is an operator's override between
   tips of equal work only and is not asked the depth: it cannot move the node to a branch with
@@ -111,13 +185,22 @@ behaviours follow ycashd's there, each against Zakura's own:
   _With the backup off_ a node that is started without the record has only its finalized
   blocks: it has no tip to keep, and follows the chain with the most work its peers give it,
   which is the new one. That node cannot be kept on the old chain by removing the record; turn
-  the backup on before it is needed on any node that must be able to make this choice.
+  the backup on before it is needed on any node that must be able to make this choice. The same
+  holds for any restart of such a node, refusal or not: it comes back without the blocks above
+  its finalized tip (up to 1,000), has no tip to compare with, and follows its peers' best chain
+  where a ycashd, which keeps its tip, would stop. `koganyd` warns of this at every start with
+  the backup off.
 
   Proved by `crates/kogany-rpc/qa/reorg_parity.py` against ycashd (depths 99, 100, 101, the
-  restarts, and the restart without the record), and in `zakura-state` by
+  restarts, the restart without the record, and `invalidateblock` at 99 and 100), and in `zakura-state` by
   `running_writer_refuses_a_commit_that_rolls_back_100_blocks` (and its `_header_integrated`
   twin, the path the node uses),
   `running_writer_refuses_a_reconsideration_that_rolls_back_100_blocks`,
+  `running_writer_refuses_an_invalidation_that_rolls_back_102_blocks`,
+  `running_writer_makes_an_invalidation_that_rolls_back_99_blocks`,
+  `running_writer_refuses_an_invalidation_that_rolls_back_100_blocks` (each with its
+  `_header_integrated` twin), `reorg_guard_asks_an_invalidation_from_the_parent_as_ycashd`,
+  `reorg_refusal_is_recorded_when_its_message_cannot_be_written`,
   `restored_best_chain_is_the_one_the_node_was_on` and
   `ycash_restart_keeps_the_tip_the_node_was_on`.
 - **Templates.** `getblocktemplate` has no limit on unpaid ZIP-317 actions by default, as ycashd's
@@ -159,7 +242,12 @@ behaviours follow ycashd's there, each against Zakura's own:
   transparent and post-quantum addresses are unaffected. With the file, `getblocktemplate` also
   serves a Sapling `mining.miner_address` (ycashd's `-mineraddress=<Sapling>`): the miner's
   reward is one Sapling output and only the fund output is transparent. Proofs are made off the
-  async worker threads, at most four at once; one takes about 0.2 s on a current desktop core.
+  async worker threads, at most four at once; one takes about 0.2 s on a current desktop core,
+  and a call that finds no free slot within 30 s is refused. `getcoinbasetemplatefor` is in the
+  access class of `getblocktemplate` and `submitblock`: with `rpc.enable_cookie_auth = true`
+  (the default) it needs the cookie, as on ycashd, where every RPC is authenticated; with
+  cookie authentication off, whoever reaches the RPC port can call the three of them, and can
+  keep the four proof slots busy. Keep the cookie on, or the port unreachable, on a pool's node.
 - **The insight explorer fields.** `rpc.insight_explorer = true` is kogany's counterpart of
   ycashd's `-insightexplorer` for the transaction and block answers (off by default). On an
   archive node it adds `value`, `valueSat` and `address` to every non-coinbase input in
@@ -180,6 +268,14 @@ behaviours follow ycashd's there, each against Zakura's own:
   on) leaves the node without a payout key: it emits no tag and `yed_setquote` refuses
   `no-payout-address`, as a ycashd mining to its wallet does. A Yellowback-live node can then mine
   to a transparent address without naming a payout key.
+- **JSON-RPC 1.0 batches.** ycashd runs each member of a batch as a request of its own, whether
+  or not it says `"jsonrpc"`, and answers every one in order. `koganyd` does the same since
+  beta3: each 1.0 member is taken as a single 1.0 request is, and answered in its own version;
+  an empty batch answers `[]`. The limits are unchanged (at most 1,000 members, the body limit,
+  authentication). Two answers differ: a 1.0 member with `"id": null` or no id answers `-32600`
+  "Invalid request" where ycashd runs it and answers with `"id": null`, and a member whose id
+  JSON-RPC 2.0 does not allow (negative, fractional, a boolean, an object) answers `-32600`
+  without running. A batch of 2.0 members is answered as before.
 - **Transaction relay.** An inv-announced transaction id the per-peer download cap
   (`MAX_INBOUND_CONCURRENCY_PER_PEER`, 5) refuses is kept, bounded, and requested again when a
   slot frees, as ycashd keeps every announced id in its request queue: a burst of announcements is
@@ -220,24 +316,24 @@ These differences are kept: the RPC server is upstream Zakura's, and the wallet 
   - **`monitored`** in `transparentPools` means "this node knows the value", as on ycashd. It is
     `false`, and the amounts are absent, for a block the index does not cover; `transactions`
     is then omitted. (In `valuePools` Zakura's meaning stands: "the pool is not zero".)
-  - **The upgrade.** The index is state database format 30.3.0. A node started on an older
-    database fills it once at startup, before it serves RPC or commits a block: the
-    transaction count from genesis (it reads no transaction), the pools from the compiled seed
-    at height 2,800,000 on a chain that contains that block (mainnet and the testnets that
-    share it), otherwise from genesis. A start that is interrupted continues where it stopped.
-    It logs its progress every 100,000 heights. Measured on real state with a debug build
-    (2026-11-15; a release-build timing is still to be taken for the release notes): the fast
-    testnet in 37 s (the count 4.7 s for 717,594 transactions, the pools 32 s), mainnet in
-    75 s (the count 35 s for 8,941,849 transactions over 3.1 million rows, the pools 40 s from
-    the seed at 2,800,000). On the fast testnet the figures matched the invariants and
-    ycashd's `valuePools` transparent entry at every height 510,353 to 511,352, `transactions`
-    was 718,657 on both nodes, and `vault` equalled `vault_getinfo.lockedvalue`; a `kill -9`
-    during each fill resumed and ended with identical figures.
+  - **The upgrade.** The index is state database format 30.3.0 (beta2 wrote 30.2.0). A node
+    started on an older database fills it once at startup, before it serves RPC or commits a
+    block: the transaction count from genesis (it reads no transaction), the pools from the
+    compiled seed at height 2,800,000 on a chain that contains that block (mainnet and the
+    testnets that share it), otherwise from genesis. A start that is interrupted continues where
+    it stopped. It logs its progress every 100,000 heights, and takes about a minute or two on
+    mainnet, less on the fast testnet. On the fast testnet the figures matched ycashd's
+    `valuePools` transparent entry at every height compared, `transactions` was the same on both
+    nodes, and `vault` equalled `vault_getinfo.lockedvalue`; a `kill -9` during each fill
+    resumed and ended with identical figures.
   - **A pruned node** that synced on this format has both figures. One that upgrades an older
     database gets `transactions` but not the pools (the blocks to read are gone): its
-    `transparentPools` says `monitored: false` until it is synced again.
-  - **Going back to an older `koganyd`** is safe: it ignores the index and leaves the blocks it
-    adds without rows. The next start of this version fills them. Checked with the released
+    `transparentPools` says `monitored: false` until its state is built again from genesis
+    with this version. A database that is only partly filled answers the same way for the
+    blocks it does not cover.
+  - **The step is one-way, and going back is safe.** No version takes the database back to
+    30.2.0. An older `koganyd` still opens it: it ignores the index and leaves the blocks it
+    adds without rows, and the next start of this version fills them. Checked with the released
     beta2 binary: it opens an upgraded database cleanly, marks it downgraded and reads the
     68-byte `block_info` rows correctly; the next beta3 start re-runs the upgrade in under a
     second.
@@ -256,7 +352,9 @@ These differences are kept: the RPC server is upstream Zakura's, and the wallet 
   parameters disagree. A block hash above the block's own target (`high-hash`) scores 100,
   where ycashd scores 50. And `koganyd` checks that hash before the Equihash solution (Zakura's
   cheap check first), so a block wrong in both answers `high-hash` where ycashd answers
-  `invalid-solution`; both score it 100.
+  `invalid-solution`; both score it 100. (Since beta3 `koganyd` checks the difficulty target
+  before the median-time rules, as ycashd does, so a header wrong in both of those ways answers
+  `bad-diffbits` on both lines.)
 
 For post-quantum addresses (`sqf…`/`sqs…`, the YED `ybf…`/`ybs…`), the answers match ycashd's
 field for field (2026-11-12, regtest, `koganyd` against ycash6 6.22.0-beta2):

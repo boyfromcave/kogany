@@ -11,7 +11,8 @@
 //! This is fork choice, not block validity: the guard never rejects a block, it stops the node
 //! before the best chain changes.
 //!
-//! The state writer asks [`NonFinalizedState::refused_reorg`] before it publishes a commit. On a
+//! The state writer asks [`NonFinalizedState::refused_reorg`] before it publishes a commit or a
+//! reconsideration, and [`NonFinalizedState::refused_invalidation`] before an invalidation. On a
 //! refusal it records the message beside the state database ([`record`]), and exits; the node
 //! shuts down on the writer's failure. While the record exists the node refuses to start
 //! ([`recorded_for`]) and the writer exits at once ([`recorded`]), whether or not the
@@ -146,6 +147,40 @@ impl NonFinalizedState {
             fork,
         })
     }
+
+    /// Returns the refusal if invalidating `hash` moves the node to a branch that forks more
+    /// than [`MAX_REORG_LENGTH`] blocks below the parent of `hash`.
+    ///
+    /// ycashd's `invalidateblock` disconnects the best chain down to that parent without asking
+    /// the depth (`InvalidateBlock`, ycash6 `src/main.cpp:5245-5267`), then calls
+    /// `ActivateBestChain` (`src/rpc/blockchain.cpp:2171-2175`), whose guard measures from the
+    /// tip it finds, the parent (`src/main.cpp:5004-5008`). So the blocks at and above `hash`
+    /// are not counted, and a branch that holds the parent rolls nothing back.
+    ///
+    /// `None` when `hash` is not in the best chain (the best chain keeps its tip), when it is
+    /// the first non-finalized block (the parent is the finalized tip, which every chain
+    /// keeps), and when the best chain after the invalidation holds the parent.
+    pub(crate) fn refused_invalidation(&self, hash: block::Hash) -> Option<RefusedReorg> {
+        let old = self.best_chain()?;
+        let parent_height = Height(old.height_by_hash(hash)?.0.checked_sub(1)?);
+        let parent = (parent_height, old.hash_by_height(parent_height)?);
+
+        let mut after = self.clone();
+        after.invalidate_block(hash).ok()?;
+        let new = after.best_chain()?;
+        if new.contains_block_hash(parent.1) {
+            return None;
+        }
+
+        let (_, fork) = rollback(old, new);
+        let rollback = parent.0 .0.saturating_sub(fork.0 .0);
+        (rollback > MAX_REORG_LENGTH).then(|| RefusedReorg {
+            rollback,
+            old_tip: parent,
+            new_tip: new.non_finalized_tip(),
+            fork,
+        })
+    }
 }
 
 /// The path of the refusal record for the state database at `db_path`.
@@ -157,12 +192,7 @@ pub(crate) fn refusal_path(db_path: &Path) -> PathBuf {
 /// of one: a temporary file beside it is written and synced, renamed over `path`, and the
 /// directory is synced.
 fn write_durably(path: &Path, contents: &[u8]) -> io::Result<()> {
-    let mut temporary_name = path
-        .file_name()
-        .map(OsString::from)
-        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "the path names no file"))?;
-    temporary_name.push(".tmp");
-    let temporary = path.with_file_name(temporary_name);
+    let temporary = temporary_path(path)?;
 
     let mut file = fs::File::create(&temporary)?;
     file.write_all(contents)?;
@@ -170,6 +200,16 @@ fn write_durably(path: &Path, contents: &[u8]) -> io::Result<()> {
     drop(file);
     fs::rename(&temporary, path)?;
     sync_parent_dir(path)
+}
+
+/// The temporary file [`write_durably`] writes before it renames it over `path`.
+fn temporary_path(path: &Path) -> io::Result<PathBuf> {
+    let mut temporary_name = path
+        .file_name()
+        .map(OsString::from)
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "the path names no file"))?;
+    temporary_name.push(".tmp");
+    Ok(path.with_file_name(temporary_name))
 }
 
 /// Syncs the directory that holds `path`, so a rename or a removal in it survives a crash.
@@ -189,10 +229,49 @@ fn sync_parent_dir(path: &Path) -> io::Result<()> {
 /// The record does not depend on the non-finalized backup. An ephemeral database is deleted with
 /// its directory when the node stops, and the record with it: its next start is a new node at
 /// genesis, which has no tip to roll back.
+///
+/// If the message cannot be written (a full disk), the temporary file is removed and the record
+/// is still made, empty and without touching a record that is there: [`recorded`] counts a file
+/// with no message, so the node stays down either way.
+///
+/// The answer follows what the next start will find, not which step failed: `Ok` whenever the
+/// record exists, also when it could not be synced, and an error only when there is no record
+/// at all.
 pub(crate) fn record(db_path: &Path, message: &str) -> io::Result<PathBuf> {
     let path = refusal_path(db_path);
-    write_durably(&path, message.as_bytes())?;
-    Ok(path)
+    let Err(error) = write_durably(&path, message.as_bytes()) else {
+        return Ok(path);
+    };
+    tracing::error!(
+        ?error,
+        ?path,
+        "could not write the refused reorganization's message durably: recording the refusal \
+         with the file as it is, or without a message"
+    );
+    if let Ok(temporary) = temporary_path(&path) {
+        // What is left of the message; a failure to remove it changes nothing the node reads.
+        let _ = fs::remove_file(temporary);
+    }
+
+    let made = fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&path)
+        .and_then(|file| file.sync_all())
+        .and_then(|()| sync_parent_dir(&path));
+    match made {
+        Ok(()) => Ok(path),
+        // The record is there (anything at the path counts, [`recorded`]): the next start stops.
+        Err(error) if fs::symlink_metadata(&path).is_ok() => {
+            tracing::error!(
+                ?error,
+                ?path,
+                "the record of the refused reorganization exists, but could not be synced"
+            );
+            Ok(path)
+        }
+        Err(error) => Err(error),
+    }
 }
 
 /// What the node says when the record exists but holds no message it can show.
