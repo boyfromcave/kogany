@@ -11,12 +11,14 @@ This page is the procedure. The bundle format is `kogany-state/2` (ycash-infra
 
 ## What is published
 
-Two families, in a public object store. The newest height of each is named by a `latest` manifest:
+Two families, at `https://snapshots.ycash.team` (the Ycash contributors' object store behind a
+CDN; the store's direct `…s3.us-east-1.amazonaws.com/snapshots/` addresses still work). The newest
+height of each, per state format, is named by a `latest-<state_format>` manifest:
 
 | Family | Base URL | For |
 | --- | --- | --- |
-| pruned | `https://ycash-contributors-object-store.s3.us-east-1.amazonaws.com/snapshots/kogany-main-pruned` | a node run with `[state.storage_mode.pruned]`: raw transactions kept for the last 34,560 blocks (30 days). About 5.4 GB. |
-| archive | `https://ycash-contributors-object-store.s3.us-east-1.amazonaws.com/snapshots/kogany-main` | an archive node (the default storage mode) or a pruned one. About 22 GB. |
+| pruned | `https://snapshots.ycash.team/kogany-main-pruned` | a node run with `[state.storage_mode.pruned]`: raw transactions kept for the last 34,560 blocks (30 days). About 5.4 GB. |
+| archive | `https://snapshots.ycash.team/kogany-main` | an archive node (the default storage mode) or a pruned one. About 22 GB. |
 
 Each height `<base>/<H>/` holds the tarball, `manifest.json`, `SHA256SUMS` (over the tarball and
 the manifest) and `SHA256SUMS.minisig`, a minisign signature over `SHA256SUMS` by the Ycash
@@ -30,11 +32,19 @@ RWQYr5PFpiPJAigk86vf89bPYrJCXj5tskgRAPRYFsEXyciZo8dveOGQ
 (the same key as ycash-infra `keys/ycash-release.pub`). The `main/` family in the same store
 holds ycashd datadirs (`ycash-state/2`): koganyd cannot read them.
 
-**The state format must match.** A bundle holds the database of one Zakura state format, named in
-the manifest's `state_format` and in the latest manifest's path (`latest-30.2.0`). This tree
-writes format 30.2.0 (`crates/zakura-state/src/constants.rs`, `DATABASE_FORMAT_VERSION` and the
-minor and patch constants). A koganyd with another major version opens a different directory
-(`state/v<major>/`) and ignores the bundle.
+**The state format must be one this koganyd opens.** A bundle holds the database of one Zakura
+state format, named in the manifest's `state_format` and in the latest manifest's path
+(`latest-30.2.0`). This tree writes format 30.3.0 (beta3; beta1 and beta2 wrote 30.2.0;
+`crates/zakura-state/src/constants.rs`, `DATABASE_FORMAT_VERSION` and the minor and patch
+constants). It restores a 30.2.0 or a 30.3.0 bundle: a 30.2.0 one is upgraded to 30.3.0 at the
+first start, once, for about a minute or two, before the node answers RPC. A koganyd with another
+major version opens a different directory (`state/v<major>/`) and ignores the bundle. Until a
+30.3.0 bundle is published, the published ones are 30.2.0.
+
+**A pruned 30.2.0 bundle has no transparent pools.** The upgrade counts every block's
+transactions but cannot rebuild the pools by type without the blocks pruning removed, so on
+such a node `getblockchaininfo.transparentPools` answers `monitored: false` (with
+`transactions` present). An archive bundle gets both.
 
 **Pruned is one-way.** A pruned bundle restores only into a node configured with
 `[state.storage_mode.pruned]` and `tx_retention` of at least 10,000; koganyd refuses to open it
@@ -74,14 +84,15 @@ for the tarball plus its unpacked size (pruned: 5.4 + 6.7 GB; archive: 22 + 24 G
    `curl -C -` resumes an interrupted download.
 
    ```sh
-   B=https://ycash-contributors-object-store.s3.us-east-1.amazonaws.com/snapshots/kogany-main-pruned
+   B=https://snapshots.ycash.team/kogany-main-pruned
    H=$(curl -fsS $B/latest-30.2.0/manifest.json | jq -r .height)
    curl -fsS --remote-name-all $B/$H/{manifest.json,SHA256SUMS,SHA256SUMS.minisig}
    T=$(jq -r .tarball manifest.json)
    curl -fL -C - -O $B/$H/$T
    ```
 
-   For the archive family, use `.../snapshots/kogany-main` as `B` and skip step 2.
+   For the archive family, use `https://snapshots.ycash.team/kogany-main` as `B` and skip step 2.
+   Once a bundle in this koganyd's own format is published, `latest-30.3.0` names it.
 
 4. Check the signature, then every file against it.
 
@@ -96,8 +107,8 @@ for the tarball plus its unpacked size (pruned: 5.4 + 6.7 GB; archive: 22 + 24 G
 5. Replace the mainnet state and check its format. Run this as one block, in the shell where you
    ran steps 1 and 3 (it needs `CACHE` and `T`) and in the download directory (it reads
    `manifest.json`). It does nothing unless koganyd is stopped and the bundle's `state_format` is
-   the one this koganyd writes (30.2.0). It moves the old mainnet state aside instead of deleting
-   it, and touches nothing else: the testnet and regtest state, and any other format's
+   one this koganyd opens (30.2.0 or 30.3.0). It moves the old mainnet state aside instead of
+   deleting it, and touches nothing else: the testnet and regtest state, and any other format's
    `state/v<major>/`, stay as they are.
 
    ```sh
@@ -105,8 +116,8 @@ for the tarball plus its unpacked size (pruned: 5.4 + 6.7 GB; archive: 22 + 24 G
      echo "set CACHE (step 1) and T (step 3) in this shell first"
    elif pgrep -x koganyd >/dev/null; then
      echo "koganyd is running: stop it first"
-   elif [ "$(jq -r .state_format manifest.json)" != 30.2.0 ]; then
-     echo "the bundle is for state format $(jq -r .state_format manifest.json), not 30.2.0"
+   elif ! jq -e '.state_format == "30.2.0" or .state_format == "30.3.0"' manifest.json >/dev/null; then
+     echo "the bundle is for state format $(jq -r .state_format manifest.json), not 30.2.0 or 30.3.0"
    else
      OLD=old.$(date +%s)
      [ -e "${CACHE:?}/state/v30/mainnet" ] && mv "${CACHE:?}/state/v30/mainnet" "${CACHE:?}/state/v30/mainnet.$OLD"
@@ -115,10 +126,10 @@ for the tarball plus its unpacked size (pruned: 5.4 + 6.7 GB; archive: 22 + 24 G
    fi
    ```
 
-   The last line prints the restored `version`; it must equal the manifest's `state_format`,
-   30.2.0. Once the node is up and the checks in step 6 pass, delete the moved-aside
-   `state/v30/mainnet.old.*` and `non_finalized_state/mainnet.old.*` directories to free the
-   space.
+   The last line prints the restored `version`; it must equal the manifest's `state_format`
+   (after the first start of a beta3 koganyd the file says 30.3.0). Once the node is up and the
+   checks in step 6 pass, delete the moved-aside `state/v30/mainnet.old.*` and
+   `non_finalized_state/mainnet.old.*` directories to free the space.
 
    The tarball holds `state/v30/mainnet/` (the RocksDB files) and `non_finalized_state/mainnet/`
    (one file per block above the finalized tip; `non_finalized_blocks` in the manifest), and no
@@ -144,6 +155,7 @@ for the tarball plus its unpacked size (pruned: 5.4 + 6.7 GB; archive: 22 + 24 G
    jq '{height, blockhash, lowest_retained_height}' manifest.json
    ```
 
+   With a 30.2.0 bundle the node answers RPC only once the first-start upgrade is done.
    Before the node syncs on, `blocks` and `bestblockhash` equal the manifest's `height` and
    `blockhash`, and on a pruned node `pruneheight` equals `lowest_retained_height`. Then it
    downloads the blocks after `H` from its peers.
