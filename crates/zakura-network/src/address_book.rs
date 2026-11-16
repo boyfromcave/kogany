@@ -338,6 +338,13 @@ pub struct AddressBook {
     /// gossiped copy never brings them back, until `addnode` adds them again. ycashd never
     /// redials a node it disconnected unless `addnode` names it.
     disconnected_by_operator: HashSet<PeerSocketAddr>,
+
+    /// kogany: failed outbound attempts in a row, by address, since the address last responded.
+    /// A node with no open connection waits longer before each further dial of an address
+    /// (`ycash::isolated_peer_reconnection_delay`). In memory only; an address that leaves the
+    /// book is dropped the next time the map outgrows the book.
+    #[cfg(feature = "ycash")]
+    failures_in_a_row: HashMap<PeerSocketAddr, u32>,
 }
 
 /// Metrics about the states of the addresses in an [`AddressBook`].
@@ -410,6 +417,8 @@ impl AddressBook {
             most_recent_by_ip: should_limit_outbound_conns_per_ip.then(HashMap::new),
             bans_by_ip: Default::default(),
             disconnected_by_operator: HashSet::new(),
+            #[cfg(feature = "ycash")]
+            failures_in_a_row: HashMap::new(),
         };
 
         new_book.update_metrics(instant_now, chrono_now);
@@ -705,6 +714,18 @@ impl AddressBook {
     /// Apply `change` without immediately publishing address book metrics.
     #[allow(clippy::unwrap_in_result)]
     fn update_inner(&mut self, change: MetaAddrChange) -> Option<MetaAddr> {
+        self.update_inner_at(change, Instant::now(), Utc::now())
+    }
+
+    /// Apply `change` as of the given times (kogany: split out of `update_inner` so that a test
+    /// of the redial waits does not depend on the clock).
+    #[allow(clippy::unwrap_in_result)]
+    pub(crate) fn update_inner_at(
+        &mut self,
+        change: MetaAddrChange,
+        instant_now: Instant,
+        chrono_now: chrono::DateTime<Utc>,
+    ) -> Option<MetaAddr> {
         let addr_label = change.addr().addr_label(self.expose_peer_addresses);
 
         if self.bans_by_ip.contains(change.addr().ip()) {
@@ -736,9 +757,6 @@ impl AddressBook {
         let previous = self.get(change.addr());
 
         let _guard = self.span.enter();
-
-        let instant_now = Instant::now();
-        let chrono_now = Utc::now();
 
         let updated = change.apply_to_meta_addr(previous, instant_now, chrono_now);
 
@@ -824,6 +842,14 @@ impl AddressBook {
             self.peers.insert(updated);
             self.address_metrics_dirty = true;
 
+            #[cfg(feature = "ycash")]
+            Self::count_failures_in_a_row(
+                &mut self.failures_in_a_row,
+                &self.peers,
+                &change,
+                previous.as_ref(),
+            );
+
             // Add the address to `most_recent_by_ip` if it sent the most recent
             // response Zebra has received from this IP.
             if self.should_update_most_recent_by_ip(updated) {
@@ -880,6 +906,41 @@ impl AddressBook {
         }
 
         updated
+    }
+
+    /// kogany: keep the count of failed outbound attempts in a row for the changed address
+    /// (`failures_in_a_row`). A failure counts once per attempt: the first after a dial, or
+    /// after a connection that had been opened by one; a response from the address clears it.
+    #[cfg(feature = "ycash")]
+    fn count_failures_in_a_row(
+        failures_in_a_row: &mut HashMap<PeerSocketAddr, u32>,
+        peers: &AddressBookIndex,
+        change: &MetaAddrChange,
+        previous: Option<&MetaAddr>,
+    ) {
+        let addr = change.addr();
+        match change {
+            MetaAddrChange::UpdateResponded { .. } => {
+                failures_in_a_row.remove(&addr);
+            }
+            MetaAddrChange::UpdateFailed { .. } => {
+                let already_counted = previous.is_some_and(|previous| {
+                    previous.last_failure().is_some_and(|failure| {
+                        previous
+                            .last_attempt()
+                            .is_none_or(|attempt| attempt < failure)
+                    })
+                });
+                if !already_counted {
+                    let failures = failures_in_a_row.entry(addr).or_insert(0);
+                    *failures = failures.saturating_add(1);
+                }
+                if failures_in_a_row.len() > peers.len().max(64) {
+                    failures_in_a_row.retain(|addr, _| peers.get(addr).is_some());
+                }
+            }
+            _ => {}
+        }
     }
 
     /// Removes the entry with `addr`, returning it if it exists
@@ -956,11 +1017,34 @@ impl AddressBook {
     ) -> impl DoubleEndedIterator<Item = MetaAddr> + '_ {
         let _guard = self.span.enter();
 
+        // kogany: with no connection open, no address is live, so the two-minute wait after a
+        // response only keeps the node alone (`ycash::ISOLATED_PEER_RECONNECTION_DELAY`).
+        #[cfg(feature = "ycash")]
+        let isolated = self
+            .peer_registry
+            .as_ref()
+            .is_some_and(PeerRegistry::is_empty);
+
         // Skip live peers, and peers pending a reconnect attempt.
         // The peers are already stored in sorted order.
         self.peers
             .ordered_values()
             .filter(move |peer| {
+                #[cfg(feature = "ycash")]
+                if isolated
+                    && !peer.is_inbound()
+                    && peer.is_ready_for_isolated_reconnection(
+                        instant_now,
+                        chrono_now,
+                        &self.network,
+                        crate::ycash::isolated_peer_reconnection_delay(
+                            self.failures_in_a_row.get(&peer.addr).copied().unwrap_or(0),
+                        ),
+                    )
+                {
+                    return true;
+                }
+
                 // Inbound entries stay in the book for liveness, bans, and per-IP dial
                 // limits, but their ephemeral source ports are not listeners to dial.
                 !peer.is_inbound()
@@ -1284,6 +1368,8 @@ impl Clone for AddressBook {
             most_recent_by_ip: self.most_recent_by_ip.clone(),
             bans_by_ip: self.bans_by_ip.clone(),
             disconnected_by_operator: self.disconnected_by_operator.clone(),
+            #[cfg(feature = "ycash")]
+            failures_in_a_row: self.failures_in_a_row.clone(),
         }
     }
 }

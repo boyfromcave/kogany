@@ -256,6 +256,17 @@ impl PeerRegistry {
         queued
     }
 
+    /// Is no connection open at all? (kogany: an isolated node redials sooner,
+    /// [`ISOLATED_PEER_RECONNECTION_DELAY`](crate::ycash::ISOLATED_PEER_RECONNECTION_DELAY).)
+    #[cfg(feature = "ycash")]
+    pub(crate) fn is_empty(&self) -> bool {
+        self.inner
+            .lock()
+            .expect("peer registry mutex is never poisoned")
+            .active_connections
+            .is_empty()
+    }
+
     /// Is an outbound connection to `addr` open?
     pub(crate) fn has_outbound(&self, addr: PeerSocketAddr) -> bool {
         self.inner
