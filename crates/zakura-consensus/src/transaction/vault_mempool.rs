@@ -330,9 +330,7 @@ where
         unreachable!("Request::BestChainYedMempoolCheck always responds with YedMempoolCheck")
     };
     if tip.and_then(|(tip, _)| tip.next().ok()) != Some(height) {
-        return Err(TransactionError::Other(format!(
-            "the YED state is not at the parent of height {height:?}: the chain tip moved, retry"
-        )));
+        return Err(TransactionError::tip_moved("the YED state", height));
     }
     match reasons.into_iter().next().flatten() {
         Some(reason) => Err(TransactionError::YellowbackRejected { reason }),
