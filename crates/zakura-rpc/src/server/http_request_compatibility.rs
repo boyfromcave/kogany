@@ -32,6 +32,10 @@ use base64::{engine::general_purpose::STANDARD, Engine as _};
 ///
 /// <http://www.simple-is-better.org/rpc/#differences-between-1-0-and-2-0>
 ///
+/// Ycash: the same rewrite applies to each entry of a batch, and each entry's response is mapped
+/// back to that entry's version, as ycashd answers a batch of 1.0 requests (`JSONRPCExecBatch`,
+/// `src/rpc/server.cpp`). An empty batch gets ycashd's answer, `[]`.
+///
 /// ### Add missing `content-type` HTTP header
 ///
 /// Some RPC clients don't include a `content-type` HTTP header.
@@ -128,7 +132,7 @@ impl<S> HttpRequestMiddleware<S> {
     async fn request_to_json_rpc_2<B>(
         request: HttpRequest<B>,
         max_request_body_size: usize,
-    ) -> Result<(JsonRpcVersion, HttpRequest<HttpBody>), BoxError>
+    ) -> Result<(ClientVersions, HttpRequest<HttpBody>), BoxError>
     where
         B: hyper::body::Body<Data = hyper::body::Bytes> + Send + 'static,
         B::Error: Into<BoxError>,
@@ -138,40 +142,48 @@ impl<S> HttpRequestMiddleware<S> {
             .collect()
             .await?
             .to_bytes();
-        let (version, bytes) =
+        let (versions, bytes) =
             if let Ok(request) = serde_json::from_slice::<'_, JsonRpcRequest>(bytes.as_ref()) {
                 let version = request.version();
                 if matches!(version, JsonRpcVersion::Unknown) {
-                    (version, bytes)
+                    (ClientVersions::Single(version), bytes)
                 } else {
                     (
-                        version,
+                        ClientVersions::Single(version),
                         serde_json::to_vec(&request.into_2()).expect("valid").into(),
                     )
                 }
             } else {
-                (JsonRpcVersion::Unknown, bytes)
+                batch_to_json_rpc_2(bytes)
             };
         Ok((
-            version,
+            versions,
             HttpRequest::from_parts(parts, HttpBody::from(bytes.as_ref().to_vec())),
         ))
     }
     /// Maps JSON-2.0 to whatever JSON-RPC version the client is using.
     async fn response_from_json_rpc_2(
-        version: JsonRpcVersion,
+        versions: ClientVersions,
         response: HttpResponse<HttpBody>,
     ) -> Result<HttpResponse<HttpBody>, BoxError> {
         let (parts, body) = response.into_parts();
         let bytes = body.collect().await?.to_bytes();
-        let bytes =
-            if let Ok(response) = serde_json::from_slice::<'_, JsonRpcResponse>(bytes.as_ref()) {
-                serde_json::to_vec(&response.into_version(version))
-                    .expect("valid")
-                    .into()
-            } else {
-                bytes
-            };
+        let bytes = match versions {
+            ClientVersions::Single(version) => {
+                if let Ok(response) = serde_json::from_slice::<'_, JsonRpcResponse>(bytes.as_ref())
+                {
+                    serde_json::to_vec(&response.into_version(version))
+                        .expect("valid")
+                        .into()
+                } else {
+                    bytes
+                }
+            }
+            #[cfg(feature = "ycash")]
+            ClientVersions::Batch(versions) => batch_response_from_json_rpc_2(&versions, bytes),
+            #[cfg(feature = "ycash")]
+            ClientVersions::EmptyBatch => empty_batch_response(bytes),
+        };
         Ok(HttpResponse::from_parts(
             parts,
             HttpBody::from(bytes.as_ref().to_vec()),
@@ -239,12 +251,147 @@ where
         let max_request_body_size = self.max_request_body_size;
 
         async move {
-            let (version, request) =
+            let (versions, request) =
                 Self::request_to_json_rpc_2(request, max_request_body_size).await?;
             let response = service.call(request).await.map_err(Into::into)?;
-            Self::response_from_json_rpc_2(version, response).await
+            Self::response_from_json_rpc_2(versions, response).await
         }
         .boxed()
+    }
+}
+
+/// The JSON-RPC versions a request body used, recorded to map the responses back.
+#[derive(Debug)]
+enum ClientVersions {
+    /// A single request, or a body this middleware forwards unchanged.
+    Single(JsonRpcVersion),
+    /// Ycash: a batch with at least one 1.0 entry. The version of each entry the server answers,
+    /// in order: every entry except a 2.0 notification.
+    #[cfg(feature = "ycash")]
+    Batch(Vec<JsonRpcVersion>),
+    /// Ycash: an empty batch.
+    #[cfg(feature = "ycash")]
+    EmptyBatch,
+}
+
+/// Without the `ycash` feature a batch is forwarded unchanged, as upstream does.
+#[cfg(not(feature = "ycash"))]
+fn batch_to_json_rpc_2(bytes: hyper::body::Bytes) -> (ClientVersions, hyper::body::Bytes) {
+    (ClientVersions::Single(JsonRpcVersion::Unknown), bytes)
+}
+
+/// Ycash: maps each 1.0 entry of a batch to JSON-RPC 2.0, as a single request is mapped.
+///
+/// ycashd runs each entry of a batch as a request of its own and answers every one in order
+/// (`JSONRPCExecBatch`, `src/rpc/server.cpp`), whether or not it says `"jsonrpc"`; the server
+/// here takes only 2.0 entries. A body that is not a JSON array, a batch with more entries than
+/// the server takes (which the server rejects before decoding any entry), and a batch of only
+/// 2.0 or invalid entries are forwarded unchanged.
+#[cfg(feature = "ycash")]
+fn batch_to_json_rpc_2(bytes: hyper::body::Bytes) -> (ClientVersions, hyper::body::Bytes) {
+    use std::borrow::Cow;
+
+    use serde_json::value::RawValue;
+
+    use super::jsonrpc::{Notification, Request};
+
+    let unchanged = ClientVersions::Single(JsonRpcVersion::Unknown);
+    let Ok(entries) = serde_json::from_slice::<Vec<&RawValue>>(bytes.as_ref()) else {
+        return (unchanged, bytes);
+    };
+    if entries.is_empty() {
+        return (ClientVersions::EmptyBatch, bytes);
+    }
+    if entries.len() > super::MAX_RPC_BATCH_REQUESTS {
+        return (unchanged, bytes);
+    }
+
+    let mut versions = Vec::with_capacity(entries.len());
+    let mut rewritten = Vec::with_capacity(entries.len());
+    let mut any_one_point_zero = false;
+    for entry in entries {
+        let (version, entry) = match serde_json::from_str::<JsonRpcRequest>(entry.get()) {
+            Ok(request)
+                if matches!(
+                    request.version(),
+                    JsonRpcVersion::Bitcoind | JsonRpcVersion::Lightwalletd
+                ) =>
+            {
+                any_one_point_zero = true;
+                (
+                    request.version(),
+                    Cow::Owned(serde_json::to_string(&request.into_2()).expect("valid")),
+                )
+            }
+            _ => (JsonRpcVersion::Unknown, Cow::Borrowed(entry.get())),
+        };
+        // The server answers every entry except a notification, and classifies them as
+        // `Body::parse` does: a call, else a notification, else an invalid entry.
+        let answered = serde_json::from_str::<Request<'_>>(&entry).is_ok()
+            || serde_json::from_str::<Notification<'_>>(&entry).is_err();
+        if answered {
+            versions.push(version);
+        }
+        rewritten.push(entry);
+    }
+
+    if !any_one_point_zero {
+        return (unchanged, bytes);
+    }
+    let body = format!("[{}]", rewritten.join(","));
+    (ClientVersions::Batch(versions), body.into())
+}
+
+/// Ycash: maps each response of a batch back to the version of the entry it answers.
+///
+/// A response that is not an array with one element per answered entry (a batch the server
+/// rejected as a whole, with a single error) is returned unchanged.
+#[cfg(feature = "ycash")]
+fn batch_response_from_json_rpc_2(
+    versions: &[JsonRpcVersion],
+    bytes: hyper::body::Bytes,
+) -> hyper::body::Bytes {
+    use std::borrow::Cow;
+
+    use serde_json::value::RawValue;
+
+    let Ok(responses) = serde_json::from_slice::<Vec<&RawValue>>(bytes.as_ref()) else {
+        return bytes;
+    };
+    if responses.len() != versions.len() {
+        return bytes;
+    }
+
+    let mapped: Vec<Cow<'_, str>> = responses
+        .into_iter()
+        .zip(versions)
+        .map(|(response, version)| match version {
+            JsonRpcVersion::Bitcoind | JsonRpcVersion::Lightwalletd => {
+                match serde_json::from_str::<JsonRpcResponse>(response.get()) {
+                    Ok(parsed) => Cow::Owned(
+                        serde_json::to_string(&parsed.into_version(*version)).expect("valid"),
+                    ),
+                    Err(_) => Cow::Borrowed(response.get()),
+                }
+            }
+            JsonRpcVersion::TwoPointZero | JsonRpcVersion::Unknown => Cow::Borrowed(response.get()),
+        })
+        .collect();
+
+    format!("[{}]", mapped.join(",")).into()
+}
+
+/// Ycash: ycashd answers an empty batch with an empty batch, `[]`, where a JSON-RPC 2.0 server
+/// answers with an invalid request error. Any other response is returned unchanged.
+#[cfg(feature = "ycash")]
+fn empty_batch_response(bytes: hyper::body::Bytes) -> hyper::body::Bytes {
+    match serde_json::from_slice::<JsonRpcResponse>(bytes.as_ref()) {
+        Ok(JsonRpcResponse {
+            error: Some(_),
+            id: serde_json::Value::Null,
+            ..
+        }) => hyper::body::Bytes::from_static(b"[]"),
+        _ => bytes,
     }
 }
 
