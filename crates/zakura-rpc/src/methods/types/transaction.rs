@@ -794,6 +794,13 @@ pub struct Output {
     #[serde(rename = "valueZat")]
     #[getset(get_copy = "pub")]
     value_zat: i64,
+    /// Ycash (beta3 item 6): ycashd's `valueSat`, the value in zats under its insight name
+    /// (`ycash6 src/rpc/rawtransaction.cpp` `TxToJSON`).
+    #[cfg(feature = "ycash")]
+    #[serde(rename = "valueSat", skip_serializing_if = "Option::is_none", default)]
+    #[getset(get_copy = "pub")]
+    #[new(value = "Some(value_zat)")]
+    value_sat: Option<i64>,
     /// index.
     #[getset(get_copy = "pub")]
     n: u32,
@@ -1386,6 +1393,8 @@ impl TransactionObject {
                     Output {
                         value: Zec::from(output.1.value).lossy_zec(),
                         value_zat: output.1.value.zatoshis(),
+                        #[cfg(feature = "ycash")]
+                        value_sat: Some(output.1.value.zatoshis()),
                         n: output.0 as u32,
                         script_pub_key: ScriptPubKey {
                             // https://github.com/zcash/zcash/blob/v6.11.0/src/rpc/rawtransaction.cpp#L271
@@ -1524,7 +1533,14 @@ impl TransactionObject {
             time: block_time,
             txid,
             in_active_chain,
+            #[cfg(not(feature = "ycash"))]
             auth_digest: tx.auth_digest(),
+            // Ycash (beta3 item 6): ycashd prints ffff..ffff for a pre-v5 transaction
+            // (`ycash6 src/rpc/rawtransaction.cpp` `TxToJSON`, `GetAuthDigest`).
+            #[cfg(feature = "ycash")]
+            auth_digest: tx
+                .auth_digest()
+                .or(Some(transaction::AuthDigest([0xff; 32]))),
             overwintered: tx.is_overwintered(),
             version: tx.version(),
             version_group_id: tx.version_group_id().map(|id| id.to_be_bytes().to_vec()),

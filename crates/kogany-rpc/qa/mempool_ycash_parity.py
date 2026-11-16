@@ -940,8 +940,8 @@ def start_ycashd(bindir, workdir, port, rpcport, mineraddress, extra, vault=Fals
     return subprocess.Popen(args, stdout=log, stderr=subprocess.STDOUT)
 
 
-def kogany_toml(workdir, base_port, miner, extra, vault=False, falcon=False):
-    toml = base.zakurad_toml(workdir, base_port + 10, base_port + 11, base_port + 12, miner)
+def kogany_toml(workdir, base_port, miner, extra, vault=False, falcon=False, insight=False):
+    toml = base.zakurad_toml(workdir, base_port + 10, base_port + 11, base_port + 12, miner, insight=insight)
     if vault:
         canopy = 'Canopy = 1\n'
         assert canopy in toml

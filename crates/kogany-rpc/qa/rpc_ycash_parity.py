@@ -104,27 +104,19 @@ ACCEPTED = [
     ('getinfo', r'\.(errors|errorstimestamp)$', 'zakura', 'node-local status'),
     ('getinfo', r'\.(connections|relayfee)$', 'zakura', 'node-local status'),
     # getblock
-    ('getblock', r'\.(authdataroot|chainhistoryroot|anchor|blockfee|chainwork)$', 'zakura',
+    ('getblock', r'\.(authdataroot|chainhistoryroot|anchor|chainwork)$', 'zakura',
      'zcashd 6.x block fields Zakura does not serve; lightwalletd-dd reads hex, height, tx'),
     ('getblock', r'\.chainSupply\.valueDelta(Zat)?$', 'zakura', 'per-block deltas Zakura omits'),
     ('getblock', r'\.valuePools\[\d\]\.valueDelta(Zat)?$', 'zakura', 'per-block deltas Zakura omits'),
     ('getblock', r'\.trees\.sapling$', 'zakura',
      'Zakura omits the Sapling tree size when the tree is empty'),
     ('getblock', r'\.nTx$', 'zakura', 'a Zakura extension'),
-    ('getblock', r'\.tx\[\d+\]\.(authdigest|in_active_chain|orchard)$', 'zakura',
+    ('getblock', r'\.tx\[\d+\]\.(in_active_chain|orchard)$', 'zakura',
      'transaction object fields, as in getrawtransaction'),
-    ('getblock', r'\.tx\[\d+\]\.vout\[\d+\]\.valueSat$', 'zakura',
-     'the zcashd alias of valueZat; Zakura serves valueZat'),
     ('getblock', r'\.tx\[\d+\]\.(blockhash|confirmations|blocktime|time|height)$', 'zakura',
      'Zakura adds the in-block context fields inside getblock 2'),
-    ('getblock', r'\.tx\[\d+\]\.vin\[\d+\]\.(value|valueZat|valueSat|address)$', 'zakura',
-     'zcashd -insightexplorer spent-output fields Zakura does not serve'),
     # getrawtransaction: lightwalletd-dd reads hex and height (common.go:115-119).
-    ('getrawtransaction', r'\.authdigest$', 'zakura', 'a v5 field; Zakura omits it for v4'),
-    ('getrawtransaction', r'\.vout\[\d+\]\.valueSat$', 'zakura', 'the zcashd alias of valueZat'),
     ('getrawtransaction', r'\.(in_active_chain|orchard)$', 'zakura', 'Zakura extensions'),
-    ('getrawtransaction', r'\.vin\[\d+\]\.(value|valueZat|valueSat|address)$', 'zakura',
-     'zcashd -insightexplorer spent-output fields Zakura does not serve'),
     ('getblock|getrawtransaction', r'(\.tx\[\d+\])?\.vout\[\d+\]\.(spentTxId|spentIndex|spentHeight)$', 'zakura',
      'zcashd -insightexplorer spent-index fields Zakura does not serve; they appear when the '
      "wallet's coin selection spends one of the compared coinbases"),
@@ -591,12 +583,14 @@ def start_ycashd(bindir, workdir, port, rpcport, mineraddress=None, pruned=False
     return subprocess.Popen(args, stdout=log, stderr=subprocess.STDOUT)
 
 
-def zakurad_toml(workdir, p2p, rpc, v2, miner_address, pruned=False, ydf=None):
+def zakurad_toml(workdir, p2p, rpc, v2, miner_address, pruned=False, ydf=None, insight=False):
     root = os.path.join(workdir, 'zakurad')
     heights = '\n'.join('%s = 1' % k for k in ACTIVATION_KEYS)
     # Zakura's Pruned mode at its regtest floor (MAX_BLOCK_REORG_HEIGHT + 1)
     storage = '\n[state.storage_mode.pruned]\ntx_retention = 1001\n' if pruned else ''
     ydf_line = '' if ydf is None else 'ydf = %d\n' % ydf
+    # rpc.insight_explorer: kogany's counterpart of ycashd's -insightexplorer (beta3 item 6)
+    insight_line = 'insight_explorer = true\n' if insight else ''
     return '''[network]
 listen_addr = "127.0.0.1:{p2p}"
 initial_testnet_peers = []
@@ -617,7 +611,7 @@ listen_addr = "127.0.0.1:{v2}"
 listen_addr = "127.0.0.1:{rpc}"
 enable_cookie_auth = false
 cookie_dir = "{root}/rpc"
-
+{insight_line}
 [state]
 cache_dir = "{root}/state"
 ephemeral = false
@@ -633,7 +627,7 @@ miner_address = "{miner}"
 use_color = false
 filter = "info"
 '''.format(p2p=p2p, rpc=rpc, v2=v2, root=root, heights=heights, miner=miner_address, storage=storage,
-           ydf_line=ydf_line)
+           ydf_line=ydf_line, insight_line=insight_line)
 
 
 def start_zakurad(binary, workdir, toml):
@@ -759,7 +753,8 @@ def run_pruned(args):
         wait_up(y, procs[-1], 'ycashd')
         miner = y.ok('getnewaddress')
         procs.append(start_zakurad(args.zakurad, workdir,
-                                   zakurad_toml(workdir, base + 10, base + 11, base + 12, miner, pruned=True)))
+                                   zakurad_toml(workdir, base + 10, base + 11, base + 12, miner, pruned=True,
+                                                insight=True)))
         wait_up(z, procs[-1], 'zakurad')
         r = Run(y, z, report)
         r.both('getblockchaininfo')
@@ -798,7 +793,8 @@ def run(args):
         procs[-1] = start_ycashd(args.ycash6_bin, workdir, base, base + 1, miner, ydf=args.ydf)
         wait_up(y, procs[-1], 'ycashd')
         procs.append(start_zakurad(args.zakurad, workdir,
-                                   zakurad_toml(workdir, base + 10, base + 11, base + 12, miner, ydf=args.ydf)))
+                                   zakurad_toml(workdir, base + 10, base + 11, base + 12, miner, ydf=args.ydf,
+                                                insight=True)))
         wait_up(z, procs[-1], 'zakurad')
 
         r = Run(y, z, report, args.ydf)

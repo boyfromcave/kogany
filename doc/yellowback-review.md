@@ -391,7 +391,19 @@ each kogany follower's tip, `vault_getinfo` (statehash, dbtip, counts, lockedval
 | `vault_rpc_contract_read.py` | the read subset of the vault contract | matches (mock, W7-a; live, W4-d) | `c8d74c30e`, `377ad54bd` |
 | `crates/kogany-rpc/qa/kogany_mines.py` | kogany templates solved by the (48,5) Python solver, accepted by ycashd by relay, the `YED!` tag after activation | 20 rounds across Vault activation | W8-c `d27a880fe` |
 | `qa/fuzz/vault` verdict replay | the parsers' verdicts recorded once from ycash6 | 3,735 equal | W3-e `709195d08` |
+| `crates/kogany-rpc/qa/rpc_insight_inputs_parity.py` | ycashd's `-insightexplorer` input fields (`vin[].value`/`valueSat`/`address`), `vout[].valueSat`, `authdigest` and `blockfee` in `getrawtransaction 1` and `getblock` 1 and 2, koganyd with `rpc.insight_explorer = true`; FN-DSA, SLH-DSA, ECC P2PKH, P2PK (compressed and uncompressed key), bare multisig, P2SH, a chained unconfirmed parent, a vault owner spend, Sapling shielding and unshielding | 258 calls, 0 differing fields (beta3 item 6) | beta3 item 6 |
 | client legs (`kogany_client_legs.py`, the client repositories' `kogany-leg.sh`) | lightwalletd-dd, chain-viz, x402, YEW W1 | 18/18; chain-viz green; x402 5/5; YEW W1 green (at `25518495f`); lightwalletd-dd 3/3 (at `18650e75c`); Hawkeye: kogany followed all 219 blocks of `regtest_self_signing` | `25518495f`, `18650e75c`, hawkeye `b8e9471` |
+
+Where the insight fields differ from ycashd by design (beta3 item 6):
+
+| Field | ycashd | koganyd | Why |
+|---|---|---|---|
+| `vin[].value`, `valueSat`, `address` | with `-insightexplorer` (the spent index) | with `rpc.insight_explorer = true` on an archive node (a parent read from the transaction index per distinct parent, 16 in flight at most) | kogany has no spent index; the switch keeps the reads opt-in on an unauthenticated RPC |
+| the same, a call with more than 5,000 distinct parents | named (no cap) | omitted for that call, logged | bounds the cost of one unauthenticated call; no Ycash block comes near it (a full 2 MB block holds about 13,500 P2PKH inputs) |
+| `blockfee` | always, `nBlockFee.value_or(0)` (0 for a block indexed before the field existed, until `-reindex`) | only with `rpc.insight_explorer = true`; absent where the pools of the block or its parent, or its coinbase, are not known | `getblock 1` is the lightwalletd sync path: the fee costs one coinbase read there; missing data is a missing field, never a wrong number |
+| `blockfee` of a block off the best chain | the fee of a block it once connected; 0 for one it never connected | absent | kogany keeps no pools for a block off the best chain |
+| `vin[].value` | `ValueFromAmount`, eight decimals (`6.25000000`) | the shortest form (`6.25`), as upstream's `vout[].value` | the same JSON number; upstream's formatting is kept |
+| an input of a side-chain transaction | named when its prevout is spent in the active chain | not named | kogany reads parents from the best chain only |
 
 ---
 

@@ -824,10 +824,15 @@ impl StartCmd {
             crate::components::sapling_output_params::install(&config.mining);
         }
         #[cfg(feature = "ycash")]
-        let rpc_impl = rpc_impl.with_ycash_mining(kogany_rpc::mining_hooks(
-            latest_chain_tip.clone(),
-            read_only_state_service.clone(),
-        ));
+        let rpc_impl = rpc_impl
+            .with_ycash_mining(kogany_rpc::mining_hooks(
+                latest_chain_tip.clone(),
+                read_only_state_service.clone(),
+            ))
+            // Beta3 item 6: ycashd's `-insightexplorer` input fields and `blockfee`, opt-in.
+            .with_insight_explorer(zakura_rpc::ycash_insight_explorer::InsightExplorer::new(
+                config.rpc.insight_explorer,
+            ));
 
         let node_services = ready.as_ref().map(|_| crate::node::NodeServices {
             read_state: read_only_state_service.clone(),
