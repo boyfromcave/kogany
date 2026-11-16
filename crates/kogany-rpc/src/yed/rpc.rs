@@ -1,5 +1,5 @@
 //! The 25 `yed_*` read RPCs and the 2 node-state ones (`yed_setquote`, `yed_addattestation`),
-//! as ycash6 serves them from `src/rpc/yellowback.cpp` (`doc/yellowback-rpc.md`, rpcversion 8).
+//! as ycash6 serves them from `src/rpc/yellowback.cpp` (`doc/yellowback-rpc.md`, rpcversion 10).
 //!
 //! Every method first asks the [`YedReadState`] for its snapshot: none means Yellowback is not
 //! live on this node, answered `-32601 "Method not found (Yellowback is not active: …)"` exactly

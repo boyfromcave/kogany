@@ -1,4 +1,4 @@
-//! The result shapes of the `yed_*` read RPCs (`ycash6/doc/yellowback-rpc.md`, rpcversion 9;
+//! The result shapes of the `yed_*` read RPCs (`ycash6/doc/yellowback-rpc.md`, rpcversion 10;
 //! `doc/yellowback-rpc-contract.json`), field for field and in ycashd's field order
 //! (`src/rpc/yellowback.cpp`). Every value is already formatted: hex strings, addresses,
 //! decimal strings for 256-bit weights; an `Option` serialises as `null` unless the field is

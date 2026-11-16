@@ -205,7 +205,7 @@ kogany's state: [`doc/mainnet-restore.md`](doc/mainnet-restore.md).
 ## Yellowback and vault RPCs
 
 `koganyd` answers the stock Ycash RPCs as ycashd does, plus the vault primitive's `set_*` and
-`vault_*` RPCs and the Yellowback `yed_*` RPCs, at `rpcversion` 9:
+`vault_*` RPCs and the Yellowback `yed_*` RPCs, at `rpcversion` 10:
 
 - [`doc/yellowback-spec.md`](doc/yellowback-spec.md): the vault upgrade and Yellowback
   specification, generated from the workspace plans;

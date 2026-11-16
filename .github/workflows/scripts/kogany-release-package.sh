@@ -82,7 +82,7 @@ State lives in ~/.cache/kogany on Linux and ~/Library/Caches/kogany on macOS. Th
                      <network> is the lowercase network name, e.g. ~/.cache/kogany/testnet/.cookie
 
 RPCs: the stock Ycash RPCs, the vault primitive's set_* and vault_* RPCs and the Yellowback
-yed_* RPCs, at rpcversion 9 (doc/ in the source tree has the contracts).
+yed_* RPCs, at rpcversion 10 (doc/ in the source tree has the contracts).
 
 Licence: MIT or Apache-2.0, at your option (LICENSE-MIT, LICENSE-APACHE).
 TXT
