@@ -1271,7 +1271,7 @@ impl Service<Request> for Mempool {
                                         }
                                         continue;
                                     }
-                                    if state_retry::is_missing_input(tx_error) {
+                                    if state_retry::is_kept(tx_error) {
                                         self.state_retries.keep_orphan((tx, source));
                                     }
                                 }

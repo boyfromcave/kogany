@@ -54,8 +54,18 @@ pub fn is_tip_state_dependent(error: &TransactionError) -> bool {
             ContextError::UnsatisfiedSequenceLock { .. }
                 | ContextError::MissingTransparentOutput { .. }
         ),
-        _ => is_missing_input(error),
+        _ => is_missing_input(error) || is_tip_moved(error),
     }
+}
+
+/// Returns true if `error` is the verifier's "the chain tip moved, retry": the vault set state or
+/// the YED state it read was not at the parent of the height it verified for, because a block was
+/// committed between the two reads (`zakura-consensus` `transaction.rs`, the vault snapshot;
+/// `transaction/vault_mempool.rs`, the YED check). It says nothing about the transaction, so it is
+/// never cached: the transaction is kept and verified again (ycashd checks against one locked tip
+/// and has no such answer).
+pub fn is_tip_moved(error: &TransactionError) -> bool {
+    matches!(error, TransactionError::Other(message) if message.ends_with("the chain tip moved, retry"))
 }
 
 /// Returns true if `error` is a missing input: a parent this node does not have yet (ycashd's
@@ -78,6 +88,13 @@ pub fn is_stale(
     best_tip: Option<Height>,
 ) -> bool {
     verified_tip != best_tip && is_tip_state_dependent(error)
+}
+
+/// Returns true if a failure with `error` keeps the transaction for another verification when
+/// a parent arrives or the tip changes: a missing input (ycashd's orphan), or a tip that moved
+/// during the verification (the best tip this node reports can still be the one it verified at).
+pub fn is_kept(error: &TransactionError) -> bool {
+    is_missing_input(error) || is_tip_moved(error)
 }
 
 /// A transaction to verify again, and the peer that relayed it.
@@ -237,6 +254,20 @@ mod tests {
         ] {
             assert!(!is_tip_state_dependent(&error), "{error}");
         }
+
+        // The verifier's "the chain tip moved, retry" (vault set state or YED state read at another
+        // tip): kept and verified again, never cached; any other `Other` is cached.
+        for message in [
+            "the vault set state is not at the parent of height Height(201): the chain tip moved, retry",
+            "the YED state is not at the parent of height Height(201): the chain tip moved, retry",
+        ] {
+            let error = TransactionError::Other(message.into());
+            assert!(is_tip_state_dependent(&error), "{message}");
+            assert!(is_kept(&error), "{message}");
+            assert!(!is_missing_input(&error), "{message}");
+        }
+        let other = TransactionError::Other("transaction has Orchard actions".into());
+        assert!(!is_tip_state_dependent(&other) && !is_kept(&other));
 
         // Stale: verified at another tip than the best one.
         let missing = TransactionError::TransparentInputNotFound;
