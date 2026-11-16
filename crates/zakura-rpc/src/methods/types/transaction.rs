@@ -43,6 +43,8 @@ use zcash_transparent::{
 };
 
 mod no_sapling;
+#[cfg(feature = "ycash")]
+pub mod sapling_coinbase;
 
 use super::zec::Zec;
 use super::{
@@ -175,6 +177,10 @@ pub(super) struct CoinbaseResourceUsage {
 enum MinerRewardAddress {
     Ironwood(::orchard::Address),
     Transparent(TransparentAddress),
+    /// Ycash (beta3 item 3): a Sapling miner address, paid with one Sapling output as ycashd's
+    /// miner pays `-mineraddress=<Sapling>` (`ycash6 src/miner.cpp`).
+    #[cfg(feature = "ycash")]
+    Sapling(sapling_crypto::PaymentAddress),
 }
 
 /// Fee-independent outputs that determine a coinbase transaction's shape.
@@ -213,6 +219,12 @@ impl CoinbasePlan {
                             .to_string(),
                     )
                 })?
+            }
+            // Ycash (beta3 item 3): payable from Heartwood on (ZIP 213), with the node's Sapling
+            // output parameters; `new_coinbase` refuses without them.
+            #[cfg(feature = "ycash")]
+            MinerAddress::Sapling(addr) if upgrade >= NetworkUpgrade::Heartwood => {
+                MinerRewardAddress::Sapling(*addr)
             }
             MinerAddress::Sapling(_) => {
                 return Err(TransactionError::CoinbaseConstruction(
@@ -337,6 +349,12 @@ impl CoinbasePlan {
             TxVersion::V4 => {
                 let sapling = VALUE_BALANCE_BYTES + compact_size_bytes(0) + compact_size_bytes(0);
                 let joinsplit_count = compact_size_bytes(0);
+                // Ycash: one v4 output description (948 bytes) and the binding signature.
+                #[cfg(feature = "ycash")]
+                let sapling = match self.miner_reward_address {
+                    MinerRewardAddress::Sapling(_) => sapling + 948 + SIGNATURE_BYTES,
+                    _ => sapling,
+                };
 
                 (V4_FIXED_FIELDS_BYTES, sapling + joinsplit_count)
             }
@@ -359,6 +377,11 @@ impl CoinbasePlan {
                 ..Default::default()
             },
             MinerRewardAddress::Transparent(_) => ShieldedActionCounts::default(),
+            #[cfg(feature = "ycash")]
+            MinerRewardAddress::Sapling(_) => ShieldedActionCounts {
+                sapling_ios: 1,
+                ..Default::default()
+            },
         };
 
         Ok(CoinbaseResourceUsage {
@@ -472,12 +495,40 @@ impl TransactionTemplate<NegativeOrZero> {
             MinerRewardAddress::Transparent(addr) => {
                 builder.add_transparent_output(&addr, miner_reward)?;
             }
+            #[cfg(feature = "ycash")]
+            MinerRewardAddress::Sapling(addr) => {
+                builder
+                    .add_sapling_output::<String>(
+                        Some(sapling_crypto::keys::OutgoingViewingKey([0u8; 32])),
+                        addr,
+                        miner_reward,
+                        memo.clone(),
+                    )
+                    .map_err(|error| {
+                        TransactionError::CoinbaseConstruction(format!(
+                            "Failed to add Sapling output: {error}"
+                        ))
+                    })?;
+            }
         }
 
         for (fs_amount, fs_addr) in plan.funding_stream_outputs {
             builder.add_transparent_output(&fs_addr, fs_amount)?;
         }
 
+        // Ycash (beta3 item 3): a Sapling reward output is proved with the node's Sapling output
+        // parameters (`sapling_coinbase`); every other coinbase asks for no Sapling proof.
+        #[cfg(feature = "ycash")]
+        let build_result = match plan.miner_reward_address {
+            MinerRewardAddress::Sapling(_) => {
+                let prover = sapling_coinbase::installed_output_prover().ok_or_else(|| {
+                    TransactionError::CoinbaseConstruction(sapling_coinbase::NOT_LOADED.to_string())
+                })?;
+                builder.build_coinbase(rand_10::rng(), &NoSaplingProver, prover.parameters())?
+            }
+            _ => builder.build_coinbase(rand_10::rng(), &NoSaplingProver, &NoSaplingProver)?,
+        };
+        #[cfg(not(feature = "ycash"))]
         let build_result =
             builder.build_coinbase(rand_10::rng(), &NoSaplingProver, &NoSaplingProver)?;
 

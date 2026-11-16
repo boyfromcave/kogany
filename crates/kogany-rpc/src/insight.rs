@@ -1,5 +1,6 @@
-//! `getaddressmempool` and `getaddressdeltas`, ycashd's insight-explorer reads that Zakura does
-//! not serve (S5 parity, `wallet_pq_address`).
+//! `getaddressmempool`, `getaddressdeltas` and `getaddressfirstlastheight`, ycashd's
+//! insight-explorer reads that Zakura does not serve (S5 parity, `wallet_pq_address`; beta3
+//! item 11).
 //!
 //! Copyright (c) 2026 The Ycash developers. Distributed under the MIT software license.
 //!
@@ -16,6 +17,11 @@
 //! txid, index and spending. It reads Zakura's address transaction index
 //! (`ReadRequest::TransactionIdsByAddresses`) and each transaction (and, for an input, the
 //! transaction whose output it spends) from the read state: no index is added.
+//!
+//! `getaddressfirstlastheight` (ycash6 `src/rpc/misc.cpp`): the heights of the first and last
+//! confirmed transactions that pay or spend one address, from the same address transaction index;
+//! `{"firstHeight": 0, "lastHeight": 0}` for an address never seen, and for a string that is not
+//! an address of this network, as ycashd answers (it decodes, and on failure looks nothing up).
 
 use std::collections::{HashMap, HashSet};
 
@@ -41,6 +47,15 @@ crate::kogany_rpc_trait! {
         /// address string).
         #[method(name = "getaddressdeltas", access = Unauthenticated)]
         async fn getaddressdeltas(&self, request: Value) -> RpcResult<Value>;
+
+        /// `{"firstHeight", "lastHeight"}`: the first and last block heights at which the
+        /// address was seen (0 if never).
+        #[method(name = "getaddressfirstlastheight", access = Unauthenticated)]
+        async fn getaddressfirstlastheight(
+            &self,
+            address: Option<Value>,
+            extra: Option<Value>,
+        ) -> RpcResult<Value>;
     }
     dispatch = InsightRpcDispatch;
 }
@@ -260,8 +275,89 @@ pub fn address_deltas(
     rows.into_iter().map(|row| row.5).collect()
 }
 
+/// ycashd's help text for `getaddressfirstlastheight`, its answer to a call without exactly one
+/// parameter (`src/rpc/misc.cpp`; `-insightexplorer` on, so no "disabled" note).
+const GETADDRESSFIRSTLASTHEIGHT_HELP: &str = "getaddressfirstlastheight \"address\"\n\
+\nReturns the first and last block height at which the given transparent address was seen.\n\
+\nArguments:\n\
+\"address\"  (string) The base58check encoded address\n\
+\nResult:\n\
+{\n\
+\x20 \"firstHeight\"  (numeric) Block height when the address was first seen (0 if never)\n\
+\x20 \"lastHeight\"   (numeric) Block height when the address was last seen (0 if never)\n\
+}\n\
+\nExamples:\n\
+> ycash-cli getaddressfirstlastheight \"smDw2LWkeuJ1NGBDDZvdNbzY8A9D1mkkDZm\"\n\
+> curl --user myusername --data-binary '{\"jsonrpc\": \"1.0\", \"id\":\"curltest\", \"method\": \"getaddressfirstlastheight\", \"params\": [\"smDw2LWkeuJ1NGBDDZvdNbzY8A9D1mkkDZm\"] }' -H 'content-type: text/plain;' http://127.0.0.1:8832/\n";
+
+/// `getaddressfirstlastheight`'s answer for the address index rows `txids` of one address.
+pub fn first_last_height(
+    txids: &std::collections::BTreeMap<
+        zakura_state::TransactionLocation,
+        zakura_chain::transaction::Hash,
+    >,
+) -> Value {
+    let height = |location: Option<&zakura_state::TransactionLocation>| {
+        location.map_or(0, |location| location.height.0)
+    };
+    json!({
+        "firstHeight": height(txids.keys().next()),
+        "lastHeight": height(txids.keys().next_back()),
+    })
+}
+
 #[async_trait::async_trait]
 impl InsightRpc for InsightRpcImpl {
+    async fn getaddressfirstlastheight(
+        &self,
+        address: Option<Value>,
+        extra: Option<Value>,
+    ) -> RpcResult<Value> {
+        // ycashd's parameter count check (`CRPCTable::execute`, `src/rpc/server.cpp`): its
+        // message, with the help text. ycashd's code is -32602; kogany's call middleware answers
+        // every invalid-params error with -1 (zcashd's), so this says -1 too.
+        let received = match (&address, &extra) {
+            (Some(_), None) => None,
+            (None, _) => Some(("Not enough parameters", 0)),
+            (Some(_), Some(_)) => Some(("Too many parameters", 2)),
+        };
+        if let Some((what, received)) = received {
+            return Err(ErrorObject::new(
+                -1,
+                format!(
+                    "{what} for method `getaddressfirstlastheight`. Needed exactly 1, but \
+                     received {received}\n\n{GETADDRESSFIRSTLASTHEIGHT_HELP}"
+                ),
+            ));
+        }
+        let Some(address) = address else {
+            unreachable!("a missing address returned above");
+        };
+        // ycashd's `params[0].get_str()`.
+        let Value::String(text) = &address else {
+            return Err(ErrorObject::new(
+                -1,
+                "JSON value is not a string as expected",
+            ));
+        };
+        let Some(address) = zakura_rpc::ycash_insight_address_on(&self.network, text) else {
+            return Ok(first_last_height(&Default::default()));
+        };
+        let ReadResponse::AddressesTransactionIds(txids) = self
+            .read(ReadRequest::TransactionIdsByAddresses {
+                addresses: HashSet::from([address]),
+                height_range: Height(0)..=Height::MAX,
+            })
+            .await?
+        else {
+            return Err(ErrorObject::new(
+                -32603,
+                "unexpected address index response",
+            ));
+        };
+        Ok(first_last_height(&txids))
+    }
+
     async fn getaddressmempool(&self, addresses: Value) -> RpcResult<Vec<Value>> {
         let addresses = parse_addresses(&self.network, &addresses)?;
         Ok(address_deltas(
@@ -517,6 +613,31 @@ mod tests {
         assert_eq!((e.code(), e.message()), (-5, "Invalid address"));
         // Nothing named, nothing answered.
         assert!(address_deltas(&network, &pool, &[]).is_empty());
+    }
+
+    /// `getaddressfirstlastheight`: 0 and 0 for an address never seen, else the heights of its
+    /// first and last index rows.
+    #[test]
+    fn first_last_height_is_ycashds() {
+        use zakura_state::TransactionLocation;
+
+        assert_eq!(
+            first_last_height(&Default::default()),
+            json!({"firstHeight": 0, "lastHeight": 0})
+        );
+        let rows = [(7, 0), (7, 3), (120, 1), (300, 2)]
+            .into_iter()
+            .map(|(height, index)| {
+                (
+                    TransactionLocation::from_usize(Height(height), index),
+                    transaction::Hash([u8::try_from(index).expect("small"); 32]),
+                )
+            })
+            .collect();
+        assert_eq!(
+            first_last_height(&rows),
+            json!({"firstHeight": 7, "lastHeight": 300})
+        );
     }
 
     /// `getHeightRange`: absent or 0 bounds are the whole chain, a start past the tip is the tip,

@@ -2344,6 +2344,25 @@ where
             ),
         };
 
+        // Ycash (beta3 item 11): ycashd's `commitments` is the size of the Sprout tree at the
+        // tip (`src/rpc/blockchain.cpp`). It is a read of its own, like `chainwork` below, so a
+        // block committed between it and the tip read above can make it one block newer than
+        // `blocks`; the read state has no single snapshot of both. On Ycash the Sprout tree
+        // changes only with a Sprout JoinSplit, so in practice the value is the same.
+        #[cfg(feature = "ycash")]
+        let commitments = match call_service(
+            self.read_state.clone(),
+            zakura_state::ReadRequest::SproutTipTreeSize,
+        )
+        .await?
+        {
+            zakura_state::ReadResponse::SproutTipTreeSize(size) => size,
+            response => unreachable!("Unexpected response from state service: {response:?}"),
+        };
+        // TODO: Investigate whether this needs to be implemented (it's sprout-only in zcashd)
+        #[cfg(not(feature = "ycash"))]
+        let commitments = 0;
+
         let response = GetBlockchainInfoResponse {
             #[cfg(not(feature = "ycash"))]
             chain: network.bip70_network_name(),
@@ -2375,8 +2394,7 @@ where
             pruned: is_pruned,
             prune_height,
             size_on_disk,
-            // TODO: Investigate whether this needs to be implemented (it's sprout-only in zcashd)
-            commitments: 0,
+            commitments,
             header_chain,
         };
 
@@ -2393,18 +2411,40 @@ where
         #[cfg(not(feature = "ycash"))]
         let valid_addresses = address_strings.valid_addresses()?;
 
+        #[cfg(feature = "ycash")]
+        let tx_count_addresses = valid_addresses.clone();
         let request = zakura_state::ReadRequest::AddressBalance(valid_addresses);
         let response = call_service(self.read_state.clone(), request).await?;
 
-        match response {
+        #[cfg_attr(not(feature = "ycash"), allow(unused_mut))]
+        let mut balance = match response {
             zakura_state::ReadResponse::AddressBalance { balance, received } => {
-                Ok(GetAddressBalanceResponse {
-                    balance: u64::from(balance),
-                    received,
-                })
+                GetAddressBalanceResponse::new(u64::from(balance), received)
             }
             _ => unreachable!("Unexpected response from state service: {response:?}"),
+        };
+
+        // Ycash (beta3 item 11): ycashd's `txcount`, the number of distinct transactions in the
+        // chain that pay or spend any of the addresses (`src/rpc/misc.cpp`), read from the same
+        // address index as `getaddresstxids`. Cost: this reads every index row of the addresses
+        // (and retries if a block finalizes meanwhile), where the balance alone is one read;
+        // ycashd's `getaddressbalance` also walks every row (`getAddressesInHeightRange`).
+        #[cfg(feature = "ycash")]
+        {
+            let request = zakura_state::ReadRequest::TransactionIdsByAddresses {
+                addresses: tx_count_addresses,
+                height_range: Height(0)..=Height::MAX,
+            };
+            balance.txcount = match call_service(self.read_state.clone(), request).await? {
+                zakura_state::ReadResponse::AddressesTransactionIds(tx_ids) => {
+                    // A `usize` count always fits in a `u64` on supported platforms.
+                    Some(tx_ids.len() as u64)
+                }
+                response => unreachable!("Unexpected response from state service: {response:?}"),
+            };
         }
+
+        Ok(balance)
     }
 
     // TODO: use HexData to handle the transaction data argument.
@@ -5741,6 +5781,13 @@ pub struct GetAddressBalanceResponse {
     /// The total received balance, including change.
     #[getset(get_copy = "pub")]
     pub received: u64,
+    /// Ycash: the number of distinct transactions touching the addresses, as ycashd's
+    /// `getaddressbalance` reports it.
+    #[cfg(feature = "ycash")]
+    #[getset(get_copy = "pub")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[new(default)]
+    pub txcount: Option<u64>,
 }
 
 /// Parameters of [`RpcServer::get_address_utxos`] RPC method.

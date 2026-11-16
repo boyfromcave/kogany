@@ -383,6 +383,21 @@ pub(crate) fn check_historical_ironwood_subtrees_available(
     )
 }
 
+/// Ycash (beta3 item 11): the number of note commitments in the Sprout tree of the best chain
+/// tip: the non-finalized `chain`'s tip tree if there is a chain, else the finalized tip's in
+/// `db` (0 for an empty state). ycashd's `getblockchaininfo.commitments`.
+#[cfg(feature = "ycash")]
+pub fn sprout_tip_tree_size<C>(chain: Option<C>, db: &ZakuraDb) -> Result<u64, crate::BoxError>
+where
+    C: AsRef<Chain>,
+{
+    let tree = match chain {
+        Some(chain) => chain.as_ref().sprout_note_commitment_tree_for_tip(),
+        None => db.sprout_tree_for_tip().map_err(crate::BoxError::from)?,
+    };
+    Ok(tree.count())
+}
+
 /// Returns the Sapling
 /// [`NoteCommitmentTree`](sapling::tree::NoteCommitmentTree) specified by a
 /// hash or height, if it exists in the non-finalized `chain` or finalized `db`.

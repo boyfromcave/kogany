@@ -28,6 +28,8 @@ use zakura_state::{BoxError, ReadRequest, ReadResponse};
 mod macros;
 
 #[cfg(feature = "ycash")]
+pub mod coinbase_for;
+#[cfg(feature = "ycash")]
 pub mod insight;
 pub mod json;
 pub mod live;
@@ -75,6 +77,9 @@ where
 {
     yed::live::set_network(network);
     let yed = yed_state(tip.clone(), read_state.clone());
+    #[cfg(feature = "ycash")]
+    let (coinbase_tip, coinbase_hooks_tip, coinbase_read_state) =
+        (tip.clone(), tip.clone(), read_state.clone());
     let insight_read_state = read_state.clone();
     let state: Arc<dyn VaultReadState> =
         if std::env::var(mock::MOCK_ENV).is_ok_and(|value| value == "1") {
@@ -102,6 +107,17 @@ where
     );
     #[cfg(not(feature = "ycash"))]
     drop(insight_read_state);
+    // Beta3 item 3: getcoinbasetemplatefor, a coinbase for a payout address and a named template.
+    #[cfg(feature = "ycash")]
+    let extension = extension.and(
+        coinbase_for::CoinbaseForRpcImpl::new(
+            network.clone(),
+            coinbase_tip,
+            tower::util::BoxCloneSyncService::new(coinbase_read_state.clone()),
+            mining_hooks(coinbase_hooks_tip, coinbase_read_state),
+        )
+        .into_extension(),
+    );
     extension
 }
 

@@ -107,6 +107,21 @@ pub struct Config {
     #[cfg(feature = "ycash")]
     #[serde(skip_serializing_if = "is_default_ydf")]
     pub ydf: i64,
+
+    /// Ycash: the path of the Sapling output parameters, the `sapling-output.params` file ycashd
+    /// uses (3,592,860 bytes; `fetch-params`, or the project's `zcash-params-v1` release). A
+    /// node needs it only to build a coinbase that pays a Sapling address:
+    /// `getcoinbasetemplatefor` for a Sapling miner, or `getblocktemplate` with a Sapling
+    /// [`Self::miner_address`].
+    ///
+    /// Unset (the default), the node looks in ycashd's parameter directory
+    /// ([`Self::sapling_output_params_path`]). The file is read once, at start, and its SHA-256
+    /// is checked. If it is absent or fails the check the node logs it and runs on: a Sapling
+    /// coinbase is then refused with "Sapling output parameters are not loaded", and transparent
+    /// and post-quantum coinbases are unaffected.
+    #[cfg(feature = "ycash")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sapling_output_params: Option<std::path::PathBuf>,
 }
 
 /// The default of [`Config::ydf`]: no donation after the mandate ends
@@ -182,6 +197,8 @@ impl Default for Config {
             block_unpaid_action_limit: None,
             #[cfg(feature = "ycash")]
             ydf: 0,
+            #[cfg(feature = "ycash")]
+            sapling_output_params: None,
         }
     }
 }
@@ -197,6 +214,20 @@ impl Config {
             Ok(percentage) if percentage <= 100 => percentage,
             _ => DEFAULT_YDF_FEE_PERCENTAGE,
         }
+    }
+
+    /// Ycash: where this node reads the Sapling output parameters from:
+    /// [`Self::sapling_output_params`], or `sapling-output.params` in ycashd's parameter
+    /// directory (`~/.zcash-params`; `~/Library/Application Support/ZcashParams` on macOS;
+    /// `%APPDATA%\ZcashParams` on Windows). `None` when neither is known.
+    #[cfg(feature = "ycash")]
+    pub fn sapling_output_params_path(&self) -> Option<std::path::PathBuf> {
+        use crate::methods::types::transaction::sapling_coinbase::{
+            default_params_dir, SAPLING_OUTPUT_PARAMS_FILE,
+        };
+        self.sapling_output_params
+            .clone()
+            .or_else(|| default_params_dir().map(|dir| dir.join(SAPLING_OUTPUT_PARAMS_FILE)))
     }
 
     /// Is the internal miner enabled using at least one thread?
@@ -423,5 +454,32 @@ mod tests {
             );
         }
         assert!(toml::from_str::<Config>("ydf = 'five'").is_err());
+    }
+
+    /// `sapling_output_params`: unset by default and then not written; unset, the path is
+    /// ycashd's parameter directory; set, it is taken as given.
+    #[cfg(feature = "ycash")]
+    #[test]
+    fn ycash_sapling_output_params_default_to_ycashds_directory() {
+        let default = Config::default();
+        assert!(!toml::to_string(&default)
+            .unwrap()
+            .contains("sapling_output_params"));
+        let path = default
+            .sapling_output_params_path()
+            .expect("the test machine has a home directory");
+        assert!(path.ends_with("sapling-output.params"));
+        let dir = path.parent().unwrap().file_name().unwrap();
+        assert!(dir == "ZcashParams" || dir == ".zcash-params", "{path:?}");
+
+        let config: Config = toml::from_str("sapling_output_params = '/x/out.params'").unwrap();
+        assert_eq!(
+            config.sapling_output_params_path(),
+            Some(std::path::PathBuf::from("/x/out.params"))
+        );
+        assert_eq!(
+            toml::from_str::<Config>(&toml::to_string(&config).unwrap()).unwrap(),
+            config
+        );
     }
 }

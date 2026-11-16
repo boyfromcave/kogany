@@ -6,7 +6,7 @@
 """kogany's stock RPC answers against ycash6's, field by field, on one Ycash regtest chain (W1-Y6).
 
     python crates/kogany-rpc/qa/rpc_ycash_parity.py --koganyd <koganyd, the --features ycash build> \\
-        [--ycash6-bin $WS/wt/.bin/ycash6-65cb4ae0f] [--workdir DIR] [--keep]
+        [--ycash6-bin <a directory holding the ycashd of ycash6 88b696287 or later>] [--workdir DIR] [--keep]
 
 It starts a ycashd and a zakurad on Ycash regtest with every upgrade through Canopy at height 1
 (the `-nuparams` set the ycash6 suites pass, `YCASH_UPGRADE_ARGS`), mines on ycashd and feeds each
@@ -136,8 +136,6 @@ ACCEPTED = [
     ('z_gettreestate', r'\.(orchard|ironwood)$', 'zakura', 'empty pools Zakura always reports'),
     ('z_gettreestate', r'\.sapling\.commitments\.finalRoot$', 'zakura',
      'zcashd 6.x adds the root beside finalState; lightwalletd-dd reads finalState'),
-    # getaddressbalance
-    ('getaddressbalance', r'\.txcount$', 'zakura', 'a zcashd 6.x field; lightwalletd-dd reads balance'),
     # getblocksubsidy: Zcash-only totals, zero on Ycash.
     ('getblocksubsidy', r'\.(fundingstreamstotal|lockboxtotal)$', 'zakura',
      'Zcash ZIP 207/271 totals, always zero on Ycash'),
@@ -182,6 +180,19 @@ ACCEPTED = [
     ('batch', r'^\[\d+,1\.0\]\.jsonrpc$', 'zakura',
      'a member that says "jsonrpc":"1.0" gets it echoed, as a single lightwalletd request does; '
      'ycashd never writes the key'),
+    ('batch', r'^\[\d+,badid\](\.(jsonrpc|result|id)|!error)$', 'zakura',
+     'a 1.0 member whose id is not a JSON-RPC 2.0 id (negative, fractional, above u64, a boolean, '
+     'an object) gets -32600 Invalid request with id null and does not run; ycashd runs it and '
+     'answers with that id (review L1 of kogany #35)'),
+    ('parameter count', r'^!error\.code$', 'zakura',
+     "ycashd's parameter count check answers -32602; Zakura's call middleware turns every "
+     'invalid-params error into -1 (zcashd), so kogany says -1 with the same message'),
+    # Not compared (upstream Zakura, not this change): a 2.0 member or single 2.0 request whose
+    # id is not a 2.0 id (-1, true) parses as a notification: no answer, and the method is not
+    # run (rpc_service.rs RpcService::notification). ycashd answers it with that id.
+    ('batch', r'^\[\d+,nullid\](\.(jsonrpc|result)|!error)$', 'zakura',
+     'a 1.0 member with "id": null or no id gets -32600 Invalid request, as a single request of '
+     'that kind does; ycashd runs it and answers with id null (review L2/L4 of kogany #35)'),
 ]
 
 # The fields the clients read (survey B row 19; lightwalletd-dd common/common.go:74-140, yolo
@@ -212,7 +223,7 @@ CLIENT_FIELDS = {
 }
 
 # The methods whose error messages are compared as well as their codes (W7-e).
-EXACT_ERROR_METHODS = ('sendrawtransaction', 'submitblock')
+EXACT_ERROR_METHODS = ('sendrawtransaction', 'submitblock', 'getaddressfirstlastheight')
 
 WALLET_ONLY = {
     'z_sendmany': 'lightwalletd-dd uses it on the regtest faucet path; kogany has no wallet (K-3)',
@@ -275,18 +286,19 @@ class Node:
         return answer.get('result'), answer.get('error')
 
     def raw(self, body):
-        """Posts `body` as it is (a batch, say) and returns the parsed answer."""
+        """Posts `body` as it is (a batch, say) and returns (HTTP status, the parsed answer)."""
         req = urllib.request.Request('http://127.0.0.1:%d/' % self.port, body.encode(),
                                      {'Content-Type': 'application/json'})
         if self.auth:
             req.add_header('Authorization', 'Basic ' + base64.b64encode(self.auth.encode()).decode())
         try:
-            raw = urllib.request.urlopen(req, timeout=300).read()
+            answer = urllib.request.urlopen(req, timeout=300)
+            status, raw = answer.status, answer.read()
         except urllib.error.HTTPError as e:
-            raw = e.read()
+            status, raw = e.code, e.read()
         except (urllib.error.URLError, ConnectionError) as e:
             raise RpcError('%s: batch: %s' % (self.name, e))
-        return json.loads(raw)
+        return status, json.loads(raw)
 
     def ok(self, method, *params):
         result, error = self.call(method, *params)
@@ -477,6 +489,10 @@ def compare_batch(report, call, members, ya, za):
     the same keys and ids; then each answer's result or error as a single call's is.
     """
     report.calls += 1
+    (ystatus, ya), (zstatus, za) = ya, za
+    # ycashd answers every batch with HTTP 200, a failing member included (review L3).
+    if ystatus != 200 or zstatus != 200:
+        report.add('batch', call, '=status', 'value', ystatus, zstatus)
     if not (isinstance(ya, list) and isinstance(za, list)) or len(ya) != len(za) \
             or len(ya) != len(members):
         report.add('batch', call, '=answer', 'shape', ya, za)
@@ -491,7 +507,11 @@ def compare_batch(report, call, members, ya, za):
         if a.get('id') != b.get('id'):
             report.add('batch', call, '%s.id' % where, 'value', a.get('id'), b.get('id'))
         ra, rb = (a.get('result'), a.get('error')), (b.get('result'), b.get('error'))
-        if results:
+        if version in ('badid', 'nullid'):
+            # ycashd runs the member; kogany refuses it. Recorded, never compared further.
+            if bool(ra[1]) != bool(rb[1]) or (ra[1] or {}).get('code') != (rb[1] or {}).get('code'):
+                report.add('batch', call, '%s!error' % where, 'error', ra[1], rb[1])
+        elif results:
             report.compare(method, '%s %s' % (call, where), ra, rb)
         elif bool(ra[1]) != bool(rb[1]) or (ra[1] or {}).get('code') != (rb[1] or {}).get('code'):
             report.add(method, '%s %s' % (call, where), '!error', 'error', ra[1], rb[1])
@@ -531,6 +551,17 @@ def batch_parity(r, tip):
         ('getblockhash', '1.0', True)], r.y.raw(mixed), r.z.raw(mixed))
 
     compare_batch(r.report, 'empty', [], r.y.raw('[]'), r.z.raw('[]'))
+
+    # 1.0 members whose id is not a 2.0 id, and with a null or no id (review L1, L2/L4).
+    odd = ('[{"id":-1,"method":"getblockcount","params":[]},'
+           '{"id":true,"method":"getblockcount","params":[]},'
+           '{"id":null,"method":"getblockcount","params":[]},'
+           '{"jsonrpc":"1.0","method":"getblockcount","params":[]},'
+           '{"id":9,"method":"getblockcount","params":[]}]')
+    compare_batch(r.report, 'odd ids', [
+        ('getblockcount', 'badid', False), ('getblockcount', 'badid', False),
+        ('getblockcount', 'nullid', False), ('getblockcount', 'nullid', False),
+        ('getblockcount', 'bitcoind', True)], r.y.raw(odd), r.z.raw(odd))
 
 
 def effective_ydf(ydf):
@@ -796,12 +827,17 @@ def run(args):
 
         # A spend paying the ZIP 317 fee, which ycashd takes with allowhighfees: in both
         # mempools, in both templates, then mined.
-        txid = spend_with_zip317_fee(y, recipient)
+        # It pays an address seen nowhere else, so while it waits in the mempool both address
+        # reads (chain only, on both nodes) answer nothing for it (beta3 item 11).
+        mempool_only = y.ok('getnewaddress')
+        txid = spend_with_zip317_fee(y, mempool_only)
         raw = y.ok('getrawtransaction', txid, 0)
         # ycashd's third parameter, allowyedburn (H7): without a Yellowback wallet it changes
         # nothing, on either node (W7-c).
         r.both('sendrawtransaction', raw, False, True)
         r.both('getrawmempool')
+        r.both('getaddressbalance', {'addresses': [mempool_only]})
+        r.both('getaddressfirstlastheight', mempool_only)
         r.template()
         r.mine()
         tip = y.ok('getblockcount')
@@ -826,12 +862,30 @@ def run(args):
         r.both('gettxout', txid, 0)
         r.both('gettxout', txid, 1)
         ydf = y.ok('getblock', y.ok('getblockhash', 1), 2)['tx'][0]['vout'][1]['scriptPubKey']['addresses'][0]
-        for addr in (miner, recipient, ydf):
+        for addr in (miner, recipient, ydf, mempool_only):
             q = {'addresses': [addr]}
             r.both('getaddressbalance', q)
+            # beta3 item 11: ycashd's insight read, one address string.
+            r.both('getaddressfirstlastheight', addr)
             r.both('getaddressutxos', q)
             r.both('getaddresstxids', q)
             r.both('getaddresstxids', {'addresses': [addr], 'start': 1, 'end': tip})
+        # beta3 item 11: txcount over several addresses (a transaction touching two counts once),
+        # and getaddressfirstlastheight for an address never seen, a string that is not an
+        # address and a value that is not a string.
+        r.both('getaddressbalance', {'addresses': [miner, recipient, ydf]})
+        r.both('getaddressfirstlastheight', y.ok('getnewaddress'))
+        r.both('getaddressfirstlastheight', 'not-an-address')
+        r.both('getaddressfirstlastheight', 7)
+        # A wrong parameter count: ycashd's message and help text on both; the code differs.
+        for params in ((), (miner, 1)):
+            r.report.calls += 1
+            (_, ea), (_, eb) = y.call('getaddressfirstlastheight', *params), z.call('getaddressfirstlastheight', *params)
+            if not ea or not eb or ea.get('message') != eb.get('message'):
+                r.report.add('getaddressfirstlastheight', 'count %d' % len(params), '!error', 'error', ea, eb)
+            elif ea.get('code') != eb.get('code'):
+                r.report.add('parameter count', 'count %d' % len(params), '!error.code', 'value',
+                             ea.get('code'), eb.get('code'))
         r.both('getrawmempool')
         r.both('sendrawtransaction', raw)
         r.both('yed_getinfo')

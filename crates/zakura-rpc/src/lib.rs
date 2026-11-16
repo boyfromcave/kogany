@@ -34,6 +34,12 @@ pub use methods::types::{
 // kogany W8: the Ycash `getblocktemplate` hooks the node installs (`RpcImpl::with_ycash_mining`).
 #[cfg(feature = "ycash")]
 pub use methods::types::get_block_template::ycash as ycash_mining;
+// Beta3 item 3: `getcoinbasetemplatefor` (kogany-rpc serves it) and the Sapling output prover of a
+// Ycash node's coinbase (`zakurad` installs it).
+#[cfg(feature = "ycash")]
+pub use methods::types::get_block_template::coinbase_for as ycash_coinbase_for;
+#[cfg(feature = "ycash")]
+pub use methods::types::transaction::sapling_coinbase as ycash_sapling_coinbase;
 // kogany W7-b: ycashd's `ScriptErrorString` text for `yed_validaterawtransaction`.
 #[cfg(feature = "ycash")]
 pub use methods::types::ycash_reject::script_error_string as ycash_script_error_string;

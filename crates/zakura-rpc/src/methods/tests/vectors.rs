@@ -4951,6 +4951,8 @@ async fn rpc_getdifficulty() {
         block_unpaid_action_limit: None,
         #[cfg(feature = "ycash")]
         ydf: 0,
+        #[cfg(feature = "ycash")]
+        sapling_output_params: None,
     };
 
     // nu5 block height
@@ -6283,8 +6285,17 @@ async fn ycash_address_index_rpcs_take_the_d9_forms() {
                 balance: Amount::try_from(7).expect("a valid amount"),
                 received: 9,
             });
+        // beta3 item 11: `txcount` reads the same address's transaction index.
+        read_state
+            .expect_request(ReadRequest::TransactionIdsByAddresses {
+                addresses: want.clone(),
+                height_range: zakura_chain::block::Height(0)..=zakura_chain::block::Height::MAX,
+            })
+            .await
+            .respond(ReadResponse::AddressesTransactionIds(Default::default()));
         let balance = call.await.expect("joins").expect("a valid address");
         assert_eq!((balance.balance, balance.received), (7, 9), "{text}");
+        assert_eq!(balance.txcount, Some(0), "{text}");
 
         // getaddresstxids
         let call = tokio::spawn({

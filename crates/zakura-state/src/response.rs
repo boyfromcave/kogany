@@ -514,6 +514,11 @@ pub enum ReadResponse {
         value_balance: ValueBalance<NonNegative>,
     },
 
+    /// Ycash: response to [`ReadRequest::SproutTipTreeSize`] with the number of note commitments
+    /// in the Sprout tree of the current best chain tip.
+    #[cfg(feature = "ycash")]
+    SproutTipTreeSize(u64),
+
     /// Response to [`ReadRequest::BlockInfo`] with
     /// the block info after the specified block.
     BlockInfo(Option<BlockInfo>),
@@ -867,6 +872,11 @@ impl TryFrom<ReadResponse> for Response {
             | ReadResponse::Blocks(_)
             | ReadResponse::NonFinalizedBlocksListener(_)
             | ReadResponse::IsTransparentOutputSpent(_) => {
+                Err("there is no corresponding Response for this ReadResponse")
+            }
+
+            #[cfg(feature = "ycash")]
+            ReadResponse::SproutTipTreeSize(_) => {
                 Err("there is no corresponding Response for this ReadResponse")
             }
 
