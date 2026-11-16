@@ -78,6 +78,41 @@ fn regtest_ydf_shares_match_ycashd() {
     assert!(is_pre_nu5(&regtest, Height(1)));
 }
 
+/// The fast testnet across its own mandate end (beta3 item 5; `mandate_end::TESTNET_FAST`,
+/// provisional): one block below it the template carries the required 5 % output and
+/// `foundersreward` whatever `mining.ydf` says; from it on the node's setting decides, as on
+/// mainnet past 2,275,000, and the default pays the miner in full.
+#[test]
+fn fast_testnet_shares_follow_its_own_mandate_end() {
+    let fast = Network::new_default_testnet();
+    let end = ydf::mandate_end::TESTNET_FAST;
+    assert_eq!(end, Height(600_000));
+
+    let below = Height(end.0 - 1);
+    let s = subsidy(&fast, below.0);
+    let required = (s / 20).unwrap();
+    for ydf in [0, 5] {
+        assert_eq!(founders_share(&fast, below, s, ydf), required);
+        assert_eq!(optional_ydf_share(&fast, below, s, ydf), zat(0));
+        assert_eq!(
+            ydf_output(&fast, below, s, ydf).map(|(amount, _)| amount),
+            Some(required)
+        );
+    }
+    assert_eq!(template_founders_reward(&fast, below, s), Some(required));
+
+    for height in [end, Height(end.0 + 1)] {
+        let s = subsidy(&fast, height.0);
+        assert_eq!(founders_share(&fast, height, s, 0), zat(0));
+        assert_eq!(ydf_output(&fast, height, s, 0), None);
+        assert_eq!(
+            ydf_output(&fast, height, s, 5).map(|(amount, _)| amount),
+            Some((s / 20).unwrap())
+        );
+        assert_eq!(template_founders_reward(&fast, height, s), None);
+    }
+}
+
 /// Mainnet around the fork and the mandate end: the founders' reward before 570,000, the YDF
 /// from it (`getblocksubsidy` at those heights on a synced ycashd).
 #[test]

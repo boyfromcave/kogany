@@ -190,7 +190,10 @@ fn ydf_missing_or_wrong_amount_rejects_until_the_mandate_ends() {
 #[test]
 fn ydf_lists_and_heights_on_testnet_and_regtest() {
     let fast = Network::new_default_testnet();
-    assert_eq!(ydf::ydf_mandate_end_height(&fast), Height(900_000));
+    // The fast profile's own end (beta3 item 5): provisional until the release-candidate cut,
+    // the same constant as `TESTNET_FAST_YDF_MANDATE_END_HEIGHT` on the C++ lines.
+    assert_eq!(ydf::mandate_end::TESTNET_FAST, Height(600_000));
+    assert_eq!(ydf::ydf_mandate_end_height(&fast), Height(600_000));
     assert_eq!(ydf::ydf_address(&fast, Height(510_247)), None);
     assert_eq!(
         ydf::ydf_address(&fast, Height(510_248)).map(|a| a.to_string()),
@@ -200,9 +203,9 @@ fn ydf_lists_and_heights_on_testnet_and_regtest() {
         ydf::ydf_address(&fast, Height(510_248 + 17_917)).map(|a| a.to_string()),
         Some(ydf::TESTNET_YDF_ADDRESSES[1].to_string())
     );
-    assert!(ydf::ydf_reward(&fast, Height(899_999)) > Amount::<NonNegative>::zero());
+    assert!(ydf::ydf_reward(&fast, Height(599_999)) > Amount::<NonNegative>::zero());
     assert_eq!(
-        ydf::ydf_reward(&fast, Height(900_000)),
+        ydf::ydf_reward(&fast, Height(600_000)),
         Amount::<NonNegative>::zero()
     );
 
@@ -246,4 +249,116 @@ fn ydf_lists_and_heights_on_testnet_and_regtest() {
     for net in [Network::Mainnet, fast] {
         assert!(net.all_funding_streams().is_empty());
     }
+}
+
+/// A block whose only transaction is a v4 coinbase at `height` with `outputs`: everything
+/// `subsidy_is_valid` reads of a block. The header is a real mainnet block's and is not read.
+fn block_with_coinbase(height: Height, outputs: Vec<zakura_chain::transparent::Output>) -> Block {
+    use zakura_chain::{transaction::LockTime, transparent::Input};
+
+    let mut block = block(BLOCKS[0].1);
+    block.transactions = vec![Arc::new(Transaction::V4 {
+        inputs: vec![Input::Coinbase {
+            height,
+            data: Vec::new(),
+            sequence: u32::MAX,
+        }],
+        outputs,
+        lock_time: LockTime::unlocked(),
+        expiry_height: Height(0),
+        joinsplit_data: None,
+        sapling_shielded_data: None,
+    })];
+    block
+}
+
+/// The four coinbases the mandate distinguishes at `height` on `net`, and whether each passes
+/// `subsidy_is_valid`: with exactly `subsidy / 20` to the fund address of the height, without a
+/// fund output, with one zatoshi more, and with the right amount to another script.
+fn fund_output_verdicts(net: &Network, height: u32) -> [bool; 4] {
+    use zakura_chain::transparent::{Output, Script};
+
+    let h = Height(height);
+    let subsidy = block_subsidy(h, net, None).expect("valid subsidy");
+    let fund = (subsidy / 20).expect("valid");
+    let miner = (subsidy - fund).expect("valid");
+    let fund_script = ydf::ydf_address(net, h)
+        .expect("the YDF address is defined from the Ycash upgrade on")
+        .script();
+    let miner_script = Script::new(&[0x51]);
+    let one = Amount::<NonNegative>::try_from(1).expect("valid");
+
+    let verdict = |outputs: Vec<Output>| {
+        subsidy_is_valid(&block_with_coinbase(h, outputs), net, subsidy).is_ok()
+    };
+    [
+        verdict(vec![
+            Output::new(miner, miner_script.clone()),
+            Output::new(fund, fund_script.clone()),
+        ]),
+        verdict(vec![Output::new(subsidy, miner_script.clone())]),
+        verdict(vec![
+            Output::new(miner, miner_script.clone()),
+            Output::new((fund + one).expect("valid"), fund_script),
+        ]),
+        verdict(vec![
+            Output::new(miner, miner_script.clone()),
+            Output::new(fund, miner_script),
+        ]),
+    ]
+}
+
+/// Beta3 item 5: the end of the YDF mandate, E, on every network. At E - 1 the output of exactly
+/// `subsidy / 20` to the fund address is required: its absence, another amount and another script
+/// are rejected. At E and at E + 1 a block is valid without it and with it (and with any other
+/// output: the rule no longer looks). E is 600,000 on the fast testnet (provisional), 5 on
+/// regtest, 2,275,000 on mainnet and on the slow and legacy shadow forks, and 900,000 on a
+/// configured testnet with a magic of its own.
+#[test]
+fn fund_output_is_required_below_the_mandate_end_and_optional_from_it() {
+    let _init_guard = zakura_test::init();
+
+    let fast = Network::new_default_testnet();
+    assert!(zakura_chain::parameters::ycash::is_fast_network(&fast));
+    let other_testnet = zakura_chain::parameters::testnet::Parameters::build()
+        .with_network_name("YdfTestOther")
+        .and_then(|builder| {
+            builder.with_network_magic(zakura_chain::parameters::Magic([0x79, 0x64, 0x66, 0x00]))
+        })
+        .and_then(|builder| builder.to_network())
+        .expect("a configured testnet with its own magic is valid");
+    assert!(!zakura_chain::parameters::ycash::is_fast_network(
+        &other_testnet
+    ));
+
+    for (name, net, end) in [
+        ("fast", fast, 600_000),
+        ("regtest", Network::new_regtest(Default::default()), 5),
+        ("mainnet", Network::Mainnet, 2_275_000),
+        ("slow", Network::new_ycash_testnet_slow(), 2_275_000),
+        ("legacy", Network::new_ycash_testnet_legacy(), 2_275_000),
+        ("configured", other_testnet, 900_000),
+    ] {
+        assert_eq!(ydf::ydf_mandate_end_height(&net), Height(end), "{name}");
+        assert_eq!(
+            fund_output_verdicts(&net, end - 1),
+            [true, false, false, false],
+            "{name}: the fund output is required at E - 1 = {}",
+            end - 1
+        );
+        for height in [end, end + 1] {
+            assert_eq!(
+                fund_output_verdicts(&net, height),
+                [true, true, true, true],
+                "{name}: the fund output is optional at {height}"
+            );
+        }
+    }
+
+    // Blocks the fast testnet already has stay valid: they carry the output, which is required
+    // below E and allowed from it. Its Ycash upgrade is at 510,248.
+    assert_eq!(
+        fund_output_verdicts(&Network::new_default_testnet(), 510_248),
+        [true, false, false, false]
+    );
 }

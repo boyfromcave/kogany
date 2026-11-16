@@ -26,8 +26,21 @@ pub mod mandate_end {
 
     /// Ycash mainnet (`ycash6 src/chainparams.cpp:167`).
     pub const MAINNET: Height = Height(2_275_000);
-    /// The Ycash testnet profiles (`ycash6 src/chainparams.cpp:474`).
+    /// A Ycash testnet that is neither the fast profile nor a shadow fork: `CTestNetParams`'s
+    /// value (`ycash6 src/chainparams.cpp:474`), which a configured testnet inherits.
     pub const TESTNET: Height = Height(900_000);
+    /// The fast profile's own end of the YDF mandate (beta3 item 5, decision B3-D4;
+    /// `TESTNET_FAST_YDF_MANDATE_END_HEIGHT`, `ycash6 src/chainparams.cpp`): from this height a
+    /// testnet-yb-fast block is valid with or without the fund output, as on mainnet past
+    /// 2,275,000. Below it the 5 % output stays required.
+    ///
+    /// PROVISIONAL: 600,000, deliberately far above the tip, so that a node built from this
+    /// tree and run on the fast testnet before the cut stays strict (it keeps paying and
+    /// requiring the output) instead of mining blocks that released nodes reject. The
+    /// coordinator replaces it at the release-candidate cut with the fast-testnet tip then, plus
+    /// 400 blocks, the same value on ycash-dd, ycash6 and kogany. Every node of the network
+    /// must run a build with the final value before the chain reaches it.
+    pub const TESTNET_FAST: Height = Height(600_000);
     /// Ycash regtest (`ycash6 src/chainparams.cpp:777`).
     pub const REGTEST: Height = Height(5);
 }
@@ -252,6 +265,7 @@ pub fn ydf_mandate_end_height(network: &Network) -> Height {
         Network::Mainnet => mandate_end::MAINNET,
         Network::Testnet(params) if params.is_regtest() => mandate_end::REGTEST,
         Network::Testnet(_) if super::is_shadow_network(network) => mandate_end::MAINNET,
+        Network::Testnet(_) if super::is_fast_network(network) => mandate_end::TESTNET_FAST,
         Network::Testnet(_) => mandate_end::TESTNET,
     }
 }
