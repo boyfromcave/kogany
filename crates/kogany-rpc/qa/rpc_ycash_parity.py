@@ -6,7 +6,7 @@
 """kogany's stock RPC answers against ycash6's, field by field, on one Ycash regtest chain (W1-Y6).
 
     python crates/kogany-rpc/qa/rpc_ycash_parity.py --koganyd <koganyd, the --features ycash build> \\
-        [--ycash6-bin $WS/wt/.bin/ycash6-65cb4ae0f] [--workdir DIR] [--keep]
+        [--ycash6-bin <a directory holding the ycashd of ycash6 88b696287 or later>] [--workdir DIR] [--keep]
 
 It starts a ycashd and a zakurad on Ycash regtest with every upgrade through Canopy at height 1
 (the `-nuparams` set the ycash6 suites pass, `YCASH_UPGRADE_ARGS`), mines on ycashd and feeds each

@@ -362,3 +362,66 @@ fn fund_output_is_required_below_the_mandate_end_and_optional_from_it() {
         [true, false, false, false]
     );
 }
+
+/// Beta3 item 5, the edges of the rule on both sides of E (regtest, E = 5). At E - 1 a coinbase
+/// with two outputs of exactly `subsidy / 20` to the fund address passes: the rule asks for one
+/// such output and does not count them (ycashd looks for a match, `ycash6 src/main.cpp`
+/// `ContextualCheckBlock`). At E a coinbase without a fund output that pays the miner the whole
+/// subsidy and every fee passes `miner_fees_are_valid` too, and one zatoshi more does not.
+#[test]
+fn two_fund_outputs_below_the_end_and_a_fund_less_coinbase_at_it() {
+    use zakura_chain::{
+        amount::DeferredPoolBalanceChange,
+        transparent::{Output, Script},
+    };
+
+    use super::check::miner_fees_are_valid;
+
+    let _init_guard = zakura_test::init();
+    let net = Network::new_regtest(Default::default());
+    let end = ydf::ydf_mandate_end_height(&net);
+    let miner_script = Script::new(&[0x51]);
+
+    let below = Height(end.0 - 1);
+    let subsidy = block_subsidy(below, &net, None).expect("valid subsidy");
+    let fund = (subsidy / 20).expect("valid");
+    let fund_script = ydf::ydf_address(&net, below)
+        .expect("the YDF address is defined from the Ycash upgrade on")
+        .script();
+    let miner = ((subsidy - fund).expect("valid") - fund).expect("valid");
+    let two_fund_outputs = block_with_coinbase(
+        below,
+        vec![
+            Output::new(miner, miner_script.clone()),
+            Output::new(fund, fund_script.clone()),
+            Output::new(fund, fund_script),
+        ],
+    );
+    subsidy_is_valid(&two_fund_outputs, &net, subsidy)
+        .expect("two fund outputs at E - 1 satisfy the mandate");
+
+    let subsidy = block_subsidy(end, &net, None).expect("valid subsidy");
+    let fees = Amount::<NonNegative>::try_from(1_234).expect("valid");
+    let one = Amount::<NonNegative>::try_from(1).expect("valid");
+    let paid_in_full = (subsidy + fees).expect("valid");
+    for (value, valid) in [
+        (paid_in_full, true),
+        ((paid_in_full + one).expect("valid"), false),
+    ] {
+        let block = block_with_coinbase(end, vec![Output::new(value, miner_script.clone())]);
+        subsidy_is_valid(&block, &net, subsidy).expect("no fund output is required at E");
+        assert_eq!(
+            miner_fees_are_valid(
+                &block.transactions[0],
+                end,
+                fees,
+                subsidy,
+                DeferredPoolBalanceChange::zero(),
+                &net,
+            )
+            .is_ok(),
+            valid,
+            "a fund-less coinbase paying {value:?} at E"
+        );
+    }
+}

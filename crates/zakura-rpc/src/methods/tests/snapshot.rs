@@ -1066,6 +1066,8 @@ pub async fn test_mining_rpcs<State, ReadState>(
         block_unpaid_action_limit: None,
         #[cfg(feature = "ycash")]
         ydf: 0,
+        #[cfg(feature = "ycash")]
+        sapling_output_params: None,
     };
 
     // nu5 block height

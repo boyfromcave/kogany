@@ -50,9 +50,38 @@ behaviours follow ycashd's there, each against Zakura's own:
 - **The development-fund share.** `mining.ydf` is ycashd's `-ydf=<n>`: after the Ycash
   Development Fund mandate ends, a block this node builds donates `n` % of the block subsidy to
   the fund. The default is 0, so a miner is paid the whole subsidy and every fee; a miner who
-  donates sets `ydf = 5`. A value outside 0..100 is reset to 0 and logged, as ycashd does. Before
-  the mandate ends the 5 % output is a consensus rule and is built whatever the setting says.
+  donates sets `ydf = 5`. A number outside 0..100 is reset to 0 and logged, as ycashd does; a
+  value that is not an integer fails to parse and the node does not start (ycashd's `atoi` reads
+  it as 0). Before the mandate ends the 5 % output is a consensus rule and is built whatever the setting says.
   `getblocksubsidy` reports the configured share as `founders`.
+- **A coinbase per payout address.** `getcoinbasetemplatefor "address"
+  {"previousblockhash": "<hex>", "txids": ["<hex>", ...]}` is ycashd's call of the same name, to
+  the same contract (request, response, error codes and strings): a pool keeps the stock
+  `getblocktemplate` reply and asks for a coinbase that pays one miner, naming its template by
+  the previous block hash and the ids of the template's transactions. The node derives the amount
+  itself: the block subsidy, less the development-fund output its own coinbase carries (the
+  mandated one, or the `mining.ydf` share), plus the mempool fee of every named transaction.
+  There is no amount argument, any other key is refused, and nothing is kept between calls.
+  The payout address is transparent (P2PKH, P2SH), post-quantum (`sqf…`/`sqs…`, from the Vault
+  upgrade on) or Sapling (`ys1…`). The coinbase is ycashd's, field for field: version 4, expiry
+  height 0, the input script `<height> OP_0 <tag>`; for a transparent or post-quantum address the
+  bytes are the ones ycashd returns. Two differences from ycashd are in the refusals it shares
+  with `getblocktemplate`: kogany has no "not connected" check, and it answers "Ycash is
+  downloading blocks..." where its `getblocktemplate` says it has not synced to the tip.
+- **The Sapling output parameters.** A coinbase that pays a Sapling address carries a Sapling
+  output proof, made with `sapling-output.params` (3,592,860 bytes), the file ycashd uses. koganyd
+  reads it once at start from `mining.sapling_output_params`, or, when that is unset, from
+  ycashd's parameter directory (`~/.zcash-params`; `~/Library/Application Support/ZcashParams` on
+  macOS; `%APPDATA%\ZcashParams` on Windows), and checks its SHA-256
+  (`2f0ebbcbb9bb0bcffe95a397e7eba89c29eb4dde6191c339db88570e3f3fb0e4`). The file is in the
+  project's `zcash-params-v1` release (the ycash-infra repository) and is what ycashd's
+  `fetch-params` installs. A node without it, or with a file that fails the check, logs that at
+  start and runs as before: `getcoinbasetemplatefor` then answers a Sapling address with
+  `-32603 coinbase construction failed: Sapling output parameters are not loaded`, and
+  transparent and post-quantum addresses are unaffected. With the file, `getblocktemplate` also
+  serves a Sapling `mining.miner_address` (ycashd's `-mineraddress=<Sapling>`): the miner's
+  reward is one Sapling output and only the fund output is transparent. Proofs are made off the
+  async worker threads, at most four at once; one takes about 0.2 s on a current desktop core.
 - **The YED payout key.** A transparent P2PKH `mining.miner_address` is also the Yellowback payout
   key the coinbase tag names, as ycashd takes `-mineraddress` when no `-yellowbackpayoutaddress`
   is set. `mining.yellowback_payout_default = false` (ycashd `-yellowbackpayoutdefault=0`, default
