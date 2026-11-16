@@ -527,9 +527,13 @@ def run(args, solver):
         for extra in ({'amount': 1}, {'fees': 0}, {'coinbasevalue': 1}):
             expect_error(-8, BAD_TEMPLATE, both, f, a, dict(ref, **extra))
         for node in both:
-            for third in (1, None):     # JSON null too: ycashd counts the parameters sent
+            # JSON null too: ycashd counts the parameters sent. Each line's usual usage error, which
+            # the contract leaves to the line: kogany and ycash-dd -1, ycash6 -32602 "Too many
+            # parameters" (docs/kogany.md, "Wrong argument counts"); always with the usage line.
+            codes = (-1,) if node is z else (-1, -32602)
+            for third in (1, None):
                 result, error = node.call(f, a, ref, third)
-                check(error is not None and error['code'] == -1 and 'getcoinbasetemplatefor "address"' in error['message'],
+                check(error is not None and error['code'] in codes and 'getcoinbasetemplatefor "address"' in error['message'],
                       '%s: a third parameter %r: %r' % (node.name, third, error or result))
         for bad in ({'previousblockhash': ref['previousblockhash']}, {'txids': []}, {}, [], 'x', 1,
                     {'previousblockhash': ref['previousblockhash'], 'amount': 1}):
