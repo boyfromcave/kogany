@@ -1559,6 +1559,32 @@ mod tests {
         work::difficulty::{ParameterDifficulty, INVALID_COMPACT_DIFFICULTY},
     };
 
+    /// kogany (beta3 R4, decision note `reorg-parity.md` T3): the two median-time-past rules score
+    /// 100 on the commit path, with the feature on and off. ycashd scores both 0 (`state.Invalid`,
+    /// ycash6 `src/main.cpp:6136-6153`); the difference is kept and documented (R4(a)): an honest
+    /// ycashd peer checks both rules before it relays, and a score of 0 would let a peer feed
+    /// such blocks unpunished.
+    #[test]
+    fn median_time_past_rules_keep_their_misbehavior_score() {
+        let time = DateTime::from_timestamp(1_000_000, 0)
+            .expect("test timestamp is in the supported range");
+        for error in [
+            ValidateContextError::TimeTooEarly {
+                candidate_time: time,
+                median_time_past: time,
+            },
+            ValidateContextError::TimeTooLate {
+                candidate_time: time,
+                block_time_max: time,
+            },
+        ] {
+            assert_eq!(
+                CommitBlockError::ValidateContextError(Box::new(error)).misbehavior_score(),
+                100
+            );
+        }
+    }
+
     #[test]
     fn commit_block_error_misbehavior_scores() {
         let block_time = DateTime::from_timestamp(1_000_000, 0)

@@ -383,6 +383,22 @@ impl StartCmd {
         Self::validate_debug_blocksync_throughput_config(&config)?;
         #[cfg(feature = "ycash")]
         Self::validate_yellowback_payout_address(&config)?;
+        // kogany (beta3 R1): a refused reorganisation on record keeps the node down, as a ycashd
+        // meets the refused branch in its block index at every start and shuts down again
+        // (ycash6 `src/main.cpp:5006-5022`).
+        #[cfg(feature = "ycash")]
+        if let Some((path, message)) = zakura_state::recorded_reorg_refusal(
+            &config.mirrored_state_config(),
+            &config.network.network,
+        ) {
+            error!("*** {message}");
+            error!(
+                ?path,
+                "a refused reorganization is on record: the node stops at every start while this \
+                 file exists. Remove it to start the node again"
+            );
+            return Err(eyre!(message));
+        }
         config.rpc.validate().map_err(|error| eyre!(error))?;
         // kogany (W6-b): the network-fee policy `yed_getinfo` reports, as ycashd's init sets it.
         #[cfg(feature = "ycash")]

@@ -36,6 +36,10 @@ pub(super) fn restore_backup(
     backup_dir_path: &Path,
     finalized_state: &ZakuraDb,
 ) -> NonFinalizedState {
+    // kogany (beta3 R1): the state before the restore, for a restore the guard refuses.
+    #[cfg(feature = "ycash")]
+    let empty = non_finalized_state.clone();
+
     let mut store: BTreeMap<Height, Vec<SemanticallyVerifiedBlock>> = BTreeMap::new();
 
     for block in read_non_finalized_blocks_from_backup(backup_dir_path, finalized_state) {
@@ -46,6 +50,18 @@ pub(super) fn restore_backup(
     crate::service::yed::without_yed_test_fault(|| {
         restore_blocks(&mut non_finalized_state, store, finalized_state)
     });
+
+    // kogany (beta3 R1): restored chains with the same work are ordered by tip hash, so the
+    // best chain is settled against the best tip kept with the backup.
+    #[cfg(feature = "ycash")]
+    {
+        non_finalized_state = super::reorg_guard::after_restore(
+            non_finalized_state,
+            empty,
+            backup_dir_path,
+            finalized_state,
+        );
+    }
 
     non_finalized_state
 }
@@ -113,6 +129,10 @@ pub(super) fn update_non_finalized_state_backup(
             tracing::warn!(?delete_error, "failed to delete backup block file");
         }
     }
+
+    // kogany (beta3 R1): the best tip this backup was written for, for the next restore.
+    #[cfg(feature = "ycash")]
+    super::reorg_guard::persist_best_tip(backup_dir_path, non_finalized_state);
 }
 
 /// Updates the non-finalized state backup cache whenever the non-finalized state changes,

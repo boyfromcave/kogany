@@ -395,6 +395,11 @@ impl Drop for ReadStateService {
                     Ok(write::BlockWriteTaskExit::HeaderChainRuntimeFailed(error)) => {
                         tracing::error!(?error, "block write task stopped after a runtime failure")
                     }
+                    // kogany (beta3 R1)
+                    #[cfg(feature = "ycash")]
+                    Ok(write::BlockWriteTaskExit::ReorgRefused(error)) => {
+                        tracing::error!(%error, "block write task stopped: reorganization refused")
+                    }
                     Ok(write::BlockWriteTaskExit::Completed) => {
                         debug!("shutting down the state because the block write task has finished")
                     }
@@ -2890,6 +2895,11 @@ impl Service<ReadRequest> for ReadStateService {
                                 return Poll::Ready(Err(Box::new(error)));
                             }
                             Ok(write::BlockWriteTaskExit::HeaderChainRuntimeFailed(error)) => {
+                                return Poll::Ready(Err(Box::new(error)));
+                            }
+                            // kogany (beta3 R1)
+                            #[cfg(feature = "ycash")]
+                            Ok(write::BlockWriteTaskExit::ReorgRefused(error)) => {
                                 return Poll::Ready(Err(Box::new(error)));
                             }
                             Ok(write::BlockWriteTaskExit::Completed) => {}
