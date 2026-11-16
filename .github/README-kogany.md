@@ -209,6 +209,9 @@ What kogany publishes and consumes (the workspace's `docs/plans/kogany/ci-design
   file is `yellowback-tests.yml` of `boyfromcave/ycash6`, its `head_sha` is the pin, its event is
   push, schedule or dispatch, and its `build` job succeeded, and checks the downloaded zip against
   the artifact's recorded sha256 digest (ycash6 publishes no `SHA256SUMS` for node-bin yet).
+  `kogany-mixed.yml` also takes that run's `sidecars` artifact (`sidecars.tgz`: `yolo` and
+  `chain-viz`, built by its `sidecars` job), under the same checks, for `yellowback_stratum` and
+  `yellowback_chainviz` (`FETCH_SIDECARS=1`).
 - **Pins kogany holds** (bumped by a reviewed commit, never a branch tip): `YCASH6_REV` in
   `kogany-audit.yml` (must equal `testdata/yellowback/PIN`'s source commit; the cross-line job
   checks it), `YCASH6_REV` in `kogany-mixed.yml` and `kogany-client-legs.yml`, `LWD_REV`, `CHAINVIZ_REV` and `YOLO_REV` in

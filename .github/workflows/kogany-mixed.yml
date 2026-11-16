@@ -17,6 +17,8 @@ name: kogany-mixed
 # node-bin: from a push, schedule or dispatch run of ycash6's yellowback-tests.yml at the commit
 # (artifact `ycash6-node-bin`, else `node-bin`, holding node-bin.tgz); `ycash6_run_id` names the
 # run, else the newest such run at the commit is used. ycash6 is not built here (an hour of C++).
+# The same run's `sidecars` artifact (yolo and chain-viz, built by its `sidecars` job) comes with
+# it, for the two gate scripts that drive them.
 on:
   push:
     branches: [upgrade/vault, "vaults/**"]
@@ -78,11 +80,14 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.YCASH6_ARTIFACT_TOKEN || github.token }}
           RUN_ID: ${{ inputs.ycash6_run_id }}
+          FETCH_SIDECARS: '1'
         run: .github/workflows/scripts/fetch-ycash6-node-bin.sh "$RUNNER_TEMP/dl"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: ycash6-node-bin
-          path: ${{ runner.temp }}/dl/node-bin.tgz
+          path: |
+            ${{ runner.temp }}/dl/node-bin.tgz
+            ${{ runner.temp }}/dl/sidecars.tgz
           retention-days: 7
           if-no-files-found: error
 
@@ -132,6 +137,13 @@ jobs:
           cat "$RUNNER_TEMP/zk/koganyd-bin.json"
           "$RUNNER_TEMP/zk/koganyd" --version
           echo "KOGANY_BIN=$RUNNER_TEMP/zk/koganyd" >> "$GITHUB_ENV"
+          # yolo and chain-viz from the same ycash6 run: yellowback_stratum and yellowback_chainviz
+          # (attest group) SKIP without them, which --fail-on-skip turns into a failure.
+          mkdir -p "$RUNNER_TEMP/sidecars" && tar xzf "$RUNNER_TEMP/sidecars.tgz" -C "$RUNNER_TEMP/sidecars"
+          "$RUNNER_TEMP/sidecars/yolo" --version
+          "$RUNNER_TEMP/sidecars/chain-viz" --version
+          echo "YOLO_BIN=$RUNNER_TEMP/sidecars/yolo" >> "$GITHUB_ENV"
+          echo "CHAINVIZ_BIN=$RUNNER_TEMP/sidecars/chain-viz" >> "$GITHUB_ENV"
       - name: fetch zcash params
         run: zcutil/fetch-params.sh
       # The harness gives every node fixed ports in bands from 11000 to 56000 (ycash6
@@ -224,6 +236,8 @@ jobs:
             ${{ runner.temp }}/mixed-tests/**/node*/regtest/debug.log
             ${{ runner.temp }}/mixed-tests/**/kogany*/zakurad.log
             ${{ runner.temp }}/mixed-tests/**/kogany*/zakurad.toml
+            ${{ runner.temp }}/mixed-tests/**/kogany*/koganyd.log
+            ${{ runner.temp }}/mixed-tests/**/kogany*/koganyd.toml
             ${{ runner.temp }}/mixed-tests/reorg-parity/**/*.out
             ${{ runner.temp }}/mixed-tests/*-parity/**/*.log
           retention-days: 14
