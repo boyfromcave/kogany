@@ -134,6 +134,13 @@ jobs:
           echo "KOGANY_BIN=$RUNNER_TEMP/zk/koganyd" >> "$GITHUB_ENV"
       - name: fetch zcash params
         run: zcutil/fetch-params.sh
+      # The harness gives every node fixed ports in bands from 11000 to 56000 (ycash6
+      # qa/rpc-tests/test_framework/kogany.py: koganyd's RPC at 36000+, its P2P at 46000+). Linux
+      # hands out ephemeral ports from 32768 to 60999, so with two scripts at a time one script's
+      # outgoing connection could take another's listening port ("its p2p port ... is taken by
+      # another process"). Keep the kernel out of the bands; 56000 to 60999 stays ephemeral.
+      - name: reserve the harness port bands
+        run: sudo sysctl -w net.ipv4.ip_local_reserved_ports=31000-55999
       - name: the group's gate scripts (blocking, KOGANY_STRICT=1)
         id: gate
         env:
