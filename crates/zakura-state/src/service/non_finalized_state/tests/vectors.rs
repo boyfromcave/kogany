@@ -1732,6 +1732,99 @@ fn receipt_fallback_and_backup_restore_ignore_replay_order() {
     }
 }
 
+/// kogany: a backup that is up to date writes no block file again, also when the state holds
+/// more than one chain. Every chain holds a copy of the blocks it shares with the others, and the
+/// backup took the second copy of a block for missing, so on the Ycash build, which writes the
+/// backup before every tip update (F-S5-7), each new block rewrote every shared block: a koganyd
+/// with one stale branch 500 blocks above its finalized tip followed a burst of blocks at 4 to
+/// 10 blocks a second (500 file writes a block) until the branch was finalized away.
+#[cfg(feature = "ycash")]
+#[test]
+fn ycash_backup_writes_a_block_shared_by_two_chains_once() {
+    use std::{
+        collections::HashMap,
+        fs,
+        time::{Duration, SystemTime},
+    };
+
+    let _init_guard = zakura_test::init();
+    let network = Network::Mainnet;
+    let root = Arc::new(network.test_block(653599, 583999).unwrap());
+    let shared = root.make_fake_child().set_work(10);
+    let tip = shared.make_fake_child().set_work(10);
+    let stale = shared
+        .make_fake_child()
+        .set_work(5)
+        .set_block_commitment([1; 32]);
+
+    let (mut state, finalized) = new_invalidate_test_state(&network);
+    state
+        .commit_new_chain(root.clone().prepare(), &finalized.db)
+        .unwrap();
+    for block in [&shared, &tip, &stale] {
+        state
+            .commit_block(block.clone().prepare(), &finalized.db)
+            .unwrap();
+    }
+    assert_eq!(state.chain_count(), 2);
+
+    let backup = tempfile::tempdir().unwrap();
+    let block_files = || -> HashMap<_, _> {
+        fs::read_dir(backup.path())
+            .unwrap()
+            .map(|entry| entry.unwrap().path())
+            .map(|path| {
+                let modified = fs::metadata(&path).unwrap().modified().unwrap();
+                (path, modified)
+            })
+            .collect()
+    };
+
+    state.write_to_backup(backup.path());
+    assert_eq!(block_files().len(), 4, "root, shared, tip and stale");
+
+    // Date every file a day back: a file written again has a newer time.
+    let before = SystemTime::now() - Duration::from_secs(24 * 60 * 60);
+    for path in block_files().into_keys() {
+        fs::File::options()
+            .write(true)
+            .open(path)
+            .unwrap()
+            .set_modified(before)
+            .unwrap();
+    }
+    let dated = block_files();
+
+    // Nothing changed: nothing is written.
+    state.write_to_backup(backup.path());
+    assert_eq!(block_files(), dated, "an up-to-date backup was rewritten");
+
+    // One new block on the best chain: its file only.
+    let next = tip.make_fake_child().set_work(10);
+    state
+        .commit_block(next.clone().prepare(), &finalized.db)
+        .unwrap();
+    state.write_to_backup(backup.path());
+    let mut after = block_files();
+    assert_eq!(after.len(), 5);
+    after.retain(|path, modified| dated.get(path) != Some(modified));
+    let new_file = backup.path().join(next.hash().to_string());
+    assert_eq!(
+        after.into_keys().collect::<Vec<_>>(),
+        vec![new_file],
+        "only the new block is written"
+    );
+
+    // And the backup still restores both chains.
+    let restored = super::super::backup::restore_backup(
+        NonFinalizedState::new(&network),
+        backup.path(),
+        &finalized.db,
+    );
+    assert_eq!(restored.chain_count(), 2);
+    assert_eq!(restored.best_tip().unwrap().1, next.hash());
+}
+
 /// kogany (S5, `vault_pq_reorg` case C): two blocks invalidated at one height are both recorded,
 /// keyed by hash, and each can be reconsidered; keyed by height the second record overwrote the
 /// first, so `reconsiderblock` of the first found nothing. ycashd keeps a failure flag per block.
