@@ -168,7 +168,8 @@ jobs:
       # The beta3 parity scripts after it are report-only until each has passed on a runner; the
       # coordinator then removes its continue-on-error. value_pools_parity.py and
       # rpc_insight_inputs_parity.py passed in the #42 PR run (43835275455) and block;
-      # coinbase_for_parity.py stays report-only until it passes with the parameters below.
+      # coinbase_for_parity.py passed in the #43 PR run ("16 paired blocks accepted on both lines")
+      # and blocks.
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         if: ${{ !cancelled() && matrix.group == 'node' }}
         with:
@@ -195,11 +196,10 @@ jobs:
           curl -fsSL --retry 3 --max-time 120 --max-filesize 4000000 -o "$RUNNER_TEMP/sapling-output.params" \
             https://github.com/boyfromcave/ycash-infra/releases/download/zcash-params-v1/sapling-output.params
           echo "2f0ebbcbb9bb0bcffe95a397e7eba89c29eb4dde6191c339db88570e3f3fb0e4  $RUNNER_TEMP/sapling-output.params" | sha256sum -c -
-      - name: coinbase_for_parity.py (getcoinbasetemplatefor against ycashd; report-only)
+      - name: coinbase_for_parity.py (getcoinbasetemplatefor against ycashd)
         id: coinbase_for
         if: ${{ !cancelled() && matrix.group == 'node' }}
         timeout-minutes: 45
-        continue-on-error: true  # blocking once it has passed on a runner; the coordinator flips it
         run: |
           mkdir -p "$RUNNER_TEMP/mixed-tests"
           python3 kogany/crates/kogany-rpc/qa/coinbase_for_parity.py --koganyd "$KOGANY_BIN" \
