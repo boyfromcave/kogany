@@ -25,9 +25,12 @@ paths the name is lowercase: the repository and cargo package are `kogany`, the 
 - [The three Ycash node lines](#the-three-ycash-node-lines)
 - [Building](#building)
 - [Versioning](#versioning)
-- [Networks, ports and identifiers](#networks-ports-and-identifiers)
+- [Ports](#ports)
+- [Networks and identifiers](#networks-and-identifiers)
 - [Directories and files](#directories-and-files)
 - [Running](#running)
+- [Upgrading to beta3](#upgrading-to-beta3)
+- [The wallet: yewd](#the-wallet-yewd)
 - [Yellowback and vault RPCs](#yellowback-and-vault-rpcs)
 - [Upstream documentation](#upstream-documentation)
 - [License](#license)
@@ -60,6 +63,11 @@ root `Cargo.toml` under `[patch.crates-io]`) to their Ycash values. The same bui
 `zakurad` binary, which refuses to run: a Ycash node never runs, or installs, under Zcash's name.
 Without the feature, `cargo build -p kogany` builds upstream's Zcash `zakurad` and no `koganyd`.
 
+The compiler is pinned: `rust-toolchain.toml` names Rust 1.100.0 (with `clippy` and `rustfmt`),
+and `rustup` installs it on the first `cargo` call in the tree. Every kogany CI build uses the
+same version; [`.github/README-kogany.md`](.github/README-kogany.md) ("The Rust toolchain") says
+how it is bumped.
+
 The container image is upstream's `docker/Dockerfile` with the same switch: with `ycash` in the
 `FEATURES` build argument it builds and ships `koganyd` (and no `zakurad`), without it upstream's
 `zakurad`. The image's default command, `node`, runs whichever is installed:
@@ -88,8 +96,9 @@ appended for uncommitted changes. A build without `.git` (the Docker image) has 
 prints `koganyd 1.8.0-rc1+kogany.g<commit>` from the commit it was given (`SHORT_SHA`). The same
 version is in the startup diagnostics and the `kogany.build.info` metric. The user agent carries
 the package version only, `/koganyd:1.8.0-rc1/`: ycashd keeps only `[A-Za-z0-9 .-/:]` of a peer's
-subversion, so a `+` would be dropped. Upstream's `zakurad` (built without the `ycash` feature)
-keeps Zakura's scheme.
+subversion, so a `+` would be dropped. A release build cut at a tag `v<X.Y.Z>-ycash.<beta|rc><n>`
+advertises the release name instead, e.g. `/koganyd:1.8.0-ycash.beta3/`. Upstream's `zakurad`
+(built without the `ycash` feature) keeps Zakura's scheme.
 
 ## Ports
 
@@ -146,7 +155,9 @@ with a Zcash network's on one host.
   `ys…`, `ytestsapling…`, `yregtestsapling…`; post-quantum `sqf…`/`sqs…`, `tqf…`/`tqs…`,
   `rqf…`/`rqs…` (the scheme in the prefix: FN-DSA-512 / SLH-DSA, D-9); Yellowback (YED) `yb…`,
   `yt…`, `yr…`, post-quantum `ybf…`/`ybs…`, `ytf…`/`yts…`, `yrf…`/`yrs…`. Coin type 347 on mainnet.
-- DNS seed: `seed.ycash.xyz` on mainnet; the testnet has fixed seeds only.
+- DNS seed: `seed.ycash.xyz` on mainnet. No testnet peer is built in: name one in
+  `initial_testnet_peers`, e.g. `fastnet-seed.ycash.team:18833` (fast),
+  `slownet-seed.ycash.team:18933` (slow), `legacy-seed.ycash.team:19033` (legacy).
 - ycashd 4.5.0's testnet3 is not one of kogany's networks.
 - `network = "Testnet"` is testnet-yb-fast. `network = "TestnetSlow"` and
   `network = "TestnetLegacy"` are the shadow forks of mainnet through height 3,079,999.
@@ -199,8 +210,52 @@ from these quotes: blocks mined without one leave the price window empty, and ev
 with `mintpol-no-price: no defined price at the reference height`. `yed_getprice` shows whether a
 price is defined.
 
+### Mining: the development fund and pool payouts
+
+- `mining.ydf` is ycashd's `-ydf`: the percentage of the block subsidy a block this node builds
+  donates to the Ycash Development Fund once the fund's mandate has ended. The default is 0, so
+  the miner is paid the whole subsidy and every fee; set `ydf = 5` under `[mining]` to keep
+  donating. A value outside 0 to 100 is reset to 0 and logged. Before the mandate ends the 5 %
+  output is a consensus rule and is paid whatever the setting says.
+- `getcoinbasetemplatefor "address" {"previousblockhash": …, "txids": […]}` builds the coinbase
+  for one payout address (transparent, post-quantum or Sapling) against a template the pool
+  already holds, as ycashd does; the node derives the amount. A Sapling payout, and a Sapling
+  `mining.miner_address`, need ycashd's `sapling-output.params` file
+  ([`docs/kogany.md`](docs/kogany.md#where-a-koganyd-behaves-as-ycashd-does), "The Sapling output
+  parameters").
+
 To start a mainnet node at a recent height instead of from genesis, restore a signed snapshot of
 kogany's state: [`doc/mainnet-restore.md`](doc/mainnet-restore.md).
+
+## Upgrading to beta3
+
+Stop the old `koganyd`, install the new binary and start it with the same configuration. Then:
+
+- **The first start upgrades the database** from state format 30.2.0 to 30.3.0, once, for about
+  a minute or two on mainnet. The node serves no RPC until it is done; an interrupted start
+  continues where it stopped. The step is one-way, but a beta2 `koganyd` still opens the
+  upgraded database.
+- **On the fast testnet, upgrade before the development fund's mandate ends there**, at the
+  height the release notes name: from that height a block without the fund output is valid, and
+  an older node rejects it.
+- **Miners:** the fund donation now defaults to 0 % (`mining.ydf`, above).
+- **Explorer nodes:** set `[rpc] insight_explorer = true` for ycashd's `-insightexplorer` input
+  fields and `blockfee` (off by default; keep it off where untrusted clients reach the RPC port).
+- **Clients:** `rpcversion` is 10.
+
+[`docs/kogany.md`](docs/kogany.md#what-an-operator-must-know-for-beta3) has the full list, including
+the refusal of a reorganisation deeper than 99 blocks, and every place where `koganyd` answers
+differently from ycashd.
+
+## The wallet: yewd
+
+`koganyd` has no wallet. yewd, the YEW wallet core as a daemon, lives in the
+[yew repository](https://github.com/boyfromcave/yew) (`yewd/`) and sits in front of a `koganyd`:
+it answers ycashd's wallet RPCs by name and JSON shape and forwards the node RPCs, so the pair
+behaves as a ycashd with a wallet. Run it on another RPC port than `koganyd`'s, with
+`-backendrpcport` set to `koganyd`'s RPC port and `-backendrpccookiefile` to its cookie; yewd's
+README has the options and the build. A client that needs ycashd's wallet answers (`ismine`,
+balances, sends) talks to yewd, not to `koganyd`.
 
 ## Yellowback and vault RPCs
 
