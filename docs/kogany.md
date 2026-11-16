@@ -23,6 +23,34 @@ Where these documents name a Zcash value, a `koganyd` uses Ycash's instead:
 [README.md](../README.md) has the full table, how to build and run each network, and the pointers
 to the Yellowback and vault RPC documents in [`doc/`](../doc/).
 
+## What an operator must know for beta3
+
+- **The first start upgrades the database, for about a minute.** The state moves to format
+  30.3.0 (the transparent pools by type and the chain's transaction count) once, at the first
+  start of a beta3 `koganyd` on an older database. Until it is done the node serves no RPC and
+  commits no block; it logs progress every 100,000 heights, and an interrupted start continues
+  where it stopped. Measured with a debug build: 37 s on the fast testnet, 75 s on mainnet
+  ("The upgrade", below). Allow for it in health checks and supervisors.
+- **`mining.ydf`: the development-fund donation is opt-in.** After the fund's mandate ends a
+  block this node builds pays the miner the whole subsidy and every fee by default
+  (`ydf = 0`). A miner who wants to keep donating sets `ydf = 5` under `[mining]` (ycashd's
+  `-ydf=5`). Before the mandate ends the 5 % output is a consensus rule and is paid whatever this
+  says.
+- **Explorer nodes set `[rpc] insight_explorer = true`.** It names `value`, `valueSat` and
+  `address` on transaction inputs and adds `blockfee` to `getblock`, as ycashd's
+  `-insightexplorer` does, on an archive node. It is off by default; keep it off where the RPC
+  port is reachable by untrusted clients.
+- **A reorganisation deeper than 99 blocks stops the node, and keeps it stopped.** `koganyd`
+  logs ycashd's message, exits with status 1 and writes the record `ycash-reorg-refused` in the
+  state database's directory; while that file exists every start stops again. Decide which chain
+  is right, then remove the file ("Deep reorganisations", below).
+- **A shielded coinbase needs the Sapling output parameters.** To pay a Sapling miner
+  (`getcoinbasetemplatefor`, or a Sapling `mining.miner_address`) the node reads
+  `sapling-output.params` (3,592,860 bytes) at start, from ycashd's parameter directory
+  (`~/.zcash-params`) or `mining.sapling_output_params`. Without it a Sapling coinbase is
+  refused with "Sapling output parameters are not loaded"; transparent and post-quantum
+  coinbases are unaffected.
+
 ## Where a `koganyd` behaves as ycashd does
 
 The Yellowback parity gate (S5) runs ycash6's functional scripts against kogany; these node

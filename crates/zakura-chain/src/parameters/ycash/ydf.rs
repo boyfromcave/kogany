@@ -2,8 +2,8 @@
 //!
 //! From the Ycash upgrade until the mandate ends, every coinbase must pay exactly 5 % of the block
 //! subsidy (`GetBlockSubsidy(nHeight) / 20`) to the YDF address for its height, P2PKH or P2SH; after
-//! the mandate the payment is optional and unchecked (`ycash6 src/main.cpp:6267-6286`). Before the
-//! Ycash upgrade the inherited Zcash founders' reward applies (`src/main.cpp:6248-6265`). Ycash has
+//! the mandate the payment is optional and unchecked (`ycash6 src/main.cpp:6268-6288`). Before the
+//! Ycash upgrade the inherited Zcash founders' reward applies (`src/main.cpp:6250-6267`). Ycash has
 //! no ZIP 207/214 funding streams and no lockbox (survey B trap T4).
 
 use crate::{
@@ -14,10 +14,10 @@ use crate::{
 };
 
 /// The number of blocks each YDF address is used for, about a month
-/// (`ycash6 src/chainparams.cpp:1030`, `addressChangeInterval`).
+/// (`ycash6 src/chainparams.cpp:1161`, `addressChangeInterval`).
 pub const YDF_ADDRESS_CHANGE_INTERVAL: u32 = 17_917;
 
-/// The YDF share divisor: the YDF is paid `subsidy / 20`, 5 % (`ycash6 src/main.cpp:6272`).
+/// The YDF share divisor: the YDF is paid `subsidy / 20`, 5 % (`ycash6 src/main.cpp:6275`).
 pub const YDF_DIVISOR: u64 = 20;
 
 /// The first height at which the YDF payment is no longer mandatory, `nYdfMandateEndHeight`.
@@ -32,7 +32,7 @@ pub mod mandate_end {
     /// [`TESTNET_FAST`].
     pub const TESTNET: Height = Height(900_000);
     /// The fast profile's own end of the YDF mandate (beta3 item 5, decision B3-D4;
-    /// `TESTNET_FAST_YDF_MANDATE_END_HEIGHT`, `ycash6 src/chainparams.cpp`): from this height a
+    /// `TESTNET_FAST_YDF_MANDATE_END_HEIGHT`, `ycash6 src/chainparams.cpp:653,669`): from this height a
     /// testnet-yb-fast block is valid with or without the fund output, as on mainnet past
     /// 2,275,000. Below it the 5 % output stays required.
     ///
@@ -43,7 +43,7 @@ pub mod mandate_end {
     /// 400 blocks, the same value on ycash-dd, ycash6 and kogany. Every node of the network
     /// must run a build with the final value before the chain reaches it.
     pub const TESTNET_FAST: Height = Height(600_000);
-    /// Ycash regtest (`ycash6 src/chainparams.cpp:889`).
+    /// Ycash regtest (`ycash6 src/chainparams.cpp:904`).
     pub const REGTEST: Height = Height(5);
 }
 
@@ -99,7 +99,7 @@ pub const MAINNET_YDF_ADDRESSES: [&str; 48] = [
     "s1kYEiPdFZ3oV389q2MmSYY932qPF1ygVtx",
 ];
 
-/// Ycash testnet and regtest YDF addresses (`ycash6 src/chainparams.cpp:613-626,856-869`).
+/// Ycash testnet and regtest YDF addresses (`ycash6 src/chainparams.cpp:625-638,983-996`).
 pub const TESTNET_YDF_ADDRESSES: [&str; 48] = [
     "smDw2LWkeuJ1NGBDDZvdNbzY8A9D1mkkDZm",
     "smDxM6WPpz3HcK6m9cCnhQkBXMLnUf3cryA",
@@ -285,7 +285,7 @@ pub fn ydf_address_list(network: &Network) -> &'static [&'static str] {
 ///
 /// The index advances every [`YDF_ADDRESS_CHANGE_INTERVAL`] blocks from the Ycash activation
 /// height and wraps modulo the list length (`CChainParams::GetFoundersRewardAddressAtHeight`,
-/// `ycash6 src/chainparams.cpp:1026-1033`). It is defined after the mandate ends too, for miners
+/// `ycash6 src/chainparams.cpp:1157-1164`). It is defined after the mandate ends too, for miners
 /// that pay the optional YDF.
 pub fn ydf_address(network: &Network, height: Height) -> Option<transparent::Address> {
     if !is_ycash_active(network, height) {
