@@ -52,13 +52,13 @@ behaviours follow ycashd's there, each against Zakura's own:
   (`MAX_BLOCK_REORG_HEIGHT`), and a `koganyd` built without the `ycash` feature follows any
   branch inside it.
 
-  *The exit status.* `koganyd` exits with status 1 where ycashd exits with 0 (its
+  _The exit status._ `koganyd` exits with status 1 where ycashd exits with 0 (its
   `StartShutdown()` is an ordinary shutdown). This is kept: the refusal stops the state writer,
   and a writer failure ends the node with an error, as every other one does. A supervisor that
   restarts on failure shows a crash loop, each start ending with the message, where it would
   show a ycashd that stopped once.
 
-  *The record.* The refusal is written to the file `ycash-reorg-refused` in the state
+  _The record._ The refusal is written to the file `ycash-reorg-refused` in the state
   database's directory, `<state.cache_dir>/state/v<major>/<network>/`, and **the node stops at
   every start while that file exists**, whether or not the non-finalized backup is on, as a
   ycashd meets the branch in its block index at every start. The file holds the message; if it
@@ -70,7 +70,7 @@ behaviours follow ycashd's there, each against Zakura's own:
   the record: it is deleted when the node stops, the record with it, and its next start is a new
   node at genesis.
 
-  *After a restart.* The non-finalized backup (`state.should_backup_non_finalized_state`, on by
+  _After a restart._ The non-finalized backup (`state.should_backup_non_finalized_state`, on by
   default) holds every block the node stored, on both branches, and beside it, while there is
   more than one chain, the tip the node was on
   (`<state.cache_dir>/non_finalized_state/<network>.ycash-best-tip`). A node started without the
@@ -84,7 +84,7 @@ behaviours follow ycashd's there, each against Zakura's own:
   file yet, so a tie already stored in the backup is decided once by tip hash, as before, and
   the tip is kept from then on.
 
-  *To stay on the old chain* (the answer to a hash-rate attack, and what a ycashd operator does
+  _To stay on the old chain_ (the answer to a hash-rate attack, and what a ycashd operator does
   with `invalidateblock`), with the backup on:
 
   1. Read the record: note "Current tip" and "Fork point".
@@ -98,7 +98,7 @@ behaviours follow ycashd's there, each against Zakura's own:
      block whose parent is the fork point. The node then refuses that branch from every peer.
   6. Restore the network settings and start the node again.
 
-  *To accept the new chain:* steps 1 to 4, then `invalidateblock` the first block of the old
+  _To accept the new chain:_ steps 1 to 4, then `invalidateblock` the first block of the old
   chain above the fork point (`getblockhash <fork height + 1>`), which is not asked the depth
   either on ycashd (`InvalidateBlock` disconnects before `ActivateBestChain` runs). The stored
   part of the other branch becomes the best chain, and the node takes the rest from its peers
@@ -108,7 +108,7 @@ behaviours follow ycashd's there, each against Zakura's own:
   tip the node is on, so with the backup on it is kept across a restart, where upstream Zakura
   forgets the preference and comes back on the tip its hash order picks.
 
-  *With the backup off* a node that is started without the record has only its finalized
+  _With the backup off_ a node that is started without the record has only its finalized
   blocks: it has no tip to keep, and follows the chain with the most work its peers give it,
   which is the new one. That node cannot be kept on the old chain by removing the record; turn
   the backup on before it is needed on any node that must be able to make this choice.
