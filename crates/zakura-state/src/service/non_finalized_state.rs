@@ -47,6 +47,9 @@ mod address_transfers;
 mod backup;
 mod chain;
 mod created_utxos;
+// kogany (beta3 R1): ycashd's reorganisation guard.
+#[cfg(feature = "ycash")]
+pub(crate) mod reorg_guard;
 mod shared_map;
 
 #[cfg(test)]
