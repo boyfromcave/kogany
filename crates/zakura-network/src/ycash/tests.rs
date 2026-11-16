@@ -759,6 +759,86 @@ async fn disconnect_peer_closes_the_connection_and_keeps_the_address_out() {
     assert!(book.get(peer).is_some());
 }
 
+/// A node with no open connection dials an outbound address again after
+/// `ISOLATED_PEER_RECONNECTION_DELAY`, not after upstream's two minutes: a koganyd following one
+/// ycashd stopped at its height for 100 to 119 seconds after its only connection closed, while the
+/// peer mined on. With a connection open, or without a registry to know, upstream's rule stands.
+#[tokio::test]
+async fn an_isolated_node_redials_its_peer_without_the_two_minute_wait() {
+    use std::time::{Duration, Instant};
+
+    use crate::{
+        address_book_peers::AddressBookPeers, constants::MIN_PEER_RECONNECTION_DELAY,
+        meta_addr::MetaAddr, peer_registry::PeerRegistry, protocol::external::types::PeerServices,
+        AddressBook, ConnectedPeer,
+    };
+
+    let regtest = Network::new_regtest(Default::default());
+    let listener = "127.0.0.1:0".parse().expect("listener parses");
+    let peer: crate::PeerSocketAddr = "127.0.0.1:18344".parse().expect("parses");
+    let other: crate::PeerSocketAddr = "127.0.0.2:18344".parse().expect("parses");
+    let connection = |addr| ConnectedPeer {
+        addr,
+        user_agent: "/YcashCpp:test/".into(),
+        version: Version(270_200),
+        start_height: Height(0),
+        is_inbound: false,
+        rtt: None,
+        ping_sent_at: None,
+    };
+    // The dial, then the peer's answer: what the book holds for a connected outbound peer.
+    let connect = |book: &mut AddressBook| {
+        assert!(book.add_peer(peer));
+        assert!(book.update(MetaAddr::new_reconnect(peer)).is_some());
+        assert!(book.update(MetaAddr::new_responded(peer, None)).is_some());
+    };
+    let due = |book: &AddressBook, after: Duration| {
+        let after_chrono = chrono::Duration::from_std(after).expect("a short duration");
+        book.reconnection_peers(Instant::now() + after, chrono::Utc::now() + after_chrono)
+            .map(|meta| meta.addr())
+            .collect::<Vec<_>>()
+    };
+    let before = ISOLATED_PEER_RECONNECTION_DELAY / 2;
+    let after = ISOLATED_PEER_RECONNECTION_DELAY + Duration::from_secs(1);
+    assert!(after < MIN_PEER_RECONNECTION_DELAY);
+
+    let registry = PeerRegistry::default();
+    let mut book = AddressBook::new(listener, &regtest, 1, tracing::Span::none())
+        .with_peer_registry(registry.clone());
+    connect(&mut book);
+
+    // The connection is open: the address is live, nothing is dialled.
+    let (guard, _updater) = registry.register_legacy(connection(peer));
+    assert_eq!(due(&book, after), vec![]);
+
+    // Another peer's connection is open: the node is not alone, upstream's wait stands.
+    let (other_guard, _other_updater) = registry.register_legacy(connection(other));
+    drop(guard);
+    assert_eq!(due(&book, after), vec![]);
+
+    // The last connection closed: the address is dialled again, after the short wait.
+    drop(other_guard);
+    assert!(registry.connected_peers().is_empty());
+    assert_eq!(due(&book, before), vec![]);
+    assert_eq!(due(&book, after), vec![peer]);
+
+    // A failed dial waits the short wait again, and no longer.
+    assert!(book
+        .update(MetaAddr::new_errored(peer, PeerServices::NODE_NETWORK))
+        .is_some());
+    assert_eq!(due(&book, before), vec![]);
+    assert_eq!(due(&book, after), vec![peer]);
+
+    // A book that cannot know whether a connection is open keeps upstream's rule.
+    let mut blind = AddressBook::new(listener, &regtest, 1, tracing::Span::none());
+    connect(&mut blind);
+    assert_eq!(due(&blind, after), vec![]);
+    assert_eq!(
+        due(&blind, MIN_PEER_RECONNECTION_DELAY + Duration::from_secs(1)),
+        vec![peer]
+    );
+}
+
 /// kogany (S5): the transaction `reject` is ycashd's bytes (`ycash6 src/main.cpp:8943-8945`):
 /// `varstr "tx"`, the code byte, `varstr` reason cut to `MAX_REJECT_MESSAGE_LENGTH`, the txid.
 #[test]

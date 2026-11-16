@@ -956,11 +956,31 @@ impl AddressBook {
     ) -> impl DoubleEndedIterator<Item = MetaAddr> + '_ {
         let _guard = self.span.enter();
 
+        // kogany: with no connection open, no address is live, so the two-minute wait after a
+        // response only keeps the node alone (`ycash::ISOLATED_PEER_RECONNECTION_DELAY`).
+        #[cfg(feature = "ycash")]
+        let isolated = self
+            .peer_registry
+            .as_ref()
+            .is_some_and(PeerRegistry::is_empty);
+
         // Skip live peers, and peers pending a reconnect attempt.
         // The peers are already stored in sorted order.
         self.peers
             .ordered_values()
             .filter(move |peer| {
+                #[cfg(feature = "ycash")]
+                if isolated
+                    && !peer.is_inbound()
+                    && peer.is_ready_for_isolated_reconnection(
+                        instant_now,
+                        chrono_now,
+                        &self.network,
+                    )
+                {
+                    return true;
+                }
+
                 // Inbound entries stay in the book for liveness, bans, and per-IP dial
                 // limits, but their ephemeral source ports are not listeners to dial.
                 !peer.is_inbound()

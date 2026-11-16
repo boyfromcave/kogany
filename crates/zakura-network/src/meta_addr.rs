@@ -663,6 +663,31 @@ impl MetaAddr {
             && self.is_probably_reachable(chrono_now)
     }
 
+    /// kogany: is this address ready for a new outbound connection attempt by a node that has
+    /// no open connection? As [`Self::is_ready_for_connection_attempt`], but a recent response
+    /// does not hold the dial back (the connection that gave it is closed), and the last
+    /// attempt and the last failure hold it back for
+    /// [`ISOLATED_PEER_RECONNECTION_DELAY`](crate::ycash::ISOLATED_PEER_RECONNECTION_DELAY) only.
+    #[cfg(feature = "ycash")]
+    pub(crate) fn is_ready_for_isolated_reconnection(
+        &self,
+        instant_now: Instant,
+        chrono_now: chrono::DateTime<Utc>,
+        network: &Network,
+    ) -> bool {
+        let recent = |last: Option<Instant>| {
+            last.is_some_and(|last| {
+                instant_now.saturating_duration_since(last)
+                    <= crate::ycash::ISOLATED_PEER_RECONNECTION_DELAY
+            })
+        };
+
+        self.last_known_info_is_valid_for_outbound(network)
+            && !recent(self.last_attempt)
+            && !recent(self.last_failure)
+            && self.is_probably_reachable(chrono_now)
+    }
+
     /// Is the [`PeerSocketAddr`] we have for this peer valid for outbound
     /// connections?
     ///
