@@ -1428,6 +1428,11 @@ async fn ycash_getblock_v1_blockfee(
         .respond(ReadResponse::BlockInfo(Some(pools(
             prev_pools.unwrap_or(0) + paid - 1_234,
         ))));
+    // The node-side index read (beta3 item 2), before the insight reads; this state has no index.
+    read_state
+        .expect_request(ReadRequest::BlockIndexInfo(hash.into()))
+        .await
+        .respond(ReadResponse::BlockIndexInfo(None));
     // The coinbase is read only with the switch on and both pools known.
     if insight && prev_pools.is_some() {
         read_state
