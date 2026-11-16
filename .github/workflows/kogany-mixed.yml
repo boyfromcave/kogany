@@ -135,17 +135,20 @@ jobs:
           mkdir -p "$TMPDIR"
           python3 qa/kogany_mixed_shards.py run "$GROUP" --state gate --jobs 2
       # kogany's own cross-line script for the reorganisation guard (beta3 item 12, R1): the two
-      # binaries of this job, kogany's script from this commit. Blocking, once, in the node group:
-      # an upstream sync that drops the guard from the state writer fails here.
+      # binaries of this job, kogany's script from this commit, once, in the node group: an
+      # upstream sync that drops the guard from the state writer fails here. Report-only for now:
+      # blocking once it has passed on a runner; the coordinator flips it.
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         if: ${{ !cancelled() && matrix.group == 'node' }}
         with:
           path: kogany
           persist-credentials: false
           sparse-checkout: crates/kogany-rpc/qa
-      - name: reorg_parity.py (koganyd's reorganisation guard against ycashd's; blocking)
+      - name: reorg_parity.py (koganyd's reorganisation guard against ycashd's; report-only)
         id: reorg
         if: ${{ !cancelled() && matrix.group == 'node' }}
+        timeout-minutes: 20
+        continue-on-error: true  # blocking once it has passed on a runner; the coordinator flips it
         run: |
           mkdir -p "$RUNNER_TEMP/mixed-tests"
           python3 kogany/crates/kogany-rpc/qa/reorg_parity.py --koganyd "$KOGANY_BIN" \

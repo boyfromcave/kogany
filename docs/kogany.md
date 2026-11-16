@@ -79,7 +79,10 @@ behaviours follow ycashd's there, each against Zakura's own:
   would switch it. If the backup itself would roll the node back more than 99 blocks from that
   tip (a backup changed outside the node), the start is refused and recorded in the same way;
   the way out is to remove the record and the backup directory, which leaves the case of the
-  backup being off, below.
+  backup being off, below. The `.ycash-best-tip` file may be removed along with the backup
+  directory. On the first start after upgrading to a `koganyd` with this guard there is no tip
+  file yet, so a tie already stored in the backup is decided once by tip hash, as before, and
+  the tip is kept from then on.
 
   *To stay on the old chain* (the answer to a hash-rate attack, and what a ycashd operator does
   with `invalidateblock`), with the backup on:
@@ -112,7 +115,8 @@ behaviours follow ycashd's there, each against Zakura's own:
 
   Proved by `crates/kogany-rpc/qa/reorg_parity.py` against ycashd (depths 99, 100, 101, the
   restarts, and the restart without the record), and in `zakura-state` by
-  `running_writer_refuses_a_commit_that_rolls_back_100_blocks`,
+  `running_writer_refuses_a_commit_that_rolls_back_100_blocks` (and its `_header_integrated`
+  twin, the path the node uses),
   `running_writer_refuses_a_reconsideration_that_rolls_back_100_blocks`,
   `restored_best_chain_is_the_one_the_node_was_on` and
   `ycash_restart_keeps_the_tip_the_node_was_on`.

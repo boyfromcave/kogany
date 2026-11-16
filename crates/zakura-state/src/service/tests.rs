@@ -3462,10 +3462,12 @@ fn nu5_child(
 /// kogany (beta3 R1): a Regtest state on a persistent directory under `cache_dir`, with the
 /// non-finalized backup on and genesis committed, as [`nu5_state_with_genesis`] opens an
 /// ephemeral one. Returns the state, its read service, the network, genesis, the state
-/// database's directory and the backup's.
+/// database's directory and the backup's. With `header_runtime` the writer commits through the
+/// header chain's staged path, as the node does; without it, in place.
 #[cfg(feature = "ycash")]
 async fn persistent_nu5_state_with_genesis(
     cache_dir: &std::path::Path,
+    header_runtime: bool,
 ) -> (
     StateService,
     crate::ReadStateService,
@@ -3487,6 +3489,7 @@ async fn persistent_nu5_state_with_genesis(
         cache_dir: cache_dir.to_owned(),
         ephemeral: false,
         should_backup_non_finalized_state: true,
+        enable_zakura_header_seed_from_committed_blocks: header_runtime,
         ..Config::default()
     };
     let db_path = config.db_path(
@@ -3633,20 +3636,36 @@ async fn assert_reorg_refused_by_the_writer(
     );
 }
 
-/// kogany (beta3 R1): the guard's call site on the commit path, driven through the running
-/// state writer. Two branches of 100 valid Regtest blocks from genesis tie; the first received
-/// stays best while the second is only stored. The block that gives the second branch more
-/// work would roll back 100 blocks: the writer refuses it, publishes nothing, records the
-/// refusal and exits. If an upstream sync drops the call in the writer, this test fails.
+/// kogany (beta3 R1): the guard's call site on the writer's in-place commit path, the one
+/// taken without a header-chain writer. If that call is dropped, this test fails; it does not
+/// reach the staged path the node uses, which the `_header_integrated` twin drives.
 #[cfg(feature = "ycash")]
 #[tokio::test(flavor = "multi_thread")]
 async fn running_writer_refuses_a_commit_that_rolls_back_100_blocks() {
+    assert_running_writer_refuses_a_commit_that_rolls_back_100_blocks(false).await;
+}
+
+/// kogany (beta3 R1): the guard's call site on the header chain's staged commit path, the one
+/// the node uses (`refused_reorg(&staged)` before the transition is prepared). If an upstream
+/// sync drops that call, this test fails.
+#[cfg(feature = "ycash")]
+#[tokio::test(flavor = "multi_thread")]
+async fn running_writer_refuses_a_commit_that_rolls_back_100_blocks_header_integrated() {
+    assert_running_writer_refuses_a_commit_that_rolls_back_100_blocks(true).await;
+}
+
+/// kogany (beta3 R1): a refusal driven through the running state writer. Two branches of 100
+/// valid Regtest blocks from genesis tie; the first received stays best while the second is
+/// only stored. The block that gives the second branch more work would roll back 100 blocks:
+/// the writer refuses it, publishes nothing, records the refusal and exits.
+#[cfg(feature = "ycash")]
+async fn assert_running_writer_refuses_a_commit_that_rolls_back_100_blocks(header_runtime: bool) {
     use crate::service::non_finalized_state::reorg_guard;
 
     let _init_guard = zakura_test::init();
     let cache_dir = tempfile::tempdir().expect("a temporary directory");
     let (mut state, read, network, genesis, db_path, backup_dir) =
-        persistent_nu5_state_with_genesis(cache_dir.path()).await;
+        persistent_nu5_state_with_genesis(cache_dir.path(), header_runtime).await;
 
     let (old, answer) = commit_nu5_branch(&mut state, &network, &genesis, 100, 0).await;
     answer.expect("the 100th block of the first branch commits");
@@ -3702,7 +3721,7 @@ async fn running_writer_refuses_a_reconsideration_that_rolls_back_100_blocks() {
     let _init_guard = zakura_test::init();
     let cache_dir = tempfile::tempdir().expect("a temporary directory");
     let (mut state, read, network, genesis, db_path, _backup_dir) =
-        persistent_nu5_state_with_genesis(cache_dir.path()).await;
+        persistent_nu5_state_with_genesis(cache_dir.path(), false).await;
 
     let (other, answer) = commit_nu5_branch(&mut state, &network, &genesis, 101, 1).await;
     answer.expect("the 101st block commits");
