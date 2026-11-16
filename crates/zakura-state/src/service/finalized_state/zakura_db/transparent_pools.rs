@@ -13,8 +13,12 @@
 //! # Rows
 //!
 //! `ycash_transparent_pools` holds one row per finalized height: the totals after that block
-//! ([`TransparentPools::to_bytes`]). The rows form one contiguous range that ends at the
-//! finalized tip, or the column family is empty. Every block write either inserts its row or
+//! ([`TransparentPools::to_bytes`]). The rows form one contiguous range, or the column family
+//! is empty. The range usually ends at the finalized tip, but not always: a pruned database
+//! that upgraded from an older format has no rows (its blocks are gone), a fill that was stopped
+//! part-way ends where it stopped until it resumes, and a block whose record could not be
+//! computed ends the range for itself and its descendants. Heights above the range read as
+//! `monitored: false`. Every block write either inserts its row or
 //! deletes whatever is stored at its height, so a row left above the tip by a rollback can never
 //! be read as the row of a later block.
 

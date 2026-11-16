@@ -225,11 +225,22 @@ These differences are kept: the RPC server is upstream Zakura's, and the wallet 
     transaction count from genesis (it reads no transaction), the pools from the compiled seed
     at height 2,800,000 on a chain that contains that block (mainnet and the testnets that
     share it), otherwise from genesis. A start that is interrupted continues where it stopped.
+    It logs its progress every 100,000 heights. Measured on real state with a debug build
+    (2026-11-15; a release-build timing is still to be taken for the release notes): the fast
+    testnet in 37 s (the count 4.7 s for 717,594 transactions, the pools 32 s), mainnet in
+    75 s (the count 35 s for 8,941,849 transactions over 3.1 million rows, the pools 40 s from
+    the seed at 2,800,000). On the fast testnet the figures matched the invariants and
+    ycashd's `valuePools` transparent entry at every height 510,353 to 511,352, `transactions`
+    was 718,657 on both nodes, and `vault` equalled `vault_getinfo.lockedvalue`; a `kill -9`
+    during each fill resumed and ended with identical figures.
   - **A pruned node** that synced on this format has both figures. One that upgrades an older
     database gets `transactions` but not the pools (the blocks to read are gone): its
     `transparentPools` says `monitored: false` until it is synced again.
   - **Going back to an older `koganyd`** is safe: it ignores the index and leaves the blocks it
-    adds without rows. The next start of this version fills them.
+    adds without rows. The next start of this version fills them. Checked with the released
+    beta2 binary: it opens an upgraded database cleanly, marks it downgraded and reads the
+    68-byte `block_info` rows correctly; the next beta3 start re-runs the upgrade in under a
+    second.
 - **Node fields from Zakura.** `getblockchaininfo` has no `upgrades.<id>.info`, `softforks`,
   `fullyNotified` or `initial_block_download_complete`, and adds
   `nsmValueBalanceZat`. `getnetworkinfo` has no `warningstimestamp`. `getmininginfo` has no

@@ -214,9 +214,16 @@ impl IntoDisk for BlockInfo {
 /// [`FromDisk`] for [`BlockInfo`] chooses the pool layout by the row length (44, 52 or 60
 /// bytes), so a count appended to a shorter row would be read as a longer pool layout.
 ///
-/// # Upstream syncs
+/// # Upstream syncs: READ THIS BEFORE MERGING ANY UPSTREAM CHANGE TO `BlockInfo`'S LAYOUT
 ///
-/// An upstream change that lengthens `BlockInfo` past 60 bytes collides with this 68-byte row.
+/// Upstream's value-pool layout has grown 8 bytes at a time (40, 48, 56 bytes of pools, so
+/// 44, 52, 60-byte rows). Its next growth would make upstream's row 68 bytes: the same length
+/// as kogany's 60-byte row with the count appended. The length-dispatched reader below would
+/// then read every existing counted row's count as pool data, and consensus reads the pools
+/// (`AwaitBlockInfo`). Such a merge needs a kogany format step that moves the count first.
+/// The procedure is `.github/README-kogany.md`, "Before merging an upstream change to
+/// BlockInfo's on-disk layout"; the tripwire is the test
+/// `ycash_upstream_block_info_row_is_still_60_bytes` in `chain/tests.rs`.
 #[cfg(feature = "ycash")]
 const YCASH_FULL_BLOCK_INFO_LEN: usize = 60;
 
@@ -275,6 +282,13 @@ impl FromDisk for BlockInfo {
 
         // We want to be forward-compatible, so this must work even if the
         // size of the buffer is larger than expected.
+        //
+        // Ycash: UPSTREAM-SYNC HAZARD. A kogany row with the chain transaction count is 68
+        // bytes and is read here by its first 60. If an upstream merge adds a longer pool layout
+        // (a 64-byte value balance makes a 68-byte row), the count would be read as pool data.
+        // Do not merge such a change without the procedure in `.github/README-kogany.md`,
+        // "Before merging an upstream change to BlockInfo's on-disk layout"
+        // (`YCASH_FULL_BLOCK_INFO_LEN`, `ycash_upstream_block_info_row_is_still_60_bytes`).
         let block_info = match bytes.len() {
             NU7_BLOCK_INFO_LEN.. => {
                 let value_pools =

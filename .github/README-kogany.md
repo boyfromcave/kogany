@@ -149,6 +149,37 @@ run by the chunk agents per crate (`-p`), never workspace-wide (the coordination
 subset the chunk agents reported green, per crate. A crate whose subset is red on its first CI
 run is a finding for the coordinator, not a reason to widen the filter.
 
+## Before merging an upstream change to BlockInfo's on-disk layout
+
+**Read this before any upstream sync that touches `BlockInfo`, `ValueBalance`'s byte layout, or
+`FromDisk for BlockInfo` (`crates/zakura-state/src/service/finalized_state/disk_format/chain.rs`).**
+
+In the `ycash` build (format 30.3.0, beta3), kogany appends the chain transaction count, a
+little-endian `u64`, to upstream's 60-byte `block_info` row: 56 bytes of value pools, 4 of block
+size, 8 of count, 68 bytes in all. Upstream's reader picks the pool layout by the row length, and
+that layout has grown 8 bytes at a time (40, 48, 56 bytes of pools: 44, 52, 60-byte rows). Its
+next growth would make **upstream's** row 68 bytes, the same length as kogany's counted row. A
+plain merge would then read every existing counted row's count as pool data, and consensus reads
+those pools (`AwaitBlockInfo`, the chain value pool rules). It would compile and pass upstream's
+tests.
+
+The tripwire is the test `ycash_upstream_block_info_row_is_still_60_bytes`
+(`disk_format/chain/tests.rs`, in the `kogany-ycash` nextest profile): it fails when upstream's
+row is no longer 60 bytes. Do not edit the test to pass. Instead, in the sync, before it merges:
+
+1. Stop and tell the Yellowback lead architect: this is a change on a consensus path (the review
+   gate).
+2. Move the count out of the dispatched length range in a kogany format step of its own: for
+   example a separate column family keyed by height, or a row tag that no upstream length can
+   produce. The step rewrites every counted row back to upstream's layout first, then the
+   upstream layout change lands.
+3. Update `YCASH_FULL_BLOCK_INFO_LEN`, `ycash_append_chain_tx_count`,
+   `ycash_chain_tx_count_from_row`, `ycash_block_info_row_with_count`, the fill in
+   `disk_format/upgrade/add_transparent_pools.rs`, the length assertions in
+   `zakura_db/transparent_pools/tests.rs` and `tests/issuance_accounting.rs`, and then the tripwire.
+4. Test the upgrade on a copy of a mainnet database with counted rows and compare
+   `getblockchaininfo` (`valuePools`, `transactions`) with ycashd at the same height.
+
 ## Cross-line contract
 
 What kogany publishes and consumes (the workspace's `docs/plans/kogany/ci-design.md` §3, §5):

@@ -212,9 +212,13 @@ fn upgrade(db: &ZakuraDb, seed: Option<TransparentPoolsSeed>) {
 }
 
 /// The fixtures exercise the classes: the tests below would pass trivially on coinbase-only
-/// chains.
+/// chains. Between them they hold vault and intent outputs; they hold no post-quantum or channel
+/// output (the recorded chains predate those wallets), and this test pins that, so that a
+/// re-recorded fixture extends the assertions. Those classes are covered by the classifier vectors
+/// and by `qa/value_pools_parity.py`, whose chain has every class.
 #[test]
 fn the_recorded_chains_create_and_spend_template_outputs() {
+    let mut seen = [0i64; 3];
     for name in FIXTURES {
         let fx = fixture(name);
         let max = |f: fn(&TransparentPools) -> i64| {
@@ -224,6 +228,9 @@ fn the_recorded_chains_create_and_spend_template_outputs() {
                 .max()
                 .unwrap()
         };
+        seen[0] = seen[0].max(max(|r| r.pq1 + r.pq2));
+        seen[1] = seen[1].max(max(|r| r.channel));
+        seen[2] = seen[2].max(max(|r| r.intent));
         assert!(max(|r| r.vault) > 0, "{name}: vaults");
         assert!(max(|r| r.transparent_ecc()) > 0, "{name}: ECC outputs");
         assert!(
@@ -236,6 +243,12 @@ fn the_recorded_chains_create_and_spend_template_outputs() {
         let last = fx.expected.last().unwrap();
         assert!(last.chain_tx_count.unwrap() > fx.blocks.len() as u64);
     }
+    assert_eq!(
+        seen[..2],
+        [0, 0],
+        "post-quantum and channel outputs: assert them now"
+    );
+    assert!(seen[2] > 0, "intent outputs: {seen:?}");
 }
 
 /// A fresh database: the finalized write path stores the row and the count of every block,

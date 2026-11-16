@@ -14,6 +14,8 @@
 //! The record is not part of [`ValueBalance`](zakura_chain::value_balance::ValueBalance), so the
 //! chain-value consensus rule is exactly where it was.
 
+use std::sync::LazyLock;
+
 use zakura_chain::{amount::MAX_MONEY, block, transparent};
 
 /// The class of a transparent output script; the first match in this order wins.
@@ -309,15 +311,20 @@ const SEED_TRANSPARENT: i64 = 1_053_104_265_390_951;
 /// class but `transparent` is 0 there. The C++ line checked the claim on mainnet on 2026-11-15
 /// (a fill from genesis matched the seed, ycash6 `valuepools.cpp` `SEED_CHECKED_MAX_HEIGHT`), and
 /// a node that syncs from genesis checks it again as it commits the seed block.
+///
+/// The hash is parsed once; every block write asks for the seed.
 pub fn compiled_seed() -> Option<TransparentPoolsSeed> {
-    Some(TransparentPoolsSeed {
-        height: block::Height(SEED_HEIGHT),
-        hash: SEED_HASH.parse().ok()?,
-        record: TransparentPools {
-            transparent: SEED_TRANSPARENT,
-            ..TransparentPools::default()
-        },
-    })
+    static SEED: LazyLock<Option<TransparentPoolsSeed>> = LazyLock::new(|| {
+        Some(TransparentPoolsSeed {
+            height: block::Height(SEED_HEIGHT),
+            hash: SEED_HASH.parse().ok()?,
+            record: TransparentPools {
+                transparent: SEED_TRANSPARENT,
+                ..TransparentPools::default()
+            },
+        })
+    });
+    *SEED
 }
 
 /// What a block's index rows say (the read side of the index).
