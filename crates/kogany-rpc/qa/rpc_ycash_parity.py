@@ -80,7 +80,6 @@ ACCEPTED = [
     ('getblockchaininfo', r'\.initial_block_download_complete$', 'zakura',
      'a zcashd 6.x field Zakura does not serve; no client reads it'),
     ('getblockchaininfo', r'\.size_on_disk$', 'zakura', 'a different database'),
-    ('getblockchaininfo', r'\.transactions$', 'zakura', 'a zcashd 6.x field Zakura does not serve'),
     ('getblockchaininfo|getblock', r'\.valuePools(\[\d\]\.monitored)?$', 'zakura',
      'Zakura adds the lockbox and ironwood pools (zero on Ycash) and reports monitored=false'),
     ('getblockchaininfo|getblock', r'\.chainSupply\.monitored$', 'zakura',
@@ -841,6 +840,11 @@ def run(args):
         r.template()
         r.mine()
         tip = y.ok('getblockcount')
+        # Right after a block with several transactions (beta3 items 2 and 11): `transactions`
+        # (ycashd's nChainTx) and `transparentPools`, with the block's deltas in getblock, have
+        # no accepted difference, so they are compared exactly here and at every read below.
+        r.both('getblockchaininfo')
+        r.both('getblock', str(tip), 1)
 
         # lightwalletd-dd's reads at the common tip.
         r.both('getblockchaininfo')

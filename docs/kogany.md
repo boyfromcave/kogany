@@ -196,8 +196,28 @@ These differences are kept: the RPC server is upstream Zakura's, and the wallet 
   alone is one read of the balance index; ycashd walks every row too), held in memory for the
   call and re-read if a block finalizes meanwhile. For an address with a very long history,
   each call costs about what `getaddresstxids` for the whole chain costs.
+- **`transparentPools` and `getblockchaininfo.transactions`** answer as ycashd's since beta3
+  (items 2 and 11): the transparent value pool split by address type (`transparent_ecc`,
+  `transparent_pq`, `pq_channel`, `vault`, `vault_intent`, with `pq_by_scheme` and
+  `vault_by_module`), in `getblockchaininfo` and in `getblock` at verbosity 1 and 2 (there with
+  the change in the block), and the number of transactions in the best chain. Find entries by
+  `id`, never by position. Both are a node-side index, not a consensus rule: a block is never
+  refused, delayed or reordered because of it.
+  - **`monitored`** in `transparentPools` means "this node knows the value", as on ycashd. It is
+    `false`, and the amounts are absent, for a block the index does not cover; `transactions`
+    is then omitted. (In `valuePools` Zakura's meaning stands: "the pool is not zero".)
+  - **The upgrade.** The index is state database format 30.3.0. A node started on an older
+    database fills it once at startup, before it serves RPC or commits a block: the
+    transaction count from genesis (it reads no transaction), the pools from the compiled seed
+    at height 2,800,000 on a chain that contains that block (mainnet and the testnets that
+    share it), otherwise from genesis. A start that is interrupted continues where it stopped.
+  - **A pruned node** that synced on this format has both figures. One that upgrades an older
+    database gets `transactions` but not the pools (the blocks to read are gone): its
+    `transparentPools` says `monitored: false` until it is synced again.
+  - **Going back to an older `koganyd`** is safe: it ignores the index and leaves the blocks it
+    adds without rows. The next start of this version fills them.
 - **Node fields from Zakura.** `getblockchaininfo` has no `upgrades.<id>.info`, `softforks`,
-  `transactions`, `fullyNotified` or `initial_block_download_complete`, and adds
+  `fullyNotified` or `initial_block_download_complete`, and adds
   `nsmValueBalanceZat`. `getnetworkinfo` has no `warningstimestamp`. `getmininginfo` has no
   `difficulty`, `errors`, `errorstimestamp`, `generate`, `genproclimit`, `localsolps` or
   `pooledtx`.
