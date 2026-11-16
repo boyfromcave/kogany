@@ -21,6 +21,8 @@ pub mod validate_address;
 #[cfg(feature = "ycash")]
 pub mod ycash;
 #[cfg(feature = "ycash")]
+pub mod ycash_inputs;
+#[cfg(feature = "ycash")]
 pub mod ycash_reject;
 #[cfg(feature = "ycash")]
 pub(crate) mod ycash_script;

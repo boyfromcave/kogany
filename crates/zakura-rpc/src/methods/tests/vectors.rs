@@ -714,6 +714,9 @@ async fn rpc_getblock() {
                         .expect("vector blocks have a height"),
                     expected_block_commitments,
                 )),
+                // `rpc.insight_explorer` off (the default): no `blockfee` (beta3 item 6).
+                #[cfg(feature = "ycash")]
+                block_fee: None,
                 nonce: Some(expected_nonce),
                 bits: Some(block.header.difficulty_threshold),
                 difficulty: Some(
@@ -792,6 +795,9 @@ async fn rpc_getblock() {
                         .expect("vector blocks have a height"),
                     expected_block_commitments,
                 )),
+                // `rpc.insight_explorer` off (the default): no `blockfee` (beta3 item 6).
+                #[cfg(feature = "ycash")]
+                block_fee: None,
                 nonce: Some(expected_nonce),
                 bits: Some(block.header.difficulty_threshold),
                 difficulty: Some(
@@ -849,6 +855,8 @@ async fn rpc_getblock() {
                     chain_history_root: _,
                 #[cfg(feature = "ycash")]
                     transparent_pools: _,
+                #[cfg(feature = "ycash")]
+                    block_fee: _,
                 nonce,
                 bits,
                 difficulty,
@@ -952,6 +960,8 @@ async fn rpc_getblock() {
                     chain_history_root: _,
                 #[cfg(feature = "ycash")]
                     transparent_pools: _,
+                #[cfg(feature = "ycash")]
+                    block_fee: _,
                 nonce,
                 bits,
                 difficulty,
@@ -1075,6 +1085,9 @@ async fn rpc_getblock() {
                         .expect("vector blocks have a height"),
                     expected_block_commitments,
                 )),
+                // `rpc.insight_explorer` off (the default): no `blockfee` (beta3 item 6).
+                #[cfg(feature = "ycash")]
+                block_fee: None,
                 nonce: Some(expected_nonce),
                 bits: Some(block.header.difficulty_threshold),
                 difficulty: Some(
@@ -1152,6 +1165,9 @@ async fn rpc_getblock() {
                         .expect("vector blocks have a height"),
                     expected_block_commitments,
                 )),
+                // `rpc.insight_explorer` off (the default): no `blockfee` (beta3 item 6).
+                #[cfg(feature = "ycash")]
+                block_fee: None,
                 nonce: Some(expected_nonce),
                 bits: Some(block.header.difficulty_threshold),
                 difficulty: Some(
@@ -1310,6 +1326,157 @@ async fn rpc_getblock_includes_empty_ironwood_tree_after_nu6_3_activation() {
 
     let rpc_tx_queue_task_result = rpc_tx_queue.now_or_never();
     assert!(rpc_tx_queue_task_result.is_none());
+}
+
+/// Ycash (beta3 item 6): `getblock <height> 1` of mainnet block 1 with the insight switch
+/// `insight`, the parent's pools `prev_pools` (`None`: its `BlockInfo` is missing) and the
+/// coinbase read answered with `coinbase_found`; returns the answer's `blockfee` field.
+///
+/// The block's pools are its parent's plus the coinbase outputs less a fee of 1,234 zats.
+#[cfg(feature = "ycash")]
+async fn ycash_getblock_v1_blockfee(
+    insight: bool,
+    prev_pools: Option<i64>,
+    coinbase_found: bool,
+) -> Option<serde_json::Value> {
+    use zakura_chain::{amount::Amount, value_balance::ValueBalance};
+
+    let network = Mainnet;
+    let block: Arc<Block> = zakura_test::vectors::CONTINUOUS_MAINNET_BLOCKS
+        .get(&1)
+        .expect("test vector should contain block 1")
+        .zcash_deserialize_into()
+        .expect("test block should deserialize");
+    let hash = block.hash();
+    let height = Height(1);
+    let tx_hashes = block
+        .transactions
+        .iter()
+        .map(|tx| tx.hash())
+        .collect::<Vec<_>>();
+    let coinbase = block.transactions[0].clone();
+    let paid: i64 = coinbase
+        .outputs()
+        .iter()
+        .map(|output| output.value.zatoshis())
+        .sum();
+    let pools = |zats: i64| {
+        BlockInfo::new(
+            ValueBalance::from_transparent_amount(
+                Amount::try_from(zats).expect("the test pools are valid amounts"),
+            ),
+            block.zcash_serialized_size() as u32,
+        )
+    };
+
+    let mut mempool: MockService<_, _, _, BoxError> = MockService::build().for_unit_tests();
+    let state: MockService<_, _, _, BoxError> = MockService::build().for_unit_tests();
+    let mut read_state: MockService<_, _, _, BoxError> = MockService::build().for_unit_tests();
+    let (_tx, rx) = tokio::sync::watch::channel(None);
+    let (rpc, _rpc_tx_queue) = mock_rpc(
+        network,
+        Buffer::new(mempool.clone(), 1),
+        Buffer::new(state.clone(), 1),
+        Buffer::new(read_state.clone(), 8),
+        NoChainTip,
+        rx,
+    );
+    let rpc = rpc.with_insight_explorer(types::ycash_inputs::InsightExplorer::new(insight));
+    let block_future =
+        tokio::spawn(async move { rpc.get_block(height.0.to_string(), Some(1)).await });
+
+    read_state
+        .expect_request(ReadRequest::BlockHeader(height.into()))
+        .await
+        .respond(ReadResponse::BlockHeader {
+            header: block.header.clone(),
+            hash,
+            height,
+            next_block_hash: None,
+        });
+    read_state
+        .expect_request(ReadRequest::SaplingTree(hash.into()))
+        .await
+        .respond(ReadResponse::SaplingTree(Some(Arc::new(
+            zakura_chain::sapling::tree::NoteCommitmentTree::default(),
+        ))));
+    read_state
+        .expect_request(ReadRequest::Depth(hash))
+        .await
+        .respond(ReadResponse::Depth(Some(0)));
+    read_state
+        .expect_request(ReadRequest::TransactionIdsForBlock(hash.into()))
+        .await
+        .respond(ReadResponse::TransactionIdsForBlock(Some(Arc::from(
+            tx_hashes.into_boxed_slice(),
+        ))));
+    read_state
+        .expect_request(ReadRequest::OrchardTree(hash.into()))
+        .await
+        .respond(ReadResponse::OrchardTree(Some(Arc::new(
+            zakura_chain::orchard::tree::NoteCommitmentTree::default(),
+        ))));
+    read_state
+        .expect_request(ReadRequest::BlockInfo(
+            block.header.previous_block_hash.into(),
+        ))
+        .await
+        .respond(ReadResponse::BlockInfo(prev_pools.map(pools)));
+    read_state
+        .expect_request(ReadRequest::BlockInfo(hash.into()))
+        .await
+        .respond(ReadResponse::BlockInfo(Some(pools(
+            prev_pools.unwrap_or(0) + paid - 1_234,
+        ))));
+    // The coinbase is read only with the switch on and both pools known.
+    if insight && prev_pools.is_some() {
+        read_state
+            .expect_request(ReadRequest::Transaction(coinbase.hash()))
+            .await
+            .respond(ReadResponse::Transaction(coinbase_found.then(|| {
+                zakura_state::MinedTx::new(coinbase.clone(), height, 1, block.header.time)
+            })));
+    }
+
+    let GetBlockResponse::Object(answer) = block_future
+        .await
+        .expect("block future should not panic")
+        .expect("getblock should succeed")
+    else {
+        panic!("expected a verbose getblock object");
+    };
+    mempool.expect_no_requests().await;
+    read_state.expect_no_requests().await;
+    serde_json::to_value(answer)
+        .expect("getblock object should serialize")
+        .get("blockfee")
+        .cloned()
+}
+
+/// Ycash (beta3 item 6): `blockfee` at verbosity 1 is opt-in, reads the coinbase once, and is
+/// absent, never a wrong number, when the parent's pools or the coinbase are missing.
+#[cfg(feature = "ycash")]
+#[tokio::test(flavor = "multi_thread")]
+async fn ycash_getblock_v1_blockfee_is_opt_in_and_never_wrong() {
+    let _init_guard = zakura_test::init();
+
+    // Off (the default): no field, and no coinbase read.
+    assert_eq!(
+        ycash_getblock_v1_blockfee(false, Some(5_000), true).await,
+        None
+    );
+    // On: the fee, from the pool change and the coinbase.
+    assert_eq!(
+        ycash_getblock_v1_blockfee(true, Some(5_000), true).await,
+        Some(serde_json::json!(1_234))
+    );
+    // The parent's BlockInfo missing: no field (the whole pool is not this block's change).
+    assert_eq!(ycash_getblock_v1_blockfee(true, None, true).await, None);
+    // The coinbase not found: no field, not 0.
+    assert_eq!(
+        ycash_getblock_v1_blockfee(true, Some(5_000), false).await,
+        None
+    );
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -2229,6 +2396,10 @@ async fn rpc_getblock_side_chain_verbosity2_does_not_panic() {
         rx,
     );
 
+    // Ycash (beta3 item 6): with the insight switch on, a block off the best chain still names
+    // no `blockfee` (it has no pools to derive one from).
+    #[cfg(feature = "ycash")]
+    let rpc = rpc.with_insight_explorer(types::ycash_inputs::InsightExplorer::new(true));
     let rpc_clone = rpc.clone();
     let hash_str = block_hash.to_string();
     let block_future = tokio::spawn(async move { rpc_clone.get_block(hash_str, Some(2u8)).await });
@@ -2290,10 +2461,19 @@ async fn rpc_getblock_side_chain_verbosity2_does_not_panic() {
             .respond(ReadResponse::BlockInfo(Some(BlockInfo::default())));
     }
 
-    block_future
+    let answer = block_future
         .await
         .expect("task should not panic")
         .expect("getblock should succeed for side-chain blocks");
+    #[cfg(feature = "ycash")]
+    {
+        let GetBlockResponse::Object(answer) = answer else {
+            panic!("expected a verbose getblock object");
+        };
+        assert_eq!(answer.block_fee(), None);
+    }
+    #[cfg(not(feature = "ycash"))]
+    let _ = answer;
 }
 
 #[tokio::test(flavor = "multi_thread")]
