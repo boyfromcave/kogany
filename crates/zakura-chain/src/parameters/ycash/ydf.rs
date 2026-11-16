@@ -43,7 +43,7 @@ pub mod mandate_end {
     /// 400 blocks, the same value on ycash-dd, ycash6 and kogany. Every node of the network
     /// must run a build with the final value before the chain reaches it.
     pub const TESTNET_FAST: Height = Height(600_000);
-    /// Ycash regtest (`ycash6 src/chainparams.cpp:904`).
+    /// Ycash regtest (`ycash6 src/chainparams.cpp:889`).
     pub const REGTEST: Height = Height(5);
 }
 
