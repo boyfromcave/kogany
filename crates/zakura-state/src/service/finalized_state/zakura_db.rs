@@ -60,6 +60,9 @@ pub mod prune;
 pub mod rollback;
 pub mod shielded;
 pub mod transparent;
+// Ycash (beta3 item 2): the transparent value pools by address type, a node-side index.
+#[cfg(feature = "ycash")]
+pub mod transparent_pools;
 // kogany (W4-c): the Vault upgrade's set state column families and its total transition.
 pub mod vault;
 // kogany (W5-e): the Yellowback (YED) index column families and its evaluation.

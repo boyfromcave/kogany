@@ -732,6 +732,9 @@ fn legacy_migration_reopens_and_replays_across_activation() {
                     .zs_get(&Height(height))
                     .unwrap()
                     .as_bytes();
+                // Ycash: a legacy row never has the chain transaction count this build appends.
+                #[cfg(feature = "ycash")]
+                bytes.truncate(60);
                 bytes.drain(48..56);
                 let _ = state
                     .db

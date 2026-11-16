@@ -35,6 +35,9 @@ use crate::service::finalized_state::ZakuraDb;
 
 pub(crate) mod add_ironwood_tree;
 pub(crate) mod add_subtrees;
+// Ycash (beta3 items 2 and 11)
+#[cfg(feature = "ycash")]
+pub(crate) mod add_transparent_pools;
 // kogany (W4-c)
 pub(crate) mod add_vault_state;
 // kogany (W5-e)
@@ -169,7 +172,18 @@ fn format_upgrades(
         Box::new(add_yed_state::Upgrade),
     ] as [Box<dyn DiskFormatUpgrade>; 15])
         .into_iter()
+        .chain(ycash_format_upgrades())
         .filter(move |upgrade| upgrade.version() > min_version())
+}
+
+/// Ycash: the format upgrades of the `ycash` build, after every upgrade above; none without it.
+fn ycash_format_upgrades() -> Vec<Box<dyn DiskFormatUpgrade>> {
+    // Ycash (beta3 items 2 and 11): the transparent pools by type and the chain transaction
+    // count.
+    #[cfg(feature = "ycash")]
+    return vec![Box::new(add_transparent_pools::Upgrade)];
+    #[cfg(not(feature = "ycash"))]
+    Vec::new()
 }
 
 /// Returns a list of all the major db format versions that can restored from the
@@ -1164,7 +1178,10 @@ fn vct_format_changes_include_root_auth_metadata_updates() {
     let upgrades: Vec<_> = format_upgrades(Some(Version::new(27, 3, 0))).collect();
 
     // kogany (W4-c): + 30.1.0, the vault column families; (W5-e) + 30.2.0, the YED index.
-    assert_eq!(upgrades.len(), 11);
+    // Ycash (beta3): + 30.3.0 in the `ycash` build, the transparent pools and the count.
+    assert_eq!(upgrades.len(), 11 + usize::from(cfg!(feature = "ycash")));
+    #[cfg(feature = "ycash")]
+    assert_eq!(upgrades[11].version(), Version::new(30, 3, 0));
     assert_eq!(upgrades[0].version(), Version::new(28, 0, 0));
     assert_eq!(upgrades[1].version(), Version::new(28, 0, 1));
     assert_eq!(upgrades[2].version(), Version::new(28, 0, 2));

@@ -1703,6 +1703,16 @@ pub enum ReadRequest {
     #[cfg(feature = "ycash")]
     SproutTipTreeSize,
 
+    /// Ycash (beta3 items 2 and 11): returns
+    /// [`ReadResponse::BlockIndexInfo`](ReadResponse::BlockIndexInfo), the chain transaction
+    /// count and the transparent pools by type after a block, looked up by hash in any chain or
+    /// by height in the current best chain; `None` if the block is not found.
+    ///
+    /// ycashd's `getblockchaininfo.transactions` and the `transparentPools` of
+    /// `getblockchaininfo` and `getblock`.
+    #[cfg(feature = "ycash")]
+    BlockIndexInfo(HashOrHeight),
+
     /// Looks up the block info after a block by hash in any chain, or by height in the
     /// current best chain.
     ///
@@ -2275,6 +2285,8 @@ impl ReadRequest {
             ReadRequest::TipPoolValues => "tip_pool_values",
             #[cfg(feature = "ycash")]
             ReadRequest::SproutTipTreeSize => "sprout_tip_tree_size",
+            #[cfg(feature = "ycash")]
+            ReadRequest::BlockIndexInfo(_) => "block_index_info",
             ReadRequest::BlockInfo(_) => "block_info",
             ReadRequest::VaultSnapshot { .. } => "vault_snapshot",
             ReadRequest::BestChainVaultSnapshot => "best_chain_vault_snapshot",

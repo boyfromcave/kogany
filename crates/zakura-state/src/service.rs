@@ -3024,6 +3024,17 @@ impl Service<ReadRequest> for ReadStateService {
                 read::sprout_tip_tree_size(state.latest_best_chain(), &state.db)?,
             )),
 
+            // Ycash: used by the `getblockchaininfo` and `getblock` RPC methods
+            // (`transactions`, `transparentPools`).
+            #[cfg(feature = "ycash")]
+            ReadRequest::BlockIndexInfo(hash_or_height) => Ok(ReadResponse::BlockIndexInfo(
+                read::block_index_info_by_hash_or_best_chain_height(
+                    &state.latest_non_finalized_state(),
+                    &state.db,
+                    hash_or_height,
+                ),
+            )),
+
             // Used by getblock
             ReadRequest::BlockInfo(hash_or_height) => Ok(ReadResponse::BlockInfo(
                 read::block_info_by_hash_or_best_chain_height(
