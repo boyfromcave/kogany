@@ -105,7 +105,7 @@ re-runs its consumers.
 | | `audit dormancy` | no upstream test deleted | yes | yes | 1 min |
 | | `audit workflows` | classification, placement, the trigger policy | yes | yes | 1 min |
 | | `audit cross-line (c)` | `qa/yellowback-cross-line.py --this-line kogany` against ycash6 at `YCASH6_REV` (and `testdata/yellowback/PIN` naming that commit) | yes | yes | 1 min |
-| | `audit vault-params (d)` | `cargo run -p zakura-chain --features ycash --example kogany_vault_params`, ycash6's `qa/yellowback-vault-params.py extract` at `YCASH6_REV`, `qa/kogany_vault_params.py compare` | yes | yes | 15 / 5 min |
+| | `audit vault-params (d)` | `cargo run -p zakura-chain --features ycash --example kogany_vault_params`, ycash6's `qa/yellowback-vault-params.py extract` at `YCASH6_REV`, `qa/kogany_vault_params.py compare` (the Vault heights and every network's `ydf_mandate_end_height`, which kogany must print: the release-candidate cut gate of beta3 item 5) | yes | yes | 15 / 5 min |
 | `kogany-build` | `check (ycash feature off)`, `check (… on)` | `cargo check -p kogany --all-targets` | yes | each | 25 / 8 min |
 | | `clippy kogany-pure`, `kogany-rpc`, `zakura-chain`, `zakura-consensus`, `zakura-state`, `zakura-rpc-network`, `zakurad` | `cargo clippy --all-targets -D warnings`, ycash feature on (feature off is `lint.yml`'s) | yes | each | 5–35 / 3–10 min |
 | | `rustfmt (kogany crates)` | `cargo fmt --check` over `kogany-*` | yes | yes | 1 min |
@@ -248,7 +248,10 @@ Never bump it while a release is in qualification.
 `v<X.Y.Z>-ycash.<beta|rc><n>` (or a dispatch naming one) and on no branch. Its `guard` job refuses
 any other form, refuses a final `vX.Y.Z-ycash.N` (kogany is not a qualified line, plan K-19), and
 requires X.Y.Z to equal the `kogany` crate version in `crates/zakurad/Cargo.toml` (pre-release
-suffix ignored). Three native jobs build `koganyd` (`--release --features "default-release-binaries
+suffix ignored), and refuses an rc tag while testnet-yb-fast's YDF mandate end
+(`mandate_end::TESTNET_FAST`) is the provisional 600,000 (`qa/kogany_vault_params.py release`,
+ycash6's rule R9; a beta tag passes): the release-candidate cut sets the same height on the three
+lines first, and `audit vault-params (d)` checks kogany's equals ycash6's. Three native jobs build `koganyd` (`--release --features "default-release-binaries
 ycash"`, no Rust cache, so a release never restores a cache; no system RocksDB, so the bundled one is
 linked statically) on ubuntu-24.04, ubuntu-24.04-arm and
 macos-15, and pack `koganyd_<tag>_<platform>.tar.gz` (`koganyd`, `README.txt`, the licences,
