@@ -344,3 +344,27 @@ fn legacy_history_entry_keeps_its_unprefixed_bytes() {
         bincode_format::deserialize::<LegacyEntry>(&encoded[..LEGACY_MAX_ENTRY_SIZE - 1]).is_err()
     );
 }
+
+/// Ycash: the upstream-sync tripwire for the chain transaction count appended to `block_info`.
+///
+/// kogany appends an 8-byte count to upstream's 60-byte row, and the reader dispatches on the
+/// row length. If an upstream merge changes the length of upstream's row (it grew 44, 52, 60),
+/// a 68-byte upstream row would collide with kogany's counted row, whose count would be read as
+/// pool data. This test fails first, so the merge stops for the procedure.
+#[cfg(feature = "ycash")]
+#[test]
+fn ycash_upstream_block_info_row_is_still_60_bytes() {
+    const MESSAGE: &str = "upstream changed BlockInfo's on-disk layout: STOP. kogany's \
+        chain transaction count is appended to the 60-byte row (disk_format/chain.rs, \
+        YCASH_FULL_BLOCK_INFO_LEN). Follow `.github/README-kogany.md`, \"Before merging an \
+        upstream change to BlockInfo's on-disk layout\", before changing this test";
+
+    let upstream_row = BlockInfo::new(ValueBalance::zero(), 0).as_bytes();
+    assert_eq!(upstream_row.len(), YCASH_FULL_BLOCK_INFO_LEN, "{MESSAGE}");
+    assert_eq!(YCASH_FULL_BLOCK_INFO_LEN, 60, "{MESSAGE}");
+    assert_eq!(
+        ValueBalance::<NonNegative>::zero().as_bytes().len(),
+        56,
+        "{MESSAGE}"
+    );
+}

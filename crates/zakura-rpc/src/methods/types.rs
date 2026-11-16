@@ -14,6 +14,8 @@ pub mod peer_info;
 pub mod submit_block;
 pub mod subsidy;
 pub mod transaction;
+#[cfg(feature = "ycash")]
+pub mod transparent_pools;
 pub mod unified_address;
 pub mod validate_address;
 #[cfg(feature = "ycash")]

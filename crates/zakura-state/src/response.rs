@@ -519,6 +519,11 @@ pub enum ReadResponse {
     #[cfg(feature = "ycash")]
     SproutTipTreeSize(u64),
 
+    /// Ycash: response to [`ReadRequest::BlockIndexInfo`] with the chain transaction count and
+    /// the transparent pools by type after the specified block.
+    #[cfg(feature = "ycash")]
+    BlockIndexInfo(Option<crate::transparent_pools::BlockIndexInfo>),
+
     /// Response to [`ReadRequest::BlockInfo`] with
     /// the block info after the specified block.
     BlockInfo(Option<BlockInfo>),
@@ -876,7 +881,7 @@ impl TryFrom<ReadResponse> for Response {
             }
 
             #[cfg(feature = "ycash")]
-            ReadResponse::SproutTipTreeSize(_) => {
+            ReadResponse::SproutTipTreeSize(_) | ReadResponse::BlockIndexInfo(_) => {
                 Err("there is no corresponding Response for this ReadResponse")
             }
 

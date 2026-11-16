@@ -35,6 +35,9 @@ mod error;
 mod request;
 mod response;
 mod service;
+// Ycash (beta3 item 2): the transparent value pools by address type, a node-side index.
+#[cfg(feature = "ycash")]
+pub mod transparent_pools;
 
 #[cfg(test)]
 mod tests;

@@ -192,17 +192,81 @@ impl FromDisk for HistoryTreeParts {
 impl IntoDisk for BlockInfo {
     type Bytes = Vec<u8>;
 
+    #[cfg_attr(not(feature = "ycash"), allow(clippy::let_and_return))]
     fn as_bytes(&self) -> Self::Bytes {
-        self.value_pools()
+        let bytes: Vec<u8> = self
+            .value_pools()
             .as_bytes()
             .iter()
             .copied()
             .chain(self.size().to_le_bytes().iter().copied())
-            .collect()
+            .collect();
+        // Ycash: a known chain transaction count is appended to the full-length row only.
+        #[cfg(feature = "ycash")]
+        let bytes = ycash_append_chain_tx_count(bytes, self.chain_tx_count());
+        bytes
     }
 }
 
+/// Ycash: the length of a full NU7-layout `BlockInfo` row, the only row the chain transaction
+/// count is appended to.
+///
+/// [`FromDisk`] for [`BlockInfo`] chooses the pool layout by the row length (44, 52 or 60
+/// bytes), so a count appended to a shorter row would be read as a longer pool layout.
+///
+/// # Upstream syncs: READ THIS BEFORE MERGING ANY UPSTREAM CHANGE TO `BlockInfo`'S LAYOUT
+///
+/// Upstream's value-pool layout has grown 8 bytes at a time (40, 48, 56 bytes of pools, so
+/// 44, 52, 60-byte rows). Its next growth would make upstream's row 68 bytes: the same length
+/// as kogany's 60-byte row with the count appended. The length-dispatched reader below would
+/// then read every existing counted row's count as pool data, and consensus reads the pools
+/// (`AwaitBlockInfo`). Such a merge needs a kogany format step that moves the count first.
+/// The procedure is `.github/README-kogany.md`, "Before merging an upstream change to
+/// BlockInfo's on-disk layout"; the tripwire is the test
+/// `ycash_upstream_block_info_row_is_still_60_bytes` in `chain/tests.rs`.
+#[cfg(feature = "ycash")]
+const YCASH_FULL_BLOCK_INFO_LEN: usize = 60;
+
+/// Ycash: the length of the appended chain transaction count (`u64`, little-endian).
+#[cfg(feature = "ycash")]
+const YCASH_CHAIN_TX_COUNT_LEN: usize = 8;
+
+/// Ycash: appends a known chain transaction count to a full-length row.
+#[cfg(feature = "ycash")]
+fn ycash_append_chain_tx_count(mut bytes: Vec<u8>, chain_tx_count: Option<u64>) -> Vec<u8> {
+    if let (Some(chain_tx_count), YCASH_FULL_BLOCK_INFO_LEN) = (chain_tx_count, bytes.len()) {
+        bytes.extend_from_slice(&chain_tx_count.to_le_bytes());
+    }
+    bytes
+}
+
+/// Ycash: a `BlockInfo` row with `chain_tx_count` as its count, for the format upgrade: `None`
+/// unless `row` is a full-length row, with or without a count.
+#[cfg(feature = "ycash")]
+pub(crate) fn ycash_block_info_row_with_count(row: &[u8], chain_tx_count: u64) -> Option<Vec<u8>> {
+    let full = [
+        YCASH_FULL_BLOCK_INFO_LEN,
+        YCASH_FULL_BLOCK_INFO_LEN + YCASH_CHAIN_TX_COUNT_LEN,
+    ];
+    full.contains(&row.len()).then(|| {
+        ycash_append_chain_tx_count(
+            row[..YCASH_FULL_BLOCK_INFO_LEN].to_vec(),
+            Some(chain_tx_count),
+        )
+    })
+}
+
+/// Ycash: the chain transaction count of a `BlockInfo` row, if the row holds one.
+#[cfg(feature = "ycash")]
+pub(crate) fn ycash_chain_tx_count_from_row(bytes: &[u8]) -> Option<u64> {
+    let count = bytes
+        .get(YCASH_FULL_BLOCK_INFO_LEN..YCASH_FULL_BLOCK_INFO_LEN + YCASH_CHAIN_TX_COUNT_LEN)?;
+    (bytes.len() == YCASH_FULL_BLOCK_INFO_LEN + YCASH_CHAIN_TX_COUNT_LEN)
+        .then(|| u64::from_le_bytes(count.try_into().expect("the slice is 8 bytes long")))
+}
+
 impl FromDisk for BlockInfo {
+    #[cfg_attr(not(feature = "ycash"), allow(clippy::let_and_return))]
     fn from_bytes(bytes: impl AsRef<[u8]>) -> Self {
         // We have three different DB formats: NU6_1 (Lockbox), Ironwood, and the ZIP 234
         // NSM value balance.
@@ -218,7 +282,14 @@ impl FromDisk for BlockInfo {
 
         // We want to be forward-compatible, so this must work even if the
         // size of the buffer is larger than expected.
-        match bytes.len() {
+        //
+        // Ycash: UPSTREAM-SYNC HAZARD. A kogany row with the chain transaction count is 68
+        // bytes and is read here by its first 60. If an upstream merge adds a longer pool layout
+        // (a 64-byte value balance makes a 68-byte row), the count would be read as pool data.
+        // Do not merge such a change without the procedure in `.github/README-kogany.md`,
+        // "Before merging an upstream change to BlockInfo's on-disk layout"
+        // (`YCASH_FULL_BLOCK_INFO_LEN`, `ycash_upstream_block_info_row_is_still_60_bytes`).
+        let block_info = match bytes.len() {
             NU7_BLOCK_INFO_LEN.. => {
                 let value_pools =
                     ValueBalance::<NonNegative>::from_bytes(&bytes[..NU7_VALUE_BALANCE_LEN])
@@ -253,7 +324,12 @@ impl FromDisk for BlockInfo {
                 BlockInfo::new(value_pools, size)
             }
             _ => panic!("invalid format"),
-        }
+        };
+        // Ycash: the count after a full-length row; the pools and size are read as upstream
+        // reads them.
+        #[cfg(feature = "ycash")]
+        let block_info = block_info.with_chain_tx_count(ycash_chain_tx_count_from_row(bytes));
+        block_info
     }
 }
 

@@ -67,6 +67,7 @@ fn test_raw_rocksdb_column_families_with_network(network: Network) {
     // The order that RocksDB returns column families is irrelevant,
     // because we always access them by name.
     cf_names.sort();
+    ycash_drop_index_column_family(&mut cf_names);
 
     // Assert that column family names are the same, regardless of the network.
     // Later, we check they are also the same regardless of the block height.
@@ -102,10 +103,35 @@ fn test_raw_rocksdb_column_families_with_network(network: Network) {
     }
 }
 
+/// Ycash: these snapshots are upstream's format, in both builds. The `ycash` build's own column
+/// family is left out of them (its rows are checked by `zakura_db::transparent_pools::tests`).
+fn ycash_drop_index_column_family(cf_names: &mut Vec<String>) {
+    #[cfg(feature = "ycash")]
+    cf_names.retain(|name| {
+        name != crate::service::finalized_state::zakura_db::transparent_pools::YCASH_TRANSPARENT_POOLS
+    });
+    #[cfg(not(feature = "ycash"))]
+    let _ = cf_names;
+}
+
+/// Ycash: the upstream part of a row. The `ycash` build appends the chain transaction count to
+/// the 60-byte `block_info` row; the row must be upstream's row and those eight bytes.
+fn ycash_upstream_row<'a>(cf_name: &str, row: &'a [u8]) -> &'a [u8] {
+    #[cfg(feature = "ycash")]
+    if cf_name == crate::service::finalized_state::zakura_db::chain::BLOCK_INFO {
+        assert_eq!(row.len(), 68, "a block_info row with its count");
+        return &row[..60];
+    }
+    #[cfg(not(feature = "ycash"))]
+    let _ = cf_name;
+    row
+}
+
 /// Snapshot the data in each column family, using `cargo insta` and RON serialization.
 fn snapshot_raw_rocksdb_column_family_data(db: &DiskDb, original_cf_names: &[String]) {
     let mut new_cf_names = db.list_cf().expect("empty database is valid");
     new_cf_names.sort();
+    ycash_drop_index_column_family(&mut new_cf_names);
 
     // Assert that column family names are the same, regardless of the network or block height.
     assert_eq!(
@@ -127,7 +153,12 @@ fn snapshot_raw_rocksdb_column_family_data(db: &DiskDb, original_cf_names: &[Str
         // The default raw data serialization is very verbose, so we hex-encode the bytes.
         let cf_data: Vec<KV> = cf_items
             .iter()
-            .map(|(key, value)| KV::new(key.raw_bytes(), value.raw_bytes()))
+            .map(|(key, value)| {
+                KV::new(
+                    key.raw_bytes(),
+                    ycash_upstream_row(cf_name, value.raw_bytes()),
+                )
+            })
             .collect();
 
         if cf_name == "default" {

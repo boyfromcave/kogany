@@ -254,6 +254,9 @@ pub const STATE_COLUMN_FAMILIES_IN_CODE: &[&str] = &[
     zakura_db::yed::YED_COLUMN_FAMILIES[16],
     zakura_db::yed::YED_COLUMN_FAMILIES[17],
     zakura_db::yed::YED_COLUMN_FAMILIES[18],
+    // Ycash (beta3 item 2): the transparent value pools by address type
+    #[cfg(feature = "ycash")]
+    zakura_db::transparent_pools::YCASH_TRANSPARENT_POOLS,
 ];
 
 /// Fork-aware header-chain node rows keyed by canonical hash.

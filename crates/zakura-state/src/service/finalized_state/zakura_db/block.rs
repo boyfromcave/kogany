@@ -1415,6 +1415,11 @@ impl DiskWriteBatch {
         // node when the index cannot evaluate it.
         self.prepare_yed_batch(zakura_db, network, finalized);
 
+        // Ycash (beta3 item 2): the transparent pools by type, a node-side index in the same
+        // batch; total, never an error.
+        #[cfg(feature = "ycash")]
+        self.prepare_transparent_pools_batch(zakura_db, finalized, &spent_utxos_by_outpoint);
+
         // Commit UTXOs and value pools
         self.prepare_chain_value_pools_batch(
             zakura_db,

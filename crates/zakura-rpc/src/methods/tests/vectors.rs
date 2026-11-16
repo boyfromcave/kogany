@@ -677,6 +677,17 @@ async fn rpc_getblock() {
         assert_eq!(
             get_block,
             GetBlockResponse::Object(Box::new(BlockObject {
+                // Ycash: the node-side index figures, as the state reports them.
+                #[cfg(feature = "ycash")]
+                transparent_pools: Some(crate::methods::TransparentPoolsInfo::new(
+                    crate::methods::types::ycash::block_index_info(
+                        read_state.clone(),
+                        block.hash(),
+                    )
+                    .await
+                    .as_ref(),
+                    true,
+                )),
                 hash: block.hash(),
                 confirmations: (blocks.len() - i).try_into().expect("valid i64"),
                 height: Some(Height(i.try_into().expect("valid u32"))),
@@ -747,6 +758,17 @@ async fn rpc_getblock() {
         assert_eq!(
             get_block,
             GetBlockResponse::Object(Box::new(BlockObject {
+                // Ycash: the node-side index figures, as the state reports them.
+                #[cfg(feature = "ycash")]
+                transparent_pools: Some(crate::methods::TransparentPoolsInfo::new(
+                    crate::methods::types::ycash::block_index_info(
+                        read_state.clone(),
+                        block.hash(),
+                    )
+                    .await
+                    .as_ref(),
+                    true,
+                )),
                 hash: block.hash(),
                 confirmations: (blocks.len() - i).try_into().expect("valid i64"),
                 height: Some(Height(i.try_into().expect("valid u32"))),
@@ -831,6 +853,8 @@ async fn rpc_getblock() {
                 final_orchard_root,
                 #[cfg(feature = "ycash")]
                     chain_history_root: _,
+                #[cfg(feature = "ycash")]
+                    transparent_pools: _,
                 #[cfg(feature = "ycash")]
                     block_fee: _,
                 nonce,
@@ -935,6 +959,8 @@ async fn rpc_getblock() {
                 #[cfg(feature = "ycash")]
                     chain_history_root: _,
                 #[cfg(feature = "ycash")]
+                    transparent_pools: _,
+                #[cfg(feature = "ycash")]
                     block_fee: _,
                 nonce,
                 bits,
@@ -1022,6 +1048,17 @@ async fn rpc_getblock() {
         assert_eq!(
             get_block,
             GetBlockResponse::Object(Box::new(BlockObject {
+                // Ycash: the node-side index figures, as the state reports them.
+                #[cfg(feature = "ycash")]
+                transparent_pools: Some(crate::methods::TransparentPoolsInfo::new(
+                    crate::methods::types::ycash::block_index_info(
+                        read_state.clone(),
+                        block.hash(),
+                    )
+                    .await
+                    .as_ref(),
+                    true,
+                )),
                 hash: block.hash(),
                 confirmations: (blocks.len() - i).try_into().expect("valid i64"),
                 height: Some(Height(i.try_into().expect("valid u32"))),
@@ -1091,6 +1128,17 @@ async fn rpc_getblock() {
         assert_eq!(
             get_block,
             GetBlockResponse::Object(Box::new(BlockObject {
+                // Ycash: the node-side index figures, as the state reports them.
+                #[cfg(feature = "ycash")]
+                transparent_pools: Some(crate::methods::TransparentPoolsInfo::new(
+                    crate::methods::types::ycash::block_index_info(
+                        read_state.clone(),
+                        block.hash(),
+                    )
+                    .await
+                    .as_ref(),
+                    true,
+                )),
                 hash: block.hash(),
                 confirmations: (blocks.len() - i).try_into().expect("valid i64"),
                 height: Some(Height(i.try_into().expect("valid u32"))),
@@ -1253,6 +1301,12 @@ async fn rpc_getblock_includes_empty_ironwood_tree_after_nu6_3_activation() {
             Default::default(),
             block.zcash_serialized_size() as u32,
         ))));
+    // Ycash: the node-side index read, asked last; this state has no index.
+    #[cfg(feature = "ycash")]
+    read_state
+        .expect_request(ReadRequest::BlockIndexInfo(hash.into()))
+        .await
+        .respond(ReadResponse::BlockIndexInfo(None));
 
     let get_block = block_future
         .await
@@ -1374,6 +1428,11 @@ async fn ycash_getblock_v1_blockfee(
         .respond(ReadResponse::BlockInfo(Some(pools(
             prev_pools.unwrap_or(0) + paid - 1_234,
         ))));
+    // The node-side index read (beta3 item 2), before the insight reads; this state has no index.
+    read_state
+        .expect_request(ReadRequest::BlockIndexInfo(hash.into()))
+        .await
+        .respond(ReadResponse::BlockIndexInfo(None));
     // The coinbase is read only with the switch on and both pools known.
     if insight && prev_pools.is_some() {
         read_state
@@ -1667,6 +1726,12 @@ async fn rpc_getblock_serves_pre_activation_empty_trees() {
         .expect_request(ReadRequest::BlockInfo(hash.into()))
         .await
         .respond(ReadResponse::BlockInfo(None));
+    // Ycash: the node-side index read, asked last; this state has no index.
+    #[cfg(feature = "ycash")]
+    read_state
+        .expect_request(ReadRequest::BlockIndexInfo(hash.into()))
+        .await
+        .respond(ReadResponse::BlockIndexInfo(None));
 
     let response = block_future
         .await
@@ -2373,6 +2438,11 @@ async fn rpc_getblock_side_chain_verbosity2_does_not_panic() {
                 block,
                 zakura_chain::block::Height(0),
             ))));
+        // The node-side index read, by the block's hash; this state has no index.
+        read_state
+            .expect_request(ReadRequest::BlockIndexInfo(block_hash.into()))
+            .await
+            .respond(ReadResponse::BlockIndexInfo(None));
         let _ = block_size;
     }
     #[cfg(not(feature = "ycash"))]
@@ -6587,4 +6657,95 @@ async fn ycash_address_index_rpcs_take_the_d9_forms() {
         assert_eq!(err.code(), ErrorCode::ServerError(-5).code(), "{text}");
     }
     read_state.expect_no_requests().await;
+}
+
+/// Ycash (beta3 items 2 and 11): `getblockchaininfo.transactions` and the `transparentPools`
+/// of `getblockchaininfo` and `getblock`, from a real state.
+#[cfg(feature = "ycash")]
+#[tokio::test(flavor = "multi_thread")]
+async fn rpc_transparent_pools_and_transactions() {
+    let _init_guard = zakura_test::init();
+
+    let blocks: Vec<Arc<Block>> = zakura_test::vectors::CONTINUOUS_MAINNET_BLOCKS
+        .values()
+        .map(|block_bytes| block_bytes.zcash_deserialize_into().unwrap())
+        .collect();
+    let mut mempool: MockService<_, _, _, BoxError> = MockService::build().for_unit_tests();
+    let (state, read_state, tip, _) = zakura_state::populated_state(blocks.clone(), &Mainnet).await;
+    let (_tx, rx) = tokio::sync::watch::channel(None);
+    let (rpc, rpc_tx_queue) = mock_rpc(
+        Mainnet,
+        Buffer::new(mempool.clone(), 1),
+        Buffer::new(state.clone(), 1),
+        Buffer::new(read_state.clone(), 1),
+        tip,
+        rx,
+    );
+
+    // The model: every output of every block so far (these blocks spend nothing).
+    let mut transactions = 0u64;
+    let mut transparent = 0i64;
+    let mut expected = Vec::new();
+    for block in &blocks {
+        assert!(block
+            .transactions
+            .iter()
+            .all(|tx| tx.inputs().iter().all(|i| i.outpoint().is_none())));
+        transactions += block.transactions.len() as u64;
+        let created: i64 = block
+            .transactions
+            .iter()
+            .flat_map(|tx| tx.outputs())
+            .map(|output| i64::from(output.value()))
+            .sum();
+        transparent += created;
+        expected.push((transactions, transparent, created));
+    }
+
+    let info = serde_json::to_value(
+        rpc.get_blockchain_info()
+            .await
+            .expect("getblockchaininfo answers"),
+    )
+    .unwrap();
+    let (tip_transactions, tip_transparent, _) = *expected.last().unwrap();
+    assert_eq!(info["transactions"], tip_transactions);
+    let pools = &info["transparentPools"];
+    assert_eq!(pools["monitored"], true);
+    assert_eq!(pools["transparent"]["chainValueZat"], tip_transparent);
+    assert!(pools["transparent"].get("valueDelta").is_none());
+    // Before the Vault upgrade every output is ECC, and the pools sum to the total.
+    assert_eq!(pools["pools"][0]["id"], "transparent_ecc");
+    assert_eq!(pools["pools"][0]["chainValueZat"], tip_transparent);
+    for entry in pools["pools"].as_array().unwrap().iter().skip(1) {
+        assert_eq!(
+            (&entry["monitored"], &entry["chainValueZat"]),
+            (&true.into(), &0.into())
+        );
+    }
+    // The same total as the existing transparent entry of valuePools.
+    assert_eq!(info["valuePools"][0]["id"], "transparent");
+    assert_eq!(info["valuePools"][0]["chainValueZat"], tip_transparent);
+
+    for (height, (_, transparent, created)) in expected.iter().enumerate() {
+        for verbosity in [1u8, 2] {
+            let block = serde_json::to_value(
+                rpc.get_block(height.to_string(), Some(verbosity))
+                    .await
+                    .expect("getblock answers"),
+            )
+            .unwrap();
+            let pools = &block["transparentPools"];
+            assert_eq!(pools["monitored"], true, "height {height}");
+            assert_eq!(pools["transparent"]["chainValueZat"], *transparent);
+            assert_eq!(pools["transparent"]["valueDeltaZat"], *created);
+            assert_eq!(pools["pools"][0]["valueDeltaZat"], *created);
+            assert_eq!(pools["pq_by_scheme"][1]["valueDeltaZat"], 0);
+            assert_eq!(pools["vault_by_module"][0]["module"], "YED");
+            assert_eq!(block["valuePools"][0]["chainValueZat"], *transparent);
+        }
+    }
+
+    mempool.expect_no_requests().await;
+    rpc_tx_queue.abort();
 }

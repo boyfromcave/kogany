@@ -366,10 +366,15 @@ impl DiskWriteBatch {
             finalized.block.header.zcash_serialized_size() + tx_count_size + transactions_size
         };
 
-        let _ = db.block_info_cf().with_batch_for_writing(self).zs_insert(
-            &finalized.height,
-            &BlockInfo::new(new_value_pool, block_size as u32),
-        );
+        let block_info = BlockInfo::new(new_value_pool, block_size as u32);
+        // Ycash: the chain transaction count, when the parent's is known; total, never an error.
+        #[cfg(feature = "ycash")]
+        let block_info = db.with_chain_tx_count(finalized, block_info);
+
+        let _ = db
+            .block_info_cf()
+            .with_batch_for_writing(self)
+            .zs_insert(&finalized.height, &block_info);
 
         Ok(())
     }

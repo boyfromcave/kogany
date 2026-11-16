@@ -111,7 +111,12 @@ const DATABASE_FORMAT_VERSION: u64 = 30;
 /// - breaking changes with compatibility code in all supported Zebra versions.
 // kogany (W4-c): 1 adds the Vault upgrade's set-state column families.
 // kogany (W5-e): 2 adds the Yellowback (YED) index column families.
+// Ycash (beta3 items 2 and 11): 3 adds the transparent pools by type and the chain transaction
+// count, in the `ycash` build only.
+#[cfg(not(feature = "ycash"))]
 const DATABASE_FORMAT_MINOR_VERSION: u64 = 2;
+#[cfg(feature = "ycash")]
+const DATABASE_FORMAT_MINOR_VERSION: u64 = 3;
 
 /// The database format patch version, incremented each time the on-disk database format has a
 /// significant format compatibility fix.

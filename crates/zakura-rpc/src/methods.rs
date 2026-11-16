@@ -108,6 +108,9 @@ pub(crate) mod hex_data;
 pub(crate) mod trees;
 pub(crate) mod types;
 
+#[cfg(feature = "ycash")]
+use types::transparent_pools::TransparentPoolsInfo;
+
 /// Ycash (kogany W7-e): ycashd's reject codes and texts; `zakurad`'s mempool builds
 /// [`ycash_reject::MempoolRejection`] for `sendrawtransaction`.
 #[cfg(feature = "ycash")]
@@ -2478,6 +2481,13 @@ where
         #[cfg(not(feature = "ycash"))]
         let commitments = 0;
 
+        // Ycash (beta3 items 2 and 11): ycashd's `transactions` (`nChainTx` of the tip) and
+        // `transparentPools`, read by the tip's hash, so both describe the block `blocks` and
+        // `bestblockhash` name even if the tip has moved since.
+        #[cfg(feature = "ycash")]
+        let block_index_info =
+            types::ycash::block_index_info(self.read_state.clone(), tip_hash).await;
+
         let response = GetBlockchainInfoResponse {
             #[cfg(not(feature = "ycash"))]
             chain: network.bip70_network_name(),
@@ -2510,6 +2520,10 @@ where
             prune_height,
             size_on_disk,
             commitments,
+            #[cfg(feature = "ycash")]
+            transactions: block_index_info.and_then(|info| info.chain_tx_count),
+            #[cfg(feature = "ycash")]
+            transparent_pools: Some(TransparentPoolsInfo::new(block_index_info.as_ref(), false)),
             header_chain,
         };
 
@@ -2816,6 +2830,12 @@ where
                             height,
                             block_commitments,
                         )),
+                        transparent_pools: Some(TransparentPoolsInfo::new(
+                            types::ycash::block_index_info(self.read_state.clone(), hash)
+                                .await
+                                .as_ref(),
+                            true,
+                        )),
                         previous_block_hash: Some(previous_block_hash),
                         next_block_hash: None,
                     })));
@@ -2990,6 +3010,12 @@ where
             });
             let size = size.or(block_info.as_ref().map(|d| d.size() as usize));
 
+            // Ycash (beta3 item 2): `transparentPools`, by the block's hash; asked once every
+            // read above has answered.
+            #[cfg(feature = "ycash")]
+            let block_index_info =
+                types::ycash::block_index_info(self.read_state.clone(), hash).await;
+
             // Ycash (beta3 item 6): ycashd's insight `vin` fields, the parents read once per call
             // (after every read above: those share the read state with the parent reads).
             #[cfg(feature = "ycash")]
@@ -3073,6 +3099,8 @@ where
                     height,
                     block_commitments,
                 )),
+                #[cfg(feature = "ycash")]
+                transparent_pools: Some(TransparentPoolsInfo::new(block_index_info.as_ref(), true)),
                 previous_block_hash: Some(previous_block_hash),
                 next_block_hash,
             })))
@@ -5548,6 +5576,21 @@ pub struct GetBlockchainInfoResponse {
     #[getset(get_copy = "pub")]
     commitments: u64,
 
+    /// Ycash (beta3 item 11): the number of transactions in the best chain up to and including
+    /// the tip (ycashd's `nChainTx`); omitted when this node does not know it.
+    #[cfg(feature = "ycash")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    transactions: Option<u64>,
+
+    /// Ycash (beta3 item 2): the transparent value pool split by address type.
+    #[cfg(feature = "ycash")]
+    #[serde(
+        default,
+        rename = "transparentPools",
+        skip_serializing_if = "Option::is_none"
+    )]
+    transparent_pools: Option<TransparentPoolsInfo>,
+
     /// The hash of the currently best block, in big-endian order, hex-encoded
     #[serde(rename = "bestblockhash", with = "hex")]
     #[getset(get_copy = "pub")]
@@ -5773,6 +5816,10 @@ impl Default for GetBlockchainInfoResponse {
             chain_work_hex: None,
             #[cfg(feature = "ycash")]
             testnet_profile: None,
+            #[cfg(feature = "ycash")]
+            transactions: None,
+            #[cfg(feature = "ycash")]
+            transparent_pools: None,
             pruned: false,
             prune_height: None,
             size_on_disk: 0,
@@ -5825,6 +5872,10 @@ impl GetBlockchainInfoResponse {
             chain_work_hex: None,
             #[cfg(feature = "ycash")]
             testnet_profile: None,
+            #[cfg(feature = "ycash")]
+            transactions: None,
+            #[cfg(feature = "ycash")]
+            transparent_pools: None,
             pruned,
             prune_height,
             size_on_disk,
@@ -6181,6 +6232,8 @@ impl Default for GetBlockResponse {
             #[cfg(feature = "ycash")]
             chain_history_root: None,
             #[cfg(feature = "ycash")]
+            transparent_pools: None,
+            #[cfg(feature = "ycash")]
             block_fee: None,
             nonce: None,
             bits: None,
@@ -6265,6 +6318,18 @@ pub struct BlockObject {
     #[getset(get_copy = "pub")]
     #[new(default)]
     chain_history_root: Option<[u8; 32]>,
+
+    /// Ycash (beta3 item 2): the transparent value pool split by address type, with the change
+    /// in this block.
+    #[cfg(feature = "ycash")]
+    #[serde(
+        default,
+        rename = "transparentPools",
+        skip_serializing_if = "Option::is_none"
+    )]
+    #[getset(get = "pub")]
+    #[new(default)]
+    transparent_pools: Option<TransparentPoolsInfo>,
 
     /// The number of transactions in this block.
     #[serde(rename = "nTx")]

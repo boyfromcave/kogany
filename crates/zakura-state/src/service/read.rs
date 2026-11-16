@@ -21,6 +21,9 @@ pub mod difficulty;
 pub mod find;
 pub mod historical_tree;
 pub mod tree;
+// Ycash (beta3 items 2 and 11)
+#[cfg(feature = "ycash")]
+pub mod transparent_pools;
 
 #[cfg(test)]
 mod tests;
@@ -30,6 +33,10 @@ pub use address::{
     tx_id::transparent_tx_ids,
     utxo::{address_utxos, AddressUtxos},
 };
+// Ycash (beta3 items 2 and 11)
+#[cfg(feature = "ycash")]
+pub use transparent_pools::block_index_info_by_hash_or_best_chain_height;
+
 pub use block::{
     any_block, any_transaction, any_utxo, block, block_and_size, block_header, block_info,
     block_info_by_hash_or_best_chain_height, mined_transaction, parent_inputs,
