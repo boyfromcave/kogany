@@ -310,20 +310,31 @@ fn batch_to_json_rpc_2(bytes: hyper::body::Bytes) -> (ClientVersions, hyper::bod
     let mut rewritten = Vec::with_capacity(entries.len());
     let mut any_one_point_zero = false;
     for entry in entries {
-        let (version, entry) = match serde_json::from_str::<JsonRpcRequest>(entry.get()) {
-            Ok(request)
-                if matches!(
+        let one_point_zero = serde_json::from_str::<JsonRpcRequest>(entry.get())
+            .ok()
+            .filter(|request| {
+                matches!(
                     request.version(),
                     JsonRpcVersion::Bitcoind | JsonRpcVersion::Lightwalletd
-                ) =>
-            {
-                any_one_point_zero = true;
+                )
+            })
+            .map(|request| {
                 (
                     request.version(),
-                    Cow::Owned(serde_json::to_string(&request.into_2()).expect("valid")),
+                    serde_json::to_string(&request.into_2()).expect("valid"),
                 )
+            })
+            // Only a member that becomes a 2.0 call is rewritten. One whose id the server does
+            // not take (negative, fractional, too large, a boolean or an object) would become a
+            // 2.0 notification, which gets no answer; it is forwarded unchanged instead, and the
+            // server answers it with an invalid request error without running it.
+            .filter(|(_, rewritten)| serde_json::from_str::<Request<'_>>(rewritten).is_ok());
+        let (version, entry) = match one_point_zero {
+            Some((version, rewritten)) => {
+                any_one_point_zero = true;
+                (version, Cow::Owned(rewritten))
             }
-            _ => (JsonRpcVersion::Unknown, Cow::Borrowed(entry.get())),
+            None => (JsonRpcVersion::Unknown, Cow::Borrowed(entry.get())),
         };
         // The server answers every entry except a notification, and classifies them as
         // `Body::parse` does: a call, else a notification, else an invalid entry.
