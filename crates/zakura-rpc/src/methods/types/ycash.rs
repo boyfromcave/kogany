@@ -557,3 +557,23 @@ pub fn order_address_utxos_as_ycashd(
 
 #[cfg(test)]
 mod tests;
+
+/// The chain transaction count and the transparent pools by type after the block `hash` (beta3
+/// items 2 and 11), or `None` when the state does not have the block or cannot answer: the
+/// callers then omit `transactions` and report `transparentPools` as not monitored.
+pub async fn block_index_info<ReadState>(
+    read_state: ReadState,
+    hash: block::Hash,
+) -> Option<zakura_state::transparent_pools::BlockIndexInfo>
+where
+    ReadState: ReadStateService,
+{
+    match read_state
+        .oneshot(ReadRequest::BlockIndexInfo(hash.into()))
+        .await
+        .ok()?
+    {
+        ReadResponse::BlockIndexInfo(info) => info,
+        _ => None,
+    }
+}
