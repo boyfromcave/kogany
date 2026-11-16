@@ -1046,6 +1046,31 @@ async fn the_fit_check_counts_the_consensus_sigops() {
     );
 }
 
+/// A Sapling call waits for a proof slot at most the bound, then answers row 17.
+#[tokio::test(start_paused = true)]
+async fn a_proof_slot_wait_is_bounded() {
+    static FULL: Semaphore = Semaphore::const_new(0);
+    static FREE: Semaphore = Semaphore::const_new(1);
+
+    let started = tokio::time::Instant::now();
+    assert_eq!(
+        error_of(acquire_proof_slot(&FULL, PROOF_SLOT_WAIT).await),
+        (
+            -32603,
+            "coinbase construction failed: timed out waiting for a Sapling proof slot".to_string()
+        )
+    );
+    assert!(started.elapsed() >= PROOF_SLOT_WAIT);
+    assert!(PROOF_SLOT_WAIT <= Duration::from_secs(30));
+
+    let permit = acquire_proof_slot(&FREE, PROOF_SLOT_WAIT)
+        .await
+        .expect("a free slot is taken at once");
+    assert_eq!(FREE.available_permits(), 0);
+    drop(permit);
+    assert_eq!(FREE.available_permits(), 1);
+}
+
 /// The call for a Sapling address: sixteen at once on a multi-threaded runtime, each answered
 /// with its own coinbase of exactly the derived amount.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

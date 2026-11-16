@@ -15,10 +15,10 @@
 //! or post-quantum script) followed by the fund output, or, for a Sapling address, only the fund
 //! output and one Sapling output of the amount.
 
-use std::{collections::HashSet, sync::Arc};
+use std::{collections::HashSet, sync::Arc, time::Duration};
 
 use serde_json::Value;
-use tokio::sync::Semaphore;
+use tokio::sync::{Semaphore, SemaphorePermit};
 use tower::{Service, ServiceExt};
 use zcash_address::{unified, ConversionError, TryFromAddress, ZcashAddress};
 use zcash_protocol::consensus::NetworkType;
@@ -64,6 +64,22 @@ pub const MAX_TXIDS: usize = 50_000;
 const MAX_PROOFS_IN_FLIGHT: usize = 4;
 
 static PROOF_SLOTS: Semaphore = Semaphore::const_new(MAX_PROOFS_IN_FLIGHT);
+
+/// How long a Sapling call waits for a proof slot before it is refused (row 17), as
+/// `getblocktemplate` bounds its own wait for template construction capacity.
+const PROOF_SLOT_WAIT: Duration = Duration::from_secs(30);
+
+/// A proof slot of `slots`, or row 17 when none frees within `wait`: the queue of Sapling calls
+/// is bounded in time, so a burst of calls cannot hold requests open without end.
+async fn acquire_proof_slot(
+    slots: &'static Semaphore,
+    wait: Duration,
+) -> RpcResult<SemaphorePermit<'static>> {
+    tokio::time::timeout(wait, slots.acquire())
+        .await
+        .map_err(|_| construction_failed("timed out waiting for a Sapling proof slot"))?
+        .map_err(|error| construction_failed(error.to_string()))
+}
 
 // ---- errors (the contract's table; codes and strings are identical on the three node lines) ----
 
@@ -764,10 +780,7 @@ where
         if node.sapling_output_prover.is_none() {
             return Err(construction_failed(NOT_LOADED));
         }
-        let permit = PROOF_SLOTS
-            .acquire()
-            .await
-            .map_err(|error| construction_failed(error.to_string()))?;
+        let permit = acquire_proof_slot(&PROOF_SLOTS, PROOF_SLOT_WAIT).await?;
         let (network, payout, amounts, flags, prover) = (
             node.network.clone(),
             payout.clone(),
