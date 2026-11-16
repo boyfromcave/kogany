@@ -34,6 +34,11 @@ where
     let _ = MEMPOOL.set(BoxCloneSyncService::new(mempool));
 }
 
+/// The node's mempool service, `None` until [`set_mempool`] gave one.
+pub fn service() -> Option<MempoolService> {
+    MEMPOOL.get().cloned()
+}
+
 /// Every verified transaction in the mempool (the expired-at-the-next-block ones aside, as the
 /// template sees it); empty without a mempool or while the mempool is disabled (ycashd's mempool
 /// is never disabled, and an empty one answers the same).

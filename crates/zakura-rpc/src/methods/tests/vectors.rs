@@ -4951,6 +4951,8 @@ async fn rpc_getdifficulty() {
         block_unpaid_action_limit: None,
         #[cfg(feature = "ycash")]
         ydf: 0,
+        #[cfg(feature = "ycash")]
+        sapling_output_params: None,
     };
 
     // nu5 block height

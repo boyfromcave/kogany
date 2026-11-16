@@ -800,6 +800,13 @@ impl StartCmd {
         // kogany S5 (F-S5-5): the extension's mempool reads (yed_getvault.spendPending,
         // getaddressmempool).
         kogany_rpc::mempool::set_mempool(mempool.clone());
+        // Beta3 item 3: getcoinbasetemplatefor reads the node's mining.ydf as its own coinbase
+        // does, and a Sapling coinbase needs ycashd's Sapling output parameters.
+        #[cfg(feature = "ycash")]
+        {
+            kogany_rpc::coinbase_for::set_ydf_percentage(config.mining.ydf_percentage());
+            crate::components::sapling_output_params::install(&config.mining);
+        }
         #[cfg(feature = "ycash")]
         let rpc_impl = rpc_impl.with_ycash_mining(kogany_rpc::mining_hooks(
             latest_chain_tip.clone(),

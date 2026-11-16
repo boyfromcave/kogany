@@ -9,6 +9,8 @@ pub mod zip317;
 
 // kogany W8: the Ycash coinbase tag, health refusal, sigops and template filter.
 #[cfg(feature = "ycash")]
+pub mod coinbase_for;
+#[cfg(feature = "ycash")]
 pub mod ycash;
 
 #[cfg(test)]

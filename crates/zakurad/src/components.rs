@@ -7,6 +7,8 @@ pub mod inbound;
 #[allow(missing_docs)]
 pub mod mempool;
 pub mod metrics;
+#[cfg(feature = "ycash")]
+pub mod sapling_output_params;
 #[allow(missing_docs)]
 pub mod sync;
 #[allow(missing_docs)]
