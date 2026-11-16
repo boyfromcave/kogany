@@ -79,14 +79,14 @@ fn regtest_ydf_shares_match_ycashd() {
 }
 
 /// The fast testnet across its own mandate end (beta3 item 5; `mandate_end::TESTNET_FAST`,
-/// provisional): one block below it the template carries the required 5 % output and
+/// set at the beta3 cut): one block below it the template carries the required 5 % output and
 /// `foundersreward` whatever `mining.ydf` says; from it on the node's setting decides, as on
 /// mainnet past 2,275,000, and the default pays the miner in full.
 #[test]
 fn fast_testnet_shares_follow_its_own_mandate_end() {
     let fast = Network::new_default_testnet();
     let end = ydf::mandate_end::TESTNET_FAST;
-    assert_eq!(end, Height(600_000));
+    assert_eq!(end, Height(512_417));
 
     let below = Height(end.0 - 1);
     let s = subsidy(&fast, below.0);

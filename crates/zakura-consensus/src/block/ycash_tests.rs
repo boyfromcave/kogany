@@ -190,10 +190,10 @@ fn ydf_missing_or_wrong_amount_rejects_until_the_mandate_ends() {
 #[test]
 fn ydf_lists_and_heights_on_testnet_and_regtest() {
     let fast = Network::new_default_testnet();
-    // The fast profile's own end (beta3 item 5): provisional until the release-candidate cut,
-    // the same constant as `TESTNET_FAST_YDF_MANDATE_END_HEIGHT` on the C++ lines.
-    assert_eq!(ydf::mandate_end::TESTNET_FAST, Height(600_000));
-    assert_eq!(ydf::ydf_mandate_end_height(&fast), Height(600_000));
+    // The fast profile's own end (beta3 item 5), set at the beta3 cut: the same value as
+    // `TESTNET_FAST_YDF_MANDATE_END_HEIGHT` on the C++ lines.
+    assert_eq!(ydf::mandate_end::TESTNET_FAST, Height(512_417));
+    assert_eq!(ydf::ydf_mandate_end_height(&fast), Height(512_417));
     assert_eq!(ydf::ydf_address(&fast, Height(510_247)), None);
     assert_eq!(
         ydf::ydf_address(&fast, Height(510_248)).map(|a| a.to_string()),
@@ -203,9 +203,9 @@ fn ydf_lists_and_heights_on_testnet_and_regtest() {
         ydf::ydf_address(&fast, Height(510_248 + 17_917)).map(|a| a.to_string()),
         Some(ydf::TESTNET_YDF_ADDRESSES[1].to_string())
     );
-    assert!(ydf::ydf_reward(&fast, Height(599_999)) > Amount::<NonNegative>::zero());
+    assert!(ydf::ydf_reward(&fast, Height(512_416)) > Amount::<NonNegative>::zero());
     assert_eq!(
-        ydf::ydf_reward(&fast, Height(600_000)),
+        ydf::ydf_reward(&fast, Height(512_417)),
         Amount::<NonNegative>::zero()
     );
 
@@ -311,7 +311,7 @@ fn fund_output_verdicts(net: &Network, height: u32) -> [bool; 4] {
 /// Beta3 item 5: the end of the YDF mandate, E, on every network. At E - 1 the output of exactly
 /// `subsidy / 20` to the fund address is required: its absence, another amount and another script
 /// are rejected. At E and at E + 1 a block is valid without it and with it (and with any other
-/// output: the rule no longer looks). E is 600,000 on the fast testnet (provisional), 5 on
+/// output: the rule no longer looks). E is 512,417 on the fast testnet (the beta3 cut), 5 on
 /// regtest, 2,275,000 on mainnet and on the slow and legacy shadow forks, and 900,000 on a
 /// configured testnet with a magic of its own.
 #[test]
@@ -332,7 +332,7 @@ fn fund_output_is_required_below_the_mandate_end_and_optional_from_it() {
     ));
 
     for (name, net, end) in [
-        ("fast", fast, 600_000),
+        ("fast", fast, 512_417),
         ("regtest", Network::new_regtest(Default::default()), 5),
         ("mainnet", Network::Mainnet, 2_275_000),
         ("slow", Network::new_ycash_testnet_slow(), 2_275_000),
