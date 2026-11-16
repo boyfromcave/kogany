@@ -65,7 +65,7 @@ pub fn is_tip_state_dependent(error: &TransactionError) -> bool {
 /// never cached: the transaction is kept and verified again (ycashd checks against one locked tip
 /// and has no such answer).
 pub fn is_tip_moved(error: &TransactionError) -> bool {
-    matches!(error, TransactionError::Other(message) if message.ends_with("the chain tip moved, retry"))
+    error.is_tip_moved()
 }
 
 /// Returns true if `error` is a missing input: a parent this node does not have yet (ycashd's
@@ -256,12 +256,23 @@ mod tests {
         }
 
         // The verifier's "the chain tip moved, retry" (vault set state or YED state read at another
-        // tip): kept and verified again, never cached; any other `Other` is cached.
-        for message in [
-            "the vault set state is not at the parent of height Height(201): the chain tip moved, retry",
-            "the YED state is not at the parent of height Height(201): the chain tip moved, retry",
+        // tip): kept and verified again, never cached; any other `Other` is cached. Built with
+        // `TransactionError::tip_moved`, the constructor both producers call (the vault snapshot in
+        // `transaction.rs`, the YED check in `transaction/vault_mempool.rs`), so a change of its
+        // wording cannot unlink the retry. The texts stay what the RPC reported before.
+        for (state, message) in [
+            (
+                "the vault set state",
+                "the vault set state is not at the parent of height Height(201): the chain tip moved, retry",
+            ),
+            (
+                "the YED state",
+                "the YED state is not at the parent of height Height(201): the chain tip moved, retry",
+            ),
         ] {
-            let error = TransactionError::Other(message.into());
+            let error = TransactionError::tip_moved(state, Height(201));
+            assert_eq!(error, TransactionError::Other(message.into()));
+            assert!(is_tip_moved(&error), "{message}");
             assert!(is_tip_state_dependent(&error), "{message}");
             assert!(is_kept(&error), "{message}");
             assert!(!is_missing_input(&error), "{message}");

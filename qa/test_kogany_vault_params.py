@@ -91,14 +91,35 @@ class ReleaseGuardTest(unittest.TestCase):
         for bad in ("v1.8.0", "1.8.0-ycash.rc1", "v1.8.0-ycash.rc", "v1.8.0-ycash.alpha1", "v1.8.0-ycash.rc1 "):
             self.assertIsNone(vault_params.stage_of(bad), bad)
 
-    def test_provisional_height_refuses_rc_and_final_and_passes_beta(self):
+    def test_provisional_height_refuses_rc_and_final(self):
         p = vault_params.PROVISIONAL_FAST_YDF_MANDATE_END_HEIGHT
         self.assertEqual(p, 600_000)
-        self.assertEqual(vault_params.release_problems(p, "beta"), [])
         for stage in ("rc", "final"):
             problems = vault_params.release_problems(p, stage)
             self.assertEqual(len(problems), 1)
             self.assertIn("provisional 600000", problems[0])
+
+    def test_r9_binds_a_beta_from_beta3_on(self):
+        # ycash6's R9_BETA_FROM (6.22.0-beta3) and kogany's are the same cut.
+        self.assertEqual(vault_params.R9_BETA_FROM, (1, 8, 0, 3))
+        p = vault_params.PROVISIONAL_FAST_YDF_MANDATE_END_HEIGHT
+        for old in ("v1.8.0-ycash.beta1", "v1.8.0-ycash.beta2", "v1.7.9-ycash.beta9"):
+            self.assertFalse(vault_params.r9_applies("beta", old), old)
+            self.assertEqual(vault_params.release_problems(p, "beta", old), [], old)
+            self.assertEqual(vault_params.release_problems(None, "beta", old), [], old)
+        for new in ("v1.8.0-ycash.beta3", "v1.8.0-ycash.beta10", "v1.8.1-ycash.beta1", "v2.0.0-ycash.beta1"):
+            self.assertTrue(vault_params.r9_applies("beta", new), new)
+            problems = vault_params.release_problems(p, "beta", new)
+            self.assertEqual(len(problems), 1, new)
+            self.assertIn("provisional 600000", problems[0])
+            self.assertIn("unset", vault_params.release_problems(None, "beta", new)[0])
+            self.assertEqual(vault_params.release_problems(512_345, "beta", new), [], new)
+        # The strictest reading: a beta named by no tag, or by another shape, is bound.
+        for unnamed in (None, "", "v1.8.0-ycash.beta02", "1.8.0-ycash.beta1"):
+            self.assertTrue(vault_params.r9_applies("beta", unnamed), unnamed)
+        self.assertEqual(len(vault_params.release_problems(p, "beta")), 1)
+        for stage in ("rc", "final"):
+            self.assertTrue(vault_params.r9_applies(stage, "v1.8.0-ycash.beta1"))
 
     def test_a_set_height_passes_and_an_unset_one_refuses(self):
         self.assertEqual(vault_params.release_problems(512_345, "rc"), [])
@@ -118,18 +139,51 @@ class ReleaseGuardTest(unittest.TestCase):
         with open(os.path.join(root, vault_params.YDF_SOURCE), encoding="utf-8") as f:
             self.assertIsInstance(vault_params.fast_ydf_end_from_source(f.read()), int)
 
-    def _tree(self, height):
+    def _tree(self, height, notes=("v1.8.0-ycash.beta3", "v1.8.0-ycash.rc1", "v1.8.0-ycash.1")):
         d = tempfile.mkdtemp()
         path = os.path.join(d, vault_params.YDF_SOURCE)
         os.makedirs(os.path.dirname(path))
         with open(path, "w", encoding="utf-8") as f:
             f.write(self.SOURCE % height)
+        os.makedirs(os.path.join(d, "doc", "release-notes"))
+        for tag in notes:   # R10: finished notes for every tag a test cuts
+            with open(os.path.join(d, vault_params.NOTES_FILE % tag), "w", encoding="utf-8") as f:
+                f.write("koganyd %s\n\nThe mandate ends at 512,345.\n" % tag)
         return d
+
+    def test_r10_release_notes(self):
+        self.assertEqual(vault_params.notes_problems("koganyd\n\nends at 512,345\n", "n.md"), [])
+        for marker in vault_params.NOTES_PLACEHOLDERS:
+            self.assertEqual(vault_params.notes_problems("t\n\nx %s y\n" % marker, "n.md"),
+                             ["R10: n.md line 3 still holds the placeholder %r" % marker], marker)
+        # The forms the beta3 notes carried before the cut.
+        for line in ("`<HEIGHT, set at the release-candidate cut>`", "yew `<YEW COMMIT, set at the release>`",
+                     "git checkout <YEW COMMIT>"):
+            self.assertEqual(len(vault_params.notes_problems(line, "n.md")), 1, line)
+        self.assertIn("missing", vault_params.notes_problems(None, "n.md")[0])
+        self.assertIn("empty", vault_params.notes_problems("\n", "n.md")[0])
+        cut = self._tree("512_345")
+        tag = "v1.8.0-ycash.beta3"
+        with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+            self.assertEqual(vault_params.main(["release", tag, "--root", cut]), 0)
+            with open(os.path.join(cut, vault_params.NOTES_FILE % tag), "a", encoding="utf-8") as f:
+                f.write("git checkout <YEW COMMIT>\n")
+            self.assertEqual(vault_params.main(["release", tag, "--root", cut]), 1)
+            os.remove(os.path.join(cut, vault_params.NOTES_FILE % tag))
+            self.assertEqual(vault_params.main(["release", tag, "--root", cut]), 1)
+            # beta1 and beta2 predate R10 (and R9): no notes needed.
+            self.assertEqual(vault_params.main(["release", "v1.8.0-ycash.beta2", "--root", self._tree("600_000", notes=())]), 0)
+        out = io.StringIO()
+        with redirect_stdout(out):
+            vault_params.main(["release", tag, "--root", cut])
+        self.assertIn("R10: no release notes: doc/release-notes/v1.8.0-ycash.beta3.md is missing", out.getvalue())
 
     def test_main_release_exit_codes(self):
         provisional, cut = self._tree("600_000"), self._tree("512_345")
         with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
-            self.assertEqual(vault_params.main(["release", "v1.8.0-ycash.beta3", "--root", provisional]), 0)
+            self.assertEqual(vault_params.main(["release", "v1.8.0-ycash.beta2", "--root", provisional]), 0)
+            self.assertEqual(vault_params.main(["release", "v1.8.0-ycash.beta3", "--root", provisional]), 1)
+            self.assertEqual(vault_params.main(["release", "v1.8.0-ycash.beta3", "--root", cut]), 0)
             self.assertEqual(vault_params.main(["release", "v1.8.0-ycash.rc1", "--root", provisional]), 1)
             self.assertEqual(vault_params.main(["release", "v1.8.0-ycash.1", "--root", provisional]), 1)
             self.assertEqual(vault_params.main(["release", "v1.8.0-ycash.rc1", "--root", cut]), 0)

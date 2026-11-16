@@ -460,6 +460,28 @@ impl From<BoxError> for TransactionError {
     }
 }
 
+/// kogany (beta3 review): the ending of the mempool verifier's "the chain tip moved, retry"
+/// answer. [`TransactionError::tip_moved`] writes it and [`TransactionError::is_tip_moved`] reads
+/// it, so the mempool's retry (`zakurad` `mempool/state_retry.rs`) cannot lose the answer to a
+/// wording change.
+pub const TIP_MOVED_RETRY: &str = "the chain tip moved, retry";
+
+impl TransactionError {
+    /// kogany: the mempool verifier's answer when `state` (the vault set state, the YED state)
+    /// was read at another tip than the parent of `height`: a block was committed between the
+    /// two reads. It says nothing about the transaction.
+    pub fn tip_moved(state: &str, height: block::Height) -> Self {
+        Self::Other(format!(
+            "{state} is not at the parent of height {height:?}: {TIP_MOVED_RETRY}"
+        ))
+    }
+
+    /// kogany: returns true if `self` is a [`Self::tip_moved`] answer.
+    pub fn is_tip_moved(&self) -> bool {
+        matches!(self, Self::Other(message) if message.ends_with(TIP_MOVED_RETRY))
+    }
+}
+
 impl TransactionError {
     /// Classify a transaction-verification failure for the body-evidence boundary.
     pub fn body_verification_class(&self) -> zakura_header_chain::BodyVerificationClass {

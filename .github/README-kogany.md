@@ -119,7 +119,7 @@ re-runs its consumers.
 | `kogany-client-legs` | `koganyd / koganyd-bin` (called `kogany-bin`) | this run's `koganyd-bin` | — | yes | 35 / 10 min |
 | | `lightwalletd-dd`, `chain-viz`, `yolo` (each report-only) | the client unmodified at its pin against this run's koganyd (`crates/kogany-rpc/qa/kogany_client_legs.py`; yolo's `tests/regtest.rs` kogany mode with ycash6's node-bin) | no, until the lead architect flips one | each | 10–40 min |
 | `kogany-mixed` | `koganyd / koganyd-bin`, `ycash6 node-bin` | the two binaries | — | each | 35 / 1 min |
-| | `mixed node`, `vault`, `yed`, `fees`, `attest` | ycash6's `qa/kogany_mixed_shards.py run <group>` at the pinned ycash6 commit: `gate` scripts block, `report` scripts never fail the job (the shard list at the pin says which is which); the `node` group also runs kogany's own cross-line scripts from `crates/kogany-rpc/qa` with the two binaries: `reorg_parity.py` (the reorganisation guard, beta3 item 12; blocking since it passed on a runner), and, report-only until each has passed on a runner (then the coordinator removes its `continue-on-error`), `coinbase_for_parity.py` (item 3), `value_pools_parity.py` (items 2 and 11) and `rpc_insight_inputs_parity.py` (item 6), which need a ycashd with `getcoinbasetemplatefor`, `transparentPools` and ycash6 #128: ycash6 `3ed5a96c2` or later | its `gate` scripts and `reorg_parity.py` | each | 30–180 min |
+| | `mixed node`, `vault`, `yed`, `fees`, `attest` | ycash6's `qa/kogany_mixed_shards.py run <group>` at the pinned ycash6 commit: `gate` scripts block, `report` scripts never fail the job (the shard list at the pin says which is which); the `node` group also runs kogany's own cross-line scripts from `crates/kogany-rpc/qa` with the two binaries: `reorg_parity.py` (the reorganisation guard, beta3 item 12), `value_pools_parity.py` (items 2 and 11) and `rpc_insight_inputs_parity.py` (item 6) and `coinbase_for_parity.py` (item 3, with the `sapling-output.params` of the `zcash-params-v1` release), each blocking since it passed on a runner; they need a ycashd with `getcoinbasetemplatefor`, `transparentPools` and ycash6 #128: ycash6 `3ed5a96c2` or later | its `gate` scripts, `reorg_parity.py`, `value_pools_parity.py`, `rpc_insight_inputs_parity.py` and `coinbase_for_parity.py` | each | 30–180 min |
 
 Blocking means a candidate for a required status check (see "Turning Actions on"); a
 `continue-on-error` job never turns its run red. The durations are estimates for a
@@ -251,10 +251,12 @@ Never bump it while a release is in qualification.
 `v<X.Y.Z>-ycash.<beta|rc><n>` (or a dispatch naming one) and on no branch. Its `guard` job refuses
 any other form, refuses a final `vX.Y.Z-ycash.N` (kogany is not a qualified line, plan K-19), and
 requires X.Y.Z to equal the `kogany` crate version in `crates/zakurad/Cargo.toml` (pre-release
-suffix ignored), and refuses an rc tag while testnet-yb-fast's YDF mandate end
-(`mandate_end::TESTNET_FAST`) is the provisional 600,000 (`qa/kogany_vault_params.py release`,
-ycash6's rule R9; a beta tag passes): the release-candidate cut sets the same height on the three
-lines first, and `audit vault-params (d)` checks kogany's equals ycash6's. Three native jobs build `koganyd` (`--release --features "default-release-binaries
+suffix ignored), and refuses an rc tag, and a beta tag from `v1.8.0-ycash.beta3` on, while
+testnet-yb-fast's YDF mandate end (`mandate_end::TESTNET_FAST`) is unset or the provisional 600,000
+(`qa/kogany_vault_params.py release`, ycash6's rule R9 and its `R9_BETA_FROM`; the fast testnet
+runs betas, so a beta with the provisional value would never end the mandate there; beta1 and beta2
+predate the value and still pass), and, wherever that rule binds, a tag whose notes
+`doc/release-notes/<tag>.md` are missing or still hold a placeholder (R10, ycash6's rule): the cut sets the same height on the three lines first, and `audit vault-params (d)` checks kogany's equals ycash6's. Three native jobs build `koganyd` (`--release --features "default-release-binaries
 ycash"`, no Rust cache, so a release never restores a cache; no system RocksDB, so the bundled one is
 linked statically) on ubuntu-24.04, ubuntu-24.04-arm and
 macos-15, and pack `koganyd_<tag>_<platform>.tar.gz` (`koganyd`, `README.txt`, the licences,

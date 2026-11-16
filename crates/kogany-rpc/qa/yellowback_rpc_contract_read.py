@@ -10,7 +10,7 @@
 
 It reuses ycash6's own checker, unmodified: the `Contract` class of
 `qa/rpc-tests/yellowback_rpc_contract.py` with its `OPTIONAL` and `NULLABLE` tables, over
-`doc/yellowback-rpc-contract.json` (rpcversion 10; 9 accepted, see `CXX_RPC_VERSIONS`). The 27 node-context methods are kogany's (the
+`doc/yellowback-rpc-contract.json` (rpcversion 10, see `CXX_RPC_VERSIONS`). The 27 node-context methods are kogany's (the
 25 reads and the node-state `yed_setquote` and `yed_addattestation`); the 25 wallet-context
 methods are yewd's (plan K-3, K-20), and kogany must answer them `-32601`.
 
@@ -54,10 +54,9 @@ NOT_LIVE = 'Method not found (Yellowback is not active'
 # to 10 for the run's additions).
 KOGANY_RPC_VERSION = 10
 # The rpcversion this script accepts from ycash6 (its doc/yellowback-rpc-contract.json and a live
-# ycashd's yed_getinfo): 10 from ycash6's own beta3 step (R-1, branch up/b3-rpcversion-10); 9, the
-# ycash6 upgrade/vault of today (3ed5a96c2), until that step merges. So neither line's CI waits for
-# the other; drop 9 once ycash6 upgrade/vault reports 10.
-CXX_RPC_VERSIONS = (9, 10)
+# ycashd's yed_getinfo): exactly 10, ycash6's beta3 step (#131, c7ab964fc). 9 was accepted while
+# that step was open, so neither line's CI waited for the other.
+CXX_RPC_VERSIONS = (10,)
 
 NODE_METHODS = [
     'yed_getinfo', 'yed_getstatehash', 'yed_verifyindex', 'yed_getstats', 'yed_getprice',

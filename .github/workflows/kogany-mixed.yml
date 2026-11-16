@@ -54,10 +54,11 @@ concurrency:
 
 env:
   YCASH6_REPO: boyfromcave/ycash6
-  # The pin: ycash6 upgrade/vault at the merge of #130 (3ed5a96c2: getcoinbasetemplatefor,
-  # transparentPools, the insight input addresses of #128 and the shard list's beta3 gates), unless
-  # a dispatch or caller names another commit. Bump by PR, never a branch tip.
-  YCASH6_REV: ${{ inputs.ycash6_rev || '3ed5a96c233f0ec9d4d8ad08b0aaa24afc22dec3' }}
+  # The pin: ycash6 upgrade/vault at the merge of #131 (c7ab964fc: rpcversion 10, on #130's
+  # getcoinbasetemplatefor, transparentPools, the insight input addresses of #128 and the shard
+  # list's beta3 gates), unless a dispatch or caller names another commit. Bump by PR, never a
+  # branch tip.
+  YCASH6_REV: ${{ inputs.ycash6_rev || 'c7ab964fc76d135edeebed6269ef6381a600266e' }}
 
 jobs:
   koganyd:
@@ -165,7 +166,10 @@ jobs:
       # kogany's scripts from this commit, once each, in the node group. reorg_parity.py (beta3
       # item 12, R1) blocks: an upstream sync that drops the guard from the state writer fails here.
       # The beta3 parity scripts after it are report-only until each has passed on a runner; the
-      # coordinator then removes its continue-on-error.
+      # coordinator then removes its continue-on-error. value_pools_parity.py and
+      # rpc_insight_inputs_parity.py passed in the #42 PR run (43835275455) and block;
+      # coinbase_for_parity.py passed in the #43 PR run ("16 paired blocks accepted on both lines")
+      # and blocks.
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         if: ${{ !cancelled() && matrix.group == 'node' }}
         with:
@@ -181,27 +185,34 @@ jobs:
           python3 kogany/crates/kogany-rpc/qa/reorg_parity.py --koganyd "$KOGANY_BIN" \
             --ycash6-bin "$GITHUB_WORKSPACE/src" --workdir "$RUNNER_TEMP/mixed-tests/reorg-parity"
       # beta3 item 3: kogany's getcoinbasetemplatefor coinbases of every address kind, accepted by
-      # ycashd (it needs a ycashd with getcoinbasetemplatefor, ycash6 #130, and the Sapling output
-      # parameters fetched above).
-      - name: coinbase_for_parity.py (getcoinbasetemplatefor against ycashd; report-only)
+      # ycashd (it needs a ycashd with getcoinbasetemplatefor, ycash6 #130). koganyd needs ycashd's
+      # sapling-output.params to build a Sapling coinbase; ycash6's zcutil/fetch-params.sh above no
+      # longer downloads it (6.x bundles the parameters in ycashd), so it comes from the project's
+      # release with the pinned sum, as in kogany-tests.yml. Without it every Sapling call answered
+      # "Sapling output parameters are not loaded" (the #42 PR run, 43835275455).
+      - name: The Sapling output parameters (ycash-infra zcash-params-v1, the pinned sum)
+        if: ${{ !cancelled() && matrix.group == 'node' }}
+        run: |
+          curl -fsSL --retry 3 --max-time 120 --max-filesize 4000000 -o "$RUNNER_TEMP/sapling-output.params" \
+            https://github.com/boyfromcave/ycash-infra/releases/download/zcash-params-v1/sapling-output.params
+          echo "2f0ebbcbb9bb0bcffe95a397e7eba89c29eb4dde6191c339db88570e3f3fb0e4  $RUNNER_TEMP/sapling-output.params" | sha256sum -c -
+      - name: coinbase_for_parity.py (getcoinbasetemplatefor against ycashd)
         id: coinbase_for
         if: ${{ !cancelled() && matrix.group == 'node' }}
         timeout-minutes: 45
-        continue-on-error: true  # blocking once it has passed on a runner; the coordinator flips it
         run: |
           mkdir -p "$RUNNER_TEMP/mixed-tests"
           python3 kogany/crates/kogany-rpc/qa/coinbase_for_parity.py --koganyd "$KOGANY_BIN" \
             --ycashd-bin "$GITHUB_WORKSPACE/src" --solver-dir "$GITHUB_WORKSPACE/qa/rpc-tests" \
-            --sapling-output-params "$HOME/.zcash-params/sapling-output.params" \
+            --sapling-output-params "$RUNNER_TEMP/sapling-output.params" \
             --workdir "$RUNNER_TEMP/mixed-tests/coinbase-for-parity"
       # beta3 items 2 and 11: transparentPools and transactions at every height of the chain ycash6's
       # value_pools_by_type.py mines (a ycashd with transparentPools, ycash6 #130; its test from the
       # same checkout).
-      - name: value_pools_parity.py (transparentPools and transactions against ycashd; report-only)
+      - name: value_pools_parity.py (transparentPools and transactions against ycashd)
         id: value_pools
         if: ${{ !cancelled() && matrix.group == 'node' }}
         timeout-minutes: 60
-        continue-on-error: true  # blocking once it has passed on a runner; the coordinator flips it
         run: |
           mkdir -p "$RUNNER_TEMP/mixed-tests"
           python3 kogany/crates/kogany-rpc/qa/value_pools_parity.py --koganyd "$KOGANY_BIN" \
@@ -209,11 +220,10 @@ jobs:
             --python python3 --workdir "$RUNNER_TEMP/mixed-tests/value-pools-parity"
       # beta3 item 6: the opt-in insight input fields and blockfee against a -insightexplorer ycashd
       # (one that names the address of a post-quantum input, ycash6 #128).
-      - name: rpc_insight_inputs_parity.py (insight input fields and blockfee against ycashd; report-only)
+      - name: rpc_insight_inputs_parity.py (insight input fields and blockfee against ycashd)
         id: insight_inputs
         if: ${{ !cancelled() && matrix.group == 'node' }}
         timeout-minutes: 30
-        continue-on-error: true  # blocking once it has passed on a runner; the coordinator flips it
         run: |
           mkdir -p "$RUNNER_TEMP/mixed-tests"
           python3 kogany/crates/kogany-rpc/qa/rpc_insight_inputs_parity.py --koganyd "$KOGANY_BIN" \
