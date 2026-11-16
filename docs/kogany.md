@@ -99,7 +99,17 @@ behaviours follow ycashd's there, each against Zakura's own:
   been detected that would roll back <n> blocks! This is larger than the maximum of 99 blocks,
   and so the node is shutting down for your safety.", with the two tips and the fork point, and
   shuts down on its old tip. No block is marked invalid. The guard is asked when a block is
-  committed and on `reconsiderblock`, as on ycashd. Zakura's own window stays 1,000 blocks
+  committed and on `reconsiderblock` and `invalidateblock`, as on ycashd.
+
+  _`invalidateblock`._ ycashd disconnects the best chain down to the parent of the invalidated
+  block without asking the depth (`InvalidateBlock`, `src/main.cpp:5245-5267`), and the
+  `ActivateBestChain` that follows (`src/rpc/blockchain.cpp:2175`) asks it from that parent. So
+  does `koganyd`: the blocks at and above the invalidated one are not counted, and the call is
+  refused only when it would leave the node on a branch that forks more than 99 blocks below
+  that parent. ycashd has by then marked the block invalid and is on its parent;
+  `koganyd` refuses before it changes anything, so after the record is removed the node is on
+  the tip it had. To invalidate that block all the same, first `invalidateblock` the first
+  block of the other branch. Zakura's own window stays 1,000 blocks
   (`MAX_BLOCK_REORG_HEIGHT`), and a `koganyd` built without the `ycash` feature follows any
   branch inside it.
 
@@ -113,7 +123,9 @@ behaviours follow ycashd's there, each against Zakura's own:
   database's directory, `<state.cache_dir>/state/v<major>/<network>/`, and **the node stops at
   every start while that file exists**, whether or not the non-finalized backup is on, as a
   ycashd meets the branch in its block index at every start. The file holds the message; if it
-  is empty or cannot be read the node still stops, and says where the file is. The directory is
+  is empty or cannot be read the node still stops, and says where the file is. If the message
+  cannot be written (a full disk) the file is made empty, which counts; if no file can be made
+  at all, the failure the node stops with says that nothing stops its next start. The directory is
   the one of the database's major format version: a `koganyd` release with a new major version
   opens a new directory and builds its state again from genesis, so it has neither the record
   nor the tip the record was about, like a ycashd on an empty data directory. Decide and remove
@@ -150,8 +162,9 @@ behaviours follow ycashd's there, each against Zakura's own:
   6. Restore the network settings and start the node again.
 
   _To accept the new chain:_ steps 1 to 4, then `invalidateblock` the first block of the old
-  chain above the fork point (`getblockhash <fork height + 1>`), which is not asked the depth
-  either on ycashd (`InvalidateBlock` disconnects before `ActivateBestChain` runs). The stored
+  chain above the fork point (`getblockhash <fork height + 1>`). Its parent is the fork point,
+  which the other branch holds, so nothing is rolled back from it and the call is never refused,
+  on ycashd as here. The stored
   part of the other branch becomes the best chain, and the node takes the rest from its peers
   after step 6. `preciousblock`, which ycashd does not have, is an operator's override between
   tips of equal work only and is not asked the depth: it cannot move the node to a branch with
@@ -162,13 +175,20 @@ behaviours follow ycashd's there, each against Zakura's own:
   _With the backup off_ a node that is started without the record has only its finalized
   blocks: it has no tip to keep, and follows the chain with the most work its peers give it,
   which is the new one. That node cannot be kept on the old chain by removing the record; turn
-  the backup on before it is needed on any node that must be able to make this choice.
+  the backup on before it is needed on any node that must be able to make this choice. The same
+  holds for any restart of such a node, refusal or not: it comes back without the blocks above
+  its finalized tip (up to 1,000), has no tip to compare with, and follows its peers' best chain
+  where a ycashd, which keeps its tip, would stop. `koganyd` warns of this at every start with
+  the backup off.
 
   Proved by `crates/kogany-rpc/qa/reorg_parity.py` against ycashd (depths 99, 100, 101, the
   restarts, and the restart without the record), and in `zakura-state` by
   `running_writer_refuses_a_commit_that_rolls_back_100_blocks` (and its `_header_integrated`
   twin, the path the node uses),
   `running_writer_refuses_a_reconsideration_that_rolls_back_100_blocks`,
+  `running_writer_refuses_an_invalidation_that_rolls_back_102_blocks` (and its
+  `_header_integrated` twin), `reorg_guard_asks_an_invalidation_from_the_parent_as_ycashd`,
+  `reorg_refusal_is_recorded_when_its_message_cannot_be_written`,
   `restored_best_chain_is_the_one_the_node_was_on` and
   `ycash_restart_keeps_the_tip_the_node_was_on`.
 - **Templates.** `getblocktemplate` has no limit on unpaid ZIP-317 actions by default, as ycashd's
@@ -210,7 +230,12 @@ behaviours follow ycashd's there, each against Zakura's own:
   transparent and post-quantum addresses are unaffected. With the file, `getblocktemplate` also
   serves a Sapling `mining.miner_address` (ycashd's `-mineraddress=<Sapling>`): the miner's
   reward is one Sapling output and only the fund output is transparent. Proofs are made off the
-  async worker threads, at most four at once; one takes about 0.2 s on a current desktop core.
+  async worker threads, at most four at once; one takes about 0.2 s on a current desktop core,
+  and a call that finds no free slot within 30 s is refused. `getcoinbasetemplatefor` is in the
+  access class of `getblocktemplate` and `submitblock`: with `rpc.enable_cookie_auth = true`
+  (the default) it needs the cookie, as on ycashd, where every RPC is authenticated; with
+  cookie authentication off, whoever reaches the RPC port can call the three of them, and can
+  keep the four proof slots busy. Keep the cookie on, or the port unreachable, on a pool's node.
 - **The insight explorer fields.** `rpc.insight_explorer = true` is kogany's counterpart of
   ycashd's `-insightexplorer` for the transaction and block answers (off by default). On an
   archive node it adds `value`, `valueSat` and `address` to every non-coinbase input in

@@ -482,11 +482,25 @@ fn refuse_reorg(
              this file exists. Remove it to start the node again; it stops again if it \
              meets the same branch"
         ),
-        Err(error) => tracing::error!(
-            ?error,
-            ?db_path,
-            "could not record the refused reorganization beside the state database"
-        ),
+        Err(error) => {
+            // The node stops on this failure either way; what is lost is the stop at the next
+            // start, and only the operator can supply that, so the failure says it.
+            tracing::error!(
+                ?error,
+                ?db_path,
+                "could not record the refused reorganization beside the state database"
+            );
+            return BlockWriteTaskExit::ReorgRefused(BlockWriteTaskFailure {
+                message: format!(
+                    "{message}\n\nThis refusal could not be recorded in {} ({error}), so \
+                     nothing stops the node at its next start: without the non-finalized \
+                     backup it follows the new chain. Decide which chain is right before \
+                     starting it again (\"Deep reorganisations\" in docs/kogany.md).",
+                    reorg_guard::refusal_path(db_path).display()
+                )
+                .into(),
+            });
+        }
     }
     BlockWriteTaskExit::ReorgRefused(BlockWriteTaskFailure {
         message: message.into(),
@@ -2532,6 +2546,17 @@ impl WriteBlockWorkerTask {
         if let Some(exit) = recorded_reorg_refusal(finalized_state.db.path()) {
             return exit;
         }
+        // kogany (beta3 R1): the guard compares with the tip the node is on, and without the
+        // backup a restarted node has no such tip.
+        #[cfg(feature = "ycash")]
+        if backup_dir_path.is_none() && !finalized_state.db.config().ephemeral {
+            tracing::warn!(
+                "state.should_backup_non_finalized_state is off: after a restart this node has \
+                 only its finalized blocks, and follows the chain with the most work its peers \
+                 give it, also where that rolls back more than 99 blocks of the chain it was \
+                 on. Turn the backup on to keep the reorganisation guard across restarts"
+            );
+        }
 
         let mut prev_finalized_note_commitment_trees: Option<NoteCommitmentTrees> = None;
         let mut deferred_non_finalized_messages = VecDeque::new();
@@ -3159,6 +3184,15 @@ impl WriteBlockWorkerTask {
                     write_slot: _write_slot,
                 } => {
                     tracing::info!(?hash, "invalidating a block in the non-finalized state");
+                    // kogany (beta3 R1): `invalidateblock` is guarded as on ycashd, whose
+                    // `invalidateblock` ends in `ActivateBestChain` (ycash6
+                    // `src/rpc/blockchain.cpp:2171-2175`): the depth is asked from the parent of
+                    // the invalidated block. A refused invalidation is never made, and the
+                    // caller's answer is the closed channel.
+                    #[cfg(feature = "ycash")]
+                    if let Some(refused) = non_finalized_state.refused_invalidation(hash) {
+                        return refuse_reorg(finalized_state.db.path(), refused);
+                    }
                     let result = if let Some(writer) = header_chain.as_ref() {
                         let mut staged = non_finalized_state.clone();
                         staged.invalidate_block(hash).and_then(|result| {

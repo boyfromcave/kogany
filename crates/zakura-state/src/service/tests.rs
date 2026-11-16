@@ -3751,6 +3751,86 @@ async fn running_writer_refuses_a_reconsideration_that_rolls_back_100_blocks() {
     assert!(!published.any_chain_contains(&other[0].hash()));
 }
 
+/// kogany (beta3 R1): `invalidateblock` is guarded in the running writer as ycashd guards it,
+/// from the parent of the invalidated block. The node is on a branch of 110 blocks and holds
+/// another of 105 from genesis. Invalidating the tip leaves it on its branch. Invalidating
+/// block 103 would leave 102 blocks, fewer than the other branch, which forks 102 blocks below
+/// block 102: the writer refuses, makes no invalidation, records the refusal and exits.
+#[cfg(feature = "ycash")]
+#[tokio::test(flavor = "multi_thread")]
+async fn running_writer_refuses_an_invalidation_that_rolls_back_102_blocks() {
+    assert_running_writer_refuses_an_invalidation_that_rolls_back_102_blocks(false).await;
+}
+
+/// kogany (beta3 R1): the same on the header chain's staged path, the one the node uses.
+#[cfg(feature = "ycash")]
+#[tokio::test(flavor = "multi_thread")]
+async fn running_writer_refuses_an_invalidation_that_rolls_back_102_blocks_header_integrated() {
+    assert_running_writer_refuses_an_invalidation_that_rolls_back_102_blocks(true).await;
+}
+
+#[cfg(feature = "ycash")]
+async fn assert_running_writer_refuses_an_invalidation_that_rolls_back_102_blocks(
+    header_runtime: bool,
+) {
+    use crate::service::non_finalized_state::reorg_guard;
+
+    let _init_guard = zakura_test::init();
+    let cache_dir = tempfile::tempdir().expect("a temporary directory");
+    let (mut state, read, network, genesis, db_path, _backup_dir) =
+        persistent_nu5_state_with_genesis(cache_dir.path(), header_runtime).await;
+
+    let (old, answer) = commit_nu5_branch(&mut state, &network, &genesis, 110, 0).await;
+    answer.expect("the 110th block of the node's branch commits");
+    let (other, answer) = commit_nu5_branch(&mut state, &network, &genesis, 105, 1).await;
+    answer.expect("the 105th block of the other branch is stored");
+    assert_eq!(read.best_tip(), Some((Height(110), old[109].hash())));
+
+    // The tip: the node stays on its branch, one block lower, and the writer runs.
+    timeout(
+        Duration::from_secs(30),
+        (&mut state).oneshot(Request::InvalidateBlock(old[109].hash())),
+    )
+    .await
+    .expect("the invalidation completes")
+    .expect("the tip is invalidated");
+    assert_eq!(read.best_tip(), Some((Height(109), old[108].hash())));
+    assert_eq!(reorg_guard::recorded(&db_path), None);
+
+    // Block 103: the other branch would become the best chain, 102 blocks below block 102.
+    let answer = timeout(
+        Duration::from_secs(30),
+        (&mut state).oneshot(Request::InvalidateBlock(old[102].hash())),
+    )
+    .await
+    .expect("the invalidation is answered");
+    assert!(answer.is_err(), "the invalidation is not made");
+
+    let failure = timeout(Duration::from_secs(30), read.wait_for_writer_failure())
+        .await
+        .expect("the writer stops on the refusal")
+        .to_string();
+    let sentence = "A block chain reorganization has been detected that would roll back 102 \
+                    blocks! This is larger than the maximum of 99 blocks";
+    assert!(failure.contains(sentence), "{failure}");
+    assert_eq!(
+        read.best_tip(),
+        Some((Height(109), old[108].hash())),
+        "the best tip is unchanged"
+    );
+    let published = state.read_service.latest_non_finalized_state();
+    assert!(published.any_chain_contains(&old[102].hash()));
+    let record = reorg_guard::recorded(&db_path).expect("the refusal is recorded");
+    assert!(record.starts_with(sentence), "{record}");
+    for line in [
+        format!("- Current tip: {}, height 102\n", old[101].hash()),
+        format!("- New tip:     {}, height 105\n", other[104].hash()),
+        format!("- Fork point:  {}, height 0\n", genesis.hash()),
+    ] {
+        assert!(record.contains(&line), "{record}");
+    }
+}
+
 /// Returns `block` with different coinbase authorizing data under the same header.
 ///
 /// A v5 transaction ID does not commit to `scriptSig` (ZIP 244), so the Merkle root and block

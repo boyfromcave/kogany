@@ -197,3 +197,36 @@ async fn recorded_reorg_refusal_stops_the_writer_at_startup() {
         None
     );
 }
+
+/// kogany (beta3 R1): a refusal that cannot be recorded says so in the failure that stops the
+/// node, where the operator reads it: nothing stops the next start, and without the
+/// non-finalized backup that start follows the new chain.
+#[cfg(feature = "ycash")]
+#[test]
+fn unrecorded_reorg_refusal_says_that_the_next_start_is_not_stopped() {
+    use crate::service::non_finalized_state::reorg_guard;
+
+    let _init_guard = zakura_test::init();
+    let cache_dir = tempfile::tempdir().expect("a temporary directory");
+    // The database directory does not exist, so no record can be made in it.
+    let db_path = cache_dir.path().join("missing");
+    let refused = reorg_guard::RefusedReorg {
+        rollback: 100,
+        old_tip: (block::Height(300), block::Hash([1; 32])),
+        new_tip: (block::Height(301), block::Hash([2; 32])),
+        fork: (block::Height(200), block::Hash([3; 32])),
+    };
+
+    let failure = refuse_reorg(&db_path, refused)
+        .failure()
+        .expect("a refusal is a writer failure")
+        .to_string();
+    assert!(failure.contains(&refused.to_string()), "{failure}");
+    assert!(
+        failure.contains("could not be recorded")
+            && failure.contains(&reorg_guard::refusal_path(&db_path).display().to_string())
+            && failure.contains("nothing stops the node at its next start"),
+        "{failure}"
+    );
+    assert_eq!(reorg_guard::recorded(&db_path), None);
+}

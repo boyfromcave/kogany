@@ -11,7 +11,8 @@
 //! This is fork choice, not block validity: the guard never rejects a block, it stops the node
 //! before the best chain changes.
 //!
-//! The state writer asks [`NonFinalizedState::refused_reorg`] before it publishes a commit. On a
+//! The state writer asks [`NonFinalizedState::refused_reorg`] before it publishes a commit or a
+//! reconsideration, and [`NonFinalizedState::refused_invalidation`] before an invalidation. On a
 //! refusal it records the message beside the state database ([`record`]), and exits; the node
 //! shuts down on the writer's failure. While the record exists the node refuses to start
 //! ([`recorded_for`]) and the writer exits at once ([`recorded`]), whether or not the
@@ -146,6 +147,40 @@ impl NonFinalizedState {
             fork,
         })
     }
+
+    /// Returns the refusal if invalidating `hash` moves the node to a branch that forks more
+    /// than [`MAX_REORG_LENGTH`] blocks below the parent of `hash`.
+    ///
+    /// ycashd's `invalidateblock` disconnects the best chain down to that parent without asking
+    /// the depth (`InvalidateBlock`, ycash6 `src/main.cpp:5245-5267`), then calls
+    /// `ActivateBestChain` (`src/rpc/blockchain.cpp:2171-2175`), whose guard measures from the
+    /// tip it finds, the parent (`src/main.cpp:5004-5008`). So the blocks at and above `hash`
+    /// are not counted, and a branch that holds the parent rolls nothing back.
+    ///
+    /// `None` when `hash` is not in the best chain (the best chain keeps its tip), when it is
+    /// the first non-finalized block (the parent is the finalized tip, which every chain
+    /// keeps), and when the best chain after the invalidation holds the parent.
+    pub(crate) fn refused_invalidation(&self, hash: block::Hash) -> Option<RefusedReorg> {
+        let old = self.best_chain()?;
+        let parent_height = Height(old.height_by_hash(hash)?.0.checked_sub(1)?);
+        let parent = (parent_height, old.hash_by_height(parent_height)?);
+
+        let mut after = self.clone();
+        after.invalidate_block(hash).ok()?;
+        let new = after.best_chain()?;
+        if new.contains_block_hash(parent.1) {
+            return None;
+        }
+
+        let (_, fork) = rollback(old, new);
+        let rollback = parent.0 .0.saturating_sub(fork.0 .0);
+        (rollback > MAX_REORG_LENGTH).then(|| RefusedReorg {
+            rollback,
+            old_tip: parent,
+            new_tip: new.non_finalized_tip(),
+            fork,
+        })
+    }
 }
 
 /// The path of the refusal record for the state database at `db_path`.
@@ -189,9 +224,26 @@ fn sync_parent_dir(path: &Path) -> io::Result<()> {
 /// The record does not depend on the non-finalized backup. An ephemeral database is deleted with
 /// its directory when the node stops, and the record with it: its next start is a new node at
 /// genesis, which has no tip to roll back.
+///
+/// If the message cannot be written (a full disk), the file is still made, empty and without
+/// touching a record that is there: [`recorded`] counts a file with no message, so the node
+/// stays down either way. An error means there is no record at all.
 pub(crate) fn record(db_path: &Path, message: &str) -> io::Result<PathBuf> {
     let path = refusal_path(db_path);
-    write_durably(&path, message.as_bytes())?;
+    if let Err(error) = write_durably(&path, message.as_bytes()) {
+        tracing::error!(
+            ?error,
+            ?path,
+            "could not write the refused reorganization's message: recording the refusal \
+             without it"
+        );
+        fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&path)?
+            .sync_all()?;
+        sync_parent_dir(&path)?;
+    }
     Ok(path)
 }
 

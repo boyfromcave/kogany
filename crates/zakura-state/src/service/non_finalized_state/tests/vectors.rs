@@ -1962,6 +1962,141 @@ fn reorg_guard_counts_rolled_back_blocks_as_ycashd() -> Result<()> {
     Ok(())
 }
 
+/// kogany (beta3 R1): `invalidateblock` is asked the depth as ycashd asks it. `InvalidateBlock`
+/// disconnects down to the parent of the invalidated block unasked (ycash6
+/// `src/main.cpp:5245-5267`), and the `ActivateBestChain` that follows
+/// (`src/rpc/blockchain.cpp:2175`) measures from that parent (`src/main.cpp:5004-5008`): a
+/// branch that forks 99 blocks below the parent is followed, 100 is refused, and the blocks at
+/// and above the invalidated one are not counted. An invalidation that leaves the node on a
+/// chain that holds the parent is never refused.
+#[cfg(feature = "ycash")]
+#[test]
+fn reorg_guard_asks_an_invalidation_from_the_parent_as_ycashd() -> Result<()> {
+    use crate::service::non_finalized_state::reorg_guard::RefusedReorg;
+
+    let _init_guard = zakura_test::init();
+
+    let network = Network::Mainnet;
+    let root: Arc<Block> = Arc::new(network.test_block(653599, 583999).unwrap());
+    let root_id = (root.coinbase_height().unwrap(), root.hash());
+    let finalized_state = FinalizedState::new(&Config::ephemeral(), &network)
+        .expect("opening an ephemeral database should succeed");
+    finalized_state.set_finalized_value_pool(ValueBalance::<NonNegative>::fake_populated_pool());
+
+    // `(depth, side_is_heavier)`: the blocks between the fork point (the root) and the parent of
+    // the invalidated block, and whether the side branch has more work than the best chain cut
+    // at that parent.
+    for (depth, side_is_heavier) in [(99_u32, true), (100, true), (100, false), (250, true)] {
+        let mut state = NonFinalizedState::new(&network);
+        state.commit_new_chain(root.clone().prepare(), &finalized_state)?;
+
+        // The best chain: `depth` blocks up to the parent, the invalidated block, and a tip.
+        let mut old = vec![root.clone()];
+        for _ in 0..depth + 2 {
+            let child = old.last().unwrap().make_fake_child().set_work(10);
+            state.commit_block(child.clone().prepare(), &finalized_state)?;
+            old.push(child);
+        }
+        let parent = &old[usize::try_from(depth).unwrap()];
+        let invalidated = &old[usize::try_from(depth).unwrap() + 1];
+        let old_tip = old.last().unwrap();
+
+        // One block on the root: less work than the best chain (`10 * depth + 20`), and more or
+        // less than the best chain cut at the parent (`10 * depth`).
+        let side_work = 10 * u128::from(depth) + 5 - if side_is_heavier { 0 } else { 10 };
+        let side = root
+            .make_fake_child()
+            .set_work(side_work)
+            .set_block_commitment([2; 32]);
+        state.commit_block(side.clone().prepare(), &finalized_state)?;
+        assert_eq!(state.best_tip().unwrap().1, old_tip.hash());
+        let before = state.clone();
+
+        // The tip: the node stays on the parent of the tip, which the cut chain holds.
+        assert_eq!(state.refused_invalidation(old_tip.hash()), None);
+        // A block of the side branch, an unknown block, and the first non-finalized block,
+        // whose parent is the finalized tip.
+        assert_eq!(state.refused_invalidation(side.hash()), None);
+        assert_eq!(state.refused_invalidation(block::Hash([7; 32])), None);
+        assert_eq!(state.refused_invalidation(root.hash()), None);
+
+        let refused = state.refused_invalidation(invalidated.hash());
+        // What the invalidation does when it is made: the guard reads the same change.
+        let mut after = state.clone();
+        after.invalidate_block(invalidated.hash())?;
+        if !side_is_heavier {
+            assert_eq!(after.best_tip().unwrap().1, parent.hash());
+            assert_eq!(refused, None, "the node stays on the parent");
+        } else {
+            assert_eq!(after.best_tip().unwrap().1, side.hash());
+            if depth <= 99 {
+                assert_eq!(
+                    refused, None,
+                    "{depth} blocks below the parent are rolled back"
+                );
+            } else {
+                let expected = RefusedReorg {
+                    rollback: depth,
+                    old_tip: (parent.coinbase_height().unwrap(), parent.hash()),
+                    new_tip: (side.coinbase_height().unwrap(), side.hash()),
+                    fork: root_id,
+                };
+                assert_eq!(refused, Some(expected), "{depth} blocks are refused");
+                assert!(expected.to_string().starts_with(&format!(
+                    "A block chain reorganization has been detected that would roll back {depth} \
+                     blocks! This is larger than the maximum of 99 blocks"
+                )));
+            }
+        }
+
+        // Asking changes nothing.
+        assert_eq!(state.best_tip(), before.best_tip());
+        assert_eq!(state.chain_count(), before.chain_count());
+    }
+
+    Ok(())
+}
+
+/// kogany (beta3 R1): a refusal whose message cannot be written is still recorded. The file is
+/// made without a message, which keeps the node down like any record, and a record that is
+/// there is left as it is. Only when no file can be made is there an error.
+#[cfg(feature = "ycash")]
+#[test]
+fn reorg_refusal_is_recorded_when_its_message_cannot_be_written() {
+    use crate::service::non_finalized_state::reorg_guard::{record, recorded, refusal_path};
+
+    let _init_guard = zakura_test::init();
+    let db_dir = tempfile::tempdir().expect("a temporary directory");
+    let path = refusal_path(db_dir.path());
+
+    // The temporary file the message is written to cannot be created: a directory has its name.
+    std::fs::create_dir(db_dir.path().join("ycash-reorg-refused.tmp")).unwrap();
+    assert_eq!(recorded(db_dir.path()), None);
+    assert_eq!(
+        record(db_dir.path(), "refused").expect("the refusal is recorded without its message"),
+        path
+    );
+    assert_eq!(std::fs::read(&path).unwrap(), b"");
+    let message = recorded(db_dir.path()).expect("an empty record counts");
+    assert!(
+        message.contains("is empty") && message.contains("more than 99 blocks"),
+        "{message}"
+    );
+
+    // A record with a message is not emptied by a later refusal that cannot write its own.
+    std::fs::write(&path, "the first refusal").unwrap();
+    record(db_dir.path(), "refused again").expect("the record stays");
+    assert_eq!(
+        recorded(db_dir.path()).as_deref(),
+        Some("the first refusal")
+    );
+
+    // No directory: nothing can be recorded, and the caller is told.
+    let missing = db_dir.path().join("missing");
+    record(&missing, "refused").expect_err("there is no directory to record in");
+    assert_eq!(recorded(&missing), None);
+}
+
 /// kogany (beta3 R1): the record of a refused reorganisation is a file beside the state
 /// database, so it does not depend on the non-finalized backup.
 #[cfg(feature = "ycash")]
