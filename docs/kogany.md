@@ -101,7 +101,12 @@ behaviours follow ycashd's there, each against Zakura's own:
   `invalidateblock`) return to the mempool and are verified at the new tip, as ycashd's
   `DisconnectTip` resurrects them; the mempool keeps the last 100 best-chain blocks' transactions
   for this. The non-finalized blocks are written to the backup directory before each tip update,
-  so a stopped node restarts at the tip it reported.
+  so a stopped node restarts at the tip it reported. The cost is one small file for each new
+  block. While the node holds a stale branch above its finalized tip (after a reorg, until the
+  branch is 1,000 blocks deep) it also writes its best tip beside the backup with a synced write
+  for each new block, which the reorganisation guard needs after a restart: about 10 ms a block
+  on the machine it was measured on, so such a node follows a burst of blocks at about 50 blocks
+  a second instead of 100 or more. A live network's block interval hides it.
 - **Deep reorganisations.** A change of best chain that would roll back more than 99 blocks is
   refused, as ycashd refuses it (`MAX_REORG_LENGTH`, ycash6 `src/main.h:69`,
   `src/main.cpp:5004-5022`): `koganyd` logs ycashd's message, "A block chain reorganization has

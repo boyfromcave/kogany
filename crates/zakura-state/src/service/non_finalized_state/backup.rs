@@ -112,9 +112,24 @@ pub(super) fn update_non_finalized_state_backup(
     non_finalized_state: &NonFinalizedState,
     mut backup_blocks: HashMap<block::Hash, PathBuf>,
 ) {
+    // kogany: every chain holds its own copy of the blocks it shares with the others, and the
+    // filter below takes a block for missing the second time it meets its hash (the first
+    // meeting removed it from `backup_blocks`). So each block is looked at once. The Ycash build
+    // writes the backup before every tip update (F-S5-7), not every five seconds: with a side
+    // chain in the state each new block otherwise rewrote every block the chains share.
+    #[cfg(feature = "ycash")]
+    let mut seen = std::collections::HashSet::new();
+
     for block in non_finalized_state
         .chain_iter()
         .flat_map(|chain| chain.blocks.values())
+        .filter(|_block| {
+            #[cfg(feature = "ycash")]
+            let first_copy = seen.insert(_block.hash);
+            #[cfg(not(feature = "ycash"))]
+            let first_copy = true;
+            first_copy
+        })
         // Remove blocks from `backup_blocks` that are present in the non-finalized state
         .filter(|block| backup_blocks.remove(&block.hash).is_none())
     {
