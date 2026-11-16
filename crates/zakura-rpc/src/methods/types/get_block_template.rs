@@ -780,6 +780,11 @@ pub struct MinerParams {
     /// ycashd `-blockunpaidactionlimit`); no limit by default.
     #[cfg(feature = "ycash")]
     block_unpaid_action_limit: u32,
+
+    /// Ycash: the post-mandate YDF share in percent (`mining.ydf`, ycashd `-ydf=<n>`); 0 by
+    /// default, so the miner is paid the whole subsidy and every fee.
+    #[cfg(feature = "ycash")]
+    ydf_percentage: u64,
 }
 
 /// Builds the coinbase input data for a block Zakura constructs.
@@ -801,6 +806,9 @@ impl MinerParams {
     // (`extra_coinbase_data` is length-validated), not a recoverable error.
     #[allow(clippy::unwrap_in_result)]
     pub fn new(net: &Network, conf: config::mining::Config) -> Result<Self, MinerParamsError> {
+        #[cfg(feature = "ycash")]
+        let ydf_percentage = conf.ydf_percentage();
+
         let addr = conf
             .miner_address
             .map(|addr| MinerAddress::try_from_zcash_address(net, addr))
@@ -838,6 +846,8 @@ impl MinerParams {
             yellowback: None,
             #[cfg(feature = "ycash")]
             block_unpaid_action_limit: conf.block_unpaid_action_limit.unwrap_or(u32::MAX),
+            #[cfg(feature = "ycash")]
+            ydf_percentage,
         })
     }
 
@@ -875,6 +885,19 @@ impl MinerParams {
         self.block_unpaid_action_limit
     }
 
+    /// Ycash: the post-mandate YDF share in percent, 0..=100 (`mining.ydf`).
+    #[cfg(feature = "ycash")]
+    pub fn ydf_percentage(&self) -> u64 {
+        self.ydf_percentage
+    }
+
+    /// Ycash: these parameters with another post-mandate YDF share.
+    #[cfg(feature = "ycash")]
+    pub fn with_ydf_percentage(mut self, ydf_percentage: u64) -> Self {
+        self.ydf_percentage = ydf_percentage.min(100);
+        self
+    }
+
     /// Ycash: these parameters with another template unpaid-action limit.
     #[cfg(feature = "ycash")]
     pub fn with_block_unpaid_action_limit(mut self, limit: u32) -> Self {
@@ -907,6 +930,8 @@ impl From<MinerAddress> for MinerParams {
             yellowback: None,
             #[cfg(feature = "ycash")]
             block_unpaid_action_limit: u32::MAX,
+            #[cfg(feature = "ycash")]
+            ydf_percentage: crate::config::mining::DEFAULT_YDF_FEE_PERCENTAGE,
         }
     }
 }
@@ -937,6 +962,12 @@ where
 {
     /// Miner parameters, including the miner address, data, and memo.
     miner_params: Option<MinerParams>,
+
+    /// Ycash: the post-mandate YDF share in percent (`mining.ydf`). Kept beside
+    /// [`Self::miner_params`] because `getblocksubsidy` reports it on a node that has no miner
+    /// address too, as ycashd's does.
+    #[cfg(feature = "ycash")]
+    ydf_percentage: u64,
 
     /// The chain verifier, used for submitting blocks.
     block_verifier_router: BlockVerifierRouter,
@@ -990,8 +1021,21 @@ where
         mined_block_sender: Option<mpsc::UnboundedSender<MinedBlockEvent>>,
     ) -> Self {
         let optimistic_block_inventory = conf.optimistic_block_inventory;
+        #[cfg(feature = "ycash")]
+        let ydf_percentage = conf.ydf_percentage();
+        // ycashd logs the reset of an invalid `-ydf` once, at startup (`ycash6 src/init.cpp`).
+        #[cfg(feature = "ycash")]
+        if u64::try_from(conf.ydf) != Ok(ydf_percentage) {
+            tracing::warn!(
+                configured = conf.ydf,
+                "parameter validation: invalid mining.ydf setting detected, forced to default {}%",
+                config::mining::DEFAULT_YDF_FEE_PERCENTAGE,
+            );
+        }
         Self {
             miner_params: MinerParams::new(net, conf).ok(),
+            #[cfg(feature = "ycash")]
+            ydf_percentage,
             block_verifier_router,
             prepared_candidates: PreparedCandidateResolver::default(),
             sync_status,
@@ -1050,6 +1094,12 @@ where
     /// Returns the miner parameters, including the address, data, and memo.
     pub fn miner_params(&self) -> Option<&MinerParams> {
         self.miner_params.as_ref()
+    }
+
+    /// Ycash: the post-mandate YDF share in percent this node's coinbases carry (`mining.ydf`).
+    #[cfg(feature = "ycash")]
+    pub fn ydf_percentage(&self) -> u64 {
+        self.ydf_percentage
     }
 
     /// Returns the sync status.

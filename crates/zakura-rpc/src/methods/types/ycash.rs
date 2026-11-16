@@ -24,12 +24,6 @@ use zakura_chain::{
 };
 use zakura_state::{HashOrHeight, ReadRequest, ReadResponse, ReadState as ReadStateService};
 
-/// The largest YDF share, in percent, a miner may pay voluntarily after the mandate ends, and the
-/// default share ycashd's miner pays then (`MAX_YDF_FEE_PERCENTAGE` and
-/// `DEFAULT_YDF_FEE_PERCENTAGE`, `ycash6 src/consensus/consensus.h:44-46`). kogany has no `-ydf`
-/// setting yet, so it always pays the default, as a ycashd started without `-ydf` does.
-pub const DEFAULT_YDF_FEE_PERCENTAGE: u64 = 5;
-
 /// The `chain` field of `getblockchaininfo` and `getmininginfo`: ycashd's `strNetworkID`, which is
 /// `regtest` on Regtest (`ycash6 src/chainparams.cpp`, `CRegTestParams`). Zakura reports the BIP70
 /// name, `test`, there; yolo picks its Equihash parameters from this field
@@ -285,13 +279,16 @@ pub fn is_testnet_field(network: &Network) -> bool {
 /// - before the Ycash upgrade, the inherited Zcash founders' reward (`subsidy / 5`, zero after
 ///   the founders' schedule), which Zakura already computes;
 /// - from the Ycash upgrade until the mandate ends, the mandatory YDF, `subsidy / 20`;
-/// - after the mandate, the optional YDF, `subsidy * DEFAULT_YDF_FEE_PERCENTAGE / 100`.
+/// - after the mandate, the optional YDF, `subsidy * ydf_percentage / 100`, where
+///   `ydf_percentage` is the node's `mining.ydf` setting (ycashd's `-ydf=<n>`, default 0:
+///   [`crate::config::mining::Config::ydf_percentage`]).
 ///
 /// `getblocksubsidy`'s `founders` field reports the same value (`ycash6 src/rpc/mining.cpp:963-983`).
 pub fn founders_share(
     network: &Network,
     height: Height,
     block_subsidy: Amount<NonNegative>,
+    ydf_percentage: u64,
 ) -> Amount<NonNegative> {
     if !is_ycash_active(network, height) {
         return founders_reward(network, height);
@@ -307,7 +304,9 @@ pub fn founders_share(
 
     let subsidy =
         u64::try_from(i64::from(block_subsidy)).expect("a non-negative amount converts to u64");
-    let share = subsidy * DEFAULT_YDF_FEE_PERCENTAGE / 100;
+    // `Config::ydf_percentage` is at most 100; a larger value from another caller pays the whole
+    // subsidy, never more.
+    let share = subsidy * ydf_percentage.min(100) / 100;
 
     i64::try_from(share)
         .ok()
@@ -322,16 +321,18 @@ pub fn optional_ydf_share(
     network: &Network,
     height: Height,
     block_subsidy: Amount<NonNegative>,
+    ydf_percentage: u64,
 ) -> Amount<NonNegative> {
     if !is_ycash_active(network, height) || height < ydf_mandate_end_height(network) {
         return Amount::zero();
     }
-    founders_share(network, height, block_subsidy)
+    founders_share(network, height, block_subsidy, ydf_percentage)
 }
 
 /// The `miner` and `founders` fields of `getblocksubsidy` (`ycash6 src/rpc/mining.cpp:963-987`),
 /// from Zakura's `miner_subsidy` and `founders_reward`: from the Ycash upgrade on, `founders` is
-/// the YDF share [`founders_share`] and `miner` excludes the optional post-mandate YDF too.
+/// the YDF share [`founders_share`] and `miner` excludes the optional post-mandate YDF too (the
+/// share this node's `mining.ydf` setting donates, default 0).
 /// Before the upgrade Zakura's values are ycashd's.
 pub fn subsidy_fields(
     network: &Network,
@@ -339,29 +340,32 @@ pub fn subsidy_fields(
     block_subsidy: Amount<NonNegative>,
     miner: Amount<NonNegative>,
     founders: Amount<NonNegative>,
+    ydf_percentage: u64,
 ) -> Result<(Amount<NonNegative>, Amount<NonNegative>), zakura_chain::amount::Error> {
     if !is_ycash_active(network, height) {
         return Ok((miner, founders));
     }
     Ok((
-        (miner - optional_ydf_share(network, height, block_subsidy))?,
-        founders_share(network, height, block_subsidy),
+        (miner - optional_ydf_share(network, height, block_subsidy, ydf_percentage))?,
+        founders_share(network, height, block_subsidy, ydf_percentage),
     ))
 }
 
 /// The coinbase output ycashd's miner adds for the YDF at `height`, `None` when it adds none
 /// (`ycash6 src/miner.cpp:136-148`): the share of [`founders_share`] to [`ydf_address`], from the
-/// Ycash upgrade on. Before the upgrade Zakura has no founders' output to build, and none is
+/// Ycash upgrade on: the required 5 % until the mandate ends, then `ydf_percentage` (none at the
+/// default 0). Before the upgrade Zakura has no founders' output to build, and none is
 /// needed: every Ycash network's pre-fork history is a synced chain, never a template.
 pub fn ydf_output(
     network: &Network,
     height: Height,
     block_subsidy: Amount<NonNegative>,
+    ydf_percentage: u64,
 ) -> Option<(Amount<NonNegative>, transparent::Address)> {
     if !is_ycash_active(network, height) {
         return None;
     }
-    let amount = founders_share(network, height, block_subsidy);
+    let amount = founders_share(network, height, block_subsidy, ydf_percentage);
     if amount == Amount::<NonNegative>::zero() {
         return None;
     }
@@ -380,7 +384,8 @@ pub fn template_founders_reward(
     if is_ycash_active(network, height) && height >= ydf_mandate_end_height(network) {
         return None;
     }
-    let reward = founders_share(network, height, block_subsidy);
+    // Below the mandate's end the share does not depend on the node's `mining.ydf` setting.
+    let reward = founders_share(network, height, block_subsidy, 0);
     (is_ycash_active(network, height) || reward != Amount::<NonNegative>::zero()).then_some(reward)
 }
 

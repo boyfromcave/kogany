@@ -58,6 +58,7 @@ fn miner_params(data: Option<&[u8]>, yellowback: Option<YellowbackMiner>) -> Min
         memo: None,
         yellowback,
         block_unpaid_action_limit: u32::MAX,
+        ydf_percentage: 0,
     }
 }
 
@@ -827,4 +828,55 @@ fn depends_are_one_based_block_indexes() {
     assert!(templates[0].depends.is_empty());
     assert!(templates[1].depends.is_empty());
     assert_eq!(templates[2].depends, vec![2, 1]);
+}
+
+// ---- the development-fund share (beta3 item 4) -----------------------------------------------
+
+/// The coinbase a template carries, across the regtest mandate end (height 5) and the node's
+/// `mining.ydf` setting, with 734 zatoshis of fees: below the end the required 5 % output is built
+/// whatever the setting says; from the end on the default 0 pays the miner the whole subsidy and
+/// every fee in one output, and an opted-in share adds the second output ycashd's `-ydf=<n>` adds
+/// (`ycash6 src/miner.cpp`, `SetFoundersRewardAndGetMinerValue`). The fees are the miner's on
+/// every row.
+#[test]
+fn coinbase_pays_the_configured_fund_share_after_the_mandate() {
+    let network = Network::new_regtest(Default::default());
+    let fees = 734;
+    let subsidy = 625_000_000;
+    for (height, ydf, miner, fund) in [
+        (4, 0, 593_750_000, Some(31_250_000)),
+        (4, 5, 593_750_000, Some(31_250_000)),
+        (4, 100, 593_750_000, Some(31_250_000)),
+        (5, 0, 625_000_000, None),
+        (6, 0, 625_000_000, None),
+        (5, 1, 618_750_000, Some(6_250_000)),
+        (5, 5, 593_750_000, Some(31_250_000)),
+        (100, 5, 593_750_000, Some(31_250_000)),
+        (5, 100, 0, Some(625_000_000)),
+    ] {
+        let params = miner_params(None, None).with_ydf_percentage(ydf);
+        let template = TransactionTemplate::new_coinbase(
+            &network,
+            Height(height),
+            &params,
+            amount(fees),
+            None,
+        )
+        .expect("the test coinbase builds");
+        let tx: Transaction = template
+            .data
+            .as_ref()
+            .zcash_deserialize_into()
+            .expect("the coinbase parses");
+        let values: Vec<i64> = tx.outputs().iter().map(|o| i64::from(o.value)).collect();
+        let mut want = vec![miner + fees];
+        want.extend(fund);
+        assert_eq!(values, want, "outputs at height {height} with ydf {ydf}");
+        assert_eq!(values.iter().sum::<i64>(), subsidy + fees);
+        assert_eq!(
+            template.founders_reward.map(i64::from),
+            (height < 5).then_some(31_250_000),
+            "foundersreward at height {height}"
+        );
+    }
 }

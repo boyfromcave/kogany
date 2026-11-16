@@ -3600,6 +3600,8 @@ async fn zip234_mining_rpcs_include_the_reissuance_bonus() {
                     yellowback_payout_address: None,
                     #[cfg(feature = "ycash")]
                     block_unpaid_action_limit: None,
+                    #[cfg(feature = "ycash")]
+                    ydf: 0,
                 },
                 Default::default(),
                 "0.0.1",
@@ -3905,6 +3907,8 @@ async fn gbt_with(net: Network, addr: ZcashAddress) {
         yellowback_payout_address: None,
         #[cfg(feature = "ycash")]
         block_unpaid_action_limit: None,
+        #[cfg(feature = "ycash")]
+        ydf: 0,
     };
 
     // nu5 block height
@@ -4945,6 +4949,8 @@ async fn rpc_getdifficulty() {
         yellowback_payout_address: None,
         #[cfg(feature = "ycash")]
         block_unpaid_action_limit: None,
+        #[cfg(feature = "ycash")]
+        ydf: 0,
     };
 
     // nu5 block height

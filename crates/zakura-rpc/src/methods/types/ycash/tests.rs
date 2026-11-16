@@ -18,7 +18,8 @@ fn subsidy(network: &Network, height: u32) -> Amount<NonNegative> {
 }
 
 /// Regtest, every upgrade through Canopy at 1 (the `-nuparams` set the ycash6 suites pass):
-/// the mandatory YDF below 5, the optional 5 % from 5, ycashd's `getblocksubsidy` and template.
+/// the mandatory YDF below 5 whatever `mining.ydf` says; from 5 the share `mining.ydf` sets, none
+/// at the default 0 (ycashd's `-ydf`, `getblocksubsidy` and template).
 #[test]
 fn regtest_ydf_shares_match_ycashd() {
     let regtest = Network::new_regtest(Default::default());
@@ -27,35 +28,43 @@ fn regtest_ydf_shares_match_ycashd() {
 
     for height in 1..5 {
         let h = Height(height);
-        assert_eq!(founders_share(&regtest, h, s), zat(31_250_000));
-        assert_eq!(optional_ydf_share(&regtest, h, s), zat(0));
+        for ydf in [0, 5, 100] {
+            assert_eq!(founders_share(&regtest, h, s, ydf), zat(31_250_000));
+            assert_eq!(optional_ydf_share(&regtest, h, s, ydf), zat(0));
+            let (amount, address) = ydf_output(&regtest, h, s, ydf).expect("mandatory YDF output");
+            assert_eq!(amount, zat(31_250_000));
+            assert_eq!(address.to_string(), ydf::TESTNET_YDF_ADDRESSES[0]);
+        }
         assert_eq!(
             template_founders_reward(&regtest, h, s),
             Some(zat(31_250_000))
         );
-        let (amount, address) = ydf_output(&regtest, h, s).expect("mandatory YDF output");
-        assert_eq!(amount, zat(31_250_000));
-        assert_eq!(address.to_string(), ydf::TESTNET_YDF_ADDRESSES[0]);
     }
 
-    // After the mandate: ycashd's default `-ydf=5`, no `foundersreward` in the template.
+    // After the mandate: no share and no output at the default, `mining.ydf = 0`; the configured
+    // share otherwise (`subsidy * n / 100`, ycashd's integer arithmetic). Never a
+    // `foundersreward` in the template.
     for height in [5, 6, 100] {
         let h = Height(height);
         let s = subsidy(&regtest, height);
-        assert_eq!(
-            founders_share(&regtest, h, s),
-            (s * 5).unwrap().div_exact(100)
-        );
-        assert_eq!(
-            optional_ydf_share(&regtest, h, s),
-            founders_share(&regtest, h, s)
-        );
+        assert_eq!(founders_share(&regtest, h, s, 0), zat(0));
+        assert_eq!(optional_ydf_share(&regtest, h, s, 0), zat(0));
+        assert_eq!(ydf_output(&regtest, h, s, 0), None);
+
+        for (ydf, share) in [(1, 6_250_000), (5, 31_250_000), (100, 625_000_000)] {
+            assert_eq!(founders_share(&regtest, h, s, ydf), zat(share));
+            assert_eq!(optional_ydf_share(&regtest, h, s, ydf), zat(share));
+            let (amount, address) = ydf_output(&regtest, h, s, ydf).expect("opted-in YDF output");
+            assert_eq!(amount, zat(share));
+            assert_eq!(address.to_string(), ydf::TESTNET_YDF_ADDRESSES[0]);
+        }
+        // A share above 100 % cannot be configured; the helper never pays more than the subsidy.
+        assert_eq!(founders_share(&regtest, h, s, 101), s);
         assert_eq!(template_founders_reward(&regtest, h, s), None);
-        assert!(ydf_output(&regtest, h, s).is_some());
     }
     // Once the regtest subsidy has halved to zero there is no YDF output, as in ycashd.
     assert_eq!(subsidy(&regtest, 17_918), zat(0));
-    assert_eq!(ydf_output(&regtest, Height(17_918), zat(0)), None);
+    assert_eq!(ydf_output(&regtest, Height(17_918), zat(0), 5), None);
 
     // ycashd's regtest bits never move from the genesis 0x200f0f0f.
     let limit = expected_difficulty(
@@ -69,6 +78,41 @@ fn regtest_ydf_shares_match_ycashd() {
     assert!(is_pre_nu5(&regtest, Height(1)));
 }
 
+/// The fast testnet across its own mandate end (beta3 item 5; `mandate_end::TESTNET_FAST`,
+/// provisional): one block below it the template carries the required 5 % output and
+/// `foundersreward` whatever `mining.ydf` says; from it on the node's setting decides, as on
+/// mainnet past 2,275,000, and the default pays the miner in full.
+#[test]
+fn fast_testnet_shares_follow_its_own_mandate_end() {
+    let fast = Network::new_default_testnet();
+    let end = ydf::mandate_end::TESTNET_FAST;
+    assert_eq!(end, Height(600_000));
+
+    let below = Height(end.0 - 1);
+    let s = subsidy(&fast, below.0);
+    let required = (s / 20).unwrap();
+    for ydf in [0, 5] {
+        assert_eq!(founders_share(&fast, below, s, ydf), required);
+        assert_eq!(optional_ydf_share(&fast, below, s, ydf), zat(0));
+        assert_eq!(
+            ydf_output(&fast, below, s, ydf).map(|(amount, _)| amount),
+            Some(required)
+        );
+    }
+    assert_eq!(template_founders_reward(&fast, below, s), Some(required));
+
+    for height in [end, Height(end.0 + 1)] {
+        let s = subsidy(&fast, height.0);
+        assert_eq!(founders_share(&fast, height, s, 0), zat(0));
+        assert_eq!(ydf_output(&fast, height, s, 0), None);
+        assert_eq!(
+            ydf_output(&fast, height, s, 5).map(|(amount, _)| amount),
+            Some((s / 20).unwrap())
+        );
+        assert_eq!(template_founders_reward(&fast, height, s), None);
+    }
+}
+
 /// Mainnet around the fork and the mandate end: the founders' reward before 570,000, the YDF
 /// from it (`getblocksubsidy` at those heights on a synced ycashd).
 #[test]
@@ -77,17 +121,23 @@ fn mainnet_shares_match_ycashd() {
 
     let s = subsidy(&main, 569_999);
     assert_eq!(s, zat(1_250_000_000));
-    assert_eq!(founders_share(&main, Height(569_999), s), zat(250_000_000));
+    assert_eq!(
+        founders_share(&main, Height(569_999), s, 0),
+        zat(250_000_000)
+    );
     assert_eq!(
         template_founders_reward(&main, Height(569_999), s),
         Some(zat(250_000_000))
     );
-    assert_eq!(ydf_output(&main, Height(569_999), s), None);
+    assert_eq!(ydf_output(&main, Height(569_999), s, 5), None);
 
     let s = subsidy(&main, 570_000);
-    assert_eq!(founders_share(&main, Height(570_000), s), zat(62_500_000));
     assert_eq!(
-        ydf_output(&main, Height(570_000), s).map(|(a, addr)| (a, addr.to_string())),
+        founders_share(&main, Height(570_000), s, 0),
+        zat(62_500_000)
+    );
+    assert_eq!(
+        ydf_output(&main, Height(570_000), s, 0).map(|(a, addr)| (a, addr.to_string())),
         Some((zat(62_500_000), ydf::MAINNET_YDF_ADDRESSES[0].to_string()))
     );
 
@@ -98,8 +148,10 @@ fn mainnet_shares_match_ycashd() {
     );
     let s = subsidy(&main, 2_275_000);
     assert_eq!(template_founders_reward(&main, Height(2_275_000), s), None);
+    assert_eq!(optional_ydf_share(&main, Height(2_275_000), s, 0), zat(0));
+    assert_eq!(ydf_output(&main, Height(2_275_000), s, 0), None);
     assert_eq!(
-        optional_ydf_share(&main, Height(2_275_000), s),
+        optional_ydf_share(&main, Height(2_275_000), s, 5),
         (s * 5).unwrap().div_exact(100)
     );
 
@@ -113,29 +165,38 @@ fn mainnet_shares_match_ycashd() {
     assert!(is_testnet_field(&Network::new_default_testnet()));
 }
 
-/// `getblocksubsidy` on Ycash mainnet: `(height, miner, founders, totalblocksubsidy)` in zatoshis,
-/// as a ycash6 mainnet node at 65cb4ae0f answers them (`ycash-cli getblocksubsidy <height>`).
+/// `getblocksubsidy` on Ycash mainnet: `(height, ydf, miner, founders, totalblocksubsidy)` in
+/// zatoshis, `ydf` being the node's `mining.ydf` (ycashd's `-ydf`). The `ydf = 5` rows are a
+/// ycash6 mainnet node's answers at 65cb4ae0f, whose default was 5
+/// (`ycash-cli getblocksubsidy <height>`); the `ydf = 0` rows are the default since ycash6 #125:
+/// the same until the mandate ends at 2,275,000, then the whole subsidy to the miner.
 #[test]
 fn mainnet_getblocksubsidy_matches_ycashd() {
     use zakura_chain::parameters::subsidy::{founders_reward, miner_subsidy};
 
     let main = Network::Mainnet;
-    for (height, miner, founders, total) in [
-        (569_999, 1_000_000_000, 250_000_000, 1_250_000_000),
-        (570_000, 1_187_500_000, 62_500_000, 1_250_000_000),
-        (2_274_999, 296_875_000, 15_625_000, 312_500_000),
-        (2_275_000, 296_875_000, 15_625_000, 312_500_000),
-        (3_000_000, 148_437_500, 7_812_500, 156_250_000),
+    for (height, ydf, miner, founders, total) in [
+        (569_999, 5, 1_000_000_000, 250_000_000, 1_250_000_000),
+        (570_000, 5, 1_187_500_000, 62_500_000, 1_250_000_000),
+        (2_274_999, 5, 296_875_000, 15_625_000, 312_500_000),
+        (2_275_000, 5, 296_875_000, 15_625_000, 312_500_000),
+        (3_000_000, 5, 148_437_500, 7_812_500, 156_250_000),
+        (569_999, 0, 1_000_000_000, 250_000_000, 1_250_000_000),
+        (570_000, 0, 1_187_500_000, 62_500_000, 1_250_000_000),
+        (2_274_999, 0, 296_875_000, 15_625_000, 312_500_000),
+        (2_275_000, 0, 312_500_000, 0, 312_500_000),
+        (3_000_000, 0, 156_250_000, 0, 156_250_000),
+        (3_000_000, 1, 154_687_500, 1_562_500, 156_250_000),
     ] {
         let h = Height(height);
         let s = subsidy(&main, height);
         assert_eq!(s, zat(total), "total at {height}");
         let stock_miner = miner_subsidy(h, &main, s).expect("a valid miner subsidy");
-        let fields = subsidy_fields(&main, h, s, stock_miner, founders_reward(&main, h));
+        let fields = subsidy_fields(&main, h, s, stock_miner, founders_reward(&main, h), ydf);
         assert_eq!(
             fields,
             Ok((zat(miner), zat(founders))),
-            "miner and founders at {height}"
+            "miner and founders at {height} with ydf {ydf}"
         );
     }
 }
