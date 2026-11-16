@@ -27,7 +27,9 @@ pub mod mandate_end {
     /// Ycash mainnet (`ycash6 src/chainparams.cpp:167`).
     pub const MAINNET: Height = Height(2_275_000);
     /// A Ycash testnet that is neither the fast profile nor a shadow fork: `CTestNetParams`'s
-    /// value (`ycash6 src/chainparams.cpp:474`), which a configured testnet inherits.
+    /// value (`ycash6 src/chainparams.cpp:486`). Only a configured testnet with a network magic
+    /// of its own gets it: one that keeps the default magic is the fast profile and gets
+    /// [`TESTNET_FAST`].
     pub const TESTNET: Height = Height(900_000);
     /// The fast profile's own end of the YDF mandate (beta3 item 5, decision B3-D4;
     /// `TESTNET_FAST_YDF_MANDATE_END_HEIGHT`, `ycash6 src/chainparams.cpp`): from this height a
@@ -41,7 +43,7 @@ pub mod mandate_end {
     /// 400 blocks, the same value on ycash-dd, ycash6 and kogany. Every node of the network
     /// must run a build with the final value before the chain reaches it.
     pub const TESTNET_FAST: Height = Height(600_000);
-    /// Ycash regtest (`ycash6 src/chainparams.cpp:777`).
+    /// Ycash regtest (`ycash6 src/chainparams.cpp:904`).
     pub const REGTEST: Height = Height(5);
 }
 

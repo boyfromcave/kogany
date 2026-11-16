@@ -50,8 +50,9 @@ behaviours follow ycashd's there, each against Zakura's own:
 - **The development-fund share.** `mining.ydf` is ycashd's `-ydf=<n>`: after the Ycash
   Development Fund mandate ends, a block this node builds donates `n` % of the block subsidy to
   the fund. The default is 0, so a miner is paid the whole subsidy and every fee; a miner who
-  donates sets `ydf = 5`. A value outside 0..100 is reset to 0 and logged, as ycashd does. Before
-  the mandate ends the 5 % output is a consensus rule and is built whatever the setting says.
+  donates sets `ydf = 5`. A number outside 0..100 is reset to 0 and logged, as ycashd does; a
+  value that is not an integer fails to parse and the node does not start (ycashd's `atoi` reads
+  it as 0). Before the mandate ends the 5 % output is a consensus rule and is built whatever the setting says.
   `getblocksubsidy` reports the configured share as `founders`.
 - **The YED payout key.** A transparent P2PKH `mining.miner_address` is also the Yellowback payout
   key the coinbase tag names, as ycashd takes `-mineraddress` when no `-yellowbackpayoutaddress`
