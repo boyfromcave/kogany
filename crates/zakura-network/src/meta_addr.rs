@@ -666,20 +666,18 @@ impl MetaAddr {
     /// kogany: is this address ready for a new outbound connection attempt by a node that has
     /// no open connection? As [`Self::is_ready_for_connection_attempt`], but a recent response
     /// does not hold the dial back (the connection that gave it is closed), and the last
-    /// attempt and the last failure hold it back for
-    /// [`ISOLATED_PEER_RECONNECTION_DELAY`](crate::ycash::ISOLATED_PEER_RECONNECTION_DELAY) only.
+    /// attempt and the last failure hold it back for `delay` only
+    /// ([`isolated_peer_reconnection_delay`](crate::ycash::isolated_peer_reconnection_delay)).
     #[cfg(feature = "ycash")]
     pub(crate) fn is_ready_for_isolated_reconnection(
         &self,
         instant_now: Instant,
         chrono_now: chrono::DateTime<Utc>,
         network: &Network,
+        delay: Duration,
     ) -> bool {
         let recent = |last: Option<Instant>| {
-            last.is_some_and(|last| {
-                instant_now.saturating_duration_since(last)
-                    <= crate::ycash::ISOLATED_PEER_RECONNECTION_DELAY
-            })
+            last.is_some_and(|last| instant_now.saturating_duration_since(last) <= delay)
         };
 
         self.last_known_info_is_valid_for_outbound(network)

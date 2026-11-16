@@ -839,6 +839,107 @@ async fn an_isolated_node_redials_its_peer_without_the_two_minute_wait() {
     );
 }
 
+/// The wait of a node with no open connection doubles with each failed dial in a row at an address,
+/// up to upstream's two minutes, so a peer that stays down (or a network-wide outage) is not
+/// dialled every 10 seconds for ever: 10, 20, 40, 80, 119, 119 seconds. A response from the
+/// address starts the sequence again. With a connection open the count changes nothing.
+#[tokio::test]
+async fn an_isolated_node_backs_off_from_a_peer_that_keeps_failing() {
+    use std::time::{Duration, Instant};
+
+    use crate::{
+        address_book_peers::AddressBookPeers, constants::MIN_PEER_RECONNECTION_DELAY,
+        meta_addr::MetaAddr, peer_registry::PeerRegistry, protocol::external::types::PeerServices,
+        AddressBook, ConnectedPeer,
+    };
+
+    let expected = [10, 20, 40, 80, 119, 119].map(Duration::from_secs);
+    assert_eq!(isolated_peer_reconnection_delay(0), expected[0]);
+    for (failures, wait) in (1..).zip(expected) {
+        assert_eq!(isolated_peer_reconnection_delay(failures), wait);
+    }
+    assert_eq!(
+        isolated_peer_reconnection_delay(u32::MAX),
+        MIN_PEER_RECONNECTION_DELAY
+    );
+
+    let regtest = Network::new_regtest(Default::default());
+    let listener = "127.0.0.1:0".parse().expect("listener parses");
+    let peer: crate::PeerSocketAddr = "127.0.0.1:18344".parse().expect("parses");
+    let other: crate::PeerSocketAddr = "127.0.0.2:18344".parse().expect("parses");
+
+    // The test's own clock: every change and every question carries its time.
+    let start = (Instant::now(), chrono::Utc::now());
+    let at = |elapsed: Duration| {
+        let elapsed_chrono = chrono::Duration::from_std(elapsed).expect("a short duration");
+        (start.0 + elapsed, start.1 + elapsed_chrono)
+    };
+    let due = |book: &AddressBook, elapsed: Duration| {
+        let (instant, chrono) = at(elapsed);
+        book.reconnection_peers(instant, chrono)
+            .any(|meta| meta.addr() == peer)
+    };
+    let change = |book: &mut AddressBook, change, elapsed: Duration| {
+        let (instant, chrono) = at(elapsed);
+        assert!(book.update_inner_at(change, instant, chrono).is_some());
+    };
+    let second = Duration::from_secs(1);
+    let errored = || MetaAddr::new_errored(peer, PeerServices::NODE_NETWORK);
+
+    let registry = PeerRegistry::default();
+    let mut book = AddressBook::new(listener, &regtest, 1, tracing::Span::none())
+        .with_peer_registry(registry.clone());
+    assert!(book.add_peer(peer));
+
+    let mut now = Duration::ZERO;
+    for round in 0..2 {
+        // The peer answers a dial, which clears the count of the round before.
+        change(&mut book, MetaAddr::new_reconnect(peer), now);
+        now += second;
+        change(&mut book, MetaAddr::new_responded(peer, None), now);
+
+        // With another connection open the node is not alone: upstream's wait.
+        let (guard, _updater) = registry.register_legacy(ConnectedPeer {
+            addr: other,
+            user_agent: "/YcashCpp:test/".into(),
+            version: Version(270_200),
+            start_height: Height(0),
+            is_inbound: false,
+            rtt: None,
+            ping_sent_at: None,
+        });
+        assert!(!due(&book, now + MIN_PEER_RECONNECTION_DELAY - second));
+        drop(guard);
+        now += MIN_PEER_RECONNECTION_DELAY;
+
+        for (failure, wait) in expected.into_iter().enumerate() {
+            // The first failure is the connection's close; each later one a dial and its
+            // failure a second later.
+            if failure > 0 {
+                change(&mut book, MetaAddr::new_reconnect(peer), now);
+                now += second;
+            }
+            change(&mut book, errored(), now);
+            assert!(
+                !due(&book, now + wait - second),
+                "round {round}: dialled before {wait:?}"
+            );
+            assert!(
+                due(&book, now + wait + second),
+                "round {round}: not dialled after {wait:?}"
+            );
+            now += wait + second;
+        }
+
+        // A second report of the same failure is not another failed dial: the wait starts
+        // again, at the same length.
+        change(&mut book, errored(), now);
+        assert!(!due(&book, now + MIN_PEER_RECONNECTION_DELAY - second));
+        assert!(due(&book, now + MIN_PEER_RECONNECTION_DELAY + second));
+        now += MIN_PEER_RECONNECTION_DELAY + second;
+    }
+}
+
 /// kogany (S5): the transaction `reject` is ycashd's bytes (`ycash6 src/main.cpp:8943-8945`):
 /// `varstr "tx"`, the code byte, `varstr` reason cut to `MAX_REJECT_MESSAGE_LENGTH`, the txid.
 #[test]

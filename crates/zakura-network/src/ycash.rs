@@ -186,9 +186,7 @@ pub(crate) fn outbound_inventory(hashes: &[InventoryHash]) -> Vec<InventoryHash>
 /// The error a received `MSG_WTX` inventory entry is refused with.
 pub(crate) const MSG_WTX_REFUSED: &str = "MSG_WTX inventory is not used on Ycash";
 
-/// The default listen address: every interface, on the Ycash mainnet port
-/// (`nDefaultPort`, `ycash6 src/chainparams.cpp:228`).
-/// How long a node with no open peer connection waits before it dials an address again.
+/// How long a node with no open peer connection waits before it dials an address again, at first.
 ///
 /// Upstream waits [`MIN_PEER_RECONNECTION_DELAY`](crate::constants::MIN_PEER_RECONNECTION_DELAY)
 /// (119 seconds) after an address last responded, was attempted or failed, because with many
@@ -196,11 +194,30 @@ pub(crate) const MSG_WTX_REFUSED: &str = "MSG_WTX inventory is not used on Ycash
 /// connection closed knows that none is open: waiting two minutes only leaves it behind its
 /// peers (a koganyd following one or two ycashd nodes stopped at its height for that long,
 /// through a burst of blocks). Such a node dials each outbound address again once this long
-/// has passed since its last attempt and its last failure. The dial rate stays under
-/// [`MIN_OUTBOUND_PEER_CONNECTION_INTERVAL`](crate::constants::MIN_OUTBOUND_PEER_CONNECTION_INTERVAL).
+/// has passed since its last attempt and its last failure; the wait doubles with each failure
+/// in a row ([`isolated_peer_reconnection_delay`]). The dials stay at least
+/// [`MIN_OUTBOUND_PEER_CONNECTION_INTERVAL`](crate::constants::MIN_OUTBOUND_PEER_CONNECTION_INTERVAL)
+/// apart.
 pub const ISOLATED_PEER_RECONNECTION_DELAY: std::time::Duration =
     std::time::Duration::from_secs(10);
 
+/// The wait of a node with no open connection before it dials an address again, after
+/// `failures` failed attempts in a row at that address (a connection that closed counts as the
+/// first): [`ISOLATED_PEER_RECONNECTION_DELAY`], doubled with each further failure, and never
+/// more than upstream's
+/// [`MIN_PEER_RECONNECTION_DELAY`](crate::constants::MIN_PEER_RECONNECTION_DELAY): 10, 20, 40,
+/// 80, 119, 119 seconds. So a peer that stays unreachable, or a network-wide outage, is dialled
+/// at upstream's rate after about two and a half minutes; a response from the address starts
+/// the sequence again.
+pub fn isolated_peer_reconnection_delay(failures: u32) -> std::time::Duration {
+    let doublings = failures.saturating_sub(1).min(16);
+    ISOLATED_PEER_RECONNECTION_DELAY
+        .saturating_mul(1 << doublings)
+        .min(crate::constants::MIN_PEER_RECONNECTION_DELAY)
+}
+
+/// The default listen address: every interface, on the Ycash mainnet port
+/// (`nDefaultPort`, `ycash6 src/chainparams.cpp:228`).
 pub(crate) fn default_listen_addr() -> std::net::SocketAddr {
     std::net::SocketAddr::from((std::net::Ipv6Addr::UNSPECIFIED, profile::ports::MAINNET))
 }
