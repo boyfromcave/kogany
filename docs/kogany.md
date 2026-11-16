@@ -106,10 +106,20 @@ behaviours follow ycashd's there, each against Zakura's own:
   `ActivateBestChain` that follows (`src/rpc/blockchain.cpp:2175`) asks it from that parent. So
   does `koganyd`: the blocks at and above the invalidated one are not counted, and the call is
   refused only when it would leave the node on a branch that forks more than 99 blocks below
-  that parent. ycashd has by then marked the block invalid and is on its parent;
-  `koganyd` refuses before it changes anything, so after the record is removed the node is on
-  the tip it had. To invalidate that block all the same, first `invalidateblock` the first
-  block of the other branch. Zakura's own window stays 1,000 blocks
+  that parent. What is left differs, and so does what the caller sees:
+
+  | | ycashd | `koganyd` |
+  | --- | --- | --- |
+  | The RPC answer | `null`, as for an invalidation that is made | an error, `-1 invalidate block request was unexpectedly dropped`: the state stopped before it answered |
+  | The block | marked invalid | unchanged |
+  | The best tip | the parent of the invalidated block | the tip the node had |
+  | Then | logs the message and shuts down (exit status 0) | logs the message, records the refusal and exits (status 1) |
+  | At every start | meets the other branch from the parent and shuts down again | stops while the record exists; without it, runs on the tip it had |
+
+  So a refused `invalidateblock` changes nothing on `koganyd`: after the record is removed the
+  node is on the tip it had, and the same call is refused again. To invalidate that block all
+  the same, first `invalidateblock` the first block of the other branch. `reorg_parity.py`
+  checks every row against a ycashd, at 99 blocks (both follow the other branch) and at 100. Zakura's own window stays 1,000 blocks
   (`MAX_BLOCK_REORG_HEIGHT`), and a `koganyd` built without the `ycash` feature follows any
   branch inside it.
 
@@ -124,8 +134,8 @@ behaviours follow ycashd's there, each against Zakura's own:
   every start while that file exists**, whether or not the non-finalized backup is on, as a
   ycashd meets the branch in its block index at every start. The file holds the message; if it
   is empty or cannot be read the node still stops, and says where the file is. If the message
-  cannot be written (a full disk) the file is made empty, which counts; if no file can be made
-  at all, the failure the node stops with says that nothing stops its next start. The directory is
+  cannot be written (a full disk) the file is made empty, which counts; only if there is no
+  file at all does the failure the node stops with say that nothing stops its next start. The directory is
   the one of the database's major format version: a `koganyd` release with a new major version
   opens a new directory and builds its state again from genesis, so it has neither the record
   nor the tip the record was about, like a ycashd on an empty data directory. Decide and remove
@@ -182,11 +192,13 @@ behaviours follow ycashd's there, each against Zakura's own:
   the backup off.
 
   Proved by `crates/kogany-rpc/qa/reorg_parity.py` against ycashd (depths 99, 100, 101, the
-  restarts, and the restart without the record), and in `zakura-state` by
+  restarts, the restart without the record, and `invalidateblock` at 99 and 100), and in `zakura-state` by
   `running_writer_refuses_a_commit_that_rolls_back_100_blocks` (and its `_header_integrated`
   twin, the path the node uses),
   `running_writer_refuses_a_reconsideration_that_rolls_back_100_blocks`,
-  `running_writer_refuses_an_invalidation_that_rolls_back_102_blocks` (and its
+  `running_writer_refuses_an_invalidation_that_rolls_back_102_blocks`,
+  `running_writer_makes_an_invalidation_that_rolls_back_99_blocks`,
+  `running_writer_refuses_an_invalidation_that_rolls_back_100_blocks` (each with its
   `_header_integrated` twin), `reorg_guard_asks_an_invalidation_from_the_parent_as_ycashd`,
   `reorg_refusal_is_recorded_when_its_message_cannot_be_written`,
   `restored_best_chain_is_the_one_the_node_was_on` and
