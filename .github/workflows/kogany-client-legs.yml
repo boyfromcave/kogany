@@ -224,7 +224,7 @@ jobs:
       YOLO_REPO: boyfromcave/yolo
       YOLO_REV: b3abf818ba2c9f0d5234da461757efbcd96eb4a5      # yolo upgrade/vault (#17, beta3; kogany mode since W8-c)
       YCASH6_REPO: boyfromcave/ycash6
-      YCASH6_REV: c7ab964fc76d135edeebed6269ef6381a600266e    # ycash6 upgrade/vault (#131, rpcversion 10), as kogany-mixed.yml
+      YCASH6_REV: cd575cc7b7d77208115e37811c421248586fd9dd    # ycash6 upgrade/vault (#136, the 6.22.0-beta3 cut), as kogany-mixed.yml
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
