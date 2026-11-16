@@ -54,10 +54,11 @@ concurrency:
 
 env:
   YCASH6_REPO: boyfromcave/ycash6
-  # The pin: ycash6 upgrade/vault at the merge of #130 (3ed5a96c2: getcoinbasetemplatefor,
-  # transparentPools, the insight input addresses of #128 and the shard list's beta3 gates), unless
-  # a dispatch or caller names another commit. Bump by PR, never a branch tip.
-  YCASH6_REV: ${{ inputs.ycash6_rev || '3ed5a96c233f0ec9d4d8ad08b0aaa24afc22dec3' }}
+  # The pin: ycash6 upgrade/vault at the merge of #131 (c7ab964fc: rpcversion 10, on #130's
+  # getcoinbasetemplatefor, transparentPools, the insight input addresses of #128 and the shard
+  # list's beta3 gates), unless a dispatch or caller names another commit. Bump by PR, never a
+  # branch tip.
+  YCASH6_REV: ${{ inputs.ycash6_rev || 'c7ab964fc76d135edeebed6269ef6381a600266e' }}
 
 jobs:
   koganyd:
