@@ -11,14 +11,16 @@
 # --- Cargo.lock (the node) and qa/fuzz/header-chain/Cargo.lock ---
 
 [[IgnoredVulns]]
-id = "RUSTSEC-2026-0418"
-ignoreUntil = 2027-01-29T00:00:00Z
-reason = "libz-sys 1.1.29: its build script prints the environment when compiled with cc >= 1.6.0. Not compiled: the lock entry is in no resolved graph (`cargo tree --locked --all-features --target all -i libz-sys` prints nothing), and the locks pin cc 1.2.x, below the affected range."
-
-[[IgnoredVulns]]
 id = "RUSTSEC-2026-0386"
 ignoreUntil = 2027-01-29T00:00:00Z
 reason = "tokio 1.52.3 (AsyncFd safe constructors violate I/O safety): only in qa/fuzz/header-chain/Cargo.lock and deploy/zakura-mac-cranelift/cranelift/probes/Cargo.lock, fuzz and probe tools that ship nowhere; the node's own lock has tokio 1.53.3, the fixed release."
+
+# --- Cargo.lock (the node) and the qa/fuzz/{header-chain,sim,vault}/Cargo.lock fuzz locks ---
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0543"
+ignoreUntil = 2027-02-15T00:00:00Z
+reason = "chrono 0.4.45 is unmaintained (informational: unmaintained, no vulnerability, no fixed version); accepted by the Yellowback lead architect 2026-11-18, triaged 2026-11-17. The node's own crates name it as inherited from Zakura/Zebra (zakura-chain, zakura-consensus, zakura-state, zakura-network, zakura-rpc, zakura-header-chain, zakura-storage, zakurad: block header time, lock time, difficulty adjustment, state encoding), and the fuzz locks take it through the same crates. Replacing it is an upstream migration, taken at an upstream sync (plan §4.2 rule 7); Zebra recorded the same advisory on 2026-11-17 (ZcashFoundation/zebra#12481). Also ignored in contrib/secops/deny-node.toml."
 
 # --- qa/fuzz/header-chain/Cargo.lock ---
 
