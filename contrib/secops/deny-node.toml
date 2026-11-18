@@ -16,7 +16,9 @@ targets = ["x86_64-unknown-linux-gnu", "aarch64-unknown-linux-gnu", "x86_64-appl
 [advisories]
 version = 2
 yanked = "warn"
-ignore = []
+ignore = [
+    { id = "RUSTSEC-2026-0543", reason = "chrono 0.4.45 unmaintained (informational: unmaintained, no vulnerability, no fixed version), accepted by the Yellowback lead architect 2026-11-18: named by the node's own crates as inherited from Zakura/Zebra (block header time, lock time, difficulty adjustment, state encoding); replacing it is an upstream migration, taken at an upstream sync (plan §4.2 rule 7). Zebra recorded the same advisory (ZcashFoundation/zebra#12481). The same entry, with an expiry, is in osv-scanner.toml." },
+]
 
 [bans]
 # Duplicate versions are the Zakura graph as upstream left it; upstream's deny.toml judges them.
