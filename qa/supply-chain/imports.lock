@@ -8,6 +8,11 @@ user-id = 696
 user-login = "fitzgen"
 user-name = "Nick Fitzgerald"
 
+[[publisher.libz-sys]]
+version = "1.1.33"
+when = "2026-11-10"
+trusted-publisher = "github:rust-lang/libz-sys"
+
 [[publisher.rustix]]
 version = "1.1.6"
 when = "2026-10-27"
