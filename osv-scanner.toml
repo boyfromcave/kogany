@@ -11,11 +11,6 @@
 # --- Cargo.lock (the node) and qa/fuzz/header-chain/Cargo.lock ---
 
 [[IgnoredVulns]]
-id = "RUSTSEC-2026-0418"
-ignoreUntil = 2027-01-29T00:00:00Z
-reason = "libz-sys 1.1.29: its build script prints the environment when compiled with cc >= 1.6.0. Not compiled: the lock entry is in no resolved graph (`cargo tree --locked --all-features --target all -i libz-sys` prints nothing), and the locks pin cc 1.2.x, below the affected range."
-
-[[IgnoredVulns]]
 id = "RUSTSEC-2026-0386"
 ignoreUntil = 2027-01-29T00:00:00Z
 reason = "tokio 1.52.3 (AsyncFd safe constructors violate I/O safety): only in qa/fuzz/header-chain/Cargo.lock and deploy/zakura-mac-cranelift/cranelift/probes/Cargo.lock, fuzz and probe tools that ship nowhere; the node's own lock has tokio 1.53.3, the fixed release."
