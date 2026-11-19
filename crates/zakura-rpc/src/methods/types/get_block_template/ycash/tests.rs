@@ -14,7 +14,9 @@ use kogany_vault::{
     template::bond_script_pubkey,
     Hash32, PubKeyBytes,
 };
-use kogany_yellowback::codecs::tag::{encode_tag, find_tag, height_prefix, tag_push, CoinbaseTag};
+use kogany_yellowback::codecs::tag::{
+    encode_tag, find_tag, height_prefix, tag_push, CoinbaseTag, Payee, TAG_VERSION_V2,
+};
 use zcash_transparent::{address::TransparentAddress, coinbase::MAX_COINBASE_SCRIPT_LEN};
 
 use zakura_chain::{
@@ -65,7 +67,7 @@ fn miner_params(data: Option<&[u8]>, yellowback: Option<YellowbackMiner>) -> Min
 fn miner_with(tag: CoinbaseTag) -> YellowbackMiner {
     YellowbackMiner {
         tag: Some(tag),
-        payout_key: Some(tag.payout_key),
+        payout_key: Some(tag.payee),
         quote_age_seconds: Some(0),
         registered: false,
         eligible: false,
@@ -92,7 +94,7 @@ fn cxx_quote_tag(price: u64) -> CoinbaseTag {
         flags: 0x01,
         price_micro_usd: price,
         source_mask: 7,
-        payout_key: [0xab; 20],
+        payee: Payee::p2pkh(&[0xab; 20]),
     }
 }
 
@@ -144,6 +146,7 @@ fn tag_bytes_equal_ycash6_for_the_golden_coinbases() {
     let regtest = Network::new_regtest(Default::default());
     let g = golden();
     let mut tagged = 0;
+    let mut v2 = 0;
     for block in g["blocks"].as_array().expect("blocks") {
         let height = u32::try_from(block["height"].as_u64().expect("height")).expect("u32");
         let data = hex::decode(block["txs"][0].as_str().expect("coinbase hex")).expect("hex");
@@ -154,10 +157,17 @@ fn tag_bytes_equal_ycash6_for_the_golden_coinbases() {
         };
         tagged += 1;
 
-        // ycash6's bytes: the direct push 0x24 ‖ 36 bytes, found after the height prefix.
+        // ycash6's bytes: the direct push 0x24 ‖ 36 bytes (v1) or 0x31 ‖ 49 bytes (tag v2),
+        // found after the height prefix.
         let push = tag_push(&tag);
-        assert_eq!(push.len(), 37);
-        assert_eq!(push[0], 0x24);
+        if tag.version() == TAG_VERSION_V2 {
+            v2 += 1;
+            assert_eq!(push.len(), 50);
+            assert_eq!(push[0], 0x31);
+        } else {
+            assert_eq!(push.len(), 37);
+            assert_eq!(push[0], 0x24);
+        }
         assert_eq!(&push[1..], &encode_tag(&tag)[..]);
         let after_height = &script[height_prefix(h).len()..];
         assert!(
@@ -193,6 +203,7 @@ fn tag_bytes_equal_ycash6_for_the_golden_coinbases() {
         assert_eq!(info.kind, if tag.is_quote() { "quote" } else { "signal" });
     }
     assert!(tagged > 0, "the golden vector carries tagged coinbases");
+    assert_eq!(v2, 18, "the golden vector's v2 quote tags (FN-DSA and SLH-DSA)");
 }
 
 /// `tag1_encoding_is_36_bytes_one_direct_push`'s bytes, and the coinbase that carries them.
@@ -311,12 +322,12 @@ fn tagged_coinbase_is_consistent() {
 /// quote, no key or a price outside TAG-2 make none.
 #[test]
 fn build_tag_follows_build_tag_script() {
-    let key = Some([0x11; 20]);
+    let key = Some(Payee::p2pkh(&[0x11; 20]));
     let tag = YellowbackMiner::build_tag(true, key, 2_000_000, 3).expect("a quote tag");
     assert_eq!(tag.flags, 0);
     assert_eq!(tag.price_micro_usd, 2_000_000);
     assert_eq!(tag.source_mask, 3);
-    assert_eq!(tag.payout_key, [0x11; 20]);
+    assert_eq!(tag.payee, Payee::p2pkh(&[0x11; 20]));
     assert!(YellowbackMiner::build_tag(false, key, 2_000_000, 3).is_none());
     assert!(YellowbackMiner::build_tag(true, None, 2_000_000, 3).is_none());
     assert!(
@@ -357,10 +368,11 @@ fn coinbase_flags_of_skips_two_operations() {
 #[test]
 fn template_info_matches_ycashd_fields() {
     let net = Network::Mainnet;
-    let tag = YellowbackMiner::build_tag(true, Some([0x22; 20]), 1_500_000, 1).expect("a tag");
+    let tag = YellowbackMiner::build_tag(true, Some(Payee::p2pkh(&[0x22; 20])), 1_500_000, 1)
+        .expect("a tag");
     let miner = YellowbackMiner {
         tag: Some(tag),
-        payout_key: Some([0x22; 20]),
+        payout_key: Some(Payee::p2pkh(&[0x22; 20])),
         quote_age_seconds: Some(12),
         registered: true,
         eligible: false,
@@ -879,4 +891,35 @@ fn coinbase_pays_the_configured_fund_share_after_the_mandate() {
             "foundersreward at height {height}"
         );
     }
+}
+
+/// Tag v2 (beta4 D-T3): a post-quantum payout key builds a 49-byte v2 tag, the template carries
+/// its `0x31` push and `payoutAddress` is the plain-YEC post-quantum address of the network.
+#[test]
+fn template_info_post_quantum_payout_builds_a_v2_tag() {
+    let net = Network::Mainnet;
+    let payee = Payee::pq(&kogany_vault::PqOwner {
+        scheme: 2,
+        hash: kogany_vault::Hash32([0x5a; 32]),
+    })
+    .expect("FN-DSA-512 is registered");
+    let tag = YellowbackMiner::build_tag(true, Some(payee), 1_500_000, 1).expect("a tag");
+    assert_eq!(tag.version(), TAG_VERSION_V2);
+    assert_eq!(encode_tag(&tag).len(), 49);
+    let miner = YellowbackMiner {
+        tag: Some(tag),
+        payout_key: Some(payee),
+        quote_age_seconds: Some(1),
+        registered: false,
+        eligible: false,
+    };
+    assert_eq!(miner.flags()[0], 0x31);
+    let cb = coinbase(&net, 8_388_607, &miner_params(None, Some(miner.clone())));
+    let script = coinbase_script(&cb);
+    assert!(script.len() <= 100);
+    assert_eq!(find_tag(&script, 8_388_607), Some(tag));
+    let (_, info) = template_fields(&net, Height(8_388_607), &script, &miner);
+    let address = info.payout_address.expect("a payout address");
+    assert!(address.starts_with("sqf"), "{address}");
+    assert_eq!(decode_payee_address(&net, &address), Some(payee));
 }

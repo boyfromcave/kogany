@@ -39,14 +39,16 @@ pub use wallet::{
     YedWalletRefusal, YedWalletRefusalDispatch, YedWalletRefusalImpl, WALLET_METHODS,
 };
 
-/// `YELLOWBACK_RPC_VERSION` (`ycash6/src/rpc/yellowback.cpp`): `10`, the beta3 additions in one
+/// `YELLOWBACK_RPC_VERSION` (`ycash6/src/rpc/yellowback.cpp`): `11`, tag v2 (beta4 D-T2/D-T3):
+/// `yed_gettag.version` (1 or 2) and `payoutScheme`, and every payee / `payoutAddress` may be a
+/// plain-YEC post-quantum address (D-9 form). `10` was the beta3 additions in one
 /// step (decision B3-D5): `getcoinbasetemplatefor`; `getblockchaininfo.transparentPools` and
 /// `.transactions` (and `getblock`'s `transparentPools`); `getaddressbalance.txcount`,
 /// `getaddressfirstlastheight` and the Sprout `commitments` of `z_gettreestate`; the opt-in insight
 /// input fields of `getrawtransaction` / `getblock` and `getblock`'s `blockfee`; and the miner's
 /// development-fund share (`-ydf`, kogany's `mining.ydf`). `9` was the scheme-visible
 /// post-quantum address prefixes (D-9), `8` the fee structure.
-pub const YED_RPC_VERSION: i64 = 10;
+pub const YED_RPC_VERSION: i64 = 11;
 
 /// The `yed_*` read and node-state methods over `state`, and the wallet refusals, for `network`.
 pub fn extension(state: Arc<dyn YedReadState>, network: &Network) -> RpcExtension {

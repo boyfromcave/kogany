@@ -23,7 +23,7 @@ use kogany_vault::{Hash32, OutPoint, PqOwner, PubKeyBytes};
 use kogany_yellowback::{
     codecs::{
         script::{yed_vault_script, Holder},
-        tag::CoinbaseTag,
+        tag::{CoinbaseTag, Payee},
     },
     math::{
         attest_fee_zat, min_ratio_bps, protocol_fee_cents, protocol_fee_zat,
@@ -47,7 +47,7 @@ pub const GOLDEN_TIP_HASH: &str =
     "ca6c02a81b1fd42c9bf7775ace41f9b5224b700ad25acf0ccf48e86a979d1831";
 /// Its state hash, display order.
 pub const GOLDEN_STATE_HASH: &str =
-    "ee6a9f157175b6e084df52f96dc5039e4d411189352542f329971e6dd7bb0c0b";
+    "e45e83e80a681192e237e62bfad7155c4cb01dcf93fd756da76bccb2799bfe5a";
 /// Its YED attestor set, display order.
 pub const GOLDEN_ATTESTOR_SET: &str =
     "0eeebe67c4bc64cf5deb624972629c92b09e3362e126a3702443b192dca80f4a";
@@ -57,7 +57,7 @@ pub const GOLDEN_TOTALS: Totals = Totals {
     collateral_zat: 8_775_196_019_613,
     active_vaults: 2,
     void_vaults: 0,
-    closed_vaults: 2,
+    closed_vaults: 3,
     claimed_vaults: 1,
     unbacked_cents: 0,
     open_debt_cents: 20_000,
@@ -154,8 +154,14 @@ pub struct MockYedState<T> {
     healthy: bool,
 }
 
-/// The fixture's payout key.
-pub const PAYOUT_KEY: [u8; 20] = [0x51; 20];
+/// The fixture's payout key: the P2PKH key `51…51`.
+pub const PAYOUT_KEY: Payee = Payee {
+    kind: kogany_yellowback::codecs::tag::PAYEE_P2PKH,
+    hash: [
+        0x51, 0x51, 0x51, 0x51, 0x51, 0x51, 0x51, 0x51, 0x51, 0x51, 0x51, 0x51, 0x51, 0x51, 0x51,
+        0x51, 0x51, 0x51, 0x51, 0x51, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    ],
+};
 /// The fixture's vault txids (internal order): ACTIVE, ACTIVE with a standing notice, CLAIMING.
 pub const VAULTS: [Hash32; 3] = [Hash32([0x6a; 32]), Hash32([0x6b; 32]), Hash32([0x6c; 32])];
 /// The pool's `seq`s (1..=3 eligible; 4 is EJECTED, 5 has no record).
@@ -370,7 +376,7 @@ impl<T: ChainTip + Send + Sync + 'static> YedReadState for MockYedState<T> {
             flags: 0,
             price_micro_usd: 2_000_000,
             source_mask: 3,
-            payout_key: PAYOUT_KEY,
+            payee: PAYOUT_KEY,
         }))
     }
 
@@ -642,11 +648,11 @@ impl YedIndexView for Fixture {
         }]
     }
 
-    fn eligible_payees(&self, _ref_height: i64) -> Vec<[u8; 20]> {
+    fn eligible_payees(&self, _ref_height: i64) -> Vec<Payee> {
         vec![PAYOUT_KEY]
     }
 
-    fn default_payee(&self, _ref_height: i64, _selector: &[u8]) -> Option<([u8; 20], i64)> {
+    fn default_payee(&self, _ref_height: i64, _selector: &[u8]) -> Option<(Payee, i64)> {
         Some((PAYOUT_KEY, 10_000 + i64::from(self.params.payee_tilt_bps)))
     }
 

@@ -11,6 +11,7 @@ use kogany_yellowback::{
         },
         payload::Payload,
         script::{bond_script, Holder},
+        tag::Payee,
     },
     params::Params,
 };
@@ -75,6 +76,16 @@ impl Fmt<'_> {
     /// D-Q-20, D-9), `""` for an unregistered scheme (ycash6 `EncodePQAddress`).
     pub fn plain_pq_address(&self, owner: &PqOwner) -> String {
         encode_pq(owner, self.plain_pq_versions).unwrap_or_default()
+    }
+
+    /// A fee payee's address (rpcversion 11, tag v2): the transparent P2PKH address, or the
+    /// plain-YEC post-quantum address (ycash6 `PayeeAddress`).
+    pub fn payee(&self, payee: &Payee) -> String {
+        match (payee.key_id(), payee.pq_owner()) {
+            (Some(key), _) => self.p2pkh(&key),
+            (None, Some(owner)) => self.plain_pq_address(&owner),
+            (None, None) => String::new(),
+        }
     }
 
     /// A holder's YED address and its plain-YEC twin.

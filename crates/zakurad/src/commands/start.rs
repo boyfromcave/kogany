@@ -236,16 +236,27 @@ impl StartCmd {
     }
 
     /// kogany S5 (MINER-2, K22): ycashd's init refuses a `-yellowbackpayoutaddress` that is not
-    /// a transparent P2PKH address, with this text (ycash6 `src/init.cpp`).
+    /// a transparent P2PKH or a plain-YEC post-quantum address of the network (beta4 D-T3), with
+    /// this text (ycash-dd and ycash6 `src/init.cpp`).
     #[cfg(feature = "ycash")]
     fn validate_yellowback_payout_address(config: &ZakuradConfig) -> Result<(), Report> {
-        match config.mining.yellowback_payout_address.as_ref() {
-            Some(address) if !kogany_rpc::yed::live::is_p2pkh_address(address) => Err(eyre!(
-                "-yellowbackpayoutaddress must be a transparent P2PKH address: '{}'",
-                address.encode()
-            )),
+        use zakura_rpc::ycash_mining::decode_payee_address;
+        match config.mining.yellowback_payout_address.as_deref() {
+            Some(address) if decode_payee_address(&config.network.network, address).is_none() => {
+                Err(eyre!(
+                    "-yellowbackpayoutaddress must be a transparent P2PKH or post-quantum address \
+                     of this network: '{address}'"
+                ))
+            }
             _ => Ok(()),
         }
+    }
+
+    /// Prints the one-line `resync required` refusal (beta4 C-T2) where an operator sees it.
+    #[allow(clippy::print_stderr)]
+    fn report_resync_required(reason: &str) {
+        error!(%reason, "resync required");
+        eprintln!("resync required: {reason}");
     }
 
     fn validate_debug_blocksync_throughput_config(config: &ZakuradConfig) -> Result<(), Report> {
@@ -503,6 +514,14 @@ impl StartCmd {
 
         info!("logging database metrics on startup");
         read_only_state_service.log_db_metrics();
+
+        // beta4 C-T2: a database whose chain is past the Yellowback start height but whose YED
+        // index is behind it (or of another schema) cannot be followed: kogany has no in-place
+        // YED rebuild, so the node stops and asks for a resync.
+        if let Some(reason) = read_only_state_service.yed_resync_required() {
+            Self::report_resync_required(&reason);
+            return Err(eyre!("resync required: {reason}"));
+        }
 
         let (blocksync_throughput_probe, mut blocksync_throughput_completion_rx) =
             if let Some(target_height) = config.sync.debug_blocksync_throughput_target_height {
@@ -803,16 +822,36 @@ impl StartCmd {
         // kogany F-S5-9: `mining.yellowback_payout_default = false` (ycashd
         // `-yellowbackpayoutdefault=0`) leaves the node without a payout key.
         // kogany S5: `mining.yellowback_payout_address` (ycashd -yellowbackpayoutaddress) wins.
+        // beta4 D-T3: a P2PKH payout address makes tag v1, a post-quantum one tag v2.
         #[cfg(feature = "ycash")]
-        kogany_rpc::yed::live::set_payout_address(
-            config.mining.yellowback_payout_address.as_ref().or(config
+        kogany_rpc::yed::live::set_payout_key(
+            config
+                .mining
+                .yellowback_payout_address
+                .clone()
+                .or_else(|| {
+                    config
+                        .mining
+                        .miner_address
+                        .as_ref()
+                        .filter(|_| config.mining.yellowback_payout_default)
+                        .map(ToString::to_string)
+                })
+                .and_then(|address| {
+                    zakura_rpc::ycash_mining::decode_payee_address(
+                        &config.network.network,
+                        &address,
+                    )
+                }),
+        );
+        #[cfg(not(feature = "ycash"))]
+        kogany_rpc::yed::live::set_payout_key(
+            config
                 .mining
                 .miner_address
                 .as_ref()
-                .filter(|_| config.mining.yellowback_payout_default)),
+                .and_then(kogany_rpc::yed::live::p2pkh_payee),
         );
-        #[cfg(not(feature = "ycash"))]
-        kogany_rpc::yed::live::set_payout_address(config.mining.miner_address.as_ref());
         // kogany S5 (F-S5-5): the extension's mempool reads (yed_getvault.spendPending,
         // getaddressmempool).
         kogany_rpc::mempool::set_mempool(mempool.clone());
@@ -1594,25 +1633,47 @@ mod tests {
     use zakura_network::P2pStack;
     use zakura_state::{PruningConfig, StorageMode};
 
-    /// kogany S5 (MINER-2): a non-P2PKH `mining.yellowback_payout_address` is refused at
-    /// startup with ycashd's text; a P2PKH one and none are accepted.
+    /// kogany S5 (MINER-2), beta4 D-T3: a `mining.yellowback_payout_address` that is neither a
+    /// P2PKH nor a plain-YEC post-quantum address of the network is refused at startup with
+    /// ycashd's text; a P2PKH one, a post-quantum one (both schemes) and none are accepted.
     #[cfg(feature = "ycash")]
     #[test]
-    fn ycash_yellowback_payout_address_must_be_p2pkh() {
+    fn ycash_yellowback_payout_address_must_be_p2pkh_or_post_quantum() {
+        use zakura_chain::parameters::NetworkKind;
+        let pq = |network_kind: NetworkKind, scheme: u8| {
+            zakura_chain::transparent::Address::PayToPqKeyHash {
+                network_kind,
+                scheme,
+                key_hash: [0x5a; 32],
+            }
+            .to_string()
+        };
         let with = |address: Option<&str>| {
             let mut config = ZakuradConfig::default();
-            config.mining.yellowback_payout_address = address.map(|a| a.parse().expect("address"));
+            config.mining.yellowback_payout_address = address.map(str::to_owned);
             StartCmd::validate_yellowback_payout_address(&config)
         };
         assert!(with(None).is_ok());
         assert!(with(Some("s1WUAp94K9NPDh2S1GAYtWDRg7bzUSmZCNP")).is_ok());
+        for scheme in [1u8, 2] {
+            let address = pq(NetworkKind::Mainnet, scheme);
+            assert!(address.starts_with(if scheme == 2 { "sqf" } else { "sqs" }));
+            assert!(with(Some(&address)).is_ok(), "{address}");
+        }
         let error = with(Some("s2xZAA8goa4uw6xXmWhBWFFzn9382MuGiZS"))
             .expect_err("a P2SH payout address is refused")
             .to_string();
         assert!(
-            error.starts_with("-yellowbackpayoutaddress must be a transparent P2PKH address"),
+            error.starts_with(
+                "-yellowbackpayoutaddress must be a transparent P2PKH or post-quantum address of \
+                 this network"
+            ),
             "{error}"
         );
+        // a regtest post-quantum address on mainnet
+        let regtest = pq(NetworkKind::Regtest, 2);
+        assert!(regtest.starts_with("rqf"));
+        assert!(with(Some(&regtest)).is_err());
     }
 
     /// kogany: each Ycash test network's default RPC cookie is in its own directory, mainnet's

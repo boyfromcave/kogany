@@ -79,14 +79,20 @@ pub struct Config {
     #[serde(skip_serializing_if = "is_true")]
     pub yellowback_payout_default: bool,
 
-    /// Ycash: the node's YED payout address, ycashd's `-yellowbackpayoutaddress` (a transparent
-    /// P2PKH address). When set it is the key the coinbase tag names, whatever address the
-    /// coinbase pays (a stratum pool paying each miner's username keeps its own payout key);
-    /// unset, the payout key follows [`Self::miner_address`] and
-    /// [`Self::yellowback_payout_default`] (ycashd MINER-2, `src/init.cpp`).
+    /// Ycash: the node's YED payout address, ycashd's `-yellowbackpayoutaddress`: a transparent
+    /// P2PKH address (the coinbase tag is v1) or a plain-YEC post-quantum address,
+    /// `sqf…`/`sqs…`, `tqf…`/`tqs…` or `rqf…`/`rqs…` (tag v2, beta4 D-T3). When set it is the key
+    /// the coinbase tag names, whatever address the coinbase pays (a stratum pool paying each
+    /// miner's username keeps its own payout key); unset, the payout key follows
+    /// [`Self::miner_address`] and [`Self::yellowback_payout_default`] (ycashd MINER-2,
+    /// `src/init.cpp`). The node refuses to start with any other kind of address, or one of
+    /// another network.
     #[cfg(feature = "ycash")]
-    #[serde(with = "miner_address", skip_serializing_if = "Option::is_none")]
-    pub yellowback_payout_address: Option<ZcashAddress>,
+    #[serde(
+        with = "yellowback_payout_address",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub yellowback_payout_address: Option<String>,
 
     /// Ycash: the most unpaid ZIP-317 actions a block template carries, ycashd's
     /// `-blockunpaidactionlimit`. `None` (the default) is no limit, ycashd's
@@ -137,6 +143,44 @@ fn is_default_ydf(value: &i64) -> bool {
 #[cfg(feature = "ycash")]
 fn is_true(value: &bool) -> bool {
     *value
+}
+
+/// `yellowback_payout_address`: the address text, kept as written (a post-quantum address is no
+/// `ZcashAddress`); refused unless it parses as a Ycash address. The network and the kind
+/// (P2PKH or post-quantum) are checked at start, where the network is known.
+#[cfg(feature = "ycash")]
+mod yellowback_payout_address {
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+    use zcash_address::ZcashAddress;
+
+    pub(super) fn serialize<S>(address: &Option<String>, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        address.serialize(serializer)
+    }
+
+    pub(super) fn deserialize<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        Option::<String>::deserialize(deserializer)?
+            .map(|encoded| {
+                let parses = encoded.parse::<ZcashAddress>().is_ok()
+                    || encoded
+                        .parse::<zakura_chain::transparent::Address>()
+                        .is_ok();
+                if parses {
+                    Ok(encoded)
+                } else {
+                    Err(serde::de::Error::custom(format!(
+                        "Invalid address for mining.yellowback_payout_address: Unable to parse \
+                         '{encoded}' as a Ycash address."
+                    )))
+                }
+            })
+            .transpose()
+    }
 }
 
 mod miner_address {
@@ -427,6 +471,26 @@ mod tests {
             .unwrap()
             .contains("yellowback_payout_address"));
         assert!(toml::from_str::<Config>("yellowback_payout_address = 'invalid'").is_err());
+        // beta4 D-T3: a plain-YEC post-quantum address parses and round-trips as written
+        let pq = kogany_yellowback::codecs::address::encode_pq(
+            &kogany_vault::PqOwner {
+                scheme: 2,
+                hash: kogany_vault::Hash32([0x5a; 32]),
+            },
+            &kogany_yellowback::codecs::address::PLAIN_PQ_VERSIONS_REGTEST,
+        )
+        .unwrap();
+        assert!(pq.starts_with("rqf"));
+        let config =
+            toml::from_str::<Config>(&format!("yellowback_payout_address = '{pq}'")).unwrap();
+        assert_eq!(
+            config.yellowback_payout_address.as_deref(),
+            Some(pq.as_str())
+        );
+        assert_eq!(
+            toml::from_str::<Config>(&toml::to_string(&config).unwrap()).unwrap(),
+            config
+        );
     }
 
     /// `ydf` (ycashd `-ydf=<n>`): 0 by default and then not written; 0..=100 is taken as given;
