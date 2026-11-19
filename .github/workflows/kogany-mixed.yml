@@ -54,11 +54,10 @@ concurrency:
 
 env:
   YCASH6_REPO: boyfromcave/ycash6
-  # The pin: ycash6 upgrade/vault at the merge of #136 (cd575cc7b: the 6.22.0-beta3 cut, the fast
-  # testnet's mandate end at 512,417, on rpcversion 10, getcoinbasetemplatefor, transparentPools and
-  # the shard list's beta3 gates), unless a dispatch or caller names another commit. Bump by PR, never a
+  # The pin: ycash6 upgrade/vault at the merge of #145 (d50e3b843: beta4 P1, tag v2, SCHEMA_VERSION 16,
+  # rpcversion 11, on top of the 6.22.0-beta3 cut #136), unless a dispatch or caller names another commit. Bump by PR, never a
   # branch tip.
-  YCASH6_REV: ${{ inputs.ycash6_rev || 'cd575cc7b7d77208115e37811c421248586fd9dd' }}
+  YCASH6_REV: ${{ inputs.ycash6_rev || 'd50e3b843122b46010326a4ea0bbf8cb5bd14ab1' }}
 
 jobs:
   koganyd:
