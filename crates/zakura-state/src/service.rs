@@ -1819,9 +1819,7 @@ impl ReadStateService {
     /// is off (no attestor set, or Vault unscheduled) or the configuration is refused
     /// ([`yed_params_for_db`](yed::yed_params_for_db)).
     pub fn yed_params(&self) -> Option<kogany_yellowback::params::Params> {
-        yed::yed_params_for_db(&self.db)
-            .ok()
-            .flatten()
+        yed::yed_params_for_db(&self.db).ok().flatten()
     }
 }
 
