@@ -133,7 +133,7 @@ jobs:
       contents: read
     env:
       CHAINVIZ_REPO: https://github.com/boyfromcave/chain-viz.git
-      CHAINVIZ_REV: 35d8eae6aca2c013429e7b63727bc3d8f7685f48   # chain-viz upgrade/vault (#12, rpcversion 9 and 10)
+      CHAINVIZ_REV: 15ad0bccfd3269ed9728e8a915153bddb833fcd4   # chain-viz upgrade/vault (#13)
       YCASH6_REPO: boyfromcave/ycash6
       YCASH6_BRANCH: upgrade/vault
     steps:
