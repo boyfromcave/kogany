@@ -20,17 +20,18 @@ use crate::attest::price::{
     HALT_DIVERGENCE, HALT_ENFORCEMENT, HALT_GLOBAL_RATIO, HALT_NOT_ACTIVE, HALT_NO_PRICE,
     HALT_PARTICIPATION,
 };
+use crate::codecs::tag::Payee;
 use crate::math::BPS;
 use crate::params::Params;
 
 /// The quote tag at `h` paying `key`, if any.
-fn quote_of(r: &dyn YedRead, p: &Params, h: i64, key: &[u8; 20]) -> Option<TagRecord> {
-    tag_at(r, p, h).filter(|t| t.is_quote() && t.payout_key == *key)
+fn quote_of(r: &dyn YedRead, p: &Params, h: i64, key: &Payee) -> Option<TagRecord> {
+    tag_at(r, p, h).filter(|t| t.is_quote() && t.payee == *key)
 }
 
 /// REG-1 (informational, `Registered`): some quote tag with this payout key exists in
 /// `(R - N_REG, R]`.
-pub fn registered(r: &dyn YedRead, p: &Params, key: &[u8; 20], ref_height: i64) -> bool {
+pub fn registered(r: &dyn YedRead, p: &Params, key: &Payee, ref_height: i64) -> bool {
     let lo = ref_height
         .saturating_sub(i64::from(p.n_reg))
         .saturating_add(1)
@@ -43,7 +44,7 @@ pub fn registered(r: &dyn YedRead, p: &Params, key: &[u8; 20], ref_height: i64) 
 pub fn penalized(
     r: &dyn YedRead,
     p: &Params,
-    key: &[u8; 20],
+    key: &Payee,
     ref_height: i64,
     penalty_blocks: i32,
 ) -> bool {
@@ -64,7 +65,7 @@ pub fn penalized(
 pub fn accuracy_bps(
     r: &dyn YedRead,
     p: &Params,
-    key: &[u8; 20],
+    key: &Payee,
     ref_height: i64,
     accuracy_window: i32,
 ) -> i32 {
@@ -101,7 +102,7 @@ pub struct PayeePolicy {
     /// `PAYEE_TILT_BPS` (`-yellowbackpayeetiltbps`).
     pub tilt_bps: i32,
     /// `-yellowbackpreferredpayee`: replaces the pick when it is in E(R).
-    pub preferred: Option<[u8; 20]>,
+    pub preferred: Option<Payee>,
 }
 
 impl PayeePolicy {
@@ -128,13 +129,13 @@ pub fn default_payee(
     ref_height: i64,
     selector: &[u8],
     policy: &PayeePolicy,
-) -> Option<[u8; 20]> {
+) -> Option<Payee> {
     let eligible = eligible_payees(r, p, ref_height);
     let first = *eligible.first()?;
     if let Some(pref) = policy.preferred.filter(|k| eligible.contains(k)) {
         return Some(pref);
     }
-    let mut candidates: Vec<([u8; 20], i64)> = Vec::new();
+    let mut candidates: Vec<(Payee, i64)> = Vec::new();
     let lo = ref_height
         .saturating_sub(i64::from(p.payee_window))
         .saturating_add(1)
@@ -143,7 +144,7 @@ pub fn default_payee(
         let Some(t) = tag_at(r, p, h).filter(TagRecord::is_quote) else {
             continue;
         };
-        let k = t.payout_key;
+        let k = t.payee;
         if !eligible.contains(&k) {
             continue; // pinned at R (PIN-1)
         }

@@ -820,6 +820,41 @@ pub fn test_params() -> Params {
     testnet(common(Params::default()))
 }
 
+/// `TEST_FAST_ATTESTOR_SET_ID`: the testnet-yb-fast attestor set id (beta4 C-T1,
+/// docs/plans/beta4/price-feed.md §3.4), the `SET_CREATE` txid the fast testnet's YED set
+/// ceremony produces (C-T7), as 64 display-hex characters. The ceremony fills it in; empty means
+/// null, and a null id keeps YED off (start height 0). Once set, YED starts at the
+/// `UPGRADE_VAULT` height (510,400 on testnet-yb-fast), retroactively (§3.1). Not a user setting
+/// (`yellowback.attestor_set` stays regtest-only).
+pub const TEST_FAST_ATTESTOR_SET_ID: &str = "";
+
+/// [`TEST_FAST_ATTESTOR_SET_ID`] as a set id in memory order (the reverse of its hex, as
+/// `uint256S`); all zero (null) when empty or not 64 hex characters.
+pub fn test_fast_attestor_set_id() -> [u8; 32] {
+    set_id_from_display_hex(TEST_FAST_ATTESTOR_SET_ID).unwrap_or([0u8; 32])
+}
+
+/// A set id from 64 display-hex characters (`uint256S` of a well-formed hex string), `None`
+/// for any other text.
+pub fn set_id_from_display_hex(hex: &str) -> Option<[u8; 32]> {
+    let b = hex.as_bytes();
+    if b.len() != 64 {
+        return None;
+    }
+    let nibble = |c: u8| {
+        char::from(c)
+            .to_digit(16)
+            .and_then(|d| u8::try_from(d).ok())
+    };
+    let mut out = [0u8; 32];
+    for (i, o) in out.iter_mut().enumerate() {
+        // display order is the reverse of memory order
+        let at = 62usize.checked_sub(i.checked_mul(2)?)?;
+        *o = nibble(*b.get(at)?)?.checked_mul(16)? | nibble(*b.get(at.checked_add(1)?)?)?;
+    }
+    Some(out)
+}
+
 /// `TestFastParams`: testnet-yb-fast (testnet plan Revision 3, T-16). Every lifecycle window is
 /// `max(floor, ceil(mainnet x 48 / 16,128))`; everything else is the testnet column's, but for the
 /// bond amounts (one thousandth of mainnet's, 2026-10-29).
@@ -842,6 +877,8 @@ pub fn test_fast_params() -> Params {
     f.dormancy_check = 1;
     f.bond_min_floor_zat = 10 * COIN;
     f.bond_min_cap_zat = 20 * COIN;
+    // The network's own YED set (C-T1): TEST_FAST_ATTESTOR_SET_ID, null until the ceremony names it.
+    f.attestor_set_id = test_fast_attestor_set_id();
     f
 }
 

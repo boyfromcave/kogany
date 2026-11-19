@@ -227,7 +227,12 @@ fn tag(t: Option<CoinbaseTag>) -> String {
             t.flags,
             t.price_micro_usd,
             t.source_mask,
-            hex::encode(t.payout_key)
+            // v1: the 20-byte payout key; tag v2 (beta4): the scheme byte, then the 32-byte hash
+            if t.payee.is_p2pkh() {
+                hex::encode(t.payee.hash_bytes())
+            } else {
+                hex::encode(t.payee.encode())
+            }
         ),
     }
 }

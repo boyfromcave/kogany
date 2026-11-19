@@ -10,6 +10,8 @@
 
 use kogany_vault::{Hash32, OutPoint};
 
+use crate::codecs::tag::Payee;
+
 /// A record being written.
 #[derive(Default)]
 pub(crate) struct Writer(pub(crate) Vec<u8>);
@@ -64,6 +66,11 @@ impl Writer {
 
     pub(crate) fn outpoint(&mut self, o: &OutPoint) -> &mut Self {
         self.raw(&o.to_bytes())
+    }
+
+    /// A `Payee` (`SCHEMA_VERSION` 16): kind ‖ 20 or 32 raw hash bytes.
+    pub(crate) fn payee(&mut self, p: &Payee) -> &mut Self {
+        self.raw(&p.encode())
     }
 
     pub(crate) fn compact_size(&mut self, n: usize) -> &mut Self {
@@ -152,6 +159,23 @@ impl<'a> Reader<'a> {
 
     pub(crate) fn outpoint(&mut self) -> Option<OutPoint> {
         OutPoint::from_slice(&self.take::<36>()?)
+    }
+
+    /// A `Payee`: an unregistered kind fails (`Payee::Unserialize` throws).
+    pub(crate) fn payee(&mut self) -> Option<Payee> {
+        let kind = self.u8()?;
+        let mut p = Payee {
+            kind,
+            hash: [0u8; 32],
+        };
+        if !p.is_valid() {
+            return None;
+        }
+        let n = if p.is_p2pkh() { 20 } else { 32 };
+        for (h, b) in p.hash.iter_mut().zip(self.raw(n)?) {
+            *h = *b;
+        }
+        Some(p)
     }
 
     pub(crate) fn compact_size(&mut self) -> Option<usize> {

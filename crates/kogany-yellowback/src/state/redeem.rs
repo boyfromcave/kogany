@@ -16,7 +16,7 @@ use kogany_vault::template::{is_owner_valid, script_hash256, SEL_APP, SEL_OWNER,
 use kogany_vault::OutPoint;
 
 use super::eval::{log_bundle, Eval};
-use super::lookups::{p2pkh_key, yed_intent_output};
+use super::lookups::yed_intent_output;
 use super::mint::h32;
 use super::records::{IntentRecord, IntentRole, Totals, TxLogRecord, VaultRecord, VaultStatus};
 use super::verdict;
@@ -25,6 +25,7 @@ use crate::attest::price::{ref_height_in_window, BundleFacts};
 use crate::attest::seats::outpoint_selector;
 use crate::codecs::payload::{FoundPayload, Payload, Redeem};
 use crate::codecs::script::{holder_allowed, pq_key_script, yed_vault_script_at};
+use crate::codecs::tag::Payee;
 use crate::math::{
     attest_fee_zat, claimant_max_zat, early_redeem_fee_zat, is_underwater, price_combine,
     protocol_fee_zat, residual_min_zat, residual_zat, BPS,
@@ -198,7 +199,8 @@ impl Eval<'_, '_> {
             let Some(fee_out) = tx.outputs.get(fv) else {
                 return fail(verdict::VAULT_SPEND_BAD_FEE);
             };
-            if !p2pkh_key(&fee_out.script_pubkey).is_some_and(|k| eligible.contains(&k)) {
+            // P2PKH or TX_PQPKH exactly
+            if !Payee::from_script(&fee_out.script_pubkey).is_some_and(|k| eligible.contains(&k)) {
                 return fail(verdict::VAULT_SPEND_BAD_PAYEE);
             }
             if fee_out.value < protocol_fee {
@@ -411,7 +413,7 @@ impl Eval<'_, '_> {
             let fee_out = tx.outputs.get(usize::from(red.fee_vout));
             vault.fee_paid_zat = fee_out.map_or(0, |o| o.value);
             log.fee_zat = vault.fee_paid_zat;
-            let key = fee_out.and_then(|o| p2pkh_key(&o.script_pubkey));
+            let key = fee_out.and_then(|o| Payee::from_script(&o.script_pubkey));
             log.has_payee = key.is_some();
             if let Some(k) = key {
                 log.payee = k;

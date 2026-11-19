@@ -24,7 +24,7 @@ use common::{h, load_pinned, tx_io, uint256_display};
 use kogany_vault::template::{match_intent, parse_vault};
 use kogany_yellowback::codecs::payload::{encode_payload, find_payload, payload_script, Payload};
 use kogany_yellowback::codecs::script::{find_carrier_input, yed_vault_script, YED_TAG};
-use kogany_yellowback::codecs::tag::{find_tag, tag_push};
+use kogany_yellowback::codecs::tag::{find_tag, tag_push, TAG_VERSION_V2};
 use kogany_yellowback::params::{regtest_params_with, BundleCarrier, Params};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
@@ -62,6 +62,9 @@ fn replay(params: &Params, blocks: &[Value]) -> BTreeMap<String, usize> {
                 count("coinbase");
                 if let Some(tag) = find_tag(&io.script_sigs[0], height) {
                     count("tag");
+                    if tag.version() == TAG_VERSION_V2 {
+                        count(&format!("tag-v2-{}", tag.payee.scheme_name()));
+                    }
                     let push = tag_push(&tag);
                     assert!(
                         io.script_sigs[0].windows(push.len()).any(|w| w == push),
@@ -122,24 +125,27 @@ fn golden_chain_codecs() {
     let v = load_pinned("yellowback_golden.json");
     let p = chain_params(&v["params"]);
     let blocks = v["blocks"].as_array().unwrap();
-    assert_eq!(blocks.len(), 462);
+    assert_eq!(blocks.len(), 463);
     let n = replay(&p, blocks);
     eprintln!("yellowback_golden.json: {n:?}");
-    // The pinned file's census. 461 coinbases carry the pattern; height 13's tag sets a reserved
-    // flag bit (flags 0x03), so TAG-2 makes it no tag.
+    // The pinned file's census (SCHEMA_VERSION 16: v2-only quotes at 190..206, the refused
+    // P2PKH-fee mint at 201 mined again). 462 coinbases carry a pattern; height 13's tag sets a
+    // reserved flag bit (flags 0x03), so TAG-2 makes it no tag.
     let census = [
-        ("coinbase", 462),
-        ("tag", 460),
-        ("mint", 11),
+        ("coinbase", 463),
+        ("tag", 461),
+        ("tag-v2-fn-dsa-512", 9),
+        ("tag-v2-slh-dsa-sha2-128s", 9),
+        ("mint", 14),
         ("transfer", 4),
-        ("redeem", 17),
+        ("redeem", 18),
         ("register", 1),
         ("notice", 3),
         ("equivocation", 2),
         ("cancelcosign", 7),
         ("carrier", 25),
         ("carrier-hash-ok", 25),
-        ("yed-vault-output", 23),
+        ("yed-vault-output", 26),
         ("yed-intent-output", 21),
     ];
     assert_eq!(n, census.iter().map(|&(k, c)| (k.to_owned(), c)).collect());

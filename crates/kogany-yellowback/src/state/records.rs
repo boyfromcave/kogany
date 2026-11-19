@@ -13,10 +13,13 @@ use kogany_vault::{Hash32, OutPoint};
 
 use super::codec::{Reader, Writer};
 use crate::attest::registry::AttestState;
+use crate::codecs::tag::Payee;
 use crate::params::{Amount, Cents, MicroUsd, Params};
 
-/// `SCHEMA_VERSION`: 15 (`Totals.openDebtCents`, `Snapshot.openDebtCents`); written in the tip.
-pub const SCHEMA_VERSION: u32 = 15;
+/// `SCHEMA_VERSION`: 16 (tag v2, beta4 D-T1: `TagRecord.payee`, `TxLogRecord.payee` and
+/// `Snapshot.pinnedKeys` hold a [`Payee`]; 15: `Totals.openDebtCents`, `Snapshot.openDebtCents`);
+/// written in the tip.
+pub const SCHEMA_VERSION: u32 = 16;
 
 /// The null `COutPoint` (`SetNull`: zero txid, `n = 0xffffffff`): `IntentRecord.heldBy` when no
 /// cancel holds the residual.
@@ -91,8 +94,8 @@ impl TipRecord {
 /// `Tags[height]` (`Q`): a valid coinbase tag (TAG-1..5).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct TagRecord {
-    /// Hash160 of the miner's fee key.
-    pub payout_key: [u8; 20],
+    /// The tag's payee: v1 a P2PKH key hash, v2 `payoutScheme` / `payoutHash`.
+    pub payee: Payee,
     /// The quote; 0 = signal-only (TAG-3).
     pub price_micro_usd: u64,
     /// Flag bit 0.
@@ -107,10 +110,10 @@ impl TagRecord {
         self.price_micro_usd != 0
     }
 
-    /// The canonical serialisation (31 bytes).
+    /// The canonical serialisation (32 bytes for a P2PKH payee, 44 for a post-quantum one).
     pub fn encode(&self) -> Vec<u8> {
         Writer::new()
-            .raw(&self.payout_key)
+            .payee(&self.payee)
             .u64(self.price_micro_usd)
             .bool(self.signal)
             .u16(self.source_mask)
@@ -121,7 +124,7 @@ impl TagRecord {
     pub fn decode(b: &[u8]) -> Option<TagRecord> {
         let mut r = Reader(b);
         let v = TagRecord {
-            payout_key: r.take()?,
+            payee: r.payee()?,
             price_micro_usd: r.u64()?,
             signal: r.bool()?,
             source_mask: r.u16()?,
@@ -501,8 +504,8 @@ pub struct TxLogRecord {
     pub fee_zat: Amount,
     /// `payee` is set.
     pub has_payee: bool,
-    /// The fee output's key hash.
-    pub payee: [u8; 20],
+    /// The fee output's payee (kind 0, zero hash when `has_payee` is false).
+    pub payee: Payee,
     /// The YED outputs created.
     pub assigned: Vec<AssignedOutput>,
     /// The Tokens consumed, in input order.
@@ -557,7 +560,7 @@ impl TxLogRecord {
             .i64(self.burned)
             .i64(self.fee_zat)
             .bool(self.has_payee)
-            .raw(&self.payee)
+            .payee(&self.payee)
             .vec(&self.assigned, AssignedOutput::put)
             .vec(&self.spent_tokens, AssignedOutput::put)
             .vec(&self.closed_vaults, |w, o| {
@@ -594,7 +597,7 @@ impl TxLogRecord {
             burned: r.i64()?,
             fee_zat: r.i64()?,
             has_payee: r.bool()?,
-            payee: r.take()?,
+            payee: r.payee()?,
             assigned: r.vec(AssignedOutput::get)?,
             spent_tokens: r.vec(AssignedOutput::get)?,
             closed_vaults: r.vec(Reader::outpoint)?,
@@ -833,8 +836,8 @@ pub struct Snapshot {
     pub attest: AttestState,
     /// The seated seqs, ascending.
     pub seated: Vec<u16>,
-    /// PIN-1: payout keys excluded from the medians and E(H), ascending.
-    pub pinned_keys: Vec<[u8; 20]>,
+    /// PIN-1: payees excluded from the medians and E(H), ascending ([`Payee`] order).
+    pub pinned_keys: Vec<Payee>,
     /// PIN-2: seqs excluded from selection at H.
     pub pinned_seqs: Vec<u16>,
     /// `Totals.openDebtCents` at H.
@@ -927,7 +930,7 @@ impl Snapshot {
             w.u16(*s);
         })
         .vec(&self.pinned_keys, |w, k| {
-            w.raw(k);
+            w.payee(k);
         })
         .vec(&self.pinned_seqs, |w, s| {
             w.u16(*s);
@@ -956,7 +959,7 @@ impl Snapshot {
             halt_mask: r.u32()?,
             attest: get_attest(&mut r)?,
             seated: r.vec(Reader::u16)?,
-            pinned_keys: r.vec(|r| r.take::<20>())?,
+            pinned_keys: r.vec(Reader::payee)?,
             pinned_seqs: r.vec(Reader::u16)?,
             open_debt_cents: r.i64()?,
         };

@@ -108,27 +108,30 @@ fn statehash_golden_vector() {
     let doc = load_pinned("yellowback_golden.json");
     let p = chain_params(&doc["params"]);
     let r = replay(&p, doc["blocks"].as_array().unwrap());
+    // One rejected block per verdict, in order (the C++ list; the emergency claim lands at 298
+    // since tag v2, the Falcon height is 400).
     let expected: Vec<(i64, &str)> = vec![
         (137, "bad-mint-amount"),
         (141, "bad-mint-collateral"),
         (146, "yed-template-output"),
         (150, "bad-redeem-early-fee"),
         (185, "vault-spend-short-burn"),
+        (201, "bad-mint-fee"),
         (217, "vault-spend-malformed"),
         (231, "attestor-register-retired"),
         (251, "mint9-no-bundle"),
         (252, "mint9-bundle-sig"),
         (253, "mint9-bundle-member"),
         (292, "liveness-unheld"),
-        (299, "red5-residual"),
-        (299, "red5-residual"),
-        (299, "red5-claimant-short"),
-        (300, "intent-cancel-no-vault"),
-        (300, "intent-cancel-no-refund"),
-        (300, "intent-cancel-cosign"),
-        (308, "intent-cancel-residual"),
-        (310, "intent-residual-held"),
-        (340, "intent-residual-held"),
+        (298, "red5-residual"),
+        (298, "red5-residual"),
+        (298, "red5-claimant-short"),
+        (299, "intent-cancel-no-vault"),
+        (299, "intent-cancel-no-refund"),
+        (299, "intent-cancel-cosign"),
+        (307, "intent-cancel-residual"),
+        (309, "intent-residual-held"),
+        (339, "intent-residual-held"),
         (402, "bad-yed-holder"),
         (403, "bad-yed-holder"),
     ];
@@ -142,7 +145,7 @@ fn statehash_golden_vector() {
     assert_eq!(hash, doc["stateHash"].as_str().unwrap());
     assert_eq!(
         hash,
-        "ee6a9f157175b6e084df52f96dc5039e4d411189352542f329971e6dd7bb0c0b"
+        "e45e83e80a681192e237e62bfad7155c4cb01dcf93fd756da76bccb2799bfe5a"
     );
     let tip = r.state.tip().unwrap();
     assert_eq!(

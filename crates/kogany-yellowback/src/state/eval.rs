@@ -59,7 +59,7 @@ impl<'a, 'p> Eval<'a, 'p> {
     }
 
     /// `ctx.Eligible(R)`.
-    pub(crate) fn eligible(&self, r: i64) -> Vec<[u8; 20]> {
+    pub(crate) fn eligible(&self, r: i64) -> Vec<crate::codecs::tag::Payee> {
         eligible_payees(&self.st, self.p, r)
     }
 

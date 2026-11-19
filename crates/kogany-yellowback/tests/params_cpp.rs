@@ -741,9 +741,31 @@ fn params_equal_ycash6_params_cpp() {
         &column("const Params& TestParams()", &ctx0),
         &rust_model(&test_params()),
     );
+    // C-T1: TestFastParams reads TEST_FAST_ATTESTOR_SET_ID through TestFastAttestorSetId(); the
+    // C++ constant is the Rust one (a tree from before the slot has neither).
+    let slot = cpp
+        .find("TEST_FAST_ATTESTOR_SET_ID = \"")
+        .map(|at| {
+            let rest = &cpp[at + "TEST_FAST_ATTESTOR_SET_ID = \"".len()..];
+            rest[..rest.find('"').expect("a closed string")].to_string()
+        })
+        .unwrap_or_default();
+    assert_eq!(
+        slot, TEST_FAST_ATTESTOR_SET_ID,
+        "params.cpp's TEST_FAST_ATTESTOR_SET_ID"
+    );
+    let mut fast_args = BTreeMap::new();
+    fast_args.insert(
+        "TestFastAttestorSetId()".to_string(),
+        Val::Bytes(test_fast_attestor_set_id().to_vec()),
+    );
+    let ctx_fast = Ctx {
+        consts: &all,
+        args: fast_args,
+    };
     compare(
         "test-fast",
-        &column("const Params& TestFastParams()", &ctx0),
+        &column("const Params& TestFastParams()", &ctx_fast),
         &rust_model(&test_fast_params()),
     );
 

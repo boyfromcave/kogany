@@ -460,8 +460,26 @@ fn testnet_yed_columns() {
             Some([(2, [0x57, 0x21, 0xC9]), (1, [0x57, 0x23, 0x30])])
         );
         assert_eq!(p.start_height, 0);
-        assert_eq!(p.attestor_set_id, [0u8; 32]);
     }
+    // Each Vault profile's own set, named by its release: slow has none; fast reads the compiled
+    // slot (C-T1, C-8), TEST_FAST_ATTESTOR_SET_ID, null until the ceremony (C-T7) fills it in, and
+    // when set exactly 64 hex characters naming a non-null id.
+    assert_eq!(slow.attestor_set_id, [0u8; 32]);
+    let slot = TEST_FAST_ATTESTOR_SET_ID;
+    assert!(
+        slot.is_empty()
+            || (slot.len() == 64
+                && slot.bytes().all(|c| c.is_ascii_hexdigit())
+                && set_id_from_display_hex(slot).is_some_and(|id| id != [0u8; 32]))
+    );
+    assert_eq!(fast.attestor_set_id, test_fast_attestor_set_id());
+    assert_eq!(fast.attestor_set_id == [0u8; 32], slot.is_empty());
+    // this release: the ceremony has not run (price-feed.md §3.1: no network carries an id)
+    assert_eq!(fast.attestor_set_id, [0u8; 32]);
+    // the display-hex reading is uint256S's: memory order is the reverse of the hex
+    let id = set_id_from_display_hex(&format!("01{}", "00".repeat(31))).unwrap();
+    assert_eq!(id[31], 0x01);
+    assert_eq!(set_id_from_display_hex("xy"), None);
     // slow is mainnet's column but for the network and the address versions.
     let mut slow_as_main = slow;
     slow_as_main.network = main.network;
