@@ -289,22 +289,34 @@ pub fn decode_payee_address(network: &Network, encoded: &str) -> Option<Payee> {
     (!address.is_script_hash() && payee_address(network, &payee) == encoded).then_some(payee)
 }
 
-/// The start-time refusal of an FN-DSA-512 (Falcon, scheme 0x02) YED payout address while Falcon
-/// is not active at `next_height`, the height of the next block this node would build (beta4 P1
-/// follow-up, policy: the C++ lines' init refusal). `None` for any other payee, or once Falcon is
-/// active ([`zakura_script::is_pq_falcon_active`]: Vault active and at or above the Falcon height).
+/// The YED parameters [`falcon_payout_refusal`] reads (`zakura_state`'s `yed_params`).
+pub use kogany_yellowback::params::Params as YedParams;
+
+/// The start-time refusal of an FN-DSA-512 (Falcon, scheme 0x02) YED payout address `address`
+/// (decoded: `payee`) while Falcon is not active at `next_height`, the block after the chain tip
+/// (beta4 P1 follow-up, policy only), in ycashd's init text (ycash-dd/ycash6 `src/init.cpp`,
+/// `-yellowbackpayoutaddress`). Falcon is the YED parameters' ([`Params::is_pq_falcon_active`]:
+/// from the larger of the Vault and Falcon heights), so this applies only while Yellowback is
+/// configured, as ycashd checks inside its Yellowback setup. `None` for any other payee, or once
+/// Falcon is active.
 pub fn falcon_payout_refusal(
-    network: &Network,
+    params: &YedParams,
+    address: &str,
     payee: &Payee,
-    next_height: Height,
+    next_height: i64,
 ) -> Option<String> {
     (payee.kind == kogany_vault::template::PQ_SCHEME_FN_DSA_512
-        && !zakura_script::is_pq_falcon_active(network, next_height))
+        && !params.is_pq_falcon_active(next_height))
     .then(|| {
+        let falcon = if params.pq_falcon_height >= 0 {
+            params.pq_falcon_height.to_string()
+        } else {
+            "none".to_owned()
+        };
         format!(
-            "-yellowbackpayoutaddress is an FN-DSA-512 (Falcon) address, but Falcon is not active \
-             at the next block height {}: use a P2PKH or SLH-DSA-SHA2-128s address until it is",
-            next_height.0
+            "-yellowbackpayoutaddress: an FN-DSA-512 address is refused before Falcon is active \
+             (next block {next_height}, Falcon height {falcon}); use a P2PKH or SLH-DSA address \
+             until then: '{address}'"
         )
     })
 }

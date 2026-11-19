@@ -254,29 +254,26 @@ impl StartCmd {
 
     /// beta4 P1 follow-up (policy): an FN-DSA-512 (Falcon) `mining.yellowback_payout_address` is
     /// refused while Falcon is not active at the next height (the chain tip's + 1), as ycashd's
-    /// init refuses such a `-yellowbackpayoutaddress`: a fee paid to it before Falcon could not be
-    /// spent until Falcon activates.
+    /// init refuses such a `-yellowbackpayoutaddress` once the chain is loaded; only while
+    /// Yellowback is configured (`yed_params`), as there.
     #[cfg(feature = "ycash")]
     fn validate_falcon_payout_address(
         config: &ZakuradConfig,
-        latest_chain_tip: &impl zakura_chain::chain_tip::ChainTip,
+        yed_params: Option<&zakura_rpc::ycash_mining::YedParams>,
+        tip_height: Option<block::Height>,
     ) -> Result<(), Report> {
         use zakura_rpc::ycash_mining::{decode_payee_address, falcon_payout_refusal};
-        let network = &config.network.network;
-        let Some(payee) = config
-            .mining
-            .yellowback_payout_address
-            .as_deref()
-            .and_then(|address| decode_payee_address(network, address))
-        else {
+        let (Some(params), Some(address)) = (
+            yed_params,
+            config.mining.yellowback_payout_address.as_deref(),
+        ) else {
             return Ok(());
         };
-        let next_height = latest_chain_tip
-            .best_tip_height()
-            .map_or(block::Height(0), |tip| {
-                (tip + 1).unwrap_or(block::Height::MAX)
-            });
-        match falcon_payout_refusal(network, &payee, next_height) {
+        let Some(payee) = decode_payee_address(&config.network.network, address) else {
+            return Ok(()); // refused earlier (`validate_yellowback_payout_address`)
+        };
+        let next_height = tip_height.map_or(0, |tip| i64::from(tip.0).saturating_add(1));
+        match falcon_payout_refusal(params, address, &payee, next_height) {
             Some(refusal) => Err(eyre!(refusal)),
             None => Ok(()),
         }
@@ -553,7 +550,11 @@ impl StartCmd {
             return Err(eyre!("resync required: {reason}"));
         }
         #[cfg(feature = "ycash")]
-        Self::validate_falcon_payout_address(&config, &latest_chain_tip)?;
+        Self::validate_falcon_payout_address(
+            &config,
+            read_only_state_service.yed_params().as_ref(),
+            zakura_chain::chain_tip::ChainTip::best_tip_height(&latest_chain_tip),
+        )?;
 
         let (blocksync_throughput_probe, mut blocksync_throughput_completion_rx) =
             if let Some(target_height) = config.sync.debug_blocksync_throughput_target_height {
@@ -1709,18 +1710,13 @@ mod tests {
     }
 
     /// beta4 P1 follow-up: an FN-DSA-512 payout address is refused at start while Falcon is not
-    /// active at the chain tip's next height, and accepted from it; an SLH-DSA or P2PKH one, or
-    /// none, never is.
+    /// active at the chain tip's next height, with ycashd's init text, and accepted from it; an
+    /// SLH-DSA or P2PKH one, none, or Yellowback off (no YED parameters) never is.
     #[cfg(feature = "ycash")]
     #[test]
     fn ycash_falcon_payout_address_refused_before_falcon() {
-        use zakura_chain::{
-            chain_tip::mock::MockChainTip,
-            parameters::{
-                testnet::{ConfiguredActivationHeights, RegtestParameters},
-                Network, NetworkKind,
-            },
-        };
+        use zakura_chain::parameters::{Network, NetworkKind};
+        use zakura_rpc::ycash_mining::YedParams;
         let pq = |scheme: u8| {
             zakura_chain::transparent::Address::PayToPqKeyHash {
                 network_kind: NetworkKind::Regtest,
@@ -1729,37 +1725,41 @@ mod tests {
             }
             .to_string()
         };
-        // Vault at 7, Falcon at 12: Falcon is active from 12
-        let network = Network::new_regtest(RegtestParameters::from(ConfiguredActivationHeights {
-            canopy: Some(1),
-            vault: Some(7),
-            pq_falcon: Some(12),
+        // Yellowback from 7 (the Vault height), Falcon from 12
+        let params = YedParams {
+            start_height: 7,
+            pq_falcon_height: 12,
             ..Default::default()
-        }));
-        let (tip, sender) = MockChainTip::new();
-        let check = |address: Option<String>, tip_height: Option<u32>| {
-            let mut config = ZakuradConfig::default();
-            config.network.network = network.clone();
-            config.mining.yellowback_payout_address = address;
-            sender.send_best_tip_height(tip_height.map(block::Height));
-            StartCmd::validate_falcon_payout_address(&config, &tip)
         };
-        for tip_height in [None, Some(0), Some(6), Some(10)] {
-            let error = check(Some(pq(2)), tip_height)
-                .expect_err("FN-DSA before Falcon")
-                .to_string();
-            assert!(
-                error.starts_with("-yellowbackpayoutaddress is an FN-DSA-512 (Falcon) address"),
-                "{error}"
+        let check = |address: Option<String>, yed: Option<&YedParams>, tip: Option<u32>| {
+            let mut config = ZakuradConfig::default();
+            config.network.network = Network::new_regtest(Default::default());
+            config.mining.yellowback_payout_address = address;
+            StartCmd::validate_falcon_payout_address(&config, yed, tip.map(block::Height))
+        };
+        let fn_dsa = pq(2);
+        assert!(fn_dsa.starts_with("rqf"));
+        for tip in [None, Some(0), Some(6), Some(10)] {
+            let next = tip.map_or(0, |t| t + 1);
+            assert_eq!(
+                check(Some(fn_dsa.clone()), Some(&params), tip)
+                    .expect_err("FN-DSA before Falcon")
+                    .to_string(),
+                format!(
+                    "-yellowbackpayoutaddress: an FN-DSA-512 address is refused before Falcon is \
+                     active (next block {next}, Falcon height 12); use a P2PKH or SLH-DSA address \
+                     until then: '{fn_dsa}'"
+                )
             );
         }
+        assert!(check(Some(fn_dsa.clone()), Some(&params), Some(11)).is_ok());
         assert!(
-            check(Some(pq(2)), Some(11)).is_ok(),
-            "the next height is 12"
+            check(Some(fn_dsa.clone()), None, Some(0)).is_ok(),
+            "Yellowback off"
         );
-        for tip_height in [None, Some(6), Some(11)] {
-            assert!(check(Some(pq(1)), tip_height).is_ok());
-            assert!(check(None, tip_height).is_ok());
+        for tip in [None, Some(6), Some(11)] {
+            assert!(check(Some(pq(1)), Some(&params), tip).is_ok());
+            assert!(check(None, Some(&params), tip).is_ok());
         }
     }
 
