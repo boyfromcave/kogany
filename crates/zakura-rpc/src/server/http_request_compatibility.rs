@@ -16,7 +16,6 @@ use tower::Service;
 use super::{
     cookie::Cookie,
     http::{HttpBody, HttpRequest, HttpResponse},
-    jsonrpc::ErrorObject,
 };
 
 use base64::{engine::general_purpose::STANDARD, Engine as _};
@@ -239,9 +238,7 @@ where
     fn call(&mut self, mut request: HttpRequest<B>) -> Self::Future {
         // Check if the request is authenticated
         if !self.check_credentials(request.headers_mut()) {
-            let error = ErrorObject::new(401, "unauthenticated method");
-            // TODO: Error object is not being returned to the user but an empty response.
-            return future::err(BoxError::from(error)).boxed();
+            return future::ok(unauthorized_response()).boxed();
         }
 
         // Fix the request headers.
@@ -258,6 +255,23 @@ where
         }
         .boxed()
     }
+}
+
+/// The answer to a request without valid credentials: `401 Unauthorized` with
+/// `WWW-Authenticate: Basic realm="jsonrpc"` and an empty body, as zcashd and ycashd answer
+/// (`HTTPReq_JSONRPC`, `src/httprpc.cpp`).
+///
+/// Failing the request instead, as this middleware did, makes the HTTP server close the
+/// connection without any response, so a client cannot tell a stale cookie (after a node restart)
+/// from a broken connection, and never re-reads the cookie.
+pub(crate) fn unauthorized_response() -> HttpResponse<HttpBody> {
+    let mut response = HttpResponse::new(HttpBody::default());
+    *response.status_mut() = hyper::StatusCode::UNAUTHORIZED;
+    response.headers_mut().insert(
+        header::WWW_AUTHENTICATE,
+        header::HeaderValue::from_static("Basic realm=\"jsonrpc\""),
+    );
+    response
 }
 
 /// The JSON-RPC versions a request body used, recorded to map the responses back.

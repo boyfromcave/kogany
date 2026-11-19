@@ -236,6 +236,31 @@ async fn batch_answer(
     Ok(serde_json::from_slice(&bytes).expect("the response is JSON"))
 }
 
+/// Ycash: the HTTP status the middleware and the JSON-RPC server answer `body` with.
+#[cfg(feature = "ycash")]
+async fn batch_status(
+    body: &str,
+    cookie: Option<crate::server::cookie::Cookie>,
+    authorization: Option<String>,
+) -> hyper::StatusCode {
+    let inner = crate::server::http::JsonRpcHttpService::new(
+        EchoRpc,
+        crate::server::MAX_RPC_BATCH_REQUESTS,
+        usize::MAX,
+    );
+    let mut builder = HttpRequest::builder()
+        .method("POST")
+        .header("content-type", "application/json");
+    if let Some(authorization) = authorization {
+        builder = builder.header("authorization", authorization);
+    }
+    let request = builder
+        .body(HttpBody::from(body.to_owned()))
+        .expect("valid request");
+    let mut middleware = HttpRequestMiddleware::new(inner, cookie, 2_097_152);
+    middleware.call(request).await.expect("an answer").status()
+}
+
 /// Ycash: the answer ycashd gives to one entry of a batch (`JSONRPCReplyObj`,
 /// `src/rpc/protocol.cpp`): exactly `result`, `error` and `id`, `result` null on an error.
 #[cfg(feature = "ycash")]
@@ -407,14 +432,13 @@ async fn ycash_one_point_zero_batch_limits_hold() {
 
     let cookie = crate::server::cookie::Cookie::default();
     let batch = format!("[{entry}]");
-    assert!(
-        batch_answer(&batch, Some(cookie.clone()), None)
-            .await
-            .is_err(),
+    assert_eq!(
+        batch_status(&batch, Some(cookie.clone()), None).await,
+        hyper::StatusCode::UNAUTHORIZED,
         "a batch without credentials is refused"
     );
-    assert!(
-        batch_answer(
+    assert_eq!(
+        batch_status(
             &batch,
             Some(cookie),
             Some(format!(
@@ -425,8 +449,8 @@ async fn ycash_one_point_zero_batch_limits_hold() {
                 )
             ))
         )
-        .await
-        .is_err(),
+        .await,
+        hyper::StatusCode::UNAUTHORIZED,
         "a batch with a wrong cookie is refused"
     );
 
@@ -477,4 +501,88 @@ async fn ycash_one_point_zero_batch_members_with_ids_the_server_does_not_take() 
         Value::Null,
     ));
     assert_eq!(answer, Value::Array(expected), "{answer}");
+}
+
+/// A request with a wrong or missing cookie is answered `401 Unauthorized` with a Basic challenge,
+/// as zcashd and ycashd answer, and never reaches the RPC service. Before, the middleware failed
+/// the request and the server closed the connection without a response, so a client holding the
+/// cookie of a previous start could not tell that it should re-read it.
+#[tokio::test]
+async fn wrong_cookie_is_answered_401() {
+    use base64::{engine::general_purpose::STANDARD, Engine as _};
+
+    use crate::server::cookie::{self, Cookie};
+
+    let dir = tempfile::tempdir().expect("temp dir");
+    let current = Cookie::default();
+    cookie::write_to_disk(&current, dir.path(), None).expect("cookie written");
+    let line = std::fs::read_to_string(dir.path().join(".cookie")).expect("cookie read");
+    let previous = Cookie::default();
+    cookie::write_to_disk(&previous, dir.path(), Some("old")).expect("cookie written");
+    let stale = std::fs::read_to_string(dir.path().join("old")).expect("cookie read");
+
+    for auth in [
+        Some(stale.trim().to_string()),
+        Some("__cookie__:".to_string()),
+        None,
+    ] {
+        let mut builder = HttpRequest::builder()
+            .method("POST")
+            .header("content-type", "application/json");
+        if let Some(auth) = auth {
+            builder = builder.header("authorization", format!("Basic {}", STANDARD.encode(auth)));
+        }
+        let request = builder
+            .body(HttpBody::from(
+                r#"{"jsonrpc":"1.0","id":1,"method":"getblockcount","params":[]}"#.to_string(),
+            ))
+            .expect("valid request");
+        let mut middleware =
+            HttpRequestMiddleware::new(PanicRpcService, Some(current.clone()), 2_097_152);
+        let response = middleware
+            .call(request)
+            .await
+            .expect("answered, not failed");
+        assert_eq!(response.status(), hyper::StatusCode::UNAUTHORIZED);
+        assert_eq!(
+            response.headers().get(hyper::header::WWW_AUTHENTICATE),
+            Some(&hyper::header::HeaderValue::from_static(
+                "Basic realm=\"jsonrpc\""
+            ))
+        );
+    }
+
+    // the current cookie still reaches the service
+    let request = HttpRequest::builder()
+        .method("POST")
+        .header("content-type", "application/json")
+        .header(
+            "authorization",
+            format!("Basic {}", STANDARD.encode(line.trim())),
+        )
+        .body(HttpBody::from(
+            r#"{"jsonrpc":"2.0","id":1,"method":"getblockcount","params":[]}"#.to_string(),
+        ))
+        .expect("valid request");
+    let mut middleware = HttpRequestMiddleware::new(MockRpcService, Some(current), 2_097_152);
+    let response = middleware.call(request).await.expect("answered");
+    assert_eq!(response.status(), hyper::StatusCode::OK);
+}
+
+/// An inner service a refused request must never reach.
+#[derive(Clone)]
+struct PanicRpcService;
+
+impl Service<HttpRequest> for PanicRpcService {
+    type Response = HttpResponse;
+    type Error = BoxError;
+    type Future = Pin<Box<dyn Future<Output = Result<HttpResponse, BoxError>> + Send>>;
+
+    fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        Poll::Ready(Ok(()))
+    }
+
+    fn call(&mut self, _req: HttpRequest) -> Self::Future {
+        panic!("an unauthenticated request reached the RPC service")
+    }
 }
