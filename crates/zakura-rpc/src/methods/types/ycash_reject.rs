@@ -541,7 +541,7 @@ pub fn mempool_reject(error: &(dyn StdError + 'static)) -> CxxReject {
         text.push('\n');
         next = error.source();
     }
-    storage_text_reject(&text).unwrap_or_else(|| CxxReject::Unmapped(error.to_string()))
+    storage_text_reject(&text).unwrap_or_else(|| unmapped_storage_text(error.to_string()))
 }
 
 /// The mempool storage's rejections (`zakurad` `components/mempool/{error,storage}.rs`), by
@@ -646,7 +646,42 @@ pub const STORAGE_TEXTS: &[(&str, u16, &str)] = &[
         REJECT_INSUFFICIENTFEE,
         "mempool full",
     ),
+    // Beta4 (REPORT item 7): the storage's rejection cache repeats a consensus failure of the
+    // transaction downloader (`ExactTipRejectionError::FailedVerification`, prefixed "the
+    // transaction will be rejected from the mempool until the next chain tip block"). ycashd
+    // answers a resend with the rule's reason again (main.cpp:2958, 2969); without these rows a
+    // retry of a coinbase spend read as if a later block could accept it.
+    (
+        "unshielded transparent coinbase spend",
+        REJECT_INVALID,
+        "bad-txns-coinbase-spend-has-transparent-outputs",
+    ),
+    (
+        "immature transparent coinbase spend",
+        REJECT_INVALID,
+        "bad-txns-premature-spend-of-coinbase",
+    ),
 ];
+
+/// The prefix the mempool storage gives a cached consensus failure (`zakurad`
+/// `MempoolError::StorageExactTip` + `ExactTipRejectionError::FailedVerification`).
+const STORAGE_CACHED_CONSENSUS: &str =
+    "the transaction will be rejected from the mempool until the \
+    next chain tip block: transaction did not pass consensus validation: ";
+
+/// A storage text without a row (beta4, REPORT item 7): a cached consensus failure says that the
+/// transaction is invalid, as the downloader's first answer did, instead of upstream's "will be
+/// rejected ... until the next chain tip block", which read as an invitation to retry; every other
+/// text is kept. (The coinbase rules have rows above: their resend gets ycashd's reason.)
+fn unmapped_storage_text(text: String) -> CxxReject {
+    match text.strip_prefix(STORAGE_CACHED_CONSENSUS) {
+        Some(rest) => CxxReject::Unmapped(format!(
+            "the transaction is invalid at the current chain tip (it failed consensus validation): \
+             {rest}"
+        )),
+        None => CxxReject::Unmapped(text),
+    }
+}
 
 /// The prefix of the mempool storage's policy-flag script failure (W6-a,
 /// `NonStandardTransactionError::NonMandatoryScriptVerifyFlag`), followed by `input <n>: ` and
@@ -697,7 +732,7 @@ impl MempoolRejection {
         let reject = match error {
             Some(error) => transaction_reject(error, Context::Mempool),
             None => storage_text_reject(&message)
-                .unwrap_or_else(|| CxxReject::Unmapped(message.clone())),
+                .unwrap_or_else(|| unmapped_storage_text(message.clone())),
         };
         Self { message, reject }
     }
