@@ -177,27 +177,28 @@ struct Golden {
 }
 
 /// The rejected entries of the golden chain, in order (`yellowback_state_golden.rs`).
-const GOLDEN_INVALID: [(u32, &str); 22] = [
+const GOLDEN_INVALID: [(u32, &str); 23] = [
     (137, "bad-mint-amount"),
     (141, "bad-mint-collateral"),
     (146, "yed-template-output"),
     (150, "bad-redeem-early-fee"),
     (185, "vault-spend-short-burn"),
+    (201, "bad-mint-fee"),
     (217, "vault-spend-malformed"),
     (231, "attestor-register-retired"),
     (251, "mint9-no-bundle"),
     (252, "mint9-bundle-sig"),
     (253, "mint9-bundle-member"),
     (292, "liveness-unheld"),
-    (299, "red5-residual"),
-    (299, "red5-residual"),
-    (299, "red5-claimant-short"),
-    (300, "intent-cancel-no-vault"),
-    (300, "intent-cancel-no-refund"),
-    (300, "intent-cancel-cosign"),
-    (308, "intent-cancel-residual"),
-    (310, "intent-residual-held"),
-    (340, "intent-residual-held"),
+    (298, "red5-residual"),
+    (298, "red5-residual"),
+    (298, "red5-claimant-short"),
+    (299, "intent-cancel-no-vault"),
+    (299, "intent-cancel-no-refund"),
+    (299, "intent-cancel-cosign"),
+    (307, "intent-cancel-residual"),
+    (309, "intent-residual-held"),
+    (339, "intent-residual-held"),
     (402, "bad-yed-holder"),
     (403, "bad-yed-holder"),
 ];
@@ -289,7 +290,7 @@ fn reference(g: &Golden, sample: usize) -> Reference {
 
 /// The finalized path over the golden chain: every block evaluated over the RocksDB state and
 /// committed in its own batch; a restart in the middle; the state hash equal to the in-memory
-/// replay at every height and to the pinned `stateHash`, tip and totals at the end; the 22
+/// replay at every height and to the pinned `stateHash`, tip and totals at the end; the 23
 /// invalid entries judged with their verdicts and not committed; the state unchanged by a
 /// restart; the undo records restoring every recent height.
 #[test]
@@ -1038,6 +1039,106 @@ fn format_upgrade_refuses_a_yed_epoch_without_its_index() {
     );
 }
 
+/// beta4 C-T2: a database whose finalized chain is past the Yellowback start height with an
+/// empty YED index (a beta3 testnet-yb-fast database started by the binary that compiles the set
+/// id in), or with an index of another schema, needs a resync; below the start height, or with
+/// Yellowback off, it does not.
+#[test]
+fn resync_required_when_the_index_is_behind_the_start_height() {
+    let _init_guard = zakura_test::init();
+    let network = Network::new_default_testnet();
+    let mut state = FinalizedState::new(&Config::ephemeral(), &network).unwrap();
+    for (_, bytes) in network.blockchain_map().range(0..=3) {
+        let block: Arc<Block> = bytes.zcash_deserialize_into().unwrap();
+        state
+            .commit_finalized_direct(block.into(), None, None, "yed test")
+            .unwrap();
+    }
+    let db = &state.db;
+    assert_eq!(db.yed_resync_required(), None, "Yellowback off");
+    register_yed_params_for_test(
+        &network,
+        regtest_params_with(5, 0, 0, [7u8; 32], 3, BundleCarrier::ScriptSig, false),
+    );
+    assert_eq!(
+        db.yed_resync_required(),
+        None,
+        "the chain is below the start"
+    );
+    register_yed_params_for_test(
+        &network,
+        regtest_params_with(2, 0, 0, [7u8; 32], 3, BundleCarrier::ScriptSig, false),
+    );
+    let reason = db
+        .yed_resync_required()
+        .expect("the index is behind the start height");
+    assert!(reason.contains("start height 2"), "{reason}");
+    assert!(!reason.contains('\n'), "one line: {reason}");
+
+    // an index written under the previous schema (15, before tag v2)
+    let mut batch = DiskWriteBatch::new();
+    let tip = TipRecord {
+        height: 3,
+        block_hash: Hash32([1; 32]),
+        schema_version: SCHEMA_VERSION - 1,
+        network: "regtest".to_owned(),
+    };
+    let _ = db
+        .yed_cf(cf_for_table(Table::Tip))
+        .with_batch_for_writing(&mut batch)
+        .zs_insert(
+            &RawBytes::new_raw_bytes(YedKey::Tip.encode()),
+            &RawBytes::new_raw_bytes(YedRecord::Tip(tip).encode()),
+        );
+    db.write_batch(batch).unwrap();
+    let reason = db.yed_resync_required().expect("a schema-15 index");
+    assert!(reason.contains("schema 15"), "{reason}");
+    assert!(reason.contains("schema 16"), "{reason}");
+}
+
+/// beta4 C-T1: testnet-yb-fast reads its set id from the compiled slot; with an id the YED start
+/// height is the Vault height (510,400) and YED is configured, with the null id (this release)
+/// it is off; testnet-yb-slow and testnet-legacy never read the slot.
+#[test]
+#[cfg(feature = "ycash")]
+fn fast_testnet_set_id_slot_plumbing() {
+    let _init_guard = zakura_test::init();
+    let config = YellowbackConfig::default();
+    let fast = Network::new_default_testnet();
+    assert!(zakura_chain::parameters::ycash::is_fast_network(&fast));
+    let id = [0x5e; 32];
+    let p = network_params_with_fast_set(&fast, &config, id)
+        .unwrap()
+        .expect("YED is configured with an id");
+    assert_eq!(p.attestor_set_id, id);
+    assert_eq!(p.start_height, 510_400);
+    assert_eq!(
+        fast.vault_activation_height(),
+        Some(Height(510_400)),
+        "the fast Vault height"
+    );
+    assert!(p.is_configured());
+    assert!(p.issued_before_start > 0);
+    assert_eq!(
+        network_params_with_fast_set(&fast, &config, [0u8; 32]),
+        Ok(None),
+        "null id: off"
+    );
+    // the compiled slot is null in this release, so the production resolution is off
+    assert_eq!(kogany_yellowback::params::TEST_FAST_ATTESTOR_SET_ID, "");
+    assert_eq!(yed_network_params(&fast, &config), Ok(None));
+    for other in [
+        Network::new_ycash_testnet_slow(),
+        Network::new_ycash_testnet_legacy(),
+    ] {
+        assert_eq!(
+            network_params_with_fast_set(&other, &config, id),
+            Ok(None),
+            "{other:?} never reads the fast slot"
+        );
+    }
+}
+
 /// The undo record's serialisation round-trips, and an undo record restores the state before
 /// its block byte for byte.
 #[test]
@@ -1624,7 +1725,7 @@ fn mempool_check_over_the_tip_snapshot() {
 /// W5-f exit gate (1): the golden chain through the registered module. Every one of the 462
 /// entries is evaluated over the parent chain's index state as contextual validation evaluates
 /// it, and judged by `check::yed::yed_verdict`, the rejection `validate_and_commit` applies: the
-/// 22 flagged entries are refused with `ValidateContextError::YedRejected`
+/// 23 flagged entries are refused with `ValidateContextError::YedRejected`
 /// (`bad-yellowback-<verdict>`, the C++ verdicts in order, misbehaviour score 100) and never
 /// pushed; the 440 others are accepted and pushed. The tip's state hash and `Totals` equal the
 /// pinned `stateHash` and `totals`, and the state hash equals the in-memory replay at every
