@@ -74,7 +74,7 @@ class CrossLineTest(unittest.TestCase):
     def test_the_real_pin_parses(self):
         with open(os.path.join(HERE, "..", cross_line.PIN), encoding="utf-8") as f:
             rows = cross_line.parse_pin(f.read())
-        self.assertEqual(len(rows), 10)
+        self.assertEqual(len(rows), 11)  # beta4: yellowback_tag_vectors.json
 
 
 if __name__ == "__main__":
