@@ -1,5 +1,5 @@
 //! Ycash Yellowback (YED)'s node-context RPCs (`yed_*`), served beside Zakura's `RpcServer`
-//! (plan W7-b; ycash6 `src/rpc/yellowback.cpp`, `doc/yellowback-rpc.md`, rpcversion 10).
+//! (plan W7-b; ycash6 `src/rpc/yellowback.cpp`, `doc/yellowback-rpc.md`, rpcversion 11).
 //!
 //! - [`rpc`]: the 25 read methods and the 2 node-state ones (`yed_setquote`, the miner's quote;
 //!   `yed_addattestation`, the attestation pool; both `Admin`, ycashd's "RPC auth like every

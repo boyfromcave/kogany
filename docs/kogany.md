@@ -278,7 +278,11 @@ behaviours follow ycashd's there, each against Zakura's own:
   cost nothing, are always served, as on every ycashd.
 - **The YED payout key.** A transparent P2PKH `mining.miner_address` is also the Yellowback payout
   key the coinbase tag names, as ycashd takes `-mineraddress` when no `-yellowbackpayoutaddress`
-  is set. `mining.yellowback_payout_default = false` (ycashd `-yellowbackpayoutdefault=0`, default
+  is set. `mining.yellowback_payout_address` (ycashd `-yellowbackpayoutaddress`) names the key
+  explicitly: a transparent P2PKH address (the tag is v1, 36 bytes) or, since beta4, a plain-YEC
+  post-quantum address of the network, `sqf…`/`sqs…`, `tqf…`/`tqs…` or `rqf…`/`rqs…` (the tag is
+  v2, 49 bytes, and the pool fees of mints and redeems pay that key's 35-byte script). A
+  post-quantum `mining.miner_address` is not taken yet: set the payout address instead. `mining.yellowback_payout_default = false` (ycashd `-yellowbackpayoutdefault=0`, default
   on) leaves the node without a payout key: it emits no tag and `yed_setquote` refuses
   `no-payout-address`, as a ycashd mining to its wallet does. A Yellowback-live node can then mine
   to a transparent address without naming a payout key.
