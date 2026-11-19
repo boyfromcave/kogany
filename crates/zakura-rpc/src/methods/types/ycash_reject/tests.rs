@@ -566,6 +566,35 @@ fn mempool_rejections_render_from_the_type_or_the_storage_text() {
         ),
         "64: non-mandatory-script-verify-flag (Data push larger than necessary)"
     );
+    // Beta4 (REPORT item 7): a resend of a coinbase spend the downloader rejected is answered from
+    // the storage's cache; it gets the rule's reason again (as ycashd answers every resend), not
+    // upstream's "until the next chain tip block".
+    let cached =
+        "the transaction will be rejected from the mempool until the next chain tip block: \
+                  transaction did not pass consensus validation: could not contextually validate \
+                  transaction on best chain: ";
+    assert_eq!(
+        storage(&format!(
+            "{cached}unshielded transparent coinbase spend: OutPoint {{ .. }} must be spent in a \
+             transaction which only has shielded outputs"
+        )),
+        "16: bad-txns-coinbase-spend-has-transparent-outputs"
+    );
+    assert_eq!(
+        storage(&format!(
+            "{cached}immature transparent coinbase spend: attempt to spend OutPoint {{ .. }} at \
+             Height(10), but spends are invalid before Height(101)"
+        )),
+        "16: bad-txns-premature-spend-of-coinbase"
+    );
+    // Any other cached consensus failure says the transaction is invalid, without the retry hint.
+    let other = storage(&format!("{cached}some other rule"));
+    assert_eq!(
+        other,
+        "16: the transaction is invalid at the current chain tip (it failed consensus validation): \
+         could not contextually validate transaction on best chain: some other rule"
+    );
+    assert!(!other.contains("until the next chain tip block"), "{other}");
     let in_mempool: Box<dyn StdError + Send + Sync> =
         "transaction already exists in mempool".into();
     assert!(send_raw_transaction_error(in_mempool.as_ref()).is_none());

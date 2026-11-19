@@ -72,10 +72,18 @@ content-length: 184
 POST content-type=Some("application/json")
 {"jsonrpc":"2.0","method":"getstandardfee","params":[],"id":1}
 ---
-<connection closed>
+HTTP/1.1 401 Unauthorized
+www-authenticate: basic realm="jsonrpc"
+connection: close
+content-length: 0
+
+
 
 === wrong password
 POST content-type=Some("application/json")
 {"jsonrpc":"2.0","method":"getstandardfee","params":[],"id":1}
 ---
-<connection closed>
+HTTP/1.1 401 Unauthorized
+www-authenticate: basic realm="jsonrpc"
+connection: close
+content-length: 0
