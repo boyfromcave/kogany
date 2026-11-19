@@ -39,7 +39,7 @@ env:
   # The ycash6 commit the pinned vectors and the parameter comparison come from: the commit
   # testdata/yellowback/PIN names (the `cross-line` job checks they agree). A PIN bump moves both.
   YCASH6_REPO: boyfromcave/ycash6
-  YCASH6_REV: cd575cc7b7d77208115e37811c421248586fd9dd
+  YCASH6_REV: d50e3b843122b46010326a4ea0bbf8cb5bd14ab1
 
 jobs:
   selftest:

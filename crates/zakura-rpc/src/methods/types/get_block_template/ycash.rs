@@ -39,7 +39,12 @@ use kogany_vault::{
     template::{match_intent, match_vault, parse_intent, parse_vault, Shape},
     Hash32, OutPoint,
 };
-use kogany_yellowback::codecs::tag::{find_tag, tag_push, CoinbaseTag};
+use kogany_yellowback::codecs::{
+    address::{
+        decode_pq, encode_pq, plain_pq_address_versions, PqAddressVersions, PLAIN_PQ_VERSIONS_TEST,
+    },
+    tag::{find_tag, tag_push, CoinbaseTag, Payee},
+};
 use zakura_chain::{
     amount::NegativeOrZero,
     block::{self, Height},
@@ -203,8 +208,8 @@ pub struct YellowbackMiner {
     /// unhealthy index, or no fresh quote). [`YellowbackMiner::flags`] encodes it.
     pub tag: Option<CoinbaseTag>,
     /// The payout key (`-yellowbackpayoutaddress`, else the miner address's key), `None` without
-    /// one.
-    pub payout_key: Option<[u8; 20]>,
+    /// one: a P2PKH payee (tag v1) or a post-quantum one (tag v2).
+    pub payout_key: Option<Payee>,
     /// Seconds since the held quote was set, `None` without one.
     pub quote_age_seconds: Option<i64>,
     /// REG-1 of the payout key at the tip.
@@ -221,7 +226,7 @@ impl YellowbackMiner {
     /// upgrade), and a tag that fails TAG-2 is no tag.
     pub fn build_tag(
         fresh_quote: bool,
-        payout_key: Option<[u8; 20]>,
+        payout_key: Option<Payee>,
         price_micro_usd: i64,
         source_mask: u16,
     ) -> Option<CoinbaseTag> {
@@ -230,15 +235,90 @@ impl YellowbackMiner {
             flags: 0,
             price_micro_usd: u64::try_from(price_micro_usd).ok()?,
             source_mask,
-            payout_key,
+            payee: payout_key,
         };
         tag.is_valid().then_some(tag)
     }
 
-    /// ycashd's `COINBASE_FLAGS`: the tag push (`0x24 ‖ 36 bytes`), or nothing.
+    /// ycashd's `COINBASE_FLAGS`: the tag push (`0x24 ‖ 36 bytes` for a P2PKH payee,
+    /// `0x31 ‖ 49 bytes` for a post-quantum one), or nothing.
     pub fn flags(&self) -> Vec<u8> {
         self.tag.as_ref().map(tag_push).unwrap_or_default()
     }
+}
+
+/// The plain-YEC post-quantum address versions of `network` (`sqf`/`sqs`, `tqf`/`tqs`,
+/// `rqf`/`rqs`; D-9).
+fn plain_pq_versions(network: &Network) -> &'static PqAddressVersions {
+    let name = if network.is_regtest() {
+        "regtest"
+    } else {
+        match network {
+            Network::Mainnet => "main",
+            Network::Testnet(_) => "test",
+        }
+    };
+    plain_pq_address_versions(name).unwrap_or(&PLAIN_PQ_VERSIONS_TEST)
+}
+
+/// The address of a Yellowback fee payee (beta4 tag v2, D-T3): a P2PKH payee's transparent
+/// address (`s1…`/`sm…`), a post-quantum payee's plain-YEC address of this network
+/// (`sqf…`/`sqs…`, `tqf…`/`tqs…`, `rqf…`/`rqs…`; ycashd `EncodeDestination(payee.Destination())`).
+pub fn payee_address(network: &Network, payee: &Payee) -> String {
+    match (payee.key_id(), payee.pq_owner()) {
+        (Some(key), _) => transparent::Address::from_pub_key_hash(network.kind(), key).to_string(),
+        (None, Some(owner)) => encode_pq(&owner, plain_pq_versions(network)).unwrap_or_default(),
+        (None, None) => String::new(),
+    }
+}
+
+/// The Yellowback fee payee an address of `network` names (ycashd's `-yellowbackpayoutaddress`
+/// and `-yellowbackpreferredpayee`, beta4 D-T2/D-T3): a transparent P2PKH address, or a plain-YEC
+/// post-quantum address in its scheme-visible form. Anything else (P2SH, Sapling, unified, a YED
+/// `yb…` address, another network's address) is `None`.
+pub fn decode_payee_address(network: &Network, encoded: &str) -> Option<Payee> {
+    // The post-quantum form first: a ycash build of zakura-chain parses it as a
+    // transparent::Address too.
+    if let Some(owner) = decode_pq(encoded, plain_pq_versions(network)) {
+        return Payee::pq(&owner);
+    }
+    let address = encoded.parse::<transparent::Address>().ok()?;
+    let payee = Payee::p2pkh(&address.hash_bytes());
+    // a P2PKH address of this network: it re-encodes to itself here (regtest shares testnet's
+    // prefixes, so the parsed network kind alone cannot tell)
+    (!address.is_script_hash() && payee_address(network, &payee) == encoded).then_some(payee)
+}
+
+/// The YED parameters [`falcon_payout_refusal`] reads (`zakura_state`'s `yed_params`).
+pub use kogany_yellowback::params::Params as YedParams;
+
+/// The start-time refusal of an FN-DSA-512 (Falcon, scheme 0x02) YED payout address `address`
+/// (decoded: `payee`) while Falcon is not active at `next_height`, the block after the chain tip
+/// (beta4 P1 follow-up, policy only), in ycashd's init text (ycash-dd/ycash6 `src/init.cpp`,
+/// `-yellowbackpayoutaddress`). Falcon is the YED parameters' ([`Params::is_pq_falcon_active`]:
+/// from the larger of the Vault and Falcon heights), so this applies only while Yellowback is
+/// configured, as ycashd checks inside its Yellowback setup. `None` for any other payee, or once
+/// Falcon is active.
+pub fn falcon_payout_refusal(
+    params: &YedParams,
+    address: &str,
+    payee: &Payee,
+    next_height: i64,
+) -> Option<String> {
+    (payee.kind == kogany_vault::template::PQ_SCHEME_FN_DSA_512
+        && !params.is_pq_falcon_active(next_height))
+    .then(|| {
+        let falcon = if params.pq_falcon_height >= 0 {
+            params.pq_falcon_height.to_string()
+        } else {
+            "none".to_owned()
+        };
+        format!(
+            "-yellowbackpayoutaddress: an FN-DSA-512 address is refused before Falcon is active \
+             (next block {next_height}, Falcon height {falcon}); use a P2PKH or SLH-DSA address \
+             until then: '{address}'"
+        )
+    })
 }
 
 /// ycashd's refusal while the YED index is unhealthy (`src/rpc/mining.cpp:521-523`):
@@ -258,7 +338,7 @@ pub fn unhealthy_error(reason: &str) -> crate::server::jsonrpc::ErrorObject {
 /// Zakura's coinbase input script is the height push and one push of Zakura's coinbase data; the
 /// flags follow it, so the script reads `<height> <data> <tag>` and the tag is found by the same
 /// scan (`FindTag`) at the same place relative to ycashd's two leading pushes. If the configured
-/// `extra_coinbase_data` leaves no room for the 37 tag bytes under the 100-byte limit, the data
+/// `extra_coinbase_data` leaves no room for the tag push (37 bytes for v1, 50 for v2) under the 100-byte limit, the data
 /// push shrinks to Zakura's marker alone, so the tag is never dropped for a pool's text.
 ///
 /// The txid and the serialized data are recomputed; the sigop count and the fee are unchanged
@@ -394,7 +474,8 @@ pub struct YellowbackTemplateInfo {
     /// Seconds since the held quote was set, `null` without one.
     #[serde(rename = "quoteAgeSeconds")]
     pub quote_age_seconds: Option<i64>,
-    /// The tag's payout key, else the node's, as a P2PKH address; `null` without either.
+    /// The tag's payout key, else the node's, as a P2PKH or plain-YEC post-quantum address;
+    /// `null` without either.
     #[serde(rename = "payoutAddress")]
     pub payout_address: Option<String>,
     /// REG-1 of the payout key at the tip.
@@ -424,7 +505,7 @@ pub fn template_fields(
             .ok()
             .and_then(|h| find_tag(script_sig, h))
     };
-    let payout = tag.map(|t| t.payout_key).or(miner.payout_key);
+    let payout = tag.map(|t| t.payee).or(miner.payout_key);
     let info = YellowbackTemplateInfo {
         tag: hex::encode(&flags),
         kind: match tag {
@@ -438,8 +519,7 @@ pub fn template_fields(
             .and_then(|t| i64::try_from(t.price_micro_usd).ok())
             .unwrap_or(0),
         quote_age_seconds: miner.quote_age_seconds,
-        payout_address: payout
-            .map(|key| transparent::Address::from_pub_key_hash(network.kind(), key).to_string()),
+        payout_address: payout.map(|payee| payee_address(network, &payee)),
         registered: miner.registered,
         eligible: miner.eligible,
         healthy: true,

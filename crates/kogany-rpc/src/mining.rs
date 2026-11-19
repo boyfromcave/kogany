@@ -319,7 +319,7 @@ mod tests {
         assert_eq!(tag.flags, 0);
         assert_eq!(tag.price_micro_usd, 2_000_000);
         assert_eq!(tag.source_mask, 5);
-        assert_eq!(Some(tag.payout_key), miner.payout_key);
+        assert_eq!(Some(tag.payee), miner.payout_key);
         assert_eq!(miner.flags().len(), 37);
 
         yed.set_quote(0, 0).await.expect("the quote is cleared");

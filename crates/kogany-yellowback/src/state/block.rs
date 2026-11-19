@@ -34,6 +34,7 @@ use crate::attest::seats::{
     arm_pass, dormancy_due, dormancy_pass, dormancy_window, maturity_pass, pin1_triggered,
     pin2_pinned_seqs, pin2_triggered, pin_window, seating_pass,
 };
+use crate::codecs::tag::Payee;
 use crate::codecs::tag::{find_tag, CoinbaseTag};
 use crate::math::{global_ratio_bps, lower_median, sigma_mult_bps, BPS};
 use crate::params::{Amount, MicroUsd, Params};
@@ -101,7 +102,7 @@ pub fn evaluate_block(
         st.put_tag(
             hk,
             TagRecord {
-                payout_key: t.payout_key,
+                payee: t.payee,
                 price_micro_usd: t.price_micro_usd,
                 signal: t.signal(),
                 source_mask: t.source_mask,
@@ -276,12 +277,12 @@ pub fn compute_snapshot(
     // PIN-1/2 over W = [max(H - PIN_WINDOW, START), H - 1]: prior snapshots and BundleLog only
     let window = bundle_rows(st, pin_window(p, height));
     if pin1_triggered(&window, p) {
-        let mut per_key: BTreeMap<[u8; 20], (i64, BTreeSet<u64>)> = BTreeMap::new();
+        let mut per_key: BTreeMap<Payee, (i64, BTreeSet<u64>)> = BTreeMap::new();
         let range = pin_window(p, height);
         let mut hh = *range.start();
         while hh <= *range.end() {
             if let Some(t) = tag_at(st, p, hh).filter(TagRecord::is_quote) {
-                let e = per_key.entry(t.payout_key).or_default();
+                let e = per_key.entry(t.payee).or_default();
                 e.0 = e.0.saturating_add(1);
                 e.1.insert(t.price_micro_usd);
             }
@@ -292,7 +293,7 @@ pub fn compute_snapshot(
             .into_iter()
             .filter(|(_, (n, prices))| *n >= min_tags && prices.len() == 1)
             .map(|(k, _)| k)
-            .collect(); // BTreeMap order: ascending bytes, as the C++ std::sort of uint160
+            .collect(); // BTreeMap order: Payee order (kind, then hash bytes), as the C++ std::map<Payee>
     }
     {
         let x1 = snapshot_at(st, p, height.saturating_sub(1)).and_then(|x| x.pmint());
@@ -322,7 +323,7 @@ pub fn compute_snapshot(
         let mut hh = lo;
         while hh <= height {
             if let Some(t) = tag_at(st, p, hh).filter(TagRecord::is_quote) {
-                if !s.pinned_keys.contains(&t.payout_key) {
+                if !s.pinned_keys.contains(&t.payee) {
                     v.push((hh, i64::try_from(t.price_micro_usd).unwrap_or(i64::MAX)));
                 }
             }

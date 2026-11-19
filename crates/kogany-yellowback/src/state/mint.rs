@@ -16,7 +16,6 @@ use kogany_vault::template::{is_owner_valid, PQ_SCHEME_FN_DSA_512};
 use kogany_vault::{Hash32, OutPoint};
 
 use super::eval::{log_bundle, Eval};
-use super::lookups::p2pkh_key;
 use super::records::{AssignedOutput, TokenRecord, Totals, TxLogRecord, VaultRecord, VaultStatus};
 use super::verdict;
 use crate::attest::price::ref_height_in_window;
@@ -25,6 +24,7 @@ use crate::attest::price::{
 };
 use crate::codecs::payload::Mint;
 use crate::codecs::script::{holder_allowed, yed_vault_script};
+use crate::codecs::tag::Payee;
 use crate::math::{
     attest_fee_zat, max_vault_cents, min_ratio_bps, price_combine, protocol_fee_zat,
     required_collateral, supply_cap_cents, BPS,
@@ -110,7 +110,7 @@ impl Eval<'_, '_> {
         &self,
         tx: &VaultTx,
         m: &Mint,
-        eligible: &[[u8; 20]],
+        eligible: &[Payee],
         facts: &MintFacts,
     ) -> Result<(), String> {
         if eligible.is_empty() {
@@ -131,7 +131,7 @@ impl Eval<'_, '_> {
         m: &Mint,
         op_return_index: usize,
         totals: &Totals,
-        eligible: &[[u8; 20]],
+        eligible: &[Payee],
         facts: &mut MintFacts,
     ) -> Result<(), String> {
         let p = self.p;
@@ -240,7 +240,11 @@ impl Eval<'_, '_> {
             if m.fee_vout == FEE_VOUT_NONE || fv == 0 || fv == 1 || fv == op_return_index {
                 return fail(verdict::BAD_MINT_FEE);
             }
-            let payee = tx.outputs.get(fv).and_then(|o| p2pkh_key(&o.script_pubkey));
+            // exactly the script of a payee in E(R): P2PKH (tag v1) or TX_PQPKH (tag v2)
+            let payee = tx
+                .outputs
+                .get(fv)
+                .and_then(|o| Payee::from_script(&o.script_pubkey));
             if !payee.is_some_and(|k| eligible.contains(&k)) {
                 return fail(verdict::BAD_MINT_FEE);
             }
@@ -338,7 +342,7 @@ impl Eval<'_, '_> {
             let fee_out = tx.outputs.get(usize::from(m.fee_vout));
             vault.fee_paid_zat = fee_out.map_or(0, |o| o.value);
             log.fee_zat = vault.fee_paid_zat;
-            let key = fee_out.and_then(|o| p2pkh_key(&o.script_pubkey));
+            let key = fee_out.and_then(|o| Payee::from_script(&o.script_pubkey));
             log.has_payee = key.is_some();
             if let Some(k) = key {
                 log.payee = k;

@@ -173,6 +173,23 @@ pub fn yed_network_params(
     if let Some(params) = test_params::lookup(network) {
         return Ok(Some(params));
     }
+    network_params_with_fast_set(
+        network,
+        config,
+        kogany_yellowback::params::test_fast_attestor_set_id(),
+    )
+}
+
+/// [`yed_network_params`] with testnet-yb-fast's set id given (beta4 C-T1): the compiled
+/// `TEST_FAST_ATTESTOR_SET_ID` in production, another id in the plumbing test. Slow, legacy and
+/// the other networks never read it.
+pub(crate) fn network_params_with_fast_set(
+    network: &Network,
+    config: &YellowbackConfig,
+    fast_set_id: [u8; 32],
+) -> Result<Option<Params>, String> {
+    #[cfg(not(feature = "ycash"))]
+    let _ = fast_set_id;
     let start = network.vault_activation_height();
     let mut p = if network.is_regtest() {
         let set_id = config.attestor_set_id()?;
@@ -195,7 +212,10 @@ pub fn yed_network_params(
             // legacy never reaches here because Vault is unscheduled.
             #[cfg(feature = "ycash")]
             Network::Testnet(_) if zakura_chain::parameters::ycash::is_fast_network(network) => {
-                kogany_yellowback::params::test_fast_params()
+                kogany_yellowback::params::Params {
+                    attestor_set_id: fast_set_id,
+                    ..kogany_yellowback::params::test_fast_params()
+                }
             }
             Network::Testnet(_) => kogany_yellowback::params::test_params(),
         }
@@ -741,6 +761,34 @@ impl ZakuraDb {
     /// The finalized YED tip (`GetTip`).
     pub fn yed_tip(&self) -> Option<TipRecord> {
         FinalizedYedState(self).tip()
+    }
+
+    /// Why this database cannot follow the chain under this binary's Yellowback parameters, so
+    /// `koganyd` must stop at start and ask for a resync (beta4 C-T2; kogany has no in-place YED
+    /// rebuild, `ycashd`'s `SyncToChain` rebuilds instead): Yellowback is on, the finalized tip
+    /// is at or past the start height, and the YED index is behind it (empty: written while
+    /// Yellowback was off here, as a beta3 testnet-yb-fast database once the set id is compiled
+    /// in, docs/plans/beta4/price-feed.md §3.2) or was written under another `SCHEMA_VERSION` or
+    /// network (16 since tag v2). `None` when the index can follow.
+    pub fn yed_resync_required(&self) -> Option<String> {
+        let finalized_tip = self.finalized_tip_height();
+        if let Some(reason) =
+            crate::service::finalized_state::disk_format::upgrade::add_yed_state::missing_yed_epoch(
+                finalized_tip,
+                self,
+            )
+        {
+            return Some(reason);
+        }
+        let p = yed_params_for_db(self).ok()??;
+        let tip = self.yed_tip()?;
+        (tip.schema_version != SCHEMA_VERSION || tip.network != p.network).then(|| {
+            format!(
+                "the YED index was written under schema {} for network {:?}; this binary's is \
+                 schema {} for {:?}",
+                tip.schema_version, tip.network, SCHEMA_VERSION, p.network
+            )
+        })
     }
 
     /// The rules stamp `R`, `None` when never written.

@@ -13,6 +13,7 @@ mod state_common;
 use common::{h, load_pinned, uint256_display};
 use kogany_vault::{Hash32, OutPoint};
 use kogany_yellowback::attest::registry::AttestState;
+use kogany_yellowback::codecs::tag::Payee;
 use kogany_yellowback::params::{regtest_params_with, BundleCarrier};
 use kogany_yellowback::state::{
     canonical_entries_of, evaluate_block, process_tx, state_hash, state_hash_preimage, Change,
@@ -101,12 +102,12 @@ fn record_encodings_round_trip_with_the_cpp_sizes() {
     assert_eq!(TipRecord::decode(&tip.encode()), Some(tip.clone()));
     assert_eq!(tip.encode().len(), 4 + 32 + 4 + 1 + 7);
     let tag = TagRecord {
-        payout_key: [3; 20],
+        payee: Payee::p2pkh(&[3; 20]),
         price_micro_usd: 50000,
         signal: true,
         source_mask: 7,
     };
-    assert_eq!(tag.encode().len(), 31);
+    assert_eq!(tag.encode().len(), 32);
     assert_eq!(TagRecord::decode(&tag.encode()), Some(tag));
     let j = Judgement {
         evaluated: true,
@@ -174,7 +175,7 @@ fn record_encodings_round_trip_with_the_cpp_sizes() {
     assert_eq!(IntentRecord::decode(&ir.encode()), Some(ir));
     let s = Snapshot {
         seated: vec![1, 2],
-        pinned_keys: vec![[4; 20]],
+        pinned_keys: vec![Payee::p2pkh(&[4; 20])],
         pinned_seqs: vec![3],
         attest: AttestState::default(),
         ..Snapshot::default()

@@ -129,11 +129,16 @@ fn values(tx: &Transaction) -> Vec<i64> {
 }
 
 fn tagged_miner() -> YellowbackMiner {
-    let tag =
-        YellowbackMiner::build_tag(true, Some([0x11; 20]), 1_234_567, 0x0003).expect("a valid tag");
+    let tag = YellowbackMiner::build_tag(
+        true,
+        Some(kogany_yellowback::codecs::tag::Payee::p2pkh(&[0x11; 20])),
+        1_234_567,
+        0x0003,
+    )
+    .expect("a valid tag");
     YellowbackMiner {
         tag: Some(tag),
-        payout_key: Some(tag.payout_key),
+        payout_key: Some(tag.payee),
         quote_age_seconds: Some(0),
         registered: false,
         eligible: false,

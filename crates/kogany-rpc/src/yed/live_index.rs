@@ -23,6 +23,7 @@ use kogany_yellowback::{
         },
         selected, Attestation as KAttestation, Bundle,
     },
+    codecs::tag::Payee,
     codecs::{
         payload::{find_payload, Payload},
         script::{find_carrier_input, holder_key, is_compressed_key, yed_vault_script_at, Holder},
@@ -1022,7 +1023,7 @@ impl YedIndexView for LiveIndex {
             last_quote: i64,
             quote_tags: i64,
         }
-        let mut rows: std::collections::BTreeMap<[u8; 20], Acc> = Default::default();
+        let mut rows: std::collections::BTreeMap<Payee, Acc> = Default::default();
         let mut total = 0i64;
         let lo = height
             .saturating_sub(window)
@@ -1036,7 +1037,7 @@ impl YedIndexView for LiveIndex {
                 continue;
             }
             total = total.saturating_add(1);
-            let row = rows.entry(tag.payout_key).or_insert(Acc {
+            let row = rows.entry(tag.payee).or_insert(Acc {
                 last_tag_height: t,
                 last_quote: 0,
                 quote_tags: 0,
@@ -1046,7 +1047,7 @@ impl YedIndexView for LiveIndex {
             row.quote_tags = row.quote_tags.saturating_add(1);
         }
         let eligible = eligible_payees(r, p, height);
-        let mut order: Vec<(i64, [u8; 20])> =
+        let mut order: Vec<(i64, Payee)> =
             rows.iter().map(|(k, a)| (a.last_tag_height, *k)).collect();
         order.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)));
         let peer_lag = i64::from(p.peer_lag);
@@ -1066,7 +1067,7 @@ impl YedIndexView for LiveIndex {
                         let quote_of_key = u32::try_from(t)
                             .ok()
                             .and_then(|h| r.tag(h))
-                            .is_some_and(|tag| tag.is_quote() && tag.payout_key == key);
+                            .is_some_and(|tag| tag.is_quote() && tag.payee == key);
                         if quote_of_key
                             && u32::try_from(t)
                                 .ok()
@@ -1091,7 +1092,7 @@ impl YedIndexView for LiveIndex {
                     };
                     if !r
                         .tag(h)
-                        .is_some_and(|tag| tag.is_quote() && tag.payout_key == key)
+                        .is_some_and(|tag| tag.is_quote() && tag.payee == key)
                     {
                         continue;
                     }
@@ -1124,14 +1125,19 @@ impl YedIndexView for LiveIndex {
             .collect()
     }
 
-    fn eligible_payees(&self, ref_height: i64) -> Vec<[u8; 20]> {
+    fn eligible_payees(&self, ref_height: i64) -> Vec<Payee> {
         eligible_payees(self.read(), &self.params, ref_height)
     }
 
     /// The FEE-W choice and its weight `10^4 + tiltBps x accuracyBps / 10^4`.
-    fn default_payee(&self, ref_height: i64, selector: &[u8]) -> Option<([u8; 20], i64)> {
+    fn default_payee(&self, ref_height: i64, selector: &[u8]) -> Option<(Payee, i64)> {
         let p = &self.params;
-        let policy = StatePayeePolicy::defaults(p);
+        // the wallet's draw for the next block: no FN-DSA payee before Falcon (ycash6
+        // `yed_getfeepayee`, `noPref.txHeight = IndexHeight(index) + 1`)
+        let policy = StatePayeePolicy {
+            tx_height: Some(self.tip().map_or(-1, |t| t.height).saturating_add(1)),
+            ..StatePayeePolicy::defaults(p)
+        };
         let key = default_payee(self.read(), p, ref_height, selector, &policy)?;
         let acc = kogany_yellowback::state::accuracy_bps(
             self.read(),

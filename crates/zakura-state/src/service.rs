@@ -1808,6 +1808,19 @@ impl ReadStateService {
     pub fn log_db_metrics(&self) {
         self.db.print_db_metrics();
     }
+
+    /// Why the database needs a resync before this binary's Yellowback index can follow the
+    /// chain (beta4 C-T2), `None` when it can ([`ZakuraDb::yed_resync_required`]).
+    pub fn yed_resync_required(&self) -> Option<String> {
+        self.db.yed_resync_required()
+    }
+
+    /// The YED parameters of this database's network and configuration, `None` while Yellowback
+    /// is off (no attestor set, or Vault unscheduled) or the configuration is refused
+    /// ([`yed_params_for_db`](yed::yed_params_for_db)).
+    pub fn yed_params(&self) -> Option<kogany_yellowback::params::Params> {
+        yed::yed_params_for_db(&self.db).ok().flatten()
+    }
 }
 
 impl Service<Request> for StateService {

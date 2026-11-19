@@ -155,8 +155,11 @@ static std::string RunYellowbackPayload(const valtype& data)
 static std::string Tag(const std::optional<yellowback::CoinbaseTag>& t)
 {
     if (!t) return "none";
+    // v1: the 20-byte payout key; tag v2 (beta4): the scheme byte, then the 32-byte payout hash
+    const yellowback::Payee& p = t->payee;
+    const std::string kind = p.IsP2PKH() ? std::string() : HexStr(&p.kind, &p.kind + 1);
     return std::to_string(t->flags) + ":" + std::to_string(t->priceMicroUsd) + ":" + std::to_string(t->sourceMask) + ":" +
-           HexStr(t->payoutKey.begin(), t->payoutKey.end());
+           kind + HexStr(p.hash.begin(), p.hash.begin() + p.HashSize());
 }
 
 static std::string RunYellowbackTag(const valtype& data)

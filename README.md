@@ -260,7 +260,7 @@ balances, sends) talks to yewd, not to `koganyd`.
 ## Yellowback and vault RPCs
 
 `koganyd` answers the stock Ycash RPCs as ycashd does, plus the vault primitive's `set_*` and
-`vault_*` RPCs and the Yellowback `yed_*` RPCs, at `rpcversion` 10:
+`vault_*` RPCs and the Yellowback `yed_*` RPCs, at `rpcversion` 11:
 
 - [`doc/yellowback-spec.md`](doc/yellowback-spec.md): the vault upgrade and Yellowback
   specification, generated from the workspace plans;

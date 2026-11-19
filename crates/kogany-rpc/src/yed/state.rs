@@ -24,7 +24,10 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use kogany_vault::{Hash32, OutPoint, PqOwner, PubKeyBytes};
 use kogany_yellowback::{
-    codecs::{script::Holder, tag::CoinbaseTag},
+    codecs::{
+        script::Holder,
+        tag::{CoinbaseTag, Payee},
+    },
     params::{Params, PqAddressVersions},
 };
 
@@ -303,7 +306,7 @@ pub struct QuoteAck {
     /// The next template's tag kind (`"quote"` or `"none"`).
     pub next_kind: &'static str,
     /// The payout key the next tag carries.
-    pub payout_key: Option<[u8; 20]>,
+    pub payout_key: Option<Payee>,
 }
 
 /// What `yed_addattestation` pooled.
@@ -361,14 +364,14 @@ pub struct PayeePolicy {
     /// `tiltBps`.
     pub tilt_bps: i64,
     /// `-yellowbackpreferredpayee`.
-    pub preferred: Option<[u8; 20]>,
+    pub preferred: Option<Payee>,
 }
 
 /// The miner's status (`MinerStatus`): what the next template's tag would be.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct MinerStatus {
     /// The payout key, `None` without one.
-    pub payout_key: Option<[u8; 20]>,
+    pub payout_key: Option<Payee>,
     /// `"quote"` or `"none"`.
     pub quote_kind: &'static str,
     /// Seconds since the held quote was set, `None` without one.
@@ -458,11 +461,11 @@ pub trait YedIndexView: Send + Sync {
     fn miners(&self, height: i64, window: i64) -> Vec<MinerRow>;
 
     /// `E(ref_height)` (FEE-2), height order, deduplicated.
-    fn eligible_payees(&self, ref_height: i64) -> Vec<[u8; 20]>;
+    fn eligible_payees(&self, ref_height: i64) -> Vec<Payee>;
 
     /// The FEE-W choice for `selector` (ignoring the preferred payee) with its weight, `None`
     /// when `E(ref_height)` is empty.
-    fn default_payee(&self, ref_height: i64, selector: &[u8]) -> Option<([u8; 20], i64)>;
+    fn default_payee(&self, ref_height: i64, selector: &[u8]) -> Option<(Payee, i64)>;
 
     /// The vault at `txid:0`, with its derived fields at the tip.
     fn vault(&self, txid: &Hash32) -> Option<VaultRow>;
@@ -681,7 +684,7 @@ pub struct SnapshotView {
     /// `seated[]`, ascending.
     pub seated: Vec<u16>,
     /// PIN-1's excluded pool keys.
-    pub pinned_keys: Vec<[u8; 20]>,
+    pub pinned_keys: Vec<Payee>,
     /// PIN-2's excluded `seq`s.
     pub pinned_seqs: Vec<u16>,
 }
@@ -737,7 +740,7 @@ pub struct AttestInfo {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct MinerRow {
     /// The payout key.
-    pub payout_key: [u8; 20],
+    pub payout_key: Payee,
     /// The latest quote tag's height.
     pub last_tag_height: i64,
     /// Its quote.
@@ -948,7 +951,7 @@ pub struct TxInfoRow {
     /// The protocol fee paid.
     pub fee_zat: i64,
     /// The fee output's key.
-    pub payee: Option<[u8; 20]>,
+    pub payee: Option<Payee>,
     /// The cents assigned per output `(vout, cents)`.
     pub assigned: Vec<(u32, i64)>,
     /// The tokens consumed.
@@ -1013,7 +1016,7 @@ pub struct TxValidation {
     /// The protocol fee.
     pub fee_zat: i64,
     /// The fee output's key.
-    pub payee: Option<[u8; 20]>,
+    pub payee: Option<Payee>,
     /// RED-1..5 (a block carrying it would be valid).
     pub block_valid: bool,
     /// The mempool refuses it.
@@ -1055,7 +1058,7 @@ pub struct BlockVerdictTx {
     /// The protocol fee.
     pub fee_zat: i64,
     /// The fee output's key.
-    pub payee: Option<[u8; 20]>,
+    pub payee: Option<Payee>,
     /// The vaults it closes.
     pub closed_vaults: Vec<OutPoint>,
 }

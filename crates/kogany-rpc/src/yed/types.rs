@@ -272,7 +272,7 @@ pub struct TagJson {
     pub found: bool,
     /// `"quote"`, `"signal"` or `"none"`.
     pub kind: &'static str,
-    /// `TAG_VERSION`.
+    /// The tag layout: 1, or 2 for a post-quantum payee (rpcversion 11).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub version: Option<i64>,
     /// The quote.
@@ -281,7 +281,10 @@ pub struct TagJson {
     /// The source bits.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub source_mask: Option<u16>,
-    /// The payout address.
+    /// `"p2pkh"`, `"slh-dsa-sha2-128s"` or `"fn-dsa-512"` (rpcversion 11).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub payout_scheme: Option<&'static str>,
+    /// The payout address: P2PKH, or the plain-YEC post-quantum address.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub payout_address: Option<String>,
 }

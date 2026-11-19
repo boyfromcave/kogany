@@ -748,7 +748,7 @@ fn pin1_excludes_key_from_medians_and_E() {
     put_row(&mut f, t - 1, row(53000));
     f.mine(Some(Fixture::quote(50000, 0)), Vec::new());
     let s = f.snap(f.tip);
-    assert_eq!(s.pinned_keys, vec![key_of(0)]);
+    assert_eq!(s.pinned_keys, vec![pk(0)]);
     // the medians no longer see 50,000: pFast over pools 1 and 2 only (the slow window's 2/3 fill
     // is then one short: pMint undefined, HALT-1)
     assert_ne!(s.p_fast, 50000);
@@ -756,14 +756,14 @@ fn pin1_excludes_key_from_medians_and_E() {
     assert!(s.halt_mask & HALT_NO_PRICE != 0);
     // E(H) excludes the pinned key; E(H - 1) still has it
     let e = eligible_payees(&f.state, &f.p, f.tip);
-    assert!(!e.contains(&key_of(0)));
+    assert!(!e.contains(&pk(0)));
     assert_eq!(e.len(), 2);
-    assert!(eligible_payees(&f.state, &f.p, f.tip - 1).contains(&key_of(0)));
+    assert!(eligible_payees(&f.state, &f.p, f.tip - 1).contains(&pk(0)));
     // and FEE-W never picks it
     for i in 0..8u8 {
         let pick =
             default_payee(&f.state, &f.p, f.tip, &[i], &PayeePolicy::defaults(&f.p)).unwrap();
-        assert_ne!(pick, key_of(0));
+        assert_ne!(pick, pk(0));
     }
 }
 

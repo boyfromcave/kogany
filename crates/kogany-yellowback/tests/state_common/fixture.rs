@@ -31,7 +31,7 @@ use kogany_yellowback::codecs::script::{
     bond_script, carrier_script, carrier_script_sig, p2pkh_script, pq_key_script,
     yed_vault_params_at, yed_vault_script, yed_vault_script_at,
 };
-use kogany_yellowback::codecs::tag::{height_prefix, tag_push, CoinbaseTag};
+use kogany_yellowback::codecs::tag::{height_prefix, tag_push, CoinbaseTag, Payee};
 use kogany_yellowback::math::{
     attest_fee_zat, early_redeem_fee_zat, min_ratio_bps, protocol_fee_zat,
     required_collateral_rounded,
@@ -76,6 +76,20 @@ pub fn test_set() -> Hash32 {
 /// `KeyOf(i)`: twenty bytes of `0x10 + i`.
 pub fn key_of(i: i64) -> [u8; 20] {
     [u8::try_from(0x10 + i).unwrap(); 20]
+}
+
+/// `PK(i)`: the P2PKH payee of [`key_of`] (tag v1).
+pub fn pk(i: i64) -> Payee {
+    Payee::p2pkh(&key_of(i))
+}
+
+/// `PQPayee(scheme)`: a post-quantum payee (tag v2) whose `CPQKeyID` hash is 32 bytes of
+/// `0x70 + scheme`.
+pub fn pq_payee(scheme: u8) -> Payee {
+    Payee {
+        kind: scheme,
+        hash: [0x70 + scheme; 32],
+    }
 }
 
 /// `DeterministicKey(tag, i)`: the secret `SHA256(tag ‖ i LE32)`.
@@ -207,6 +221,8 @@ pub struct MintOpts {
     pub attest_fee_script: Option<Vec<u8>>,
     pub pq_owner: Option<PqOwner>,
     pub token_script: Option<Vec<u8>>,
+    /// Overrides the fee output's script (tag v2: a payee's TX_PQPKH).
+    pub fee_script: Option<Vec<u8>>,
 }
 
 impl Default for MintOpts {
@@ -231,6 +247,7 @@ impl Default for MintOpts {
             attest_fee_script: None,
             pq_owner: None,
             token_script: None,
+            fee_script: None,
         }
     }
 }
@@ -253,6 +270,8 @@ pub struct SpendOpts {
     pub attest_fee_value: Amount,
     pub residual_value: Option<Amount>,
     pub residual_script: Option<Vec<u8>>,
+    /// Overrides the fee output's script (tag v2: a payee's TX_PQPKH).
+    pub fee_script: Option<Vec<u8>>,
 }
 
 impl Default for SpendOpts {
@@ -273,6 +292,7 @@ impl Default for SpendOpts {
             attest_fee_value: -1,
             residual_value: None,
             residual_script: None,
+            fee_script: None,
         }
     }
 }
@@ -447,12 +467,22 @@ impl Fixture {
             flags: u8::from(signal),
             price_micro_usd: u64::try_from(price).unwrap(),
             source_mask: mask,
-            payout_key: key_of(key),
+            payee: pk(key),
         }
     }
 
     pub fn quote(price: MicroUsd, key: i64) -> CoinbaseTag {
         Fixture::quote_with(price, key, true, 7)
+    }
+
+    /// `QuoteV2(price, scheme)`: a v2 quote tag (beta4 D-T1) naming [`pq_payee`].
+    pub fn quote_v2(price: MicroUsd, scheme: u8) -> CoinbaseTag {
+        CoinbaseTag {
+            flags: 1,
+            price_micro_usd: u64::try_from(price).unwrap(),
+            source_mask: 7,
+            payee: pq_payee(scheme),
+        }
     }
 
     pub fn signal_only(key: i64) -> CoinbaseTag {
@@ -694,7 +724,12 @@ impl Fixture {
             } else {
                 protocol_fee_zat(cents, fee_price, &self.p).unwrap_or(0)
             };
-            m.vout.push(txout(fee, p2pkh_script(&key_of(key))));
+            m.vout.push(txout(
+                fee,
+                o.fee_script
+                    .clone()
+                    .unwrap_or_else(|| p2pkh_script(&key_of(key))),
+            ));
         }
         if o.attest_payee >= 0 {
             while m.vout.len() < 4 {
@@ -822,7 +857,9 @@ impl Fixture {
         }
         m.vout.push(txout(
             fee,
-            p2pkh_script(&key_of(if key < 0 { 9 } else { key })),
+            o.fee_script
+                .clone()
+                .unwrap_or_else(|| p2pkh_script(&key_of(if key < 0 { 9 } else { key }))),
         ));
         let mut n_out = 3usize;
         for a in &o.assigned {

@@ -348,15 +348,17 @@ fn tag_json(tag: Option<kogany_yellowback::codecs::tag::CoinbaseTag>, fmt: &Fmt<
             version: None,
             price_micro_usd: None,
             source_mask: None,
+            payout_scheme: None,
             payout_address: None,
         },
         Some(t) => TagJson {
             found: true,
             kind: if t.is_quote() { "quote" } else { "signal" },
-            version: Some(i64::from(kogany_yellowback::params::TAG_VERSION)),
+            version: Some(i64::from(t.version())),
             price_micro_usd: Some(t.price_micro_usd),
             source_mask: Some(t.source_mask),
-            payout_address: Some(fmt.p2pkh(&t.payout_key)),
+            payout_scheme: Some(t.payee.scheme_name()),
+            payout_address: Some(fmt.payee(&t.payee)),
         },
     }
 }
@@ -486,13 +488,13 @@ impl YedRpc for YedRpcImpl {
                 armed: attest.armed,
             },
             miner: MinerJson {
-                payout_address: m.payout_key.as_ref().map(|k| fmt.p2pkh(k)),
+                payout_address: m.payout_key.as_ref().map(|k| fmt.payee(k)),
                 quote_kind: m.quote_kind,
                 quote_age_seconds: m.quote_age_seconds,
                 registered: m.registered,
                 eligible: m.eligible,
             },
-            params: params_json(&s, snap.as_ref(), &attest, |k| fmt.p2pkh(k)),
+            params: params_json(&s, snap.as_ref(), &attest, |k| fmt.payee(k)),
         })
     }
 
@@ -675,7 +677,7 @@ impl YedRpc for YedRpcImpl {
             seated: snap.as_ref().map(|x| seqs(&x.seated)).unwrap_or_default(),
             pinned_keys: snap
                 .as_ref()
-                .map(|x| x.pinned_keys.iter().map(|k| fmt.p2pkh(k)).collect())
+                .map(|x| x.pinned_keys.iter().map(|k| fmt.payee(k)).collect())
                 .unwrap_or_default(),
             pinned_seqs: snap
                 .as_ref()
@@ -724,7 +726,7 @@ impl YedRpc for YedRpcImpl {
             .miners(h, w)
             .iter()
             .map(|r| MinerRowJson {
-                payout_address: fmt.p2pkh(&r.payout_key),
+                payout_address: fmt.payee(&r.payout_key),
                 last_tag_height: r.last_tag_height,
                 last_quote: r.last_quote,
                 quote_tags: r.quote_tags,
@@ -780,7 +782,7 @@ impl YedRpc for YedRpcImpl {
             received_at: ack.received_at,
             next_tag: NextTagJson {
                 kind: ack.next_kind,
-                payout_address: ack.payout_key.as_ref().map(|k| fmt.p2pkh(k)),
+                payout_address: ack.payout_key.as_ref().map(|k| fmt.payee(k)),
             },
         })
     }
@@ -814,16 +816,16 @@ impl YedRpc for YedRpcImpl {
         let fmt = self.fmt(&s);
         let pp = &s.node.payee_policy;
         let default = match s.index.default_payee(r, &selector) {
-            Some((k, weight)) => json!({"payoutAddress": fmt.p2pkh(&k), "weight": weight}),
+            Some((k, weight)) => json!({"payoutAddress": fmt.payee(&k), "weight": weight}),
             None => Value::Object(Map::new()),
         };
         Ok(FeePayeeJson {
-            eligible: eligible.iter().map(|k| fmt.p2pkh(k)).collect(),
+            eligible: eligible.iter().map(|k| fmt.payee(k)).collect(),
             default,
             preferred: pp
                 .preferred
                 .filter(|k| eligible.contains(k))
-                .map(|k| fmt.p2pkh(&k)),
+                .map(|k| fmt.payee(&k)),
             policy: PolicyJson {
                 penalty_blocks: pp.penalty_blocks,
                 accuracy_window: pp.accuracy_window,
@@ -995,7 +997,7 @@ impl YedRpc for YedRpcImpl {
             yed_out: l.yed_out,
             burned: l.burned,
             fee_zat: l.fee_zat,
-            payee: l.payee.as_ref().map(|k| fmt.p2pkh(k)),
+            payee: l.payee.as_ref().map(|k| fmt.payee(k)),
             assigned: l
                 .assigned
                 .iter()
@@ -1066,7 +1068,7 @@ impl YedRpc for YedRpcImpl {
             yed_out: v.yed_out,
             burned: v.burned,
             fee_zat: v.fee_zat,
-            payee: v.payee.as_ref().map(|k| fmt.p2pkh(k)),
+            payee: v.payee.as_ref().map(|k| fmt.payee(k)),
             block_valid: v.block_valid,
             would_be_rejected: v.would_be_rejected,
             mempool_expiry_ok: v.mempool_expiry_ok,
@@ -1094,7 +1096,7 @@ impl YedRpc for YedRpcImpl {
                     yed_in: t.yed_in,
                     yed_out: t.yed_out,
                     fee_zat: t.fee_zat,
-                    payee: t.payee.as_ref().map(|k| fmt.p2pkh(k)),
+                    payee: t.payee.as_ref().map(|k| fmt.payee(k)),
                     closed_vaults: t.closed_vaults.iter().map(outpoint_json).collect(),
                 })
                 .collect(),

@@ -4,6 +4,7 @@
 //! and price, `fees.network`'s price, `attest.bondMinZat`) from the snapshot.
 
 use kogany_yellowback::{
+    codecs::tag::Payee,
     math::{max_vault_cents, supply_cap_cents},
     params::{FeeBand, PqAddressVersions, MINT_PAYLOAD_VERSION, NUM_CLASSES, PAYLOAD_VERSION},
 };
@@ -35,7 +36,7 @@ pub fn params_json(
     s: &YedSnapshot,
     tip: Option<&SnapshotView>,
     attest: &AttestInfo,
-    payout: impl Fn(&[u8; 20]) -> String,
+    payout: impl Fn(&Payee) -> String,
 ) -> Value {
     let p = &s.params;
     let node = &s.node;

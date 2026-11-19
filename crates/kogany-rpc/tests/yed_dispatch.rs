@@ -214,11 +214,11 @@ async fn every_method_answers_from_the_mock() {
 }
 
 #[tokio::test]
-async fn getinfo_is_rpcversion_10_at_the_golden_tip() {
+async fn getinfo_is_rpcversion_11_at_the_golden_tip() {
     let s = mock();
     let info = call(&s, "yed_getinfo", json!([])).await["result"].clone();
     assert_eq!(info["rpcversion"], YED_RPC_VERSION);
-    assert_eq!(info["rpcversion"], 10);
+    assert_eq!(info["rpcversion"], 11);
     assert_eq!(info["enabled"], true);
     assert_eq!(info["network"], "regtest");
     assert_eq!(info["height"], 440);

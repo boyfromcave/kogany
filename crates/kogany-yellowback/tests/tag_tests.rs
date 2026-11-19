@@ -3,11 +3,13 @@
 // file COPYING or https://www.opensource.org/licenses/mit-license.php .
 
 //! ycash6 `src/test/yellowback_tag_tests.cpp`, case for case (the C++ test names): the coinbase
-//! tag reader (plan §3.2, TAG-1..5) against pool-shaped scriptSigs.
+//! tag reader (plan §3.2, TAG-1..5) against pool-shaped scriptSigs, tag v2 and the payee
+//! (docs/plans/beta4/price-feed.md §4.3), and the cross-line tag vectors
+//! (`yellowback_tag_vectors.json`, D-T4).
 
 mod common;
 
-use common::h;
+use common::{h, load_pinned};
 use kogany_yellowback::codecs::tag::*;
 use kogany_yellowback::params::{
     PRICE_MAX, PRICE_MIN, TAG_PRICE_SIGNAL_ONLY, TAG_SIZE, TAG_VERSION,
@@ -18,7 +20,7 @@ fn quote_tag(price: u64, flags: u8) -> CoinbaseTag {
         flags,
         price_micro_usd: price,
         source_mask: 0x0007,
-        payout_key: [0xAB; 20],
+        payee: Payee::p2pkh(&[0xAB; 20]),
     }
 }
 
@@ -71,13 +73,13 @@ fn tag1_to_5_table() {
     let body = encode_tag(&q);
     let extranonce = h("0011223344556677");
     let magic_only = h("59454421");
-    let bad = |f: &dyn Fn(&mut [u8; 36])| {
-        let mut b = body;
+    let bad = |f: &dyn Fn(&mut Vec<u8>)| {
+        let mut b = body.clone();
         f(&mut b);
         push(&b)
     };
     let zero_key = CoinbaseTag {
-        payout_key: [0; 20],
+        payee: Payee::p2pkh(&[0; 20]),
         ..q
     };
     let cases: Vec<(&str, Vec<u8>, Option<CoinbaseTag>)> = vec![
@@ -296,4 +298,181 @@ fn height_prefix_is_the_cscript_int_push() {
     assert_eq!(height_prefix(128), vec![0x02, 0x80, 0x00]);
     assert_eq!(height_prefix(1234567), vec![0x03, 0x87, 0xd6, 0x12]);
     assert_eq!(height_prefix(i32::MAX), vec![0x04, 0xff, 0xff, 0xff, 0x7f]);
+}
+
+// ---------------------------------------------------------------------------------------------
+// Tag v2 (docs/plans/beta4/price-feed.md §4.3, beta4 P1 spec §1, §2, §7)
+
+fn v2_tag(scheme: u8) -> CoinbaseTag {
+    CoinbaseTag {
+        flags: 0x01,
+        price_micro_usd: 50000,
+        source_mask: 0x0005,
+        payee: Payee::pq(&kogany_vault::PqOwner {
+            scheme,
+            hash: kogany_vault::Hash32([0xCD; 32]),
+        })
+        .unwrap(),
+    }
+}
+
+// Rule: TAG-1
+#[test]
+fn tag_v2_layout_and_roundtrip() {
+    let height = 1000;
+    for scheme in [1u8, 2] {
+        let t = v2_tag(scheme);
+        assert_eq!(t.version(), TAG_VERSION_V2);
+        let body = encode_tag(&t);
+        assert_eq!(body.len(), TAG_SIZE_V2);
+        assert_eq!(hex::encode(&body[..5]), "5945442102");
+        assert_eq!(body[16], scheme);
+        let p = tag_push(&t);
+        assert_eq!(p.len(), 50);
+        assert_eq!(p[0], 0x31);
+        let got = find_tag(&cat(&[&prefix(height), &h("00"), &p]), height);
+        assert_eq!(got, Some(t));
+        assert!(t.is_valid());
+    }
+    // v1 for a P2PKH payee, unchanged byte for byte
+    assert_eq!(quote().version(), TAG_VERSION);
+    assert_eq!(encode_tag(&quote()).len(), TAG_SIZE);
+}
+
+// Rule: TAG-2, TAG-5
+#[test]
+fn tag_v2_bad_scheme_truncation_and_pattern_order() {
+    let height = 1000;
+    let pre = prefix(height);
+    let v2 = encode_tag(&v2_tag(2));
+    let mut bad = v2.clone();
+    bad[16] = 0x03; // unknown scheme
+    assert_eq!(find_tag(&cat(&[&pre, &push(&bad)]), height), None);
+    let mut zero = v2.clone();
+    zero[16] = 0x00; // P2PKH is not a v2 scheme
+    assert_eq!(find_tag(&cat(&[&pre, &push(&zero)]), height), None);
+    // truncated: 48 bytes after the 0x31 push opcode
+    assert_eq!(find_tag(&cat(&[&pre, &h("31"), &v2[..48]]), height), None);
+    // a v2 pattern with version 1, a v1 pattern with version 2
+    let mut v2as1 = v2.clone();
+    v2as1[4] = 0x01;
+    assert_eq!(find_tag(&cat(&[&pre, &push(&v2as1)]), height), None);
+    let mut v1as2 = encode_tag(&quote());
+    v1as2[4] = 0x02;
+    assert_eq!(find_tag(&cat(&[&pre, &push(&v1as2)]), height), None);
+    // first by position decides
+    let (v1p, v2p) = (tag_push(&quote()), tag_push(&v2_tag(1)));
+    assert_eq!(
+        find_tag(&cat(&[&pre, &v1p, &v2p]), height).map(|t| t.version()),
+        Some(TAG_VERSION)
+    );
+    assert_eq!(
+        find_tag(&cat(&[&pre, &v2p, &v1p]), height).map(|t| t.version()),
+        Some(TAG_VERSION_V2)
+    );
+    assert_eq!(find_tag(&cat(&[&pre, &push(&bad), &v1p]), height), None);
+}
+
+// Rule: FEE-2
+#[test]
+fn payee_script_order_and_serialisation() {
+    let p2pkh = quote().payee;
+    let (fn_dsa, slh) = (v2_tag(2).payee, v2_tag(1).payee);
+    assert_eq!(p2pkh.script().unwrap().len(), 25);
+    assert_eq!(fn_dsa.script().unwrap().len(), 35);
+    assert_eq!(
+        fn_dsa.script(),
+        kogany_yellowback::codecs::script::pq_key_script(&fn_dsa.pq_owner().unwrap())
+    );
+    for p in [p2pkh, fn_dsa, slh] {
+        assert_eq!(Payee::from_script(&p.script().unwrap()), Some(p));
+        let enc = p.encode();
+        assert_eq!(enc.len(), 1 + if p.is_p2pkh() { 20 } else { 32 });
+        assert_eq!(enc[0], p.kind);
+    }
+    // nothing else is a payee: a P2SH, a trailing byte, an unknown scheme
+    let p2sh = kogany_yellowback::codecs::script::p2sh_script(&[0x51]);
+    assert_eq!(Payee::from_script(&p2sh), None);
+    let mut longer = fn_dsa.script().unwrap();
+    longer.push(0x00);
+    assert_eq!(Payee::from_script(&longer), None);
+    let mut scheme3 = fn_dsa.script().unwrap();
+    scheme3[33] = 0x53;
+    assert_eq!(Payee::from_script(&scheme3), None);
+    // order: kind, then the hash bytes
+    assert!(p2pkh < slh && slh < fn_dsa);
+    assert_eq!(p2pkh.scheme_name(), "p2pkh");
+    assert_eq!(slh.scheme_name(), "slh-dsa-sha2-128s");
+    assert_eq!(fn_dsa.scheme_name(), "fn-dsa-512");
+}
+
+// Rule: TAG-1, TAG-5
+#[test]
+fn tag_vectors_cross_line() {
+    // testdata/yellowback/yellowback_tag_vectors.json (D-T4): ycash-dd's file byte for byte.
+    let doc = load_pinned("yellowback_tag_vectors.json");
+    let cases = doc["cases"].as_array().unwrap();
+    assert!(cases.len() >= 11);
+    let mut found = 0;
+    for c in cases {
+        let name = c["name"].as_str().unwrap();
+        let script_sig = h(c["scriptSig"].as_str().unwrap());
+        assert_eq!(
+            script_sig.len() as u64,
+            c["scriptSigSize"].as_u64().unwrap(),
+            "{name}"
+        );
+        let height = i32::try_from(c["height"].as_i64().unwrap()).unwrap();
+        let got = find_tag(&script_sig, height);
+        assert_eq!(got.is_some(), !c["tag"].is_null(), "{name}");
+        assert_eq!(c["payeeScript"].is_null(), c["tag"].is_null(), "{name}");
+        let Some(got) = got else { continue };
+        found += 1;
+        let t = &c["tag"];
+        assert_eq!(
+            u64::from(got.version()),
+            t["version"].as_u64().unwrap(),
+            "{name}"
+        );
+        assert_eq!(u64::from(got.flags), t["flags"].as_u64().unwrap(), "{name}");
+        assert_eq!(
+            got.price_micro_usd,
+            t["priceMicroUsd"].as_u64().unwrap(),
+            "{name}"
+        );
+        assert_eq!(
+            u64::from(got.source_mask),
+            t["sourceMask"].as_u64().unwrap(),
+            "{name}"
+        );
+        assert_eq!(
+            u64::from(got.payee.kind),
+            t["payeeKind"].as_u64().unwrap(),
+            "{name}"
+        );
+        assert_eq!(
+            got.payee.scheme_name(),
+            t["payoutScheme"].as_str().unwrap(),
+            "{name}"
+        );
+        assert_eq!(
+            hex::encode(got.payee.hash_bytes()),
+            t["payoutHash"].as_str().unwrap(),
+            "{name}"
+        );
+        assert_eq!(
+            hex::encode(got.payee.script().unwrap()),
+            c["payeeScript"].as_str().unwrap(),
+            "{name}: payee script"
+        );
+        // the push re-encodes to the bytes found
+        let p = tag_push(&got);
+        assert!(
+            script_sig.windows(p.len()).any(|w| w == p.as_slice()),
+            "{name}: re-encode"
+        );
+        // D-6: the 60-byte coinbase at height 8,388,607 is within the consensus 2..=100 range
+        assert!((2..=100).contains(&script_sig.len()), "{name}");
+    }
+    assert_eq!(found, 6);
 }

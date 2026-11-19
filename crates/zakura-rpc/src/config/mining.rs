@@ -79,14 +79,20 @@ pub struct Config {
     #[serde(skip_serializing_if = "is_true")]
     pub yellowback_payout_default: bool,
 
-    /// Ycash: the node's YED payout address, ycashd's `-yellowbackpayoutaddress` (a transparent
-    /// P2PKH address). When set it is the key the coinbase tag names, whatever address the
-    /// coinbase pays (a stratum pool paying each miner's username keeps its own payout key);
-    /// unset, the payout key follows [`Self::miner_address`] and
-    /// [`Self::yellowback_payout_default`] (ycashd MINER-2, `src/init.cpp`).
+    /// Ycash: the node's YED payout address, ycashd's `-yellowbackpayoutaddress`: a transparent
+    /// P2PKH address (the coinbase tag is v1) or a plain-YEC post-quantum address,
+    /// `sqf…`/`sqs…`, `tqf…`/`tqs…` or `rqf…`/`rqs…` (tag v2, beta4 D-T3). When set it is the key
+    /// the coinbase tag names, whatever address the coinbase pays (a stratum pool paying each
+    /// miner's username keeps its own payout key); unset, the payout key follows
+    /// [`Self::miner_address`] and [`Self::yellowback_payout_default`] (ycashd MINER-2,
+    /// `src/init.cpp`). The node refuses to start with any other kind of address, or one of
+    /// another network.
     #[cfg(feature = "ycash")]
-    #[serde(with = "miner_address", skip_serializing_if = "Option::is_none")]
-    pub yellowback_payout_address: Option<ZcashAddress>,
+    #[serde(
+        with = "yellowback_payout_address",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub yellowback_payout_address: Option<String>,
 
     /// Ycash: the most unpaid ZIP-317 actions a block template carries, ycashd's
     /// `-blockunpaidactionlimit`. `None` (the default) is no limit, ycashd's
@@ -137,6 +143,44 @@ fn is_default_ydf(value: &i64) -> bool {
 #[cfg(feature = "ycash")]
 fn is_true(value: &bool) -> bool {
     *value
+}
+
+/// `yellowback_payout_address`: the address text, kept as written (a post-quantum address is no
+/// `ZcashAddress`); refused unless it parses as a Ycash address. The network and the kind
+/// (P2PKH or post-quantum) are checked at start, where the network is known.
+#[cfg(feature = "ycash")]
+mod yellowback_payout_address {
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+    use zcash_address::ZcashAddress;
+
+    pub(super) fn serialize<S>(address: &Option<String>, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        address.serialize(serializer)
+    }
+
+    pub(super) fn deserialize<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        Option::<String>::deserialize(deserializer)?
+            .map(|encoded| {
+                let parses = encoded.parse::<ZcashAddress>().is_ok()
+                    || encoded
+                        .parse::<zakura_chain::transparent::Address>()
+                        .is_ok();
+                if parses {
+                    Ok(encoded)
+                } else {
+                    Err(serde::de::Error::custom(format!(
+                        "Invalid address for mining.yellowback_payout_address: Unable to parse \
+                         '{encoded}' as a Ycash address."
+                    )))
+                }
+            })
+            .transpose()
+    }
 }
 
 mod miner_address {
@@ -258,20 +302,43 @@ impl Deref for ExtraCoinbaseData {
 }
 
 /// The error returned when [`ExtraCoinbaseData`] is constructed from too many
-/// bytes.
+/// bytes, or (Ycash) from text that holds a Yellowback tag pattern.
 #[derive(Clone, Debug, thiserror::Error)]
-#[error("extra_coinbase_data is {0} bytes, but the maximum is {MAX_USER_COINBASE_DATA_LEN}")]
-pub struct ExtraCoinbaseDataTooLong(usize);
+pub enum ExtraCoinbaseDataError {
+    /// More than [`MAX_USER_COINBASE_DATA_LEN`] bytes.
+    #[error("extra_coinbase_data is {0} bytes, but the maximum is {MAX_USER_COINBASE_DATA_LEN}")]
+    TooLong(usize),
+    /// Ycash (beta4 P1): the text holds `$YED!` or `1YED!`, a Yellowback coinbase tag pattern.
+    #[cfg(feature = "ycash")]
+    #[error(
+        "extra_coinbase_data must not contain \"$YED!\" or \"1YED!\": the Yellowback coinbase tag \
+         scan takes the first such pattern after the height push, so this text would void or \
+         replace the tag of every block this node builds"
+    )]
+    YedTagPattern,
+}
+
+/// Ycash (beta4 P1): the Yellowback tag patterns, a v1 (`0x24`) or v2 (`0x31`) push length
+/// followed by `YED!` (`FindTag`, tag spec TAG-5): the first occurrence in the coinbase input
+/// script decides, and the configured data precedes the node's own tag push.
+#[cfg(feature = "ycash")]
+const YED_TAG_PATTERNS: [&str; 2] = ["$YED!", "1YED!"];
 
 impl TryFrom<String> for ExtraCoinbaseData {
-    type Error = ExtraCoinbaseDataTooLong;
+    type Error = ExtraCoinbaseDataError;
 
     fn try_from(data: String) -> Result<Self, Self::Error> {
         if data.len() > MAX_USER_COINBASE_DATA_LEN {
-            Err(ExtraCoinbaseDataTooLong(data.len()))
-        } else {
-            Ok(Self(data))
+            return Err(ExtraCoinbaseDataError::TooLong(data.len()));
         }
+        #[cfg(feature = "ycash")]
+        if YED_TAG_PATTERNS
+            .iter()
+            .any(|pattern| data.contains(pattern))
+        {
+            return Err(ExtraCoinbaseDataError::YedTagPattern);
+        }
+        Ok(Self(data))
     }
 }
 
@@ -427,6 +494,59 @@ mod tests {
             .unwrap()
             .contains("yellowback_payout_address"));
         assert!(toml::from_str::<Config>("yellowback_payout_address = 'invalid'").is_err());
+        // beta4 D-T3: a plain-YEC post-quantum address parses and round-trips as written
+        let pq = kogany_yellowback::codecs::address::encode_pq(
+            &kogany_vault::PqOwner {
+                scheme: 2,
+                hash: kogany_vault::Hash32([0x5a; 32]),
+            },
+            &kogany_yellowback::codecs::address::PLAIN_PQ_VERSIONS_REGTEST,
+        )
+        .unwrap();
+        assert!(pq.starts_with("rqf"));
+        let config =
+            toml::from_str::<Config>(&format!("yellowback_payout_address = '{pq}'")).unwrap();
+        assert_eq!(
+            config.yellowback_payout_address.as_deref(),
+            Some(pq.as_str())
+        );
+        assert_eq!(
+            toml::from_str::<Config>(&toml::to_string(&config).unwrap()).unwrap(),
+            config
+        );
+    }
+
+    /// beta4 P1: `extra_coinbase_data` holding a Yellowback tag pattern (`$YED!`, `1YED!`) fails
+    /// the config load with a message that names the patterns; other text, and `YED!` after any
+    /// other byte, loads.
+    #[cfg(feature = "ycash")]
+    #[test]
+    fn ycash_extra_coinbase_data_refuses_tag_patterns() {
+        use super::{ExtraCoinbaseData, ExtraCoinbaseDataError, MAX_USER_COINBASE_DATA_LEN};
+
+        for text in ["$YED!", "1YED!", "/pool/$YED!x", "a1YED!", "$YED!$YED!"] {
+            let error = toml::from_str::<Config>(&format!("extra_coinbase_data = '{text}'"))
+                .expect_err(text)
+                .to_string();
+            assert!(
+                error.contains(r#"must not contain "$YED!" or "1YED!""#),
+                "{text}: {error}"
+            );
+            assert!(matches!(
+                ExtraCoinbaseData::try_from(text.to_string()),
+                Err(ExtraCoinbaseDataError::YedTagPattern)
+            ));
+        }
+        for text in ["/pool/", "YED!", "2YED!", "$YED", "1 YED!", "$yed!"] {
+            let config = toml::from_str::<Config>(&format!("extra_coinbase_data = '{text}'"))
+                .unwrap_or_else(|error| panic!("{text}: {error}"));
+            assert_eq!(config.extra_coinbase_data.as_deref(), Some(text));
+        }
+        // the length limit is checked first and keeps its message
+        assert!(matches!(
+            ExtraCoinbaseData::try_from(format!("$YED!{}", "x".repeat(MAX_USER_COINBASE_DATA_LEN))),
+            Err(ExtraCoinbaseDataError::TooLong(_))
+        ));
     }
 
     /// `ydf` (ycashd `-ydf=<n>`): 0 by default and then not written; 0..=100 is taken as given;

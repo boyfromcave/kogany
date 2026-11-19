@@ -20,17 +20,19 @@ use crate::attest::price::{
     HALT_DIVERGENCE, HALT_ENFORCEMENT, HALT_GLOBAL_RATIO, HALT_NOT_ACTIVE, HALT_NO_PRICE,
     HALT_PARTICIPATION,
 };
+use crate::codecs::tag::Payee;
 use crate::math::BPS;
 use crate::params::Params;
+use kogany_vault::template::PQ_SCHEME_FN_DSA_512;
 
 /// The quote tag at `h` paying `key`, if any.
-fn quote_of(r: &dyn YedRead, p: &Params, h: i64, key: &[u8; 20]) -> Option<TagRecord> {
-    tag_at(r, p, h).filter(|t| t.is_quote() && t.payout_key == *key)
+fn quote_of(r: &dyn YedRead, p: &Params, h: i64, key: &Payee) -> Option<TagRecord> {
+    tag_at(r, p, h).filter(|t| t.is_quote() && t.payee == *key)
 }
 
 /// REG-1 (informational, `Registered`): some quote tag with this payout key exists in
 /// `(R - N_REG, R]`.
-pub fn registered(r: &dyn YedRead, p: &Params, key: &[u8; 20], ref_height: i64) -> bool {
+pub fn registered(r: &dyn YedRead, p: &Params, key: &Payee, ref_height: i64) -> bool {
     let lo = ref_height
         .saturating_sub(i64::from(p.n_reg))
         .saturating_add(1)
@@ -43,7 +45,7 @@ pub fn registered(r: &dyn YedRead, p: &Params, key: &[u8; 20], ref_height: i64) 
 pub fn penalized(
     r: &dyn YedRead,
     p: &Params,
-    key: &[u8; 20],
+    key: &Payee,
     ref_height: i64,
     penalty_blocks: i32,
 ) -> bool {
@@ -64,7 +66,7 @@ pub fn penalized(
 pub fn accuracy_bps(
     r: &dyn YedRead,
     p: &Params,
-    key: &[u8; 20],
+    key: &Payee,
     ref_height: i64,
     accuracy_window: i32,
 ) -> i32 {
@@ -101,7 +103,12 @@ pub struct PayeePolicy {
     /// `PAYEE_TILT_BPS` (`-yellowbackpayeetiltbps`).
     pub tilt_bps: i32,
     /// `-yellowbackpreferredpayee`: replaces the pick when it is in E(R).
-    pub preferred: Option<[u8; 20]>,
+    pub preferred: Option<Payee>,
+    /// The height of the transaction the draw is for (`PayeePolicy::txHeight`, beta4 P1
+    /// follow-up, policy only): while Falcon is not active there ([`Params::is_pq_falcon_active`])
+    /// the draw skips FN-DSA (scheme 0x02) payees, the preference included, unless E(R) holds
+    /// nothing else. `None`: no skip (the RPC views of E(R)). Validity rules are unchanged.
+    pub tx_height: Option<i64>,
 }
 
 impl PayeePolicy {
@@ -112,6 +119,7 @@ impl PayeePolicy {
             accuracy_window: p.accuracy_window,
             tilt_bps: p.payee_tilt_bps,
             preferred: None,
+            tx_height: None,
         }
     }
 }
@@ -122,19 +130,33 @@ impl PayeePolicy {
 /// little-endian `u64` from its first eight bytes; `pick = seed mod Σw`; the first tag whose
 /// cumulative weight exceeds `pick`. All penalised: every key of E(R) at equal weights.
 /// `blockHash(R)` is `Snapshots[R].blockHash` (zero when missing). `None` iff E(R) is empty.
+/// With `policy.tx_height` set and Falcon not active at it, the draw runs over E(R) without its
+/// FN-DSA payees when any other payee remains.
 pub fn default_payee(
     r: &dyn YedRead,
     p: &Params,
     ref_height: i64,
     selector: &[u8],
     policy: &PayeePolicy,
-) -> Option<[u8; 20]> {
-    let eligible = eligible_payees(r, p, ref_height);
+) -> Option<Payee> {
+    let mut eligible = eligible_payees(r, p, ref_height);
+    if policy.tx_height.is_some_and(|h| !p.is_pq_falcon_active(h)) {
+        // policy only: no FN-DSA payee before Falcon while another payee is eligible (the rules
+        // still accept one)
+        let pre_falcon: Vec<Payee> = eligible
+            .iter()
+            .copied()
+            .filter(|k| k.kind != PQ_SCHEME_FN_DSA_512)
+            .collect();
+        if !pre_falcon.is_empty() {
+            eligible = pre_falcon;
+        }
+    }
     let first = *eligible.first()?;
     if let Some(pref) = policy.preferred.filter(|k| eligible.contains(k)) {
         return Some(pref);
     }
-    let mut candidates: Vec<([u8; 20], i64)> = Vec::new();
+    let mut candidates: Vec<(Payee, i64)> = Vec::new();
     let lo = ref_height
         .saturating_sub(i64::from(p.payee_window))
         .saturating_add(1)
@@ -143,7 +165,7 @@ pub fn default_payee(
         let Some(t) = tag_at(r, p, h).filter(TagRecord::is_quote) else {
             continue;
         };
-        let k = t.payout_key;
+        let k = t.payee;
         if !eligible.contains(&k) {
             continue; // pinned at R (PIN-1)
         }

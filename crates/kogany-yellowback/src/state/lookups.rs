@@ -15,6 +15,7 @@ use super::view::{attestor_of, attestor_set_of, attestors_of, bond_seq_of, next_
 use crate::attest::registry::{AttestorRecord, AttestorSetRecord, RegistryRead};
 use crate::attest::seats::SelectionBasis;
 use crate::codecs::script::YED_TAG;
+use crate::codecs::tag::Payee;
 use crate::math::bond_min_from_collateral_zat;
 use crate::params::{Amount, Params};
 
@@ -73,11 +74,11 @@ pub fn selection_basis(r: &dyn YedRead, p: &Params, h: i64) -> Option<SelectionB
     })
 }
 
-/// `EligiblePayees` E(R) (FEE-2): the payout keys of the quote tags in
+/// `EligiblePayees` E(R) (FEE-2): the payees (P2PKH or post-quantum, tag v1 or v2) of the quote tags in
 /// `(R - PAYEE_WINDOW, R]`, height order, deduplicated, minus `Snapshots[R].pinnedKeys` (PIN-1);
 /// empty = FEE-0.
-pub fn eligible_payees(r: &dyn YedRead, p: &Params, ref_height: i64) -> Vec<[u8; 20]> {
-    let pinned: Vec<[u8; 20]> = if ref_height >= i64::from(p.start_height) {
+pub fn eligible_payees(r: &dyn YedRead, p: &Params, ref_height: i64) -> Vec<Payee> {
+    let pinned: Vec<Payee> = if ref_height >= i64::from(p.start_height) {
         key_height(ref_height)
             .and_then(|h| r.snapshot(h))
             .map(|s| s.pinned_keys)
@@ -89,12 +90,12 @@ pub fn eligible_payees(r: &dyn YedRead, p: &Params, ref_height: i64) -> Vec<[u8;
         .saturating_sub(i64::from(p.payee_window))
         .saturating_add(1)
         .max(i64::from(p.start_height));
-    let mut keys: Vec<[u8; 20]> = Vec::new();
+    let mut keys: Vec<Payee> = Vec::new();
     let mut h = lo;
     while h <= ref_height {
         if let Some(t) = tag_at(r, p, h).filter(TagRecord::is_quote) {
-            if !pinned.contains(&t.payout_key) && !keys.contains(&t.payout_key) {
-                keys.push(t.payout_key);
+            if !pinned.contains(&t.payee) && !keys.contains(&t.payee) {
+                keys.push(t.payee);
             }
         }
         h = h.saturating_add(1);

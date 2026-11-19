@@ -45,10 +45,10 @@ fn tag3_signal_only_registers_nobody() {
     assert!(f.snap(1).tagged);
     assert!(!f.snap(1).quote);
     assert!(eligible_payees(&f.state, &f.p, 1).is_empty());
-    assert!(!registered(&f.state, &f.p, &key_of(1), 1));
+    assert!(!registered(&f.state, &f.p, &pk(1), 1));
     f.mine(Some(Fixture::quote(50000, 2)), Vec::new());
     assert!(f.snap(2).quote);
-    assert!(registered(&f.state, &f.p, &key_of(2), 2));
+    assert!(registered(&f.state, &f.p, &pk(2), 2));
     assert_eq!(eligible_payees(&f.state, &f.p, 2).len(), 1);
     // TAG-4: garbage in the coinbase (an invalid tag, or no tag) never makes a block invalid and
     // is "no tag".
@@ -62,8 +62,8 @@ fn tag3_signal_only_registers_nobody() {
     assert!(!f.snap(4).tagged);
     // REG-1 lapse: registration ends N_REG blocks after the last quote.
     let n_reg = i64::from(f.p.n_reg);
-    assert!(registered(&f.state, &f.p, &key_of(2), 2 + n_reg - 1));
-    assert!(!registered(&f.state, &f.p, &key_of(2), 2 + n_reg));
+    assert!(registered(&f.state, &f.p, &pk(2), 2 + n_reg - 1));
+    assert!(!registered(&f.state, &f.p, &pk(2), 2 + n_reg));
 }
 
 // Rule: PRICE-1
@@ -263,7 +263,7 @@ fn reg4_judgement_lag_and_bands() {
     }
     assert!(!g.state.judgement(3).unwrap().evaluated);
     // REG-2 window edges: penalised at t = 6 counts for R in (10, 22] (lag 4, N_PENALTY 12).
-    let k2 = key_of(0); // 6 % 3 == 0
+    let k2 = pk(0); // 6 % 3 == 0
     let np = f.p.n_penalty;
     assert!(!penalized(&f.state, &f.p, &k2, 10, np));
     assert!(penalized(&f.state, &f.p, &k2, 11, np));
@@ -278,7 +278,7 @@ fn reg4_judgement_lag_and_bands() {
     );
     assert_eq!(accuracy_bps(&f.state, &f.p, &k2, 20, 1), 0); // t = 16 only (pool 1's)
     assert_eq!(accuracy_bps(&f.state, &f.p, &k2, 20, 4), 10000); // t in [13, 16]: pool 0's 15
-    assert_eq!(accuracy_bps(&f.state, &f.p, &key_of(7), 20, 24), 0);
+    assert_eq!(accuracy_bps(&f.state, &f.p, &pk(7), 20, 24), 0);
 }
 
 // Rule: FEE-2
@@ -292,17 +292,14 @@ fn fee2_eligible_set_window_edges() {
         f.mine(None, Vec::new());
     }
     // PAYEE_WINDOW 10: E(R) contains key 0 for R in [1, 10], not at 11.
-    assert_eq!(eligible_payees(&f.state, &f.p, 10), vec![key_of(0)]);
+    assert_eq!(eligible_payees(&f.state, &f.p, 10), vec![pk(0)]);
     assert!(eligible_payees(&f.state, &f.p, 11).is_empty()); // FEE-0
     assert_eq!(eligible_payees(&f.state, &f.p, 2).len(), 1); // the signal-only tag adds nobody
                                                              // Dedup and height order.
     f.mine(Some(Fixture::quote(50000, 2)), Vec::new()); // 13
     f.mine(Some(Fixture::quote(50000, 0)), Vec::new()); // 14
     f.mine(Some(Fixture::quote(50000, 2)), Vec::new()); // 15
-    assert_eq!(
-        eligible_payees(&f.state, &f.p, 15),
-        vec![key_of(2), key_of(0)]
-    );
+    assert_eq!(eligible_payees(&f.state, &f.p, 15), vec![pk(2), pk(0)]);
 }
 
 // Rule: FEE-1'
@@ -362,20 +359,20 @@ fn feew_accuracy_tilt_ratio() {
     let f = payee_fixture();
     // R = 60: E(R) = {A, B}; accuracy over (32, 56]: A 10000, B 0.
     assert_eq!(
-        accuracy_bps(&f.state, &f.p, &key_of(0), 60, f.p.accuracy_window),
+        accuracy_bps(&f.state, &f.p, &pk(0), 60, f.p.accuracy_window),
         10000
     );
     assert_eq!(
-        accuracy_bps(&f.state, &f.p, &key_of(1), 60, f.p.accuracy_window),
+        accuracy_bps(&f.state, &f.p, &pk(1), 60, f.p.accuracy_window),
         0
     );
     let def = PayeePolicy::defaults(&f.p);
     let (mut a, mut b) = (0, 0);
     for i in 0..1000 {
         let k = default_payee(&f.state, &f.p, 60, &selector(i), &def).unwrap();
-        if k == key_of(0) {
+        if k == pk(0) {
             a += 1;
-        } else if k == key_of(1) {
+        } else if k == pk(1) {
             b += 1;
         } else {
             panic!("pick outside E(R)");
@@ -388,7 +385,7 @@ fn feew_accuracy_tilt_ratio() {
     let flat = PayeePolicy { tilt_bps: 0, ..def };
     let (mut a, mut b) = (0, 0);
     for i in 0..1000 {
-        if default_payee(&f.state, &f.p, 60, &selector(i), &flat).unwrap() == key_of(0) {
+        if default_payee(&f.state, &f.p, 60, &selector(i), &flat).unwrap() == pk(0) {
             a += 1;
         } else {
             b += 1;
@@ -413,7 +410,7 @@ fn feew_penalised_skipped_and_fallback() {
     for i in 0..100 {
         assert_eq!(
             default_payee(&f.state, &f.p, 60, &selector(i), &def),
-            Some(key_of(0))
+            Some(pk(0))
         );
     }
     // Penalise A too: the all-penalised fallback picks among all of E(R) at equal weights.
@@ -423,7 +420,7 @@ fn feew_penalised_skipped_and_fallback() {
     );
     let (mut a, mut b) = (0, 0);
     for i in 0..1000 {
-        if default_payee(&f.state, &f.p, 60, &selector(i), &def).unwrap() == key_of(0) {
+        if default_payee(&f.state, &f.p, 60, &selector(i), &def).unwrap() == pk(0) {
             a += 1;
         } else {
             b += 1;
@@ -444,7 +441,7 @@ fn feew_override_flags_change_pick() {
     );
     let count = |f: &Fixture, pp: &PayeePolicy, r: i64| {
         (0..300)
-            .filter(|i| default_payee(&f.state, &f.p, r, &selector(*i), pp) == Some(key_of(1)))
+            .filter(|i| default_payee(&f.state, &f.p, r, &selector(*i), pp) == Some(pk(1)))
             .count()
     };
     assert_eq!(count(&f, &def, 60), 0);
@@ -478,11 +475,11 @@ fn feew_override_flags_change_pick() {
     assert!(count(&f, &flat, 60) > b_wide);
     // -yellowbackpreferredpayee replaces the pick when in E(R), never otherwise.
     let mut pref = PayeePolicy {
-        preferred: Some(key_of(1)),
+        preferred: Some(pk(1)),
         ..def
     };
     assert_eq!(count(&f, &pref, 60), 300);
-    pref.preferred = Some(key_of(7));
+    pref.preferred = Some(pk(7));
     assert_eq!(count(&f, &pref, 60), 0);
 }
 

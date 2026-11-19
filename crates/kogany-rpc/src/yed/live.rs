@@ -19,13 +19,13 @@
 use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
-use kogany_vault::Hash32;
 use kogany_vault::{state::VaultTx, OutPoint};
+use kogany_vault::{template::PQ_SCHEME_FN_DSA_512, Hash32};
 use kogany_yellowback::{
     attest::{attestation_valid, Attestation as KAttestation},
     codecs::{
         payload::{find_payload, Payload},
-        tag::{find_tag, height_prefix},
+        tag::{find_tag, height_prefix, Payee},
     },
     params::{PqAddressVersions, PRICE_MAX, PRICE_MIN},
     state::{block_hash_at, eligible_payees, evaluate_block, TxLogType},
@@ -48,10 +48,11 @@ use super::state::*;
 /// a held quote older than this builds no tag (MINER-1).
 pub const QUOTE_MAX_AGE_SECONDS: i64 = 1_800;
 
-/// The miner's payout key: the P2PKH key hash of the configured miner address (ycash6
-/// `-yellowbackpayoutaddress`, defaulting to the mining address's key, `src/init.cpp`), set once
-/// at start by `zakurad` ([`set_payout_address`]).
-static PAYOUT_KEY: std::sync::OnceLock<Option<[u8; 20]>> = std::sync::OnceLock::new();
+/// The miner's payout key: the payee of the configured payout address (ycash6
+/// `-yellowbackpayoutaddress`, defaulting to the mining address, `src/init.cpp`), set once at
+/// start by `zakurad` ([`set_payout_key`]). A P2PKH payee makes tag v1, a post-quantum one tag v2
+/// (beta4 D-T3).
+static PAYOUT_KEY: std::sync::OnceLock<Option<Payee>> = std::sync::OnceLock::new();
 
 /// A transparent P2PKH receiver's key hash.
 struct P2pkhKey([u8; 20]);
@@ -67,21 +68,24 @@ impl zcash_address::TryFromAddress for P2pkhKey {
     }
 }
 
-/// Sets the miner's payout key from the node's miner address (`mining.miner_address`); only a
-/// transparent P2PKH address has one (MINER-2: otherwise no tag). The first call wins.
-pub fn set_payout_address(address: Option<&zcash_address::ZcashAddress>) {
-    let key = address.and_then(|a| a.clone().convert::<P2pkhKey>().ok().map(|k| k.0));
+/// The P2PKH payee of a parsed miner address (a post-quantum address is no `ZcashAddress`; the
+/// `ycash` build decodes the payout address text with
+/// `zakura_rpc::ycash_mining::decode_payee_address`).
+pub fn p2pkh_payee(address: &zcash_address::ZcashAddress) -> Option<Payee> {
+    address
+        .clone()
+        .convert::<P2pkhKey>()
+        .ok()
+        .map(|k| Payee::p2pkh(&k.0))
+}
+
+/// Sets the miner's payout key (MINER-2: `None`, no tag). The first call wins.
+pub fn set_payout_key(key: Option<Payee>) {
     let _ = PAYOUT_KEY.set(key);
 }
 
-/// Whether `address` is a transparent P2PKH address (ycash6 init.cpp's K22 check on
-/// `-yellowbackpayoutaddress`).
-pub fn is_p2pkh_address(address: &zcash_address::ZcashAddress) -> bool {
-    address.clone().convert::<P2pkhKey>().is_ok()
-}
-
-/// The miner's payout key, `None` without a P2PKH miner address.
-pub fn payout_key() -> Option<[u8; 20]> {
+/// The miner's payout key, `None` without a P2PKH or post-quantum payout address.
+pub fn payout_key() -> Option<Payee> {
     PAYOUT_KEY.get().copied().flatten()
 }
 
@@ -194,7 +198,14 @@ where
         let healthy = index.health().healthy;
         let fresh =
             quote.is_some_and(|q| now.saturating_sub(q.received_at) <= QUOTE_MAX_AGE_SECONDS);
-        let quote_kind = if healthy && payout.is_some() && fresh {
+        // policy (beta4 P1 follow-up): no v2 FN-DSA tag for a block before Falcon (the start
+        // refuses such a payout key then; this covers a node started past the Falcon height whose
+        // chain is reorganised below it)
+        let falcon_blocked = payout.is_some_and(|key| {
+            key.kind == PQ_SCHEME_FN_DSA_512
+                && !params.is_pq_falcon_active(tip_height.saturating_add(1))
+        });
+        let quote_kind = if healthy && payout.is_some() && fresh && !falcon_blocked {
             "quote"
         } else {
             "none"
