@@ -289,6 +289,26 @@ pub fn decode_payee_address(network: &Network, encoded: &str) -> Option<Payee> {
     (!address.is_script_hash() && payee_address(network, &payee) == encoded).then_some(payee)
 }
 
+/// The start-time refusal of an FN-DSA-512 (Falcon, scheme 0x02) YED payout address while Falcon
+/// is not active at `next_height`, the height of the next block this node would build (beta4 P1
+/// follow-up, policy: the C++ lines' init refusal). `None` for any other payee, or once Falcon is
+/// active ([`zakura_script::is_pq_falcon_active`]: Vault active and at or above the Falcon height).
+pub fn falcon_payout_refusal(
+    network: &Network,
+    payee: &Payee,
+    next_height: Height,
+) -> Option<String> {
+    (payee.kind == kogany_vault::template::PQ_SCHEME_FN_DSA_512
+        && !zakura_script::is_pq_falcon_active(network, next_height))
+    .then(|| {
+        format!(
+            "-yellowbackpayoutaddress is an FN-DSA-512 (Falcon) address, but Falcon is not active \
+             at the next block height {}: use a P2PKH or SLH-DSA-SHA2-128s address until it is",
+            next_height.0
+        )
+    })
+}
+
 /// ycashd's refusal while the YED index is unhealthy (`src/rpc/mining.cpp:521-523`):
 /// `RPC_VERIFY_REJECTED`, `"yellowback-unhealthy: <reason>; restart with -reindex-yellowback"`.
 pub fn unhealthy_error(reason: &str) -> crate::server::jsonrpc::ErrorObject {

@@ -1132,7 +1132,12 @@ impl YedIndexView for LiveIndex {
     /// The FEE-W choice and its weight `10^4 + tiltBps x accuracyBps / 10^4`.
     fn default_payee(&self, ref_height: i64, selector: &[u8]) -> Option<(Payee, i64)> {
         let p = &self.params;
-        let policy = StatePayeePolicy::defaults(p);
+        // the wallet's draw for the next block: no FN-DSA payee before Falcon (ycash6
+        // `yed_getfeepayee`, `noPref.txHeight = IndexHeight(index) + 1`)
+        let policy = StatePayeePolicy {
+            tx_height: Some(self.tip().map_or(-1, |t| t.height).saturating_add(1)),
+            ..StatePayeePolicy::defaults(p)
+        };
         let key = default_payee(self.read(), p, ref_height, selector, &policy)?;
         let acc = kogany_yellowback::state::accuracy_bps(
             self.read(),

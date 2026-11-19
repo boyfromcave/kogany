@@ -23,6 +23,7 @@ use crate::attest::price::{
 use crate::codecs::tag::Payee;
 use crate::math::BPS;
 use crate::params::Params;
+use kogany_vault::template::PQ_SCHEME_FN_DSA_512;
 
 /// The quote tag at `h` paying `key`, if any.
 fn quote_of(r: &dyn YedRead, p: &Params, h: i64, key: &Payee) -> Option<TagRecord> {
@@ -103,6 +104,11 @@ pub struct PayeePolicy {
     pub tilt_bps: i32,
     /// `-yellowbackpreferredpayee`: replaces the pick when it is in E(R).
     pub preferred: Option<Payee>,
+    /// The height of the transaction the draw is for (`PayeePolicy::txHeight`, beta4 P1
+    /// follow-up, policy only): while Falcon is not active there ([`Params::is_pq_falcon_active`])
+    /// the draw skips FN-DSA (scheme 0x02) payees, the preference included, unless E(R) holds
+    /// nothing else. `None`: no skip (the RPC views of E(R)). Validity rules are unchanged.
+    pub tx_height: Option<i64>,
 }
 
 impl PayeePolicy {
@@ -113,6 +119,7 @@ impl PayeePolicy {
             accuracy_window: p.accuracy_window,
             tilt_bps: p.payee_tilt_bps,
             preferred: None,
+            tx_height: None,
         }
     }
 }
@@ -123,6 +130,8 @@ impl PayeePolicy {
 /// little-endian `u64` from its first eight bytes; `pick = seed mod Σw`; the first tag whose
 /// cumulative weight exceeds `pick`. All penalised: every key of E(R) at equal weights.
 /// `blockHash(R)` is `Snapshots[R].blockHash` (zero when missing). `None` iff E(R) is empty.
+/// With `policy.tx_height` set and Falcon not active at it, the draw runs over E(R) without its
+/// FN-DSA payees when any other payee remains.
 pub fn default_payee(
     r: &dyn YedRead,
     p: &Params,
@@ -130,7 +139,19 @@ pub fn default_payee(
     selector: &[u8],
     policy: &PayeePolicy,
 ) -> Option<Payee> {
-    let eligible = eligible_payees(r, p, ref_height);
+    let mut eligible = eligible_payees(r, p, ref_height);
+    if policy.tx_height.is_some_and(|h| !p.is_pq_falcon_active(h)) {
+        // policy only: no FN-DSA payee before Falcon while another payee is eligible (the rules
+        // still accept one)
+        let pre_falcon: Vec<Payee> = eligible
+            .iter()
+            .copied()
+            .filter(|k| k.kind != PQ_SCHEME_FN_DSA_512)
+            .collect();
+        if !pre_falcon.is_empty() {
+            eligible = pre_falcon;
+        }
+    }
     let first = *eligible.first()?;
     if let Some(pref) = policy.preferred.filter(|k| eligible.contains(k)) {
         return Some(pref);

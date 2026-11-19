@@ -12,7 +12,9 @@ mod state_common;
 use kogany_vault::template::{PQ_SCHEME_FN_DSA_512, PQ_SCHEME_SLH_DSA_SHA2_128S};
 use kogany_yellowback::codecs::script::p2pkh_script;
 use kogany_yellowback::codecs::tag::{CoinbaseTag, Payee, TAG_VERSION_V2};
-use kogany_yellowback::state::{eligible_payees, verdict, VaultStatus, YedRead};
+use kogany_yellowback::state::{
+    default_payee, eligible_payees, verdict, PayeePolicy, VaultStatus, YedRead,
+};
 use state_common::fixture::*;
 
 /// `v2Window`: one payee window plus one of v2-only quotes, FN-DSA and SLH-DSA alternating.
@@ -202,4 +204,85 @@ fn tag_v2_malformed_is_no_tag_block_valid() {
         pq_payee(PQ_SCHEME_SLH_DSA_SHA2_128S)
     );
     assert!(f.snap(f.tip).tagged);
+}
+
+/// `Selector(i)`: 33 bytes shaped like an owner key, `0x02 ‖ i` little-endian (N28).
+fn selector(i: i32) -> Vec<u8> {
+    let mut s = vec![0u8; 33];
+    s[0] = 0x02;
+    s[1] = (i & 0xff) as u8;
+    s[2] = ((i >> 8) & 0xff) as u8;
+    s
+}
+
+// beta4 P1 follow-up (policy, FEE-W): a draw for a transaction at a height where Falcon is not
+// active skips the FN-DSA payees of E(R), the preference included, while another payee is
+// eligible; with only FN-DSA payees, or no transaction height, or Falcon active, nothing is
+// skipped. The rules are unchanged (MINT-8 still accepts an FN-DSA payee).
+// Rule: FEE-W
+#[test]
+fn feew_skips_fn_dsa_payees_before_falcon() {
+    let mut f = Fixture::new();
+    f.activate(50000);
+    let fn_dsa = pq_payee(PQ_SCHEME_FN_DSA_512);
+    let slh = pq_payee(PQ_SCHEME_SLH_DSA_SHA2_128S);
+    v2_window(&mut f, 50000);
+    let r = f.tip;
+    let mut e = eligible_payees(&f.state, &f.p, r);
+    e.sort();
+    let mut both = vec![fn_dsa, slh];
+    both.sort();
+    assert_eq!(e, both);
+    assert_eq!(f.p.pq_falcon_height, -1, "the fixture has no Falcon height");
+
+    let picks = |f: &Fixture, pp: &PayeePolicy| {
+        (0..200)
+            .map(|i| default_payee(&f.state, &f.p, r, &selector(i), pp).unwrap())
+            .collect::<std::collections::BTreeSet<Payee>>()
+    };
+    let view = PayeePolicy::defaults(&f.p);
+    let next = PayeePolicy {
+        tx_height: Some(r + 1),
+        ..view
+    };
+    assert_eq!(picks(&f, &view), both.iter().copied().collect());
+    assert_eq!(picks(&f, &next), [slh].into_iter().collect());
+    let prefer_fn = PayeePolicy {
+        preferred: Some(fn_dsa),
+        ..next
+    };
+    assert_eq!(picks(&f, &prefer_fn), [slh].into_iter().collect());
+    let prefer_fn_view = PayeePolicy {
+        preferred: Some(fn_dsa),
+        ..view
+    };
+    assert_eq!(picks(&f, &prefer_fn_view), [fn_dsa].into_iter().collect());
+
+    // Falcon active at the transaction's height: nothing is skipped.
+    f.p.pq_falcon_height = i32::try_from(r + 1).unwrap();
+    assert_eq!(picks(&f, &next), both.iter().copied().collect());
+    let before = PayeePolicy {
+        tx_height: Some(r),
+        ..view
+    };
+    assert_eq!(picks(&f, &before), [slh].into_iter().collect());
+    f.p.pq_falcon_height = -1;
+
+    // Only FN-DSA payees in E(R): the draw keeps them (the rules accept them).
+    for _ in 0..=f.p.payee_window {
+        f.mine(
+            Some(Fixture::quote_v2(50000, PQ_SCHEME_FN_DSA_512)),
+            Vec::new(),
+        );
+    }
+    let r2 = f.tip;
+    assert_eq!(eligible_payees(&f.state, &f.p, r2), vec![fn_dsa]);
+    let next2 = PayeePolicy {
+        tx_height: Some(r2 + 1),
+        ..view
+    };
+    assert_eq!(
+        default_payee(&f.state, &f.p, r2, &selector(1), &next2),
+        Some(fn_dsa)
+    );
 }

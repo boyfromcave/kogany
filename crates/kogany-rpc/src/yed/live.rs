@@ -19,8 +19,8 @@
 use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
-use kogany_vault::Hash32;
 use kogany_vault::{state::VaultTx, OutPoint};
+use kogany_vault::{template::PQ_SCHEME_FN_DSA_512, Hash32};
 use kogany_yellowback::{
     attest::{attestation_valid, Attestation as KAttestation},
     codecs::{
@@ -198,7 +198,14 @@ where
         let healthy = index.health().healthy;
         let fresh =
             quote.is_some_and(|q| now.saturating_sub(q.received_at) <= QUOTE_MAX_AGE_SECONDS);
-        let quote_kind = if healthy && payout.is_some() && fresh {
+        // policy (beta4 P1 follow-up): no v2 FN-DSA tag for a block before Falcon (the start
+        // refuses such a payout key then; this covers a node started past the Falcon height whose
+        // chain is reorganised below it)
+        let falcon_blocked = payout.is_some_and(|key| {
+            key.kind == PQ_SCHEME_FN_DSA_512
+                && !params.is_pq_falcon_active(tip_height.saturating_add(1))
+        });
+        let quote_kind = if healthy && payout.is_some() && fresh && !falcon_blocked {
             "quote"
         } else {
             "none"

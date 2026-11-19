@@ -926,3 +926,42 @@ fn template_info_post_quantum_payout_builds_a_v2_tag() {
     assert!(address.starts_with("sqf"), "{address}");
     assert_eq!(decode_payee_address(&net, &address), Some(payee));
 }
+
+/// beta4 P1 follow-up: an FN-DSA-512 payout address is refused while Falcon is not active at the
+/// next height (before Vault, or below the Falcon height), and accepted from it; P2PKH and
+/// SLH-DSA payout addresses are never refused.
+#[test]
+fn falcon_payout_refused_before_falcon() {
+    use zakura_chain::parameters::testnet::{ConfiguredActivationHeights, RegtestParameters};
+
+    let net = Network::new_regtest(RegtestParameters::from(ConfiguredActivationHeights {
+        canopy: Some(1),
+        vault: Some(7),
+        pq_falcon: Some(12),
+        ..Default::default()
+    }));
+    let pq = |scheme| {
+        Payee::pq(&kogany_vault::PqOwner {
+            scheme,
+            hash: kogany_vault::Hash32([0x5a; 32]),
+        })
+        .expect("a registered scheme")
+    };
+    let falcon = pq(2);
+    for h in [0, 6, 7, 11] {
+        let refusal = falcon_payout_refusal(&net, &falcon, Height(h)).expect("refused");
+        assert!(
+            refusal.contains("FN-DSA-512 (Falcon)")
+                && refusal.contains(&format!("next block height {h}")),
+            "{refusal}"
+        );
+    }
+    for h in [12, 13, 1_000] {
+        assert_eq!(falcon_payout_refusal(&net, &falcon, Height(h)), None);
+    }
+    for payee in [pq(1), Payee::p2pkh(&[7; 20])] {
+        for h in [0, 7, 12] {
+            assert_eq!(falcon_payout_refusal(&net, &payee, Height(h)), None);
+        }
+    }
+}

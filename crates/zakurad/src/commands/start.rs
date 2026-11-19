@@ -252,6 +252,36 @@ impl StartCmd {
         }
     }
 
+    /// beta4 P1 follow-up (policy): an FN-DSA-512 (Falcon) `mining.yellowback_payout_address` is
+    /// refused while Falcon is not active at the next height (the chain tip's + 1), as ycashd's
+    /// init refuses such a `-yellowbackpayoutaddress`: a fee paid to it before Falcon could not be
+    /// spent until Falcon activates.
+    #[cfg(feature = "ycash")]
+    fn validate_falcon_payout_address(
+        config: &ZakuradConfig,
+        latest_chain_tip: &impl zakura_chain::chain_tip::ChainTip,
+    ) -> Result<(), Report> {
+        use zakura_rpc::ycash_mining::{decode_payee_address, falcon_payout_refusal};
+        let network = &config.network.network;
+        let Some(payee) = config
+            .mining
+            .yellowback_payout_address
+            .as_deref()
+            .and_then(|address| decode_payee_address(network, address))
+        else {
+            return Ok(());
+        };
+        let next_height = latest_chain_tip
+            .best_tip_height()
+            .map_or(block::Height(0), |tip| {
+                (tip + 1).unwrap_or(block::Height::MAX)
+            });
+        match falcon_payout_refusal(network, &payee, next_height) {
+            Some(refusal) => Err(eyre!(refusal)),
+            None => Ok(()),
+        }
+    }
+
     /// Prints the one-line `resync required` refusal (beta4 C-T2) where an operator sees it.
     #[allow(clippy::print_stderr)]
     fn report_resync_required(reason: &str) {
@@ -522,6 +552,8 @@ impl StartCmd {
             Self::report_resync_required(&reason);
             return Err(eyre!("resync required: {reason}"));
         }
+        #[cfg(feature = "ycash")]
+        Self::validate_falcon_payout_address(&config, &latest_chain_tip)?;
 
         let (blocksync_throughput_probe, mut blocksync_throughput_completion_rx) =
             if let Some(target_height) = config.sync.debug_blocksync_throughput_target_height {
@@ -1674,6 +1706,61 @@ mod tests {
         let regtest = pq(NetworkKind::Regtest, 2);
         assert!(regtest.starts_with("rqf"));
         assert!(with(Some(&regtest)).is_err());
+    }
+
+    /// beta4 P1 follow-up: an FN-DSA-512 payout address is refused at start while Falcon is not
+    /// active at the chain tip's next height, and accepted from it; an SLH-DSA or P2PKH one, or
+    /// none, never is.
+    #[cfg(feature = "ycash")]
+    #[test]
+    fn ycash_falcon_payout_address_refused_before_falcon() {
+        use zakura_chain::{
+            chain_tip::mock::MockChainTip,
+            parameters::{
+                testnet::{ConfiguredActivationHeights, RegtestParameters},
+                Network, NetworkKind,
+            },
+        };
+        let pq = |scheme: u8| {
+            zakura_chain::transparent::Address::PayToPqKeyHash {
+                network_kind: NetworkKind::Regtest,
+                scheme,
+                key_hash: [0x5a; 32],
+            }
+            .to_string()
+        };
+        // Vault at 7, Falcon at 12: Falcon is active from 12
+        let network = Network::new_regtest(RegtestParameters::from(ConfiguredActivationHeights {
+            canopy: Some(1),
+            vault: Some(7),
+            pq_falcon: Some(12),
+            ..Default::default()
+        }));
+        let (tip, sender) = MockChainTip::new();
+        let check = |address: Option<String>, tip_height: Option<u32>| {
+            let mut config = ZakuradConfig::default();
+            config.network.network = network.clone();
+            config.mining.yellowback_payout_address = address;
+            sender.send_best_tip_height(tip_height.map(block::Height));
+            StartCmd::validate_falcon_payout_address(&config, &tip)
+        };
+        for tip_height in [None, Some(0), Some(6), Some(10)] {
+            let error = check(Some(pq(2)), tip_height)
+                .expect_err("FN-DSA before Falcon")
+                .to_string();
+            assert!(
+                error.starts_with("-yellowbackpayoutaddress is an FN-DSA-512 (Falcon) address"),
+                "{error}"
+            );
+        }
+        assert!(
+            check(Some(pq(2)), Some(11)).is_ok(),
+            "the next height is 12"
+        );
+        for tip_height in [None, Some(6), Some(11)] {
+            assert!(check(Some(pq(1)), tip_height).is_ok());
+            assert!(check(None, tip_height).is_ok());
+        }
     }
 
     /// kogany: each Ycash test network's default RPC cookie is in its own directory, mainnet's

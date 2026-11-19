@@ -302,20 +302,43 @@ impl Deref for ExtraCoinbaseData {
 }
 
 /// The error returned when [`ExtraCoinbaseData`] is constructed from too many
-/// bytes.
+/// bytes, or (Ycash) from text that holds a Yellowback tag pattern.
 #[derive(Clone, Debug, thiserror::Error)]
-#[error("extra_coinbase_data is {0} bytes, but the maximum is {MAX_USER_COINBASE_DATA_LEN}")]
-pub struct ExtraCoinbaseDataTooLong(usize);
+pub enum ExtraCoinbaseDataError {
+    /// More than [`MAX_USER_COINBASE_DATA_LEN`] bytes.
+    #[error("extra_coinbase_data is {0} bytes, but the maximum is {MAX_USER_COINBASE_DATA_LEN}")]
+    TooLong(usize),
+    /// Ycash (beta4 P1): the text holds `$YED!` or `1YED!`, a Yellowback coinbase tag pattern.
+    #[cfg(feature = "ycash")]
+    #[error(
+        "extra_coinbase_data must not contain \"$YED!\" or \"1YED!\": the Yellowback coinbase tag \
+         scan takes the first such pattern after the height push, so this text would void or \
+         replace the tag of every block this node builds"
+    )]
+    YedTagPattern,
+}
+
+/// Ycash (beta4 P1): the Yellowback tag patterns, a v1 (`0x24`) or v2 (`0x31`) push length
+/// followed by `YED!` (`FindTag`, tag spec TAG-5): the first occurrence in the coinbase input
+/// script decides, and the configured data precedes the node's own tag push.
+#[cfg(feature = "ycash")]
+const YED_TAG_PATTERNS: [&str; 2] = ["$YED!", "1YED!"];
 
 impl TryFrom<String> for ExtraCoinbaseData {
-    type Error = ExtraCoinbaseDataTooLong;
+    type Error = ExtraCoinbaseDataError;
 
     fn try_from(data: String) -> Result<Self, Self::Error> {
         if data.len() > MAX_USER_COINBASE_DATA_LEN {
-            Err(ExtraCoinbaseDataTooLong(data.len()))
-        } else {
-            Ok(Self(data))
+            return Err(ExtraCoinbaseDataError::TooLong(data.len()));
         }
+        #[cfg(feature = "ycash")]
+        if YED_TAG_PATTERNS
+            .iter()
+            .any(|pattern| data.contains(pattern))
+        {
+            return Err(ExtraCoinbaseDataError::YedTagPattern);
+        }
+        Ok(Self(data))
     }
 }
 
@@ -491,6 +514,39 @@ mod tests {
             toml::from_str::<Config>(&toml::to_string(&config).unwrap()).unwrap(),
             config
         );
+    }
+
+    /// beta4 P1: `extra_coinbase_data` holding a Yellowback tag pattern (`$YED!`, `1YED!`) fails
+    /// the config load with a message that names the patterns; other text, and `YED!` after any
+    /// other byte, loads.
+    #[cfg(feature = "ycash")]
+    #[test]
+    fn ycash_extra_coinbase_data_refuses_tag_patterns() {
+        use super::{ExtraCoinbaseData, ExtraCoinbaseDataError, MAX_USER_COINBASE_DATA_LEN};
+
+        for text in ["$YED!", "1YED!", "/pool/$YED!x", "a1YED!", "$YED!$YED!"] {
+            let error = toml::from_str::<Config>(&format!("extra_coinbase_data = '{text}'"))
+                .expect_err(text)
+                .to_string();
+            assert!(
+                error.contains(r#"must not contain "$YED!" or "1YED!""#),
+                "{text}: {error}"
+            );
+            assert!(matches!(
+                ExtraCoinbaseData::try_from(text.to_string()),
+                Err(ExtraCoinbaseDataError::YedTagPattern)
+            ));
+        }
+        for text in ["/pool/", "YED!", "2YED!", "$YED", "1 YED!", "$yed!"] {
+            let config = toml::from_str::<Config>(&format!("extra_coinbase_data = '{text}'"))
+                .unwrap_or_else(|error| panic!("{text}: {error}"));
+            assert_eq!(config.extra_coinbase_data.as_deref(), Some(text));
+        }
+        // the length limit is checked first and keeps its message
+        assert!(matches!(
+            ExtraCoinbaseData::try_from(format!("$YED!{}", "x".repeat(MAX_USER_COINBASE_DATA_LEN))),
+            Err(ExtraCoinbaseDataError::TooLong(_))
+        ));
     }
 
     /// `ydf` (ycashd `-ydf=<n>`): 0 by default and then not written; 0..=100 is taken as given;
