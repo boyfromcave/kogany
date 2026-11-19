@@ -203,7 +203,10 @@ fn tag_bytes_equal_ycash6_for_the_golden_coinbases() {
         assert_eq!(info.kind, if tag.is_quote() { "quote" } else { "signal" });
     }
     assert!(tagged > 0, "the golden vector carries tagged coinbases");
-    assert_eq!(v2, 18, "the golden vector's v2 quote tags (FN-DSA and SLH-DSA)");
+    assert_eq!(
+        v2, 18,
+        "the golden vector's v2 quote tags (FN-DSA and SLH-DSA)"
+    );
 }
 
 /// `tag1_encoding_is_36_bytes_one_direct_push`'s bytes, and the coinbase that carries them.
