@@ -1,0 +1,22 @@
+{
+ "bucket": "medium",
+ "sla_days": 90,
+ "findings": [
+  {
+   "fingerprint": "02fb4c9bbbd0d80e",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-chain/src/block/header.rs",
+   "line": 124,
+   "first_seen": "2026-11-12",
+   "due": "2027-02-10"
+  },
+  {
+   "fingerprint": "0b1d77f362212434",
+   "rule": "trailofbits.rs.panic-in-function-returning-result",
+   "path": "crates/zakura-rpc/src/methods/types/get_block_template/coinbase_for.rs",
+   "line": 490,
+   "first_seen": "2026-11-16",
+   "due": "2027-02-14"
+  }
+ ]
+}
