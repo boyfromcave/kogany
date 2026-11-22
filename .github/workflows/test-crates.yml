@@ -110,7 +110,11 @@ jobs:
           # Treat warnings as errors, preserving the old `features` job behavior.
           RUSTFLAGS: -D warnings
 
+      # Upstream's crates.io publish preflight. Kogany never publishes to crates.io: its
+      # kogany-* crates are path-only and its zakura-* crates resolve through the common
+      # fork's git [patch.crates-io], so `cargo package` cannot succeed here by design.
       - name: Check publishable crate packaging
+        if: github.repository == 'zakura-core/zakura'
         run: ./scripts/check-crate-packaging.sh
 
   test-crate-build-success:
