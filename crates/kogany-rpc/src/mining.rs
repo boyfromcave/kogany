@@ -233,21 +233,29 @@ impl YedTemplateFilter for YedTemplateRun {
             writes: &self.writes,
         };
         // The storage boundary (audit A-3): a storage failure skips the candidate and marks the
-        // index unhealthy instead of unwinding the template.
-        let effect = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        // index unhealthy instead of unwinding the template; any other failure skips the
+        // candidate only, so a peer-crafted transaction cannot stop the node.
+        let effect = zakura_state::yed::yed_storage_boundary(&overlay, |read| {
             process_tx(
-                &overlay,
+                read,
                 &self.params,
                 &vtx,
                 self.height,
                 Some(zakura_state::yed::module::node_yed_sig_cache()),
             )
-        }));
+        });
         let effect = match effect {
             Ok(effect) => effect,
-            Err(_) => {
-                zakura_state::yed::mark_yed_unhealthy(
-                    "storage failure in FilterTemplate".to_owned(),
+            Err(zakura_state::yed::YedEvalFailure::Storage(what)) => {
+                zakura_state::yed::mark_yed_unhealthy(format!(
+                    "storage failure in FilterTemplate: {what}"
+                ));
+                return false;
+            }
+            Err(zakura_state::yed::YedEvalFailure::Evaluation(what)) => {
+                zakura_state::yed::warn_yed_check_error(
+                    "FilterTemplate: skipping a candidate",
+                    &what,
                 );
                 return false;
             }
@@ -363,5 +371,74 @@ mod tests {
             .await
             .is_some_and(|s| Arc::ptr_eq(&s, &state)));
         assert!(hooks.vault_state(block::Hash([8; 32])).await.is_none());
+    }
+
+    /// ycash6 `FilterTemplate`, through the real [`YedTemplateRun::keep`]: a non-storage failure
+    /// while evaluating a candidate skips that candidate and leaves the index healthy; a storage
+    /// failure skips it and marks the index unhealthy.
+    #[tokio::test]
+    async fn the_template_skips_a_failed_candidate_and_only_storage_is_unhealthy() {
+        use zakura_chain::{
+            amount::Amount,
+            block::Height,
+            parameters::Network,
+            transaction::{LockTime, Transaction, UnminedTx},
+            transparent::{Input, OutPoint, Output, Script},
+        };
+        use zakura_state::yed::test_fault::{with_yed_eval_test_fault, YedEvalTestFault};
+
+        let network = Network::new_regtest(Default::default());
+        let (_state, read, _, _) = zakura_state::init_test_services(&network).await;
+        let Ok(ReadResponse::YedSnapshot(Some(base))) =
+            read.oneshot(ReadRequest::BestChainYedSnapshot).await
+        else {
+            panic!("the state answers a YED snapshot");
+        };
+        let mut run = YedTemplateRun {
+            base,
+            writes: Writes::new(),
+            params: kogany_yellowback::params::regtest_params(1, 0, 0, [0; 32]),
+            height: 1,
+        };
+        let tx = VerifiedUnminedTx::new(
+            UnminedTx::from(Transaction::V4 {
+                inputs: vec![Input::PrevOut {
+                    outpoint: OutPoint {
+                        hash: zakura_chain::transaction::Hash([7; 32]),
+                        index: 0,
+                    },
+                    unlock_script: Script::new(&[0x51]),
+                    sequence: u32::MAX,
+                }],
+                outputs: vec![Output {
+                    value: Amount::try_from(1_000).expect("an amount"),
+                    lock_script: Script::new(&[0x51]),
+                }],
+                lock_time: LockTime::unlocked(),
+                expiry_height: Height(0),
+                joinsplit_data: None,
+                sapling_shielded_data: None,
+            }),
+            Amount::try_from(10_000).expect("a fee"),
+            0,
+            0,
+            Arc::new(vec![]),
+        )
+        .expect("verified");
+
+        let (kept, unhealthy) =
+            with_yed_eval_test_fault(Some(YedEvalTestFault::Evaluation), || run.keep(&tx));
+        assert!(!kept, "the failed candidate is skipped");
+        assert_eq!(
+            unhealthy, None,
+            "an evaluation failure leaves the index healthy"
+        );
+
+        let (kept, unhealthy) =
+            with_yed_eval_test_fault(Some(YedEvalTestFault::Storage), || run.keep(&tx));
+        assert!(!kept, "the failed candidate is skipped");
+        assert!(unhealthy
+            .expect("a storage failure marks the index unhealthy")
+            .starts_with("storage failure in FilterTemplate: injected storage fault"));
     }
 }

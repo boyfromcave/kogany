@@ -480,6 +480,17 @@ impl TransactionError {
     pub fn is_tip_moved(&self) -> bool {
         matches!(self, Self::Other(message) if message.ends_with(TIP_MOVED_RETRY))
     }
+
+    /// kogany: returns true if `self` is the YED module's refusal of a transaction whose
+    /// evaluation failed other than by a storage failure (`yellowback-check-error`, ycash6
+    /// `MempoolCheckLocked`). It says nothing about the tip, so it is refused once, never retried.
+    #[cfg(feature = "ycash")]
+    pub fn is_yellowback_check_error(&self) -> bool {
+        matches!(
+            self,
+            Self::YellowbackRejected { reason } if reason == kogany_yellowback::state::CHECK_ERROR
+        )
+    }
 }
 
 impl TransactionError {

@@ -8,8 +8,9 @@
 //!
 //! This is the pure half of the C++ `YellowbackIndex::MempoolCheckReason`. The index's own
 //! guards stay with the index (W5-e / W6-c): a stopped index admits everything (`None`), an
-//! unhealthy one refuses with [`UNHEALTHY`], and a storage failure during the check marks the
-//! index unhealthy and refuses with [`UNHEALTHY`]. The caller also picks the parameter set
+//! unhealthy one refuses with [`UNHEALTHY`], a storage failure during the check marks the
+//! index unhealthy and refuses with [`UNHEALTHY`], and any other failure while evaluating the
+//! transaction refuses that transaction only with [`CHECK_ERROR`]. The caller also picks the parameter set
 //! (`ParamsAt(tip + 1)`, [`crate::params::select_params`]).
 
 use kogany_vault::act::{decode_act, is_act_output};
@@ -33,6 +34,11 @@ pub const MEMPOOL_EXPIRY: &str = "mempool-expiry";
 /// The index's refusal while it cannot evaluate the module (the caller returns it; never this
 /// function).
 pub const UNHEALTHY: &str = "yellowback-unhealthy";
+
+/// The index's refusal of one transaction whose evaluation failed other than by a storage
+/// failure (ycash6 `MempoolCheckLocked`): the index stays healthy, so no crafted transaction can
+/// stop the node (the caller returns it; never this function).
+pub const CHECK_ERROR: &str = "yellowback-check-error";
 
 /// `MempoolCheckInner`: `None` = admitted, else the reason — the module's verdict for a
 /// transaction it makes invalid (the node reports `mempool-check-failed:<verdict>`, K7), or

@@ -413,6 +413,10 @@ static YED_UNHEALTHY: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(N
 
 /// Marks the index unhealthy (the first reason is kept).
 pub fn mark_yed_unhealthy(reason: String) {
+    #[cfg(any(test, feature = "proptest-impl"))]
+    let Some(reason) = test_fault::mark_unhealthy(reason) else {
+        return;
+    };
     tracing::error!(%reason, "Yellowback index unhealthy: the next block stops the node");
     let mut unhealthy = YED_UNHEALTHY
         .lock()
@@ -422,10 +426,201 @@ pub fn mark_yed_unhealthy(reason: String) {
 
 /// `UnhealthyReason()`: `None` while healthy (`yed_getinfo.health`, W5-f).
 pub fn yed_unhealthy_reason() -> Option<String> {
+    #[cfg(any(test, feature = "proptest-impl"))]
+    if let Some(reason) = test_fault::unhealthy_reason() {
+        return reason;
+    }
     YED_UNHEALTHY
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner)
         .clone()
+}
+
+// ---- the storage boundary ----------------------------------------------------------------
+
+/// Why an evaluation behind [`yed_storage_boundary`] failed (ycash6 `MempoolCheckLocked`'s two
+/// catches).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum YedEvalFailure {
+    /// A read of the index panicked (a record that does not decode, a database failure): the
+    /// C++ `dbwrapper_error`. Only this marks the index unhealthy.
+    Storage(String),
+    /// Anything else panicked while evaluating the transaction: it is refused, the index stays
+    /// healthy, so no crafted transaction can stop the node.
+    Evaluation(String),
+}
+
+/// The panic payload a storage read raises behind [`YedStorageBoundary`].
+struct YedStorageFailure(String);
+
+fn panic_message(payload: &(dyn std::any::Any + Send)) -> String {
+    payload
+        .downcast_ref::<String>()
+        .cloned()
+        .or_else(|| payload.downcast_ref::<&str>().map(|s| (*s).to_owned()))
+        .unwrap_or_default()
+}
+
+/// A [`YedRead`] whose reads re-raise any panic as a storage failure, so the boundary can tell
+/// a storage failure from a failure of the evaluation itself.
+struct YedStorageBoundary<'a>(&'a dyn YedRead);
+
+impl YedStorageBoundary<'_> {
+    fn read<T>(f: impl FnOnce() -> T) -> T {
+        match std::panic::catch_unwind(std::panic::AssertUnwindSafe(f)) {
+            Ok(v) => v,
+            Err(panic) => std::panic::resume_unwind(Box::new(YedStorageFailure(panic_message(
+                panic.as_ref(),
+            )))),
+        }
+    }
+}
+
+impl YedRead for YedStorageBoundary<'_> {
+    fn get(&self, key: &YedKey) -> Option<YedRecord> {
+        Self::read(|| self.0.get(key))
+    }
+
+    fn scan(&self, table: Table) -> Vec<(YedKey, YedRecord)> {
+        Self::read(|| self.0.scan(table))
+    }
+}
+
+/// The storage boundary of the mempool and template paths (audit A-3; ycash6
+/// `MempoolCheckLocked`, `FilterTemplate`): runs `eval` over `read` and turns a panic into a
+/// [`YedEvalFailure`], [`YedEvalFailure::Storage`] when a read of `read` panicked, else
+/// [`YedEvalFailure::Evaluation`].
+pub fn yed_storage_boundary<T>(
+    read: &dyn YedRead,
+    eval: impl FnOnce(&dyn YedRead) -> T,
+) -> Result<T, YedEvalFailure> {
+    let guarded = YedStorageBoundary(read);
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        #[cfg(any(test, feature = "proptest-impl"))]
+        test_fault::fire();
+        eval(&guarded)
+    }))
+    .map_err(|panic| match panic.downcast::<YedStorageFailure>() {
+        Ok(storage) => YedEvalFailure::Storage(storage.0),
+        Err(other) => YedEvalFailure::Evaluation(panic_message(other.as_ref())),
+    })
+}
+
+/// `MempoolCheckLocked`'s verdict on a guarded check: a storage failure marks the index
+/// unhealthy and refuses with `UNHEALTHY` (the next block then stops the node); any other
+/// failure refuses this transaction only with `CHECK_ERROR`.
+fn mempool_verdict(checked: Result<Option<String>, YedEvalFailure>) -> Option<String> {
+    match checked {
+        Ok(reason) => reason,
+        Err(YedEvalFailure::Storage(what)) => {
+            mark_yed_unhealthy(format!("storage failure in MempoolCheck: {what}"));
+            Some(kogany_yellowback::state::UNHEALTHY.to_owned())
+        }
+        Err(YedEvalFailure::Evaluation(what)) => {
+            warn_yed_check_error("MempoolCheck refused a transaction", &what);
+            Some(kogany_yellowback::state::CHECK_ERROR.to_owned())
+        }
+    }
+}
+
+/// The least time between two [`warn_yed_check_error`] lines.
+const CHECK_ERROR_LOG_INTERVAL: std::time::Duration = std::time::Duration::from_secs(60);
+
+/// When the last line was logged, and how many were suppressed since.
+static CHECK_ERROR_LOG: std::sync::Mutex<(Option<std::time::Instant>, u64)> =
+    std::sync::Mutex::new((None, 0));
+
+/// Logs an evaluation failure the boundary refused, at most once per
+/// [`CHECK_ERROR_LOG_INTERVAL`] with the count suppressed since, so a peer that makes the
+/// evaluation fail cannot flood the log.
+pub fn warn_yed_check_error(event: &str, what: &str) {
+    let mut log = CHECK_ERROR_LOG
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let now = std::time::Instant::now();
+    if log
+        .0
+        .is_some_and(|last| now.duration_since(last) < CHECK_ERROR_LOG_INTERVAL)
+    {
+        log.1 = log.1.saturating_add(1);
+        return;
+    }
+    let suppressed = std::mem::take(&mut log.1);
+    log.0 = Some(now);
+    tracing::warn!(%what, suppressed, "{event}");
+}
+
+/// Test builds only (`cfg(test)` or zakura-state's `proptest-impl`, never a release build): a
+/// failure injected into the next evaluation behind [`yed_storage_boundary`] on this thread
+/// (ycash6 `-yellowbacktestfault=storage:mempool` / `error:mempool`), with a health flag of the
+/// thread's own so a test's storage failure never refuses another test's check.
+#[cfg(any(test, feature = "proptest-impl"))]
+pub mod test_fault {
+    use std::cell::RefCell;
+
+    /// The failure to inject.
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    pub enum YedEvalTestFault {
+        /// A read of the index fails (the C++ `dbwrapper_error`).
+        Storage,
+        /// The evaluation itself panics (any other exception).
+        Evaluation,
+    }
+
+    /// This thread's armed fault and its own unhealthy reason, inside [`with_yed_eval_test_fault`].
+    struct Scope {
+        fault: Option<YedEvalTestFault>,
+        unhealthy: Option<String>,
+    }
+
+    thread_local! {
+        static SCOPE: RefCell<Option<Scope>> = const { RefCell::new(None) };
+    }
+
+    /// Runs `f` with `fault` armed once on this thread and a thread-local health flag; returns
+    /// `f`'s result and the unhealthy reason it left (`None` = healthy).
+    pub fn with_yed_eval_test_fault<R>(
+        fault: Option<YedEvalTestFault>,
+        f: impl FnOnce() -> R,
+    ) -> (R, Option<String>) {
+        SCOPE.with(|s| {
+            *s.borrow_mut() = Some(Scope {
+                fault,
+                unhealthy: None,
+            })
+        });
+        let result = f();
+        let scope = SCOPE.with(|s| s.borrow_mut().take());
+        (result, scope.and_then(|s| s.unhealthy))
+    }
+
+    /// Fires the armed fault once (inside the boundary).
+    pub(super) fn fire() {
+        let fault = SCOPE.with(|s| s.borrow_mut().as_mut().and_then(|s| s.fault.take()));
+        match fault {
+            Some(YedEvalTestFault::Storage) => {
+                super::YedStorageBoundary::read(|| panic!("injected storage fault (test)"))
+            }
+            Some(YedEvalTestFault::Evaluation) => panic!("injected non-storage fault (test)"),
+            None => {}
+        }
+    }
+
+    /// Records `reason` in this thread's scope: `None` when recorded, else `Some(reason)`.
+    pub(super) fn mark_unhealthy(reason: String) -> Option<String> {
+        SCOPE.with(|s| match s.borrow_mut().as_mut() {
+            Some(scope) => {
+                scope.unhealthy.get_or_insert(reason);
+                None
+            }
+            None => Some(reason),
+        })
+    }
+
+    /// This thread's scope's reason, `None` outside a scope.
+    pub(super) fn unhealthy_reason() -> Option<Option<String>> {
+        SCOPE.with(|s| s.borrow().as_ref().map(|scope| scope.unhealthy.clone()))
+    }
 }
 
 // ---- snapshots ----------------------------------------------------------------------------
@@ -607,6 +802,9 @@ impl YedSnapshot {
     /// - a storage failure while reading (a record that does not decode): the index is marked
     ///   unhealthy ([`mark_yed_unhealthy`]) and the transaction refused with `UNHEALTHY`; the
     ///   next block's evaluation then stops the node, as ycashd's next `ConnectBlock` aborts.
+    /// - any other failure while evaluating the transaction (a panic outside the index reads):
+    ///   that transaction is refused with `CHECK_ERROR` and the index stays healthy, so a
+    ///   peer-crafted transaction cannot stop the node ([`yed_storage_boundary`]).
     ///
     /// `expiry_height` is the transaction's `nExpiryHeight` (0 = none). For W6-b.
     pub fn mempool_check(
@@ -627,28 +825,16 @@ impl YedSnapshot {
             .map(|t| i64::from(t.height))
             .or(self.tip.map(|(h, _)| i64::from(h.0)))
             .map_or(0, |h| h.saturating_add(1));
-        let checked = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        mempool_verdict(yed_storage_boundary(self, |read| {
             kogany_yellowback::state::mempool_check_reason(
-                self,
+                read,
                 p,
                 next_height,
                 tx,
                 expiry_height,
                 None,
             )
-        }));
-        match checked {
-            Ok(reason) => reason,
-            Err(panic) => {
-                let what = panic
-                    .downcast_ref::<String>()
-                    .cloned()
-                    .or_else(|| panic.downcast_ref::<&str>().map(|s| (*s).to_owned()))
-                    .unwrap_or_default();
-                mark_yed_unhealthy(format!("storage failure in MempoolCheck: {what}"));
-                Some(kogany_yellowback::state::UNHEALTHY.to_owned())
-            }
-        }
+        }))
     }
 
     /// Every record, canonical key → canonical value (the tables of the state hash and the rest).
@@ -852,5 +1038,86 @@ mod ycash_test_fault_tests {
             zakura_chain::block::Hash([0; 32])
         )
         .is_ok());
+    }
+}
+
+#[cfg(test)]
+mod ycash_storage_boundary_tests {
+    use super::*;
+
+    /// An index whose every read fails, as a record that does not decode does.
+    struct BrokenStore;
+
+    impl YedRead for BrokenStore {
+        fn get(&self, _key: &YedKey) -> Option<YedRecord> {
+            panic!("a stored YED record does not decode: the database is corrupt; resync")
+        }
+
+        fn scan(&self, _table: Table) -> Vec<(YedKey, YedRecord)> {
+            panic!("unexpected database failure")
+        }
+    }
+
+    /// An empty index whose reads succeed.
+    struct EmptyStore;
+
+    impl YedRead for EmptyStore {
+        fn get(&self, _key: &YedKey) -> Option<YedRecord> {
+            None
+        }
+
+        fn scan(&self, _table: Table) -> Vec<(YedKey, YedRecord)> {
+            Vec::new()
+        }
+    }
+
+    /// ycash6 `mempool_non_storage_exception_refuses_without_unhealthy`: only a failed read of
+    /// the index is a storage failure; a panic while evaluating a transaction refuses that
+    /// transaction (`yellowback-check-error`) and leaves the index healthy, so a peer-crafted
+    /// transaction cannot stop the node. (Before: every panic marked the index unhealthy.)
+    #[test]
+    fn mempool_non_storage_panic_refuses_without_unhealthy() {
+        let _init_guard = zakura_test::init();
+
+        // A clean evaluation passes its verdict through.
+        assert_eq!(
+            yed_storage_boundary(&EmptyStore, |read| read.tip().map(|_| "x".to_owned())),
+            Ok(None)
+        );
+
+        // A failed read is a storage failure (the get and the scan path).
+        assert!(matches!(
+            yed_storage_boundary(&BrokenStore, |read| read.tip()),
+            Err(YedEvalFailure::Storage(what)) if what.contains("does not decode")
+        ));
+        assert!(matches!(
+            yed_storage_boundary(&BrokenStore, |read| read.scan(Table::Vault).len()),
+            Err(YedEvalFailure::Storage(what)) if what.contains("database failure")
+        ));
+
+        // A panic outside the reads is an evaluation failure, even when a read succeeded first.
+        let failed = yed_storage_boundary(&EmptyStore, |read| -> Option<String> {
+            let _ = read.tip();
+            panic!("a parser bug reachable from a crafted transaction")
+        });
+        assert_eq!(
+            failed,
+            Err(YedEvalFailure::Evaluation(
+                "a parser bug reachable from a crafted transaction".to_owned()
+            ))
+        );
+
+        // The mempool verdict refuses only that transaction and does not mark the index
+        // unhealthy. (The storage branch marks the process-wide flag, so it is not driven here:
+        // it would refuse every other test's mempool check.)
+        let healthy_before = yed_unhealthy_reason().is_none();
+        assert_eq!(
+            mempool_verdict(failed),
+            Some(kogany_yellowback::state::CHECK_ERROR.to_owned())
+        );
+        assert_eq!(mempool_verdict(Ok(None)), None);
+        if healthy_before {
+            assert_eq!(yed_unhealthy_reason(), None);
+        }
     }
 }

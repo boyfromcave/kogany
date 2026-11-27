@@ -48,7 +48,9 @@ pub fn is_tip_state_dependent(error: &TransactionError) -> bool {
     use TransactionError::*;
     match error {
         VaultRejected { byte_level, .. } => !byte_level,
-        VaultTemplateSetState { .. } | YellowbackRejected { .. } => true,
+        VaultTemplateSetState { .. } => true,
+        // A failed evaluation (`yellowback-check-error`) is refused once, as ycashd's.
+        YellowbackRejected { .. } => !error.is_yellowback_check_error(),
         ValidateContextError(error) => matches!(
             **error,
             ContextError::UnsatisfiedSequenceLock { .. }
@@ -243,7 +245,11 @@ mod tests {
             assert!(!is_missing_input(&error), "{error}");
         }
         // A malformed act, a bad balance, a failing script: the transaction's own fault.
+        // A YED evaluation failure (`yellowback-check-error`): refused once, never retried.
         for error in [
+            TransactionError::YellowbackRejected {
+                reason: "yellowback-check-error".into(),
+            },
             TransactionError::VaultRejected {
                 reason: "bad-act".into(),
                 height: Height(10),
@@ -289,6 +295,20 @@ mod tests {
             Some(Height(5)),
             Some(Height(6))
         ));
+
+        // A YED evaluation failure is not verified again at a new tip and is not kept, while
+        // the module's verdicts still are.
+        let check_error = TransactionError::YellowbackRejected {
+            reason: "yellowback-check-error".into(),
+        };
+        assert!(check_error.is_yellowback_check_error());
+        assert!(!is_stale(&check_error, Some(Height(5)), Some(Height(6))));
+        assert!(!is_kept(&check_error));
+        let verdict = TransactionError::YellowbackRejected {
+            reason: "bad-mint-amount".into(),
+        };
+        assert!(!verdict.is_yellowback_check_error());
+        assert!(is_stale(&verdict, Some(Height(5)), Some(Height(6))));
     }
 
     /// The vectors' non-coinbase transactions.
