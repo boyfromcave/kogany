@@ -1722,6 +1722,56 @@ fn mempool_check_over_the_tip_snapshot() {
     assert_eq!(off_snapshot.attested_fee_price(), None);
 }
 
+/// ycash6 `mempool_non_storage_exception_refuses_without_unhealthy`, through the real
+/// `YedSnapshot::mempool_check`: a non-storage failure while evaluating a transaction refuses that
+/// transaction (`yellowback-check-error`) and leaves the index healthy; the next check runs
+/// normally. A storage failure still marks the index unhealthy and refuses with
+/// `yellowback-unhealthy`, and every later check is refused while it is.
+#[test]
+fn mempool_check_refuses_on_an_evaluation_failure_without_unhealthy() {
+    use crate::service::yed::test_fault::{with_yed_eval_test_fault, YedEvalTestFault};
+    use kogany_yellowback::state::{CHECK_ERROR, UNHEALTHY};
+
+    let _init_guard = zakura_test::init();
+    let g = golden();
+    let network = network_with(g.p);
+    let dir = TempDir::new().unwrap();
+    let db = open_db(&config_at(dir.path()), &network);
+    let first_invalid = g.blocks.iter().position(|b| b.invalid).unwrap();
+    for b in g.blocks[..first_invalid].iter() {
+        let e = finalized_yed_effect(&db, Some(&g.p), &b.input).unwrap();
+        commit(&db, b.input.height, b.input.hash, &e);
+    }
+    // The refused mint: its normal verdict is the module's, not a failure.
+    let tx = &g.blocks[first_invalid].input.txs[1];
+    let snapshot = finalized_yed_snapshot(&db);
+    assert!(snapshot.is_live());
+    let verdict = snapshot.mempool_check(tx, 0);
+    assert!(verdict
+        .as_deref()
+        .is_some_and(|v| v != CHECK_ERROR && v != UNHEALTHY));
+
+    let (reasons, unhealthy) = with_yed_eval_test_fault(Some(YedEvalTestFault::Evaluation), || {
+        [snapshot.mempool_check(tx, 0), snapshot.mempool_check(tx, 0)]
+    });
+    assert_eq!(reasons, [Some(CHECK_ERROR.to_owned()), verdict]);
+    assert_eq!(
+        unhealthy, None,
+        "an evaluation failure leaves the index healthy"
+    );
+
+    let (reasons, unhealthy) = with_yed_eval_test_fault(Some(YedEvalTestFault::Storage), || {
+        [snapshot.mempool_check(tx, 0), snapshot.mempool_check(tx, 0)]
+    });
+    assert_eq!(
+        reasons,
+        [Some(UNHEALTHY.to_owned()), Some(UNHEALTHY.to_owned())]
+    );
+    assert!(unhealthy
+        .unwrap()
+        .starts_with("storage failure in MempoolCheck: injected storage fault"));
+}
+
 /// W5-f exit gate (1): the golden chain through the registered module. Every one of the 462
 /// entries is evaluated over the parent chain's index state as contextual validation evaluates
 /// it, and judged by `check::yed::yed_verdict`, the rejection `validate_and_commit` applies: the
