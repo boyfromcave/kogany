@@ -56,7 +56,7 @@ pub use lookups::{
     armed_at, block_hash_at, bond_min_zat, cancel_q, cancels_required, eligible_payees,
     judgement_at, p2pkh_key, selection_basis, snapshot_at, tag_at, RegistryView,
 };
-pub use mempool::{mempool_check_reason, MEMPOOL_EXPIRY, UNHEALTHY};
+pub use mempool::{mempool_check_reason, CHECK_ERROR, MEMPOOL_EXPIRY, UNHEALTHY};
 pub use policy::{
     accuracy_bps, default_payee, halt_mask_names, open_debt_invariant_violation, penalized,
     registered, PayeePolicy,

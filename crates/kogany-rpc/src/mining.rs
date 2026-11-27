@@ -233,22 +233,28 @@ impl YedTemplateFilter for YedTemplateRun {
             writes: &self.writes,
         };
         // The storage boundary (audit A-3): a storage failure skips the candidate and marks the
-        // index unhealthy instead of unwinding the template.
-        let effect = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        // index unhealthy instead of unwinding the template; any other failure skips the
+        // candidate only, so a peer-crafted transaction cannot stop the node.
+        let effect = zakura_state::yed::yed_storage_boundary(&overlay, |read| {
             process_tx(
-                &overlay,
+                read,
                 &self.params,
                 &vtx,
                 self.height,
                 Some(zakura_state::yed::module::node_yed_sig_cache()),
             )
-        }));
+        });
         let effect = match effect {
             Ok(effect) => effect,
-            Err(_) => {
-                zakura_state::yed::mark_yed_unhealthy(
-                    "storage failure in FilterTemplate".to_owned(),
-                );
+            Err(zakura_state::yed::YedEvalFailure::Storage(what)) => {
+                zakura_state::yed::mark_yed_unhealthy(format!(
+                    "storage failure in FilterTemplate: {what}"
+                ));
+                return false;
+            }
+            Err(zakura_state::yed::YedEvalFailure::Evaluation(what)) => {
+                let txid = tx.transaction.id().mined_id();
+                tracing::warn!(%txid, %what, "FilterTemplate: skipping {txid}");
                 return false;
             }
         };
